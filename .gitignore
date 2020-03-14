@@ -75,7 +75,7 @@ docs/_build/
 target/
 
 # Jupyter Notebook
-.ipynb_checkpoints
+*.ipynb_*
 
 # IPython
 profile_default/
@@ -127,3 +127,18 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# MacOS files
+.DS_Store
+
+# Compiled Python modules
+*.pyc
+*.so
+*.pyd
+
+# PyCharm project files
+.idea/*
+
+# Unit test files
+testing/*
+htmlcov/*
