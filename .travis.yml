@@ -1,0 +1,42 @@
+language: python
+python:
+  - "3.7"
+
+stages:
+  - test
+
+before_install:
+  - cd ..
+  # Install miniconda
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then wget http://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh; fi
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - export PATH=$HOME/miniconda/bin:$PATH
+  # Update conda
+  - conda update -y -n base conda setuptools
+  - conda info -a
+  # Set git info
+  - git config --global user.name "Travis Deploy"
+  - git config --global user.email "alongd@mit.edu"
+
+cache: pip
+
+jobs:
+  include:
+    - stage: test
+      install:
+        - cd T3
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - conda env create -q -f environment.yml
+        - source activate t3_env
+        - cd ..
+        - git clone https://github.com/ReactionMechanismGenerator/ARC
+        - cd ARC
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - cd ..
+        - conda install -y -c conda-forge codecov
+        - conda list
+        - cd T3
+      script:
+        - make test
+#        - codecov --token=788d104c-5bc4-4986-8cfd-0d79930d97e1
