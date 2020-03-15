@@ -1,0 +1,12 @@
+# Required python packages
+
+numpy
+paramiko
+pydantic
+qcelemental
+rdkit >=2019.09.2.0
+rmg >=3.0.0
+
+# For running the unit tests
+nose
+coverage
