@@ -39,4 +39,4 @@ jobs:
         - cd T3
       script:
         - make test
-#        - codecov --token=788d104c-5bc4-4986-8cfd-0d79930d97e1
+        - codecov --token=788d104c-5bc4-4986-8cfd-0d79930d97e1
