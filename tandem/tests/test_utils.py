@@ -4,7 +4,7 @@ ts tests test_utils module
 
 import unittest
 
-import t3.utils as utils
+import tandem.utils as utils
 
 
 class TestUtils(unittest.TestCase):
