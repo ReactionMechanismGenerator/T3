@@ -2,6 +2,7 @@
 
 numpy
 paramiko
+pandas
 pydantic
 qcelemental
 rdkit >=2019.09.2.0
