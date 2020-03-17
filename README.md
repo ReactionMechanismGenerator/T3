@@ -7,3 +7,8 @@
 [![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
 ![python](https://img.shields.io/badge/Python-3.7+-blue.svg)
 
+### T3 works according to the following general scheme:
+
+![T3 scheme][cycle]
+
+[cycle]: /grf/cycle.png "T3 scheme"
