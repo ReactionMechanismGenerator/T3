@@ -4,7 +4,7 @@ T3 executable module
 
 import argparse
 
-from .tandem import execute
+from tandem import execute
 
 
 def parse_command_line_arguments(command_line_args=None):

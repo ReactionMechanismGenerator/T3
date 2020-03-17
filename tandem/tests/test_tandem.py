@@ -13,7 +13,7 @@ from rmgpy.species import Species
 from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 from rmgpy.thermo.model import HeatCapacityModel
 
-import t3.tandem as tandem
+import tandem.tandem as tandem
 
 
 class TestTandem(unittest.TestCase):
