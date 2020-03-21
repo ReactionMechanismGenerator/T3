@@ -1,0 +1,37 @@
+# .coveragerc to control coverage
+[run]
+branch = True
+source = t3.py
+         tandem
+omit =
+    *Test.py
+    test_*.py
+    */scripts/*
+    */testing/*
+    */tests/*
+    */docs/*
+    */examples/*
+    */ipython/*
+    */grf/*
+
+[report]
+show_missing = False
+include =
+    tandem/*
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__.:
+omit =
+    *Test.py
+    test_*.py
+    */scripts/*
+    */testing/*
+    */tests/*
+    */docs/*
+    */examples/*
+    */ipython/*
+    */grf/*
+
+[html]
+directory = testing/coverage
