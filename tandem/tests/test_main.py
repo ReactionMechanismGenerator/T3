@@ -1,5 +1,5 @@
 """
-t3 tests test_tandem module
+t3 tests test_main module
 """
 
 import os
@@ -13,12 +13,12 @@ from rmgpy.species import Species
 from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 from rmgpy.thermo.model import HeatCapacityModel
 
-import tandem.tandem as tandem
+import tandem.main as main
 
 
 class TestTandem(unittest.TestCase):
     """
-    Contains unit tests for the tandem module
+    Contains unit tests for the main module
     """
 
     @classmethod
@@ -62,7 +62,7 @@ class TestTandem(unittest.TestCase):
         os.makedirs(run_rmg_path)
         rmg_input_file_path = os.path.join(run_rmg_path, 'input.py')
         shutil.copyfile(src=self.rmg_input_file_path, dst=rmg_input_file_path)
-        tandem.run_rmg(input_file=rmg_input_file_path,
+        main.run_rmg(input_file=rmg_input_file_path,
                        output_directory=run_rmg_path,
                        kwargs={'restart': '',
                                'walltime': '00:00:00:00',
@@ -80,7 +80,7 @@ class TestTandem(unittest.TestCase):
 
     def test_run_arc(self):
         """Test the ability to run ARC from The Tandem Tool"""
-        tandem.run_arc(input_dict={'level_of_theory': 'b3lyp/6-31g**//b3lyp/6-31g**',
+        main.run_arc(input_dict={'level_of_theory': 'b3lyp/6-31g**//b3lyp/6-31g**',
                                    'calc_freq_factor': False},
                        run_directory=self.base_path,
                        species_to_calc=list(),
@@ -92,7 +92,7 @@ class TestTandem(unittest.TestCase):
 
     def test_parse_arc_input_file(self):
         """Test parsing the arc input file"""
-        arguments, input_dict = tandem.parse_arc_input_file(self.arc_input_file_path,
+        arguments, input_dict = main.parse_arc_input_file(self.arc_input_file_path,
                                                             has_sa=True,
                                                             has_pdep=False,
                                                             verbose=False)
@@ -118,12 +118,12 @@ class TestTandem(unittest.TestCase):
     def test_set_legal_species_labels(self):
         """Test setting legal species labels"""
         # test two species with the same formula
-        updated_species_to_calc = tandem.set_legal_species_labels(self.species_to_calc0, self.all_species0)
+        updated_species_to_calc = main.set_legal_species_labels(self.species_to_calc0, self.all_species0)
         updated_labels = [spc.label for spc in updated_species_to_calc]
         self.assertEqual(updated_labels, ['C3H7_0', 'C3H7_1'])
 
         # test having a species with the same formula in all_species
-        updated_species_to_calc = tandem.set_legal_species_labels(self.species_to_calc1, self.all_species1)
+        updated_species_to_calc = main.set_legal_species_labels(self.species_to_calc1, self.all_species1)
         updated_labels = [spc.label for spc in updated_species_to_calc]
         self.assertEqual(updated_labels, ['C4H9_1', 'C4H9_2', 'H3N_0'])
 
@@ -138,25 +138,25 @@ class TestTandem(unittest.TestCase):
 7 H u0 p0 c0 {2,S}
 8 H u0 p0 c0 {2,S}"""
         spc_list = [Species(label='propane').from_smiles('CCC'), Species(label='ethane').from_smiles('CC')]
-        label = tandem.get_species_label_by_structure(adj=adj, species_list=spc_list)
+        label = main.get_species_label_by_structure(adj=adj, species_list=spc_list)
         self.assertEqual(label, 'ethane')
 
     def test_species_not_in_list(self):
         """Test determining whether a species is NOT in a list of species"""
         # calling set_legal_species_labels() sets the global species_labels_dict
-        updated_species_to_calc = tandem.set_legal_species_labels(self.species_to_calc1, all_species=list())
-        species_not_in_list = tandem.species_not_in_list('C4H9_1', updated_species_to_calc)
+        updated_species_to_calc = main.set_legal_species_labels(self.species_to_calc1, all_species=list())
+        species_not_in_list = main.species_not_in_list('C4H9_1', updated_species_to_calc)
         self.assertFalse(species_not_in_list)
-        species_not_in_list = tandem.species_not_in_list('C4H9_5', updated_species_to_calc)
+        species_not_in_list = main.species_not_in_list('C4H9_5', updated_species_to_calc)
         self.assertTrue(species_not_in_list)
 
     def test_get_species_by_label(self):
         """Test getting a species from a list by its label"""
-        spc = tandem.get_species_by_label(label='C4H9a', species_list=self.species_to_calc1)
+        spc = main.get_species_by_label(label='C4H9a', species_list=self.species_to_calc1)
         self.assertIsInstance(spc, Species)
         self.assertEqual(spc.label, 'C4H9a')
 
-        spc = tandem.get_species_by_label(label='x', species_list=self.species_to_calc1)
+        spc = main.get_species_by_label(label='x', species_list=self.species_to_calc1)
         self.assertIsNone(spc)
 
     def test_get_reaction_by_index(self):
@@ -164,42 +164,42 @@ class TestTandem(unittest.TestCase):
         reaction_list = [Reaction(index=0,
                                   reactants=[Species().from_smiles('[CH2]CC')],
                                   products=[Species().from_smiles('C[CH]C')])]
-        rxn = tandem.get_reaction_by_index(index=0, reaction_list=reaction_list)
+        rxn = main.get_reaction_by_index(index=0, reaction_list=reaction_list)
         self.assertIsInstance(rxn, Reaction)
         self.assertEqual(rxn.index, 0)
         self.assertEqual(str(rxn), '[CH2]CC <=> C[CH]C')
 
-        rxn = tandem.get_reaction_by_index(index=5, reaction_list=reaction_list)
+        rxn = main.get_reaction_by_index(index=5, reaction_list=reaction_list)
         self.assertIsNone(rxn)
 
     def test_calc_based_on_thermo_comment(self):
         """Test which species are selected for calculation based on their thermo comment"""
-        self.assertTrue(tandem.calc_based_on_thermo_comment(self.spc1))
-        self.assertTrue(tandem.calc_based_on_thermo_comment(self.spc2))
-        self.assertFalse(tandem.calc_based_on_thermo_comment(self.spc3))
+        self.assertTrue(main.calc_based_on_thermo_comment(self.spc1))
+        self.assertTrue(main.calc_based_on_thermo_comment(self.spc2))
+        self.assertFalse(main.calc_based_on_thermo_comment(self.spc3))
 
     def test_has_high_uncertainty(self):
         """Test determining whether a species thermo should be calculated"""
-        should_species_be_calculated = tandem.has_high_uncertainty(
+        should_species_be_calculated = main.has_high_uncertainty(
             species=self.spc1, unconverged_species=list(), species_to_calc=dict())
         self.assertTrue(should_species_be_calculated)
 
-        should_species_be_calculated = tandem.has_high_uncertainty(
+        should_species_be_calculated = main.has_high_uncertainty(
             species=self.spc1, unconverged_species=[self.spc1.copy()], species_to_calc=dict())
         self.assertFalse(should_species_be_calculated)
 
-        should_species_be_calculated = tandem.has_high_uncertainty(
+        should_species_be_calculated = main.has_high_uncertainty(
             species=self.spc1, unconverged_species=list(), species_to_calc={'label': {'spc': self.spc2}})
         self.assertFalse(should_species_be_calculated)
 
-        should_species_be_calculated = tandem.has_high_uncertainty(
+        should_species_be_calculated = main.has_high_uncertainty(
             species=self.spc1, unconverged_species=list(), species_to_calc={'label': {'spc': self.spc3}})
         self.assertTrue(should_species_be_calculated)
 
     def test_load_species_and_reactions_from_chemkin_file(self):
         """Test loading species and reactions from a Chemkin file"""
         run_directory = os.path.join(self.base_path, 'iteration_0')
-        rmg_species, rmg_reactions = tandem.load_species_and_reactions_from_chemkin_file(run_directory, verbose=False)
+        rmg_species, rmg_reactions = main.load_species_and_reactions_from_chemkin_file(run_directory, verbose=False)
         self.assertEqual(len(rmg_species), 27)
         self.assertEqual(len(rmg_reactions), 227)
         self.assertIsInstance(rmg_species[0], Species)
@@ -213,10 +213,10 @@ class TestTandem(unittest.TestCase):
     def test_determine_species_based_on_sensitivity(self):
         """Test determining species to calculate based on sensitivity analysis"""
         run_directory = os.path.join(self.base_path, 'iteration_1')
-        arguments = tandem.parse_arc_input_file(self.arc_input_file_path, has_sa=True, has_pdep=False, verbose=False)[0]
-        rmg_species, rmg_reactions = tandem.load_species_and_reactions_from_chemkin_file(run_directory, verbose=False)
+        arguments = main.parse_arc_input_file(self.arc_input_file_path, has_sa=True, has_pdep=False, verbose=False)[0]
+        rmg_species, rmg_reactions = main.load_species_and_reactions_from_chemkin_file(run_directory, verbose=False)
         unconverged_species = list()
-        species_to_calc = tandem.determine_species_based_on_sensitivity(run_directory,
+        species_to_calc = main.determine_species_based_on_sensitivity(run_directory,
                                                                         arguments,
                                                                         rmg_species,
                                                                         rmg_reactions,
@@ -225,7 +225,7 @@ class TestTandem(unittest.TestCase):
                                                                         executed_networks=list(),
                                                                         verbose=False)[0]
         self.assertEqual(len(list(species_to_calc.values())), 7)
-        species_to_calc_str = tandem.dict_to_str(species_to_calc)
+        species_to_calc_str = main.dict_to_str(species_to_calc)
         expected_species_to_calc_str = """ethane(1):
   spc: ethane(1)
   reason: observable
@@ -276,7 +276,7 @@ CH3(3):
 #                                 network=PDepNetwork(index=27))
 #         pdep_rxns_to_explore = [(pdep_rxn, 1, 'CH2(S)(3)')]
 #         species_to_calc, executed_networks = \
-#             tandem.determine_species_from_pdep_network(
+#             main.determine_species_from_pdep_network(
 #                 run_directory=os.path.join(self.base_path, 'iteration_0'),
 #                 pdep_rxns_to_explore=pdep_rxns_to_explore,
 #                 unconverged_species=list(),
@@ -297,7 +297,7 @@ CH3(3):
             shutil.rmtree(pdep_sa_path)
 
         input_file_path, output_file_path, isomer_labels = \
-            tandem.modify_pdep_network_file(run_directory=os.path.join(self.base_path, 'iteration_0'),
+            main.modify_pdep_network_file(run_directory=os.path.join(self.base_path, 'iteration_0'),
                                             network_name='network27_2', method='CSE')
         self.assertIn('iteration_0/pdep_sa/network27_2/CSE/input.py', input_file_path)
         self.assertIn('iteration_0/pdep_sa/network27_2/CSE/sensitivity/sa_coefficients.yml', output_file_path)
@@ -315,7 +315,7 @@ CH3(3):
         self.assertTrue(cse)
 
         input_file_path, output_file_path, isomer_labels = \
-            tandem.modify_pdep_network_file(run_directory=os.path.join(self.base_path, 'iteration_0'),
+            main.modify_pdep_network_file(run_directory=os.path.join(self.base_path, 'iteration_0'),
                                             network_name='network3_1', method='MSC')
         self.assertIn('iteration_0/pdep_sa/network3_1/MSC/input.py', input_file_path)
         self.assertIn('iteration_0/pdep_sa/network3_1/MSC/sensitivity/sa_coefficients.yml', output_file_path)
@@ -341,14 +341,14 @@ CH3(3):
     def test_determine_species_based_on_collision_violators(self):
         """Test determining species to calculate based on collision rate violating reactions"""
         run_directory = os.path.join(self.base_path, 'iteration_2')
-        rmg_species, rmg_reactions = tandem.load_species_and_reactions_from_chemkin_file(run_directory, verbose=False)
+        rmg_species, rmg_reactions = main.load_species_and_reactions_from_chemkin_file(run_directory, verbose=False)
         unconverged_species = list()
-        species_to_calc = tandem.determine_species_based_on_collision_violators(run_directory,
+        species_to_calc = main.determine_species_based_on_collision_violators(run_directory,
                                                                                 rmg_species,
                                                                                 unconverged_species,
                                                                                 verbose=False)
         self.assertEqual(len(list(species_to_calc.values())), 1)
-        species_to_calc_str = tandem.dict_to_str(species_to_calc)
+        species_to_calc_str = main.dict_to_str(species_to_calc)
         expected_species_to_calc_str = """C3H6(19):
   spc: [CH2]C[CH2](19)
   reason: species participates in a collision rate violating reaction, C3H6(19)+H(4)=C3H7_0(15)
@@ -368,14 +368,14 @@ CH3(3):
             os.remove(rmg_thermo_lib_2_path)
 
         # test adding a library for the fist time
-        library_name = tandem.add_rmg_libraries(run_directory=libraries_path, library_name=None, verbose=False)
+        library_name = main.add_rmg_libraries(run_directory=libraries_path, library_name=None, verbose=False)
         self.assertEqual(library_name, 't3_thermo')
         thermo_lib = ThermoLibrary()
         thermo_lib.load(path=rmg_thermo_lib_1_path, local_context=local_context, global_context=dict())
         self.assertEqual(len(list(thermo_lib.entries.values())), 10)
 
         # test adding a library for the fist time with a different name ('t3_thermo' is occupied)
-        library_name = tandem.add_rmg_libraries(run_directory=libraries_path, library_name=None, verbose=False)
+        library_name = main.add_rmg_libraries(run_directory=libraries_path, library_name=None, verbose=False)
         self.assertEqual(library_name, 't3_thermo_0')
         thermo_lib = ThermoLibrary()
         thermo_lib.load(path=rmg_thermo_lib_1_path, local_context=local_context, global_context=dict())
@@ -383,7 +383,7 @@ CH3(3):
 
         # test appending entries to an existing library
         libraries_path = os.path.join(self.base_path, 'iteration_1')
-        library_name = tandem.add_rmg_libraries(run_directory=libraries_path, library_name='t3_thermo', verbose=False)
+        library_name = main.add_rmg_libraries(run_directory=libraries_path, library_name='t3_thermo', verbose=False)
         self.assertEqual(library_name, 't3_thermo')
         thermo_lib = ThermoLibrary()
         thermo_lib.load(path=rmg_thermo_lib_1_path, local_context=local_context, global_context=dict())
@@ -397,7 +397,7 @@ CH3(3):
         labels = ['C3H8_0', 'C3H7_1', 'C3H6_0', 'C3H6_1', 'C3H5_1',
                   'C3H5_2', 'C3H6_2', 'C3H4_0', 'C3H3_0', 'C3H4_1', 'C3H4_2']
         all_species = [Species(label=label) for label in labels]
-        unconverged_species = tandem.get_unconverged_species(run_directory=os.path.join(self.base_path, 'iteration_0'),
+        unconverged_species = main.get_unconverged_species(run_directory=os.path.join(self.base_path, 'iteration_0'),
                                                              all_species=all_species,
                                                              log_species=False,
                                                              verbose=False)
