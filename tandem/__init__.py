@@ -2,4 +2,7 @@
 Initializing the t3 module
 """
 
-from .tandem import execute
+import tandem.logger
+import tandem.main
+import tandem.utils
+from tandem.main import execute
