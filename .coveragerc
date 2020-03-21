@@ -1,10 +1,9 @@
-# .coveragerc to control coverage
+# .coveragerc to control coverage.py
 [run]
 branch = True
-source = t3.py
-         tandem
+source = tandem
+         t3.py
 omit =
-    *Test.py
     test_*.py
     */scripts/*
     */testing/*
@@ -16,14 +15,11 @@ omit =
 
 [report]
 show_missing = False
+exclude_lines =
+    if __name__ == .__main__.:
 include =
     tandem/*
-exclude_lines =
-    pragma: no cover
-    def __repr__
-    if __name__ == .__main__.:
 omit =
-    *Test.py
     test_*.py
     */scripts/*
     */testing/*
