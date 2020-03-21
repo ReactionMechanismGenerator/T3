@@ -12,12 +12,12 @@ dependencies:
   - ipython
   - jupyter
   - matplotlib >=2.2.2
-  - nose
   - numpy >=1.15.4
   - paramiko >=2.6.0
   - pandas
   - py3dmol >= 0.8.0
   - pyparsing
+  - pytest
   - python >=3.7
   - pyyaml
   - qcelemental
