@@ -36,7 +36,7 @@ jobs:
       script:
         - coverage run -m pytest -ra
         - coverage report
-        - codecov --token=788d104c-5bc4-4986-8cfd-0d79930d97e1
+        - codecov
 
 notifications:
     email: false
