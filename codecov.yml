@@ -1,14 +1,17 @@
+codecov:
+  token: 788d104c-5bc4-4986-8cfd-0d79930d97e1
+  bot: "codecov-io"
+  ci:
+    - "travis.org"
+  require_ci_to_pass: yes
 coverage:
+  range: 0..100
+  round: nearest
+  percision: 2
   ignore:
-    - */tests/*
+    - tests/**/*
     - tandem/_version.py
-  status:
-    patch: false
-    project:
-      default:
-        threshold: 50%
 comment:
-  layout: "header"
+  layout: "reach, diff, flags, files"
   require_changes: false
-  branches: null
-  behavior: once
+  branches: master
