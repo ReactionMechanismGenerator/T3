@@ -2,4 +2,4 @@
 Initializing the t3 module
 """
 
-from .tandem import execute
+from .main import execute
