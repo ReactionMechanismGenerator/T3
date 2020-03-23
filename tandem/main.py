@@ -141,10 +141,10 @@ def execute(args,
     rmg_input_file = args.file
     thermo_library = initialize_tandem_log(output_directory=args.output_directory, verbose=verbose)
 
-    unconverged_species = list()  # entries are Species objects of species for which thermo calculations failed once.
-    all_species = list()  # stores species_to_calc_in_iteration from all iterations, includes unconverged species
-    species_dict = dict()  # keys are labels, values are dicts of {'spc': <RMG Species objects>, 'reason': ``str``}
-    executed_networks = list()  # P-dep networks for which SA was already executed. Entries are tuples of isomer labels.
+    unconverged_species = list()    # entries are Species objects of species for which thermo calculations failed once.
+    all_species = list()            # stores species_to_calc_in_iteration from all iterations, includes unconverged species
+    species_dict = dict()           # keys are labels, values are dicts of {'spc': <RMG Species objects>, 'reason': ``str``}
+    executed_networks = list()      # P-dep networks for which SA was already executed. Entries are tuples of isomer labels.
 
     with open(rmg_input_file, 'r') as f:
         content = f.read()
@@ -339,7 +339,7 @@ def run_arc(input_dict: Union[str, dict],
 
     Raises:
         TypeError: If ``input_dict`` is of wrong type.
-        Various ARC Exceptions: if ARC crushed.
+        Various ARC Exceptions: if ARC crashed.
     """
     if isinstance(input_dict, str):
         input_dict = read_yaml_file(input_dict)
@@ -360,7 +360,7 @@ def run_arc(input_dict: Union[str, dict],
     try:
         arc0.execute()
     except Exception as e:
-        log(f'ARC crushed with {e.__class__}. Got the following message:\n{e}', level='error', verbose=verbose)
+        log(f'ARC crashed with {e.__class__}. Got the following message:\n{e}', level='error', verbose=verbose)
         raise
     elapsed_time = time_lapse(tic)
     log(f'ARC terminated. Overall execution time: {elapsed_time}', verbose=verbose)
