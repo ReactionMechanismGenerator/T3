@@ -23,6 +23,10 @@ def parse_command_line_arguments(command_line_args=None):
     parser.add_argument('-a', '--arc', metavar='ARC', type=str, nargs=1,
                         help="The augmented ARC input file")
 
+    # Add options for controlling what directories files are written to
+    parser.add_argument('-o', '--output-directory', type=str, default='',
+                        metavar='DIR', help='use DIR as output directory')
+
     # Options for controlling the amount of information printed to the console
     # By default a moderate level of information is printed; you can either
     # ask for less (quiet), more (verbose), or much more (debug)
@@ -41,7 +45,6 @@ def main() -> None:
     """
     # Parse the command-line arguments (requires the argparse module)
     args = parse_command_line_arguments()
-
     kwargs = {
         'rmg': args.rmg,
         'arc': args.arc,

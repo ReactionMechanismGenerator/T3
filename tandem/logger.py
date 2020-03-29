@@ -12,6 +12,7 @@ from typing import Optional
 
 from arc.common import time_lapse
 
+from .config import species_labels_dict
 from .utils import dict_to_str
 
 
