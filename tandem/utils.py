@@ -5,6 +5,7 @@ t3 utils module
 import os
 from typing import Optional, Union
 
+VERSION = '0.1.0'
 
 def dict_to_str(dictionary: dict,
                 level: Optional[int] = 0,
