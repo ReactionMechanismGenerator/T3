@@ -1,0 +1,814 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>tandem.main &mdash; T3 0.1.0 Documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="tandem.logger" href="logger.html" />
+    <link rel="prev" title="t3" href="t3.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> T3
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation instructions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../running.html">Running T3</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../output.html">Output</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">T3’s API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="t3.html">t3</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">tandem.main</a></li>
+<li class="toctree-l2"><a class="reference internal" href="logger.html">tandem.logger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">tandem.utils</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../release.html">Release notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../credits.html">Credits</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contribute.html">Contribute</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cite.html">How to cite T3</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">T3</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="index.html">T3’s API</a> &raquo;</li>
+        
+      <li>tandem.main</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/api/main.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-tandem.main">
+<span id="tandem-main"></span><span id="main"></span><h1>tandem.main<a class="headerlink" href="#module-tandem.main" title="Permalink to this headline">¶</a></h1>
+<p>The RMG-ARC tandem module for iterative kinetic model generation and refinement</p>
+<p>RMG is an automatic chemical mechanism generator. It is awesomely awesome.
+ARC is an automatic electronic structure computation scheduler and processor. It is magnificently magnificent.
+Here we iteratively execute RMG and ARC to generate and refine a chemical kinetic model.
+Run RMG and ARC in tandem by passing an additional input file to RMG with the <cite>-a</cite> attribute, e.g.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>python $rmgpy/rmg.py input.py -t3 arc.yml
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">input.py</span></code> is the legacy RMG input file, and <code class="docutils literal notranslate"><span class="pre">arc.yml</span></code> is an ARC input file augmented with T3 directives.</p>
+<p>Do not specify species nor reactions in ARC’s input file, they are automatically selected from RMG by this tool
+according to the T3 directives in ARC’s input file.</p>
+<p>Directives by which species are selected for thermodynamic data calculations are all optional,
+and may include the following (values in parentheses are defaults):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>- SA observables: A list of observables for the SA. Entries are dictionaries, keys are &#39;label&#39; and either &#39;smiles&#39;
+                  or &#39;adj&#39; bearing the structure.
+- SA method (optional): The software to use for running SA: Either &#39;RMG&#39; (default), &#39;RMS&#39;, or &#39;Cantera&#39;.
+- SA threshold (optional): The SA threshold to use, 0.01 by default.
+- SA species (10): The top X species each observable is sensitive to for which thermo will be calculated.
+- SA reactions (10): The top X reactions each observable is sensitive to for which participating species thermo
+                     will be calculated.
+- SA pdep threshold (0.001): The ratio of the sensitivity coefficient of a well relative to the maximum sensitivity
+                            coefficient of all wells/TSs at each condition in a pressure-dependent network of a
+                            reaction identified by ``SA reactions``, for which thermodynamic data will be calculated.
+- collision violators (``True``): Whether to calculate thermodynamic data for all species participating in
+                                  collision rate violating reactions.
+- all core species (``False``): Whether to calculate thermodynamic data for all core species.
+</pre></div>
+</div>
+<p>The above criteria are always matched with uncertainty analysis, currently in the form of a simple check of whether the
+thermodynamic data was derived from group additivity or not.</p>
+<p>Additional allowed directives are:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">-</span> <span class="n">RMG</span> <span class="n">tolerances</span> <span class="p">([</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]):</span> <span class="n">A</span> <span class="nb">list</span> <span class="n">of</span> <span class="n">RMG</span> <span class="n">toleranceMoveToCore</span> <span class="n">to</span> <span class="n">use</span><span class="o">.</span>
+<span class="o">-</span> <span class="nb">max</span> <span class="n">tandem</span> <span class="n">iterations</span> <span class="p">(</span><span class="mi">10</span><span class="p">):</span> <span class="n">Maximum</span> <span class="n">iteration</span> <span class="n">T3</span> <span class="n">will</span> <span class="n">make</span><span class="o">.</span>
+<span class="o">-</span> <span class="nb">max</span> <span class="n">RMG</span> <span class="n">exceptions</span> <span class="n">allowed</span> <span class="p">(</span><span class="mi">10</span><span class="p">):</span> <span class="n">Maximum</span> <span class="n">number</span> <span class="n">of</span> <span class="n">times</span> <span class="n">RMG</span> <span class="ow">is</span> <span class="n">allowed</span> <span class="n">to</span> <span class="n">crush</span><span class="o">.</span>
+<span class="o">-</span> <span class="nb">max</span> <span class="n">RMG</span> <span class="n">walltime</span> <span class="p">(</span><span class="mi">01</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span><span class="p">):</span> <span class="n">The</span> <span class="n">maximal</span> <span class="n">wall</span> <span class="n">time</span> <span class="n">allocated</span> <span class="n">per</span> <span class="n">RMG</span> <span class="n">execution</span><span class="o">.</span>
+</pre></div>
+</div>
+<p>T3 has a restart feature that automatically kicks in if it finds previous iteration directories in the output path.
+To run T3 <strong>afresh</strong> in the same path, maker sure to first delete all iteration directories in that path.</p>
+<dl class="function">
+<dt id="tandem.main.add_rmg_libraries">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">add_rmg_libraries</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">library_name: Optional[str] = None</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; str<a class="reference internal" href="../_modules/tandem/main.html#add_rmg_libraries"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.add_rmg_libraries" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a “t3_thermo” library in the correct place in the RMG database repository if it doesn’t already exist,
+and appends the respective entries from the library generated by ARC.
+The libraries generated by ARC are located in <code class="docutils literal notranslate"><span class="pre">run_directory</span></code>/ARC/output/RMG libraries/</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The directory of the recently terminated RMG-ARC iteration.</p></li>
+<li><p><strong>library_name</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The library name. None in the first iteration (where it is created),
+other iterations should pass this argument for consistency.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The (created) library_name.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.calc_based_on_thermo_comment">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">calc_based_on_thermo_comment</code><span class="sig-paren">(</span><em class="sig-param">species: Optional[rmgpy.species.Species]</em><span class="sig-paren">)</span> &#x2192; bool<a class="reference internal" href="../_modules/tandem/main.html#calc_based_on_thermo_comment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.calc_based_on_thermo_comment" title="Permalink to this definition">¶</a></dt>
+<dd><p>A helper function for reading the species thermo comment and determining whether to calculate thermodynamic
+properties for it using ARC.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>species</strong> (<em>Union</em><em>[</em><em>Species</em><em>, </em><em>None</em><em>]</em>) – The considered species.</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>InputError</strong> – If <code class="docutils literal notranslate"><span class="pre">species</span></code> is None.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Whether thermodynamic properties should be calculated. <code class="docutils literal notranslate"><span class="pre">True</span></code> if they should.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.determine_species_based_on_collision_violators">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">determine_species_based_on_collision_violators</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">rmg_species: list</em>, <em class="sig-param">unconverged_species: list</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; dict<a class="reference internal" href="../_modules/tandem/main.html#determine_species_based_on_collision_violators"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.determine_species_based_on_collision_violators" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine species to calculate based on collision rate violating reactions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The current RMG-ARC Tandem Tool iteration directory.</p></li>
+<li><p><strong>rmg_species</strong> (<em>list</em>) – All RMG Species parsed from the Chemkin file.</p></li>
+<li><p><strong>unconverged_species</strong> (<em>list</em>) – Entries are RMG Species for which thermo calculations did not converge
+in ARC throughout the iterations.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Keys are Chemkin labels, values are dicts of {‘spc’: RMG Species objects, ‘reason’: <code class="docutils literal notranslate"><span class="pre">str</span></code>}</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.determine_species_based_on_sensitivity">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">determine_species_based_on_sensitivity</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">arguments: dict</em>, <em class="sig-param">rmg_species: list</em>, <em class="sig-param">rmg_reactions: list</em>, <em class="sig-param">unconverged_species: list</em>, <em class="sig-param">iteration: int</em>, <em class="sig-param">executed_networks: list</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; Tuple[dict, list]<a class="reference internal" href="../_modules/tandem/main.html#determine_species_based_on_sensitivity"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.determine_species_based_on_sensitivity" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine species to calculate based on sensitivity analysis.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The current RMG-ARC Tandem Tool iteration directory.</p></li>
+<li><p><strong>arguments</strong> (<em>dict</em>) – User directives for determining which species thermodynamic properties to calculate.</p></li>
+<li><p><strong>rmg_species</strong> (<em>list</em>) – All RMG Species parsed from the Chemkin file.</p></li>
+<li><p><strong>rmg_reactions</strong> (<em>list</em>) – All RMG Reactions parsed from the Chemkin file.</p></li>
+<li><p><strong>unconverged_species</strong> (<em>list</em>) – Entries are RMG Species for which thermo calculations did not converge
+in ARC throughout the iterations.</p></li>
+<li><p><strong>iteration</strong> (<em>int</em>) – The current T3 iteration number.</p></li>
+<li><p><strong>executed_networks</strong> (<em>list</em>) – Entries are tuples of isomers labels from networks which were already executed.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>Keys are Chemkin labels, values are dicts of {‘spc’: RMG Species objects, ‘reason’: <code class="docutils literal notranslate"><span class="pre">str</span></code>}</p></li>
+<li><p>The updated executed_networks list.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Tuple[dict, list]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.determine_species_from_pdep_network">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">determine_species_from_pdep_network</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">pdep_rxns_to_explore: list</em>, <em class="sig-param">unconverged_species: list</em>, <em class="sig-param">species_to_calc: dict</em>, <em class="sig-param">iteration: int</em>, <em class="sig-param">threshold: float</em>, <em class="sig-param">executed_networks: list</em>, <em class="sig-param">rmg_species: list</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; Tuple[dict, list]<a class="reference internal" href="../_modules/tandem/main.html#determine_species_from_pdep_network"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.determine_species_from_pdep_network" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine species to calculate based on a pressure dependent network by spawning a network sensitivity analysis.
+First tries to use the CSE method, if unsuccessful tries the MSC method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The current RMG-ARC Tandem Tool iteration directory.</p></li>
+<li><p><strong>pdep_rxns_to_explore</strong> (<em>list</em>) – Entries are tuples of (Reaction, SA rank index, observable_label).</p></li>
+<li><p><strong>unconverged_species</strong> (<em>list</em>) – Entries are RMG Species for which thermo calculations did not converge
+in ARC throughout the iterations.</p></li>
+<li><p><strong>species_to_calc</strong> (<em>dict</em>) – Keys are Chemkin labels, values are dictionaries of {‘spc’: species, ‘reason’: reason}.</p></li>
+<li><p><strong>iteration</strong> (<em>int</em>) – The T3 iteration number.</p></li>
+<li><p><strong>threshold</strong> (<em>float</em>) – The relative SA pdep threshold above which sensitivity coefficients are considered high.</p></li>
+<li><p><strong>executed_networks</strong> (<em>list</em>) – Entries are tuples of isomers labels from networks which were already executed.</p></li>
+<li><p><strong>rmg_species</strong> (<em>list</em>) – All RMG Species parsed from the Chemkin file.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>The updated species_to_calc dictionary.</p></li>
+<li><p>The updated executed_networks list.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Tuple[dict, list]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.determine_species_to_calculate">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">determine_species_to_calculate</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">arguments: dict</em>, <em class="sig-param">unconverged_species: list</em>, <em class="sig-param">all_species: list</em>, <em class="sig-param">iteration: int</em>, <em class="sig-param">executed_networks: list</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; Tuple[dict, bool, list]<a class="reference internal" href="../_modules/tandem/main.html#determine_species_to_calculate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.determine_species_to_calculate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine which species in the executed RMG job should be calculated by ARC.
+Species which were previously attempted to be calculated but did not converge will not be selected again.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The current RMG-ARC Tandem Tool iteration directory.</p></li>
+<li><p><strong>arguments</strong> (<em>dict</em>) – User directives for determining which species thermodynamic properties to calculate.</p></li>
+<li><p><strong>unconverged_species</strong> (<em>list</em>) – Entries are RMG Species for which thermo calculations did not converge
+in ARC throughout the iterations.</p></li>
+<li><p><strong>all_species</strong> (<em>list</em>) – Entries are RMG Species identified so far to be calculated. Used for setting legal names.</p></li>
+<li><p><strong>iteration</strong> (<em>int</em>) – The current T3 iteration number.</p></li>
+<li><p><strong>executed_networks</strong> (<em>list</em>) – Entries are tuples of isomers labels from networks which were already executed.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>Keys are species Chemkin labels, values are dictionaries.
+In the value dictionaries, keys are ‘spc’ and ‘reason’, values are RMG Species for which thermodynamic
+properties should be calculated, and the reason they were selected for the calculation, respectively.</p></li>
+<li><p>Whether additional calculations are required. <code class="docutils literal notranslate"><span class="pre">True</span></code> if they are.</p></li>
+<li><p>The updated executed_networks list.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Tuple[dict, bool, list]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.execute">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">execute</code><span class="sig-paren">(</span><em class="sig-param">args</em>, <em class="sig-param">kwargs</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../_modules/tandem/main.html#execute"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.execute" title="Permalink to this definition">¶</a></dt>
+<dd><p>Execute the tandem RMG and ARC model generation and refinement module.
+Note that <code class="docutils literal notranslate"><span class="pre">args</span></code> and <code class="docutils literal notranslate"><span class="pre">kwargs</span></code> should not be defined with the common <cite>*</cite> and <cite>**</cite> here.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>args</strong> (<em>parser.parse_args</em>) – The command line parsed arguments.</p></li>
+<li><p><strong>kwargs</strong> (<em>dict</em>) – Keyword arguments to be passed when initializing the RMG object.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>Input error if the number of RMG tolerances is greater than the total number of T3 iterations.</strong> – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.get_reaction_by_index">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">get_reaction_by_index</code><span class="sig-paren">(</span><em class="sig-param">index: int</em>, <em class="sig-param">reaction_list: list</em><span class="sig-paren">)</span> &#x2192; Optional[Reaction]<a class="reference internal" href="../_modules/tandem/main.html#get_reaction_by_index"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.get_reaction_by_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a reaction from a list of reactions by its index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – The reaction index attribute, 0-indexed.</p></li>
+<li><p><strong>reaction_list</strong> (<em>list</em>) – Entries are RMG Reaction objects.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>The corresponding reaction from the reaction_list.</dt><dd><p>Returns <code class="docutils literal notranslate"><span class="pre">None</span></code> if no reaction was found.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Union[‘Reaction’, None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.get_species_by_label">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">get_species_by_label</code><span class="sig-paren">(</span><em class="sig-param">label: str</em>, <em class="sig-param">species_list: list</em><span class="sig-paren">)</span> &#x2192; Optional[rmgpy.species.Species]<a class="reference internal" href="../_modules/tandem/main.html#get_species_by_label"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.get_species_by_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a species from a list of species by its label.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>label</strong> (<em>str</em>) – A species’ label (species.label).</p></li>
+<li><p><strong>species_list</strong> (<em>list</em>) – Entries are RMG Species objects.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>InputError</strong> – If <code class="docutils literal notranslate"><span class="pre">label</span></code> is None.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>The corresponding species from the species_list.</dt><dd><p>Returns <code class="docutils literal notranslate"><span class="pre">None</span></code> if no species was found.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Union[Species, None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.get_species_label_by_structure">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">get_species_label_by_structure</code><span class="sig-paren">(</span><em class="sig-param">adj: str</em>, <em class="sig-param">species_list: list</em><span class="sig-paren">)</span> &#x2192; Optional[str]<a class="reference internal" href="../_modules/tandem/main.html#get_species_label_by_structure"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.get_species_label_by_structure" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a species from a list of species by its structure (adjacency list).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>adj</strong> (<em>str</em>) – The species adjacency list.</p></li>
+<li><p><strong>species_list</strong> (<em>list</em>) – Entries are RMG Species objects.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>The corresponding species label attribute from the species_list.</dt><dd><p>Returns <code class="docutils literal notranslate"><span class="pre">None</span></code> if no species was found.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Union[str, None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.get_unconverged_species">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">get_unconverged_species</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">all_species: list</em>, <em class="sig-param">log_species: Optional[bool] = True</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; list<a class="reference internal" href="../_modules/tandem/main.html#get_unconverged_species"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.get_unconverged_species" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the labels of unconverged species from the present ARC iteration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The directory name of the present iteration.</p></li>
+<li><p><strong>all_species</strong> (<em>list</em>) – Entries are RMG Species objects sent to calculation so far.</p></li>
+<li><p><strong>log_species</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether to log unconverged species, <code class="docutils literal notranslate"><span class="pre">True</span></code> to log, used for testing.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Entries are RMG Species objects which could not be calculated in the present iteration.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.has_high_uncertainty">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">has_high_uncertainty</code><span class="sig-paren">(</span><em class="sig-param">species: Optional[rmgpy.species.Species], unconverged_species: list, species_to_calc: dict</em><span class="sig-paren">)</span> &#x2192; bool<a class="reference internal" href="../_modules/tandem/main.html#has_high_uncertainty"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.has_high_uncertainty" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine whether a species’ thermochemical properties should be calculated based on the uncertainty in its
+thermodynamic properties (currently only considering GAV).
+Also check that it is not already selected or previously attempted to be calculated but did not converge.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>species</strong> (<em>Union</em><em>[</em><em>Species</em><em>, </em><em>None</em><em>]</em>) – The species for which the query is performed.</p></li>
+<li><p><strong>unconverged_species</strong> (<em>list</em>) – Entries are RMG Species objects for which thermo calculations did not converge
+in ARC throughout the iterations.</p></li>
+<li><p><strong>species_to_calc</strong> (<em>dict</em>) – RMG Species to calculate thermo for in the current iteration.
+Keys are labels, values are dicts of {‘spc’: RMG Species objects, ‘reason’: <code class="docutils literal notranslate"><span class="pre">str</span></code>}.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>InputError</strong> – If <code class="docutils literal notranslate"><span class="pre">species</span></code> is None.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Whether thermochemical properties for the species should be calculated. <code class="docutils literal notranslate"><span class="pre">True</span></code> if they should be.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.load_species_and_reactions_from_chemkin_file">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">load_species_and_reactions_from_chemkin_file</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; Tuple[list, list]<a class="reference internal" href="../_modules/tandem/main.html#load_species_and_reactions_from_chemkin_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.load_species_and_reactions_from_chemkin_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load RMG Species and Reaction objects from the annotated Chemkin file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The current RMG-ARC Tandem Tool iteration directory.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>ChemkinError</strong> – If the Chemkin file could not be read.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p>The Species objects.</p></li>
+<li><p>The Reactions objects.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Tuple[list, list]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.modify_pdep_network_file">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">modify_pdep_network_file</code><span class="sig-paren">(</span><em class="sig-param">run_directory: str</em>, <em class="sig-param">network_name: str</em>, <em class="sig-param">method: str</em><span class="sig-paren">)</span> &#x2192; Tuple[str, str, tuple]<a class="reference internal" href="../_modules/tandem/main.html#modify_pdep_network_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.modify_pdep_network_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>A helper function for adding a P-dep SA directive to an Arkane network input file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>run_directory</strong> (<em>str</em>) – The current RMG-ARC Tandem Tool iteration directory.</p></li>
+<li><p><strong>network_name</strong> (<em>str</em>) – The name of the original network file, e.g. ‘network32_1’.</p></li>
+<li><p><strong>method</strong> (<em>str</em>) – ‘CSE’, ‘MSC’ or ‘RS’.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>InputError</strong> – If <code class="docutils literal notranslate"><span class="pre">method</span></code> is not identified, or T/P ranges could not be parsed from the file.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p>The path to the new Arkane network input file.</p></li>
+<li><p>The path to the Arkane output file.</p></li>
+<li><p>Isomer labels of the current network.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Tuple[str, str, tuple]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.parse_arc_input_file">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">parse_arc_input_file</code><span class="sig-paren">(</span><em class="sig-param">input_file_path: Union[str, list], has_sa: bool, has_pdep: bool, verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; Tuple[dict, dict]<a class="reference internal" href="../_modules/tandem/main.html#parse_arc_input_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.parse_arc_input_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Split the ARC input file into relevant arguments for The RMG-ARC Tandem Tool, and the legacy ARC input.
+This function also checks the ARC input file’s validity.</p>
+<p>All Tandem arguments are optional, and may include the following (values in parentheses are defaults):
+‘SA observables’ (<code class="docutils literal notranslate"><span class="pre">True</span></code>), ‘SA species’ (10), ‘SA reactions’ (10), ‘SA pdep threshold’ (10%),
+‘collision violators’ (<code class="docutils literal notranslate"><span class="pre">True</span></code>), ‘all core species’ (<code class="docutils literal notranslate"><span class="pre">False</span></code>), ‘RMG tolerances’ ([0.1, 0.01, 0.001]),
+‘max tandem iterations’ (10), ‘max RMG exceptions allowed’ (10), ‘max RMG walltime’ (01:00:00:00).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_file_path</strong> (<em>str</em><em>, </em><em>list</em>) – A path to ARC’s input file.</p></li>
+<li><p><strong>has_sa</strong> (<em>bool</em>) – Whether the RMG input file contains sensitivity analysis directives, <code class="docutils literal notranslate"><span class="pre">True</span></code> if it does.</p></li>
+<li><p><strong>has_pdep</strong> (<em>bool</em>) – Whether the RMG input file contains a P-dep block, <code class="docutils literal notranslate"><span class="pre">True</span></code> if it does.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>InputError</strong> – If the ARC input file contains either species or reactions.</p></li>
+<li><p><strong>ValueError</strong> – If arguments[‘SA pdep threshold’] has a value outside of the range [0, 1].</p></li>
+<li><p><strong>TypeError</strong> – If arguments have wrong type.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p>The T3 arguments.</p></li>
+<li><p>ARC’s input.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Tuple[dict, dict]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.restart_t3">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">restart_t3</code><span class="sig-paren">(</span><em class="sig-param">path: str</em>, <em class="sig-param">thermo_library: Optional[str] = None</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; Tuple[int, bool, str]<a class="reference internal" href="../_modules/tandem/main.html#restart_t3"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.restart_t3" title="Permalink to this definition">¶</a></dt>
+<dd><p>Restart T3 by looking for existing iteration folders.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>str</em>) – The folder path of the current T3 run, where the ‘iteration_i’ folders are located.</p></li>
+<li><p><strong>thermo_library</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The name of the thermo library parsed from the previous T3 log file.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>The current iteration number.</p></li>
+<li><p>Whether to run RMG for this iteration.</p></li>
+<li><p>The thermo library name to use.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Tuple[int, bool, str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.run_arc">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">run_arc</code><span class="sig-paren">(</span><em class="sig-param">input_dict: Union[str, dict], run_directory: str, species_to_calc: Optional[list] = None, verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../_modules/tandem/main.html#run_arc"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.run_arc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run ARC.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_dict</strong> (<em>str</em><em>, </em><em>dict</em>) – A dictionary containing directives to execute ARC, or the path to the yml file.</p></li>
+<li><p><strong>run_directory</strong> (<em>str</em>) – A path to the RMG-ARC iteration directory.</p></li>
+<li><p><strong>species_to_calc</strong> (<em>Optional</em><em>[</em><em>list</em><em>]</em>) – Entries are RMG Species for which ARC will calculate thermo properties.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>TypeError</strong> – If <code class="docutils literal notranslate"><span class="pre">input_dict</span></code> is of wrong type.</p></li>
+<li><p><strong>Various ARC Exceptions</strong> – if ARC crashed.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.run_rmg">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">run_rmg</code><span class="sig-paren">(</span><em class="sig-param">input_file: str</em>, <em class="sig-param">output_directory: str</em>, <em class="sig-param">kwargs: dict</em>, <em class="sig-param">arguments: dict</em>, <em class="sig-param">tolerance: float</em>, <em class="sig-param">thermo_library: Optional[str] = None</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../_modules/tandem/main.html#run_rmg"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.run_rmg" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run RMG.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_file</strong> (<em>str</em>) – The path to the legacy RMG input file.</p></li>
+<li><p><strong>output_directory</strong> (<em>str</em>) – The path to the output directory for the current iteration.</p></li>
+<li><p><strong>kwargs</strong> (<em>dict</em>) – Keyword arguments to be passed when initializing the RMG object.</p></li>
+<li><p><strong>arguments</strong> (<em>dict</em>) – Various arguments for The RMG-ARC Tandem Tool.</p></li>
+<li><p><strong>tolerance</strong> (<em>float</em>) – The toleranceMoveToCore value to use.</p></li>
+<li><p><strong>thermo_library</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The thermo library name created by the tandem tool.
+Consistent between iterations
+(it is None only in iteration 0, where it is being set).</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>InputError</strong> – If something is wrong with the RMG input file.</p></li>
+<li><p><strong>Various RMG Exceptions</strong> – if RMG crushed too many times.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.run_sa">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">run_sa</code><span class="sig-paren">(</span><em class="sig-param">method: str</em>, <em class="sig-param">observable_list: list</em>, <em class="sig-param">run_directory: str</em>, <em class="sig-param">input_file: str</em>, <em class="sig-param">threshold: Optional[float] = 0.001</em>, <em class="sig-param">verbose: Optional[bool] = True</em><span class="sig-paren">)</span> &#x2192; bool<a class="reference internal" href="../_modules/tandem/main.html#run_sa"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.run_sa" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run a sensitivity analysis.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>method</strong> (<em>str</em>) – The software to use, either RMG, RMS, or Cantera.</p></li>
+<li><p><strong>observable_list</strong> (<em>list</em>) – Entries are dictionaries of ‘label’ and structure (either ‘smiles’ or ‘adj’).</p></li>
+<li><p><strong>run_directory</strong> (<em>str</em>) – A path to the RMG-ARC iteration directory.</p></li>
+<li><p><strong>input_file</strong> (<em>str</em>) – The path to the legacy RMG input file.</p></li>
+<li><p><strong>threshold</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – The sensitivity threshold to use.</p></li>
+<li><p><strong>verbose</strong> (<em>Optional</em><em>[</em><em>bool</em><em>]</em>) – Whether or not to log to file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>InputError</strong> – If <code class="docutils literal notranslate"><span class="pre">method</span></code> has a wrong value.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Whether SA ran successfully. <code class="docutils literal notranslate"><span class="pre">True</span></code> if it did.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.set_legal_species_labels">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">set_legal_species_labels</code><span class="sig-paren">(</span><em class="sig-param">species_to_calc: list</em>, <em class="sig-param">all_species: list</em><span class="sig-paren">)</span> &#x2192; list<a class="reference internal" href="../_modules/tandem/main.html#set_legal_species_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.set_legal_species_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>ARC uses the species label as folder names on the servers and the local machine.
+Make sure each species has a legal and unique label (which consists of the molecular formula, underscore, and index)
+Store the new labels (keys) and original Chemkin labels (values) in the <code class="docutils literal notranslate"><span class="pre">species_labels_dict</span></code> dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>species_to_calc</strong> (<em>list</em>) – Entries are RMG Species objects for which thermo should be calculated in this iteration.</p></li>
+<li><p><strong>all_species</strong> (<em>list</em>) – Entries are RMG Species object of previously considered species,
+used here to determine unique labels.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Species to be calculated with modified labels.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="tandem.main.species_not_in_list">
+<code class="sig-prename descclassname">tandem.main.</code><code class="sig-name descname">species_not_in_list</code><span class="sig-paren">(</span><em class="sig-param">species: Union[rmgpy.species.Species, str], species_list: list</em><span class="sig-paren">)</span> &#x2192; bool<a class="reference internal" href="../_modules/tandem/main.html#species_not_in_list"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tandem.main.species_not_in_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check whether a species is NOT in species_list. Use the unique Chemkin species labels.
+Note that the labels in species_list were changed, therefore the global <code class="docutils literal notranslate"><span class="pre">species_labels_dict</span></code> is used.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>species</strong> (<em>Species</em><em>, </em><em>str</em>) – Either an RMG Species object or a Chemkin label thereof.</p></li>
+<li><p><strong>species_list</strong> (<em>list</em>) – Entries are RMG Species objects.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>TypeError</strong> – If <code class="docutils literal notranslate"><span class="pre">species</span></code> is of wrong type.</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Whether the species is in the list. True if it is.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="logger.html" class="btn btn-neutral float-right" title="tandem.logger" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="t3.html" class="btn btn-neutral float-left" title="t3" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019-2020, Alon Grinberg Dana
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
