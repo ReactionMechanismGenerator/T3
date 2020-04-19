@@ -30,7 +30,12 @@ jobs:
         - cd ARC
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - cd ..
-        - conda install -y -c conda-forge codecov
+        - git clone https://github.com/ReactionMechanismGenerator/RMG-database
+        - git clone https://github.com/ReactionMechanismGenerator/RMG-Py
+        - cd RMG-Py
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - make
+        - cd ..
         - conda list
         - cd T3
       script:

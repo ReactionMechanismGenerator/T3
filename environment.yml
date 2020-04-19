@@ -5,22 +5,56 @@ channels:
   - rdkit
   - cantera
   - anaconda
+  - omnia
   - pytorch
   - conda-forge
 dependencies:
+  - ase >=3.15.0
+  - cairo
+  - cairocffi
+  - cantera >=2.3.0
+  - cclib >=1.6
+  - chemprop
+  - codecov
+  - coolprop
   - coverage
+  - cython >=0.25.2
+  - ffmpeg
+  - gprof2dot
+  - graphviz
+  - h5py
   - ipython
+  - jinja2
   - jupyter
+  - lpsolve55
+  - markupsafe
   - matplotlib >=2.2.2
+  - mock
+  - mopac
+  - mpmath
+  - networkx
+  - nose
+  - numdifftools
   - numpy >=1.15.4
+  - openbabel
   - paramiko >=2.6.0
   - pandas
+  - psutil
   - py3dmol >= 0.8.0
+  - pydas >=1.0.1
+  - pydot
+  - pydqed >=1.0.0
+  - pymongo
   - pyparsing
-  - pytest
+  - pyrdl
   - python >=3.7
+  - pytest
   - pyyaml
   - qcelemental
+  - quantities
   - rdkit >=2019.09.2.0
-  - rmg >=3.0.0
+  - scikit-learn
+  - scipy
   - sphinx
+  - symmetry
+  - xlwt
