@@ -22,5 +22,4 @@ dependencies:
   - pyyaml
   - qcelemental
   - rdkit >=2019.09.2.0
-  - rmg >=3.0.0
   - sphinx
