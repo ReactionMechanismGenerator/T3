@@ -29,6 +29,9 @@ __ anaconda_
 Install dependencies
 ^^^^^^^^^^^^^^^^^^^^
 
+- Install the latest versions of RMG-Py and the RMG-database on the same machine that 
+  T3 is installed on by following the `documented instructions <http://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/anacondaDeveloper.html>`_. 
+  Be sure to add RMG-Py to your PATH and PYTHONPATH as explained in the instructions.
 - Install the latest version of ARC on the same machine that T3 is installed on 
   by following `ARC's installation instructions 
   <https://reactionmechanismgenerator.github.io/ARC/installation.html>`_. 
