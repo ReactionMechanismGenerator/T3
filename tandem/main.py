@@ -956,7 +956,7 @@ def determine_species_to_calculate(run_directory: str,
             species_to_calc_coll = determine_species_based_on_collision_violators(
                 run_directory, rmg_species, unconverged_species)
 
-    species_to_calc = combine_dicts(species_to_calc_sa, species_to_calc_coll)
+        species_to_calc = combine_dicts(species_to_calc_sa, species_to_calc_coll)
 
     additional_calcs_required = bool(len(species_to_calc.values()))
     log(f'Additional calculations required: {additional_calcs_required}\n',
