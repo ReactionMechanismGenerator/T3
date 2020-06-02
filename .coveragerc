@@ -11,6 +11,7 @@ omit =
     */examples/*
     */ipython/*
     */grf/*
+    */devtools/*
 
 [report]
 show_missing = False
@@ -27,6 +28,7 @@ omit =
     */examples/*
     */ipython/*
     */grf/*
+    */devtools/*
 
 [html]
 directory = testing/coverage
