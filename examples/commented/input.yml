@@ -1,0 +1,219 @@
+# A commented version of T3 input file
+project: project_name  # required
+project_directory: project_name  # optional
+
+verbose: 20  # The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20
+             # ``None`` will avoid logging to file.
+
+# arguments related to T3 (optional)
+t3:
+
+  # options (optional block, all arguments have defaults)
+  options:
+    flux_adapter: RMG  # optional, can use any implemented simulation adapter, default: 'RMG'
+    profiles_adapter: RMG  # optional, can use any implemented simulation adapter, default: 'RMG'
+    collision_violators_thermo: false  # optional, whether to calculate thermo of species participating in collision violating reactions, default: ``False``
+    collision_violators_rates: false  # optional, whether to calculate rates of core collision violating reactions, default: ``False``. If ``True``, will only be done if all thermo of species in these reactions were calculated (will force ``collision_violators_thermo`` to be ``True`` if it's not
+    all_core_species: false  # optional, whether to calculate thermo for all core species, default: ``False``
+    all_core_reactions: false  # optional, whether to calculate rates (to be implemented) for all core species, default: ``False``
+    fit_missing_GAV: false  # optional, whether to capture wrong thermo groups of species estimated by RMG and attempt to calculate them, default: ``False``
+    max_T3_iterations: 10  # optional, maximum T3 iterations, default: 10
+    max_RMG_exceptions_allowed: 10  # optional, maximum number of times RMG is allowed to crash, default: 10
+    max_RMG_walltime: '00:02:00:00'  # optional, default: ``None``
+    max_T3_walltime: '01:00:00:00'  # optional, default: ``None``
+    library_name: T3  # optional, default: 'T3'
+
+  # sensitivity analysis (optional block, T3 can ran w/o SA)
+  sensitivity:
+    adapter: RMG  # *required* (this is how SA is requested), can use any implemented simulation adapter
+    atol: 1e-6  # optional, default: 1e-6
+    rtol: 1e-4  # optional, default: 1e-4
+    global_observables: ['IgD', 'ESR', 'SL']  # optional, only implemented in the Cantera adapter, default: ``None``
+    SA_threshold: 0.01  # optional, default: 0.01
+    pdep_SA_thershold: 0.001  # optional, used to determine wells and reactions (to be implemented) to calculate
+                              # thermo and rates for from a PES of a sensitive reaction, default: 0.001
+                              # Pass ``None`` to skip PES SA.
+    ME_methods: ['CSE', 'MSC']  # master equation methods, used to conduct a PES SA,
+                                # could be any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC']
+    top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
+    top_SA_reactions: 10  # optional, used per observable to determine rates to calculate (to be implemented) as well as
+                          # thermo of species participating in these reactions, default: 10
+
+  # uncertainty analysis for a predicted species concentration (optional block, T3 can ran w/o UA)
+  # either local or global UA type must be specified to execute an UA
+  uncertainty:
+    adapter: RMG  # *required* (this is how UA is requested), currently only implemented in the RMG adapter
+    local_analysis: false  # optional, local uncertainty analysis using first-order sensitivity coefficients, default: ``False``
+    global_analysis: false  # optional, global uncertainty analysis varying largest sensitive input parameters, default: ``False``
+    correlated: true  # optional, whether to treat input parameters as correlated (RMG has ``correlated`` and ``uncorrelated``, ascribe correctly), default: ``True``
+    local_number: 10  # optional, the number of reported parameters in a local uncertainty analysis, default: 10
+    global_number: 5  # optional, number of sensitive input parameters to vary in the global uncertainty analysis per observable, applies independently to species and reactions, default: 5
+    termination_time: None  # only necessary for global UA if a termination time wasn't specified in the RMG reactor
+    PCE_run_time: 1800  # optional, sets a time limit for adapting the Polynomial Chaos Expansion (PCE) to the output, default: 1000, Units: s
+    PCE_error_tolerance: None  # optional, sets the target L2 error between the PCE model and the true output, default: ``None``
+    PCE_max_evals: None  # optional, sets a limit on the total number of model evaluations used to adapt the PCE, default: ``None``
+    logx: false  # optional, toggles the output parameter space between mole fractions and log mole fractions, results in mole fraction space are more physically meaningful, while results in log mole fraction space can be directly compared against local uncertainty results, default: ``False``
+
+# arguments related to RMG, required
+rmg:
+
+  # database (a required block)
+  database:
+    thermo_libraries: ['BurkeH2O2', 'DFT_QCI_thermo', 'primaryThermoLibrary', 'CBS_QB3_1dHR']  # *required*, can be an empty list
+    kinetics_libraries: ['BurkeH2O2inN2', 'NOx2018', 'Klippenstein_Glarborg2016']  # *required*, can be an empty list
+    transport_libraries: ['PrimaryTransportLibrary', 'OneDMinN2', 'NOx2018', 'GRI-Mech']  # optional, default: ['PrimaryTransportLibrary', 'OneDMinN2', 'NOx2018', 'GRI-Mech']
+    seed_mechanisms: []  # optional, default: []
+    kinetics_depositories: default  # optional, default: 'default'
+    kinetics_families: default  # optional, default: 'default'
+    kinetics_estimator: rate rules  # optional, default: 'rate rules'
+
+  # species (initial mixture) (a required block)
+  # concentration units are mole fraction for gas phase and mol/cm3 for liquid phase
+  # must specify either `smiles`, 'inchi', or `adj`
+  # not specifying `concentration` is allowed and will result in a 0 initial concentration.
+  species:
+    - label: ethane
+      smiles: CC
+      concentration: 1
+      reactive: true  # optional, default: ``True``
+    - label: OH
+      smiles: '[OH]'
+      observable: true  # optional, will be used as both SA and UA observable, default: ``False``
+      SA_observable: true  # optional, will be used as an SA observable, default: ``False``
+      UA_observable: true  # optional, will be used as an UA observable, default: ``False``
+    - label: O2
+      smiles: '[O][O]'
+      concentration: 3.5
+    - label: N2
+      adjlist: |
+        1 N u0 p1 c0 {2,T}
+        2 N u0 p1 c0 {1,T}
+      concentration: 3.5 * 3.76
+      constant: true  # optional, only allowed to be ``True`` in liquid phase simulations, default: ``False``
+      balance: true  # optional, only allowed to be ``True`` in gas phase simulations, default: ``False``
+    - label: water
+      smiles: O
+      solvent: true  # optional, only allowed to be ``True`` in liquid phase simulations, required for one species for liquid phase simulations, default: ``False``
+
+  # reactors (List[dict]) (a required block)
+  # reactor type can be either 'gas batch constant T P', or 'liquid batch constant T V'
+  # at least one of the three termination criteria must be given per reactor
+  # note that having a termination time is recommended, it will also be used for the simulations
+  # for species concentration profiles and SA. If not specified, the chemical time at which RMG terminated due to other
+  # termination criteria will be used.
+  # users may specify as many reactors as they wish, yet the must all be either gas or liquid phase
+  reactors:
+    - type: gas batch constant T P
+      T: [800, 1750]  # Could be a float (single T) or a list (range of Ts), Units: K
+      P: 1e0  # could be a float (single P) or a list (range of P), Units: bar
+      termination_conversion:
+        'ethane': 0.2
+      termination_time: 5  # units: s
+      termination_rate_ratio: 0.01
+      conditions_per_iteration: 12  # optional, number of times variable ranged-reactor conditions are ran per RMG iteration (nSims)
+
+  # model (a required block)
+  model:
+    # primary_tolerances:
+    core_tolerance: [0.05, 0.01]  # *required*, float or list (if a list, a different core tolerance value is used per T3 iteration) (toleranceMoveToCore)
+    atol: 1e-16  # optional, default: 1e-16
+    rtol: 1e-8  # optional, default: 1e-8
+    # filtering:
+    filter_reactions: false  # optional, filtering reactions
+    filter_threshold: 1e8  # optional, filtering reactions
+    # pruning:
+    tolerance_interrupt_simulation: [0.05, 0.01]  # optional, float or list, pruning, will be set equal to core_tolerance if not specified
+    min_core_size_for_prune: 50  # optional, pruning
+    min_species_exist_iterations_for_prune: 2  # optional, pruning
+    tolerance_keep_in_edge: 0.02  # optional, pruning
+    maximum_edge_species: 1000000  # optional, pruning
+    tolerance_thermo_keep_species_in_edge:  # optional, thermo pruning
+    # staging:
+    max_num_species: None  # optional, staging
+    # dynamics:
+    tolerance_move_edge_reaction_to_core:  # optional, dynamics criterion
+    tolerance_move_edge_reaction_to_core_interrupt: 5.0  # optional, dynamics criterion
+    dynamics_time_scale: (0.0, 'sec')  # optional, dynamics criterion
+    # multiple_objects:
+    max_num_objs_per_iter: 1  # optional, multiple objects
+    terminate_at_max_objects: false  # optional, multiple objects
+    # misc:
+    ignore_overall_flux_criterion: false  # optional
+    tolerance_branch_reaction_to_core: 0.001  # optional
+    branching_index: 0.5  # optional
+    branching_ratio_max: 1.0  # optional
+    # surface algorithm
+    tolerance_move_edge_reaction_to_surface: None
+    tolerance_move_surface_species_to_core: None
+    tolerance_move_surface_reaction_to_core: None
+    tolerance_move_edge_reaction_to_surface_interrupt: None
+
+    # pressure dependence (optional block)
+    # only allowed for gas phase simulations
+    pdep:
+      method: MSC  # *required*, this is how PDep is requested
+      max_grain_size: 2  # optional, units: kJ/mol, default: 2
+      max_number_of_grains: 250  # optional, default: 250
+      T: [300, 2500, 10]  # optional, [T min, T max, number of points], default: [300, 2500, 10], Units: K
+      P: [0.01, 100, 10]  # optional, [P min, P max, number of points], default: [0.01, 100, 10], Units: bar
+      interpolation: Chebyshev  # optional, either 'PDepArrhenius' or 'Chebyshev', default: 'Chebyshev'
+      T_basis_set: 6  # optional, only used for a Chebyshev interpolation, default: 6
+      P_basis_set: 4  # optional, only used for a Chebyshev interpolation, default: 4
+      max_atoms: 16  # optional, default: 16
+
+  # options (optional block)
+  options:
+    seed_name: Seed  # optional, name for the generated seed, default: 'Seed'
+    save_edge: true  # optional, saves the Edge, default: ``True`` in T3 (``False`` in RMG) (saveEdgeSpecies)
+    save_html: false  # optional, default: ``False`` (have T3 generate HTML for the core after the last T3 iteration))
+    generate_seed_each_iteration: true  # optional, save a seed at each iteration, default: ``True``
+    save_seed_to_database: false  # optional, save the seed to the database as well, default: ``False``
+    units: si  # optional, currently RMG does not support any other units set
+    generate_plots: false  # optional, will generate RMG job statistics plots (core and edge size, memory used), default: ``False``
+    save_simulation_profiles: false  # optional, save RMG .csv simulation profiles files, default: ``False``
+    verbose_comments: false  # optional, adds significant verbosity to the chemkin files, default: ``False``
+    keep_irreversible: false  # optional, don't force library reactions to be reversible, default: ``False``
+    trimolecular_product_reversible: true  # optional, allow families with three products to react in the reverse direction, default: ``True``
+    save_seed_modulus: -1  # optional, save the seed every n iterations (-1 to only save the last iteration), default: -1
+
+  # species constraints (optional block)
+  species_constraints:
+    allowed: ['input species', 'seed mechanisms', 'reaction libraries']  # optional, allow species from these sources to bypass the constraints, default: ['input species', 'seed mechanisms', 'reaction libraries']
+    max_C_atoms: 10  # required
+    max_O_atoms: 10  # required
+    max_N_atoms: 10  # required
+    max_Si_atoms: 10  # required
+    max_S_atoms: 10  # required
+    max_heavy_atoms: 10  # required
+    max_radical_electrons: 2  # required
+    max_singlet_carbenes: 1  # optional, default: 1
+    max_carbene_radicals: 0  # optional, default: 0
+    allow_singlet_O2: true  # optional, allows singlet O2 **from the input file**, default: ``True`` in T3 (``False`` in RMG)
+
+# arguments related to QM calcs, required to run QM calcs, otherwise T3 will only spawn RMG
+qm:
+  # currently only ARC is supported, we'd like to also incorporate AutoTST
+  # All legal ARC arguments are allowed here
+  # Note: If ``species`` or ``reactions`` are specified, ARC will be spawned prior to RMG to calculate them first
+  adapter: ARC
+  # any legal ARC argument can come here
+  adaptive_levels:
+    (1, 6):
+      opt_level: wb97xd/wb97xd/def2tzvp
+      sp: ccsd(t)-f12/aug-cc-pvtz-f12
+    (7, 30):
+      conformer_level:
+        method: wb97xd
+        basis: def2svp
+      opt_level:
+        method: wb97xd
+        basis: def2tzvp
+      sp_level:
+        method: dlpno-ccsd(T)
+        basis: def2-tzvp
+        auxiliary_basis: def2-tzvp/c
+    (31, 'inf'):
+      opt_level: wb97xd/wb97xd/def2tzvp
+  species:
+    - label: vinoxy
+      smiles: C=C[O]
