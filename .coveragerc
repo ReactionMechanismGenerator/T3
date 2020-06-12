@@ -1,7 +1,7 @@
 # .coveragerc to control coverage.py
 [run]
 branch = True
-source = tandem
+source = t3
 omit =
     test_*.py
     */scripts/*
@@ -18,7 +18,7 @@ show_missing = False
 exclude_lines =
     if __name__ == .__main__.:
 include =
-    tandem/*
+    t3/*
 omit =
     test_*.py
     */scripts/*
