@@ -1,0 +1,47 @@
+project: T3_minimal
+
+t3:
+  options:
+    max_T3_iterations: 2
+    max_RMG_walltime: '00:00:05:00'
+  sensitivity:
+    adapter: RMG  # *required* (this is how SA is requested), can use any implemented simulation adapter
+    top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
+
+rmg:
+  database:
+    thermo_libraries: ['primaryThermoLibrary']
+    kinetics_libraries: []
+  species:
+    - label: H2
+      smiles: '[H][H]'
+      concentration: 0.67
+    - label: O2
+      smiles: '[O][O]'
+      concentration: 0.33
+    - label: H
+      smiles: '[H]'
+      SA_observable: true
+    - label: OH
+      smiles: '[OH]'
+      SA_observable: true
+  reactors:
+    - type: gas batch constant T P
+      T: 1000
+      P: 1
+      termination_conversion:
+        'H2': 0.9
+      termination_time: 1e6
+  model:
+    core_tolerance: [0.01, 0.001]
+
+qm:
+  adapter: ARC
+  level_of_theory: 'b3lyp/6-31g(d,p)'
+  job_types:
+    rotors: false
+    conformers: true
+    fine: false
+    freq: true
+    opt: true
+    sp: true

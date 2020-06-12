@@ -27,6 +27,7 @@ dependencies:
   - jinja2
   - jupyter
   - lpsolve55
+  - mako
   - markupsafe
   - matplotlib >=2.2.2
   - mock

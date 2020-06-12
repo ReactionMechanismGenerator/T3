@@ -39,7 +39,7 @@ jobs:
         - conda list
         - cd T3
       script:
-        - coverage run -m pytest -ra
+        - coverage run -m pytest -ra -vv
         - coverage report
         - codecov
 
