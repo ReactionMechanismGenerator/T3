@@ -1,0 +1,628 @@
+*** Collision rate limit violators report ***
+"Violation factor" is the ratio of the rate coefficient to the collision limit rate at the relevant conditions
+
+! Library reaction: BurkeH2O2inN2
+! Flux pairs: H(3), H2O2(11); HO2(10), H2O2(11); 
+H(3)+HO2(10)+M=H2O2(11)+M                           6.000e+14 1.250     -0.270   
+
+
+Direction: forward
+Violation factor: 1.65
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Library reaction: BurkeH2O2inN2
+! Flux pairs: H(3), H2O2(11); HO2(10), H2O2(11); 
+H(3)+HO2(10)+M=H2O2(11)+M                           6.000e+14 1.250     -0.270   
+
+
+Direction: forward
+Violation factor: 1.47
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: R_Recombination
+! Flux pairs: H(3), C7H14(323); C7H13(920), C7H14(323); 
+! BM rule fitted to 2 training reactions at node Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_Sp-3R!H=2CCNNOO_N-3R!H->O_Ext-2CNO-R_Ext-3CS-R
+!     Total Standard Deviation in ln(k): 11.5401827615
+! Exact match found for rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_Sp-3R!H=2CCNNOO_N-3R!H->O_Ext-2CNO-R_Ext-3CS-R]
+! Euclidian distance = 0
+! family: R_Recombination
+H(3)+C7H13(920)=C7H14(323)                          1.528040e+55 -12.789   0.000    
+
+Direction: forward
+Violation factor: 45.61
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C7H13(341), C7H12(261); O2(2), HO2(10); 
+! From training reaction 2 used for O2b;Cmethyl_Csrad
+! Exact match found for rate rule [O2b;Cmethyl_Csrad]
+! Euclidian distance = 0
+! Multiplied by reaction path degeneracy 6.0
+! family: Disproportionation
+O2(2)+C7H13(341)=HO2(10)+C7H12(261)                 4.338000e+13 0.000     15.990   
+
+Direction: reverse
+Violation factor: 10.91
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(1933), C6H8(2025); HO2(10), H2O2(11); 
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/NonDeO;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+HO2(10)+C6H9(1933)=H2O2(11)+C6H8(2025)              4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 2.07
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); HO2(10), H2O2(11); 
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/NonDeO;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+HO2(10)+C6H9(2035)=H2O2(11)+C6H8(2025)              7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 6.08
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); O2(2), HO2(10); 
+! From training reaction 70 used for O2b;Cmethyl_Csrad/H/Cd
+! Exact match found for rate rule [O2b;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 0
+! Multiplied by reaction path degeneracy 6.0
+! family: Disproportionation
+! Ea raised from 103.0 to 106.2 kJ/mol to match endothermicity of reaction.
+O2(2)+C6H9(2035)=HO2(10)+C6H8(2025)                 4.338000e+13 0.000     25.385   
+
+Direction: reverse
+Violation factor: 5.44
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); O2(2), HO2(10); 
+! From training reaction 70 used for O2b;Cmethyl_Csrad/H/Cd
+! Exact match found for rate rule [O2b;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 0
+! Multiplied by reaction path degeneracy 6.0
+! family: Disproportionation
+! Ea raised from 103.0 to 106.2 kJ/mol to match endothermicity of reaction.
+O2(2)+C6H9(2035)=HO2(10)+C6H8(2025)                 4.338000e+13 0.000     25.385   
+
+Direction: reverse
+Violation factor: 18.36
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: 1,4_Linear_birad_scission
+! Flux pairs: C6H8(2027), C2H4(21); C6H8(2027), C4H4(2531); 
+! Exact match found for rate rule [RJJ]
+! Euclidian distance = 0
+! family: 1,4_Linear_birad_scission
+! Ea raised from 0.0 to 13.8 kJ/mol to match endothermicity of reaction.
+C6H8(2027)=C2H4(21)+C4H4(2531)                      5.000000e+12 0.000     3.291    
+
+Direction: reverse
+Violation factor: 2.14
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C7H13(341), C7H12(261); CH3OO(27), CH3OOH(34); 
+! Estimated using average of templates [O_rad;Cmethyl_Csrad] + [O_rad/NonDeO;XH_s_Rrad] for rate rule [O_rad/NonDeO;Cmethyl_Csrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+CH3OO(27)+C7H13(341)=CH3OOH(34)+C7H12(261)          3.003453e+10 1.009     -0.600   
+
+Direction: reverse
+Violation factor: 2.49
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(1933), C6H8(2025); CH3OO(27), CH3OOH(34); 
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/NonDeO;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+CH3OO(27)+C6H9(1933)=CH3OOH(34)+C6H8(2025)          4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 20.81
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); CH3OO(27), CH3OOH(34); 
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/NonDeO;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+CH3OO(27)+C6H9(2035)=CH3OOH(34)+C6H8(2025)          7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 1.05
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); CH3OO(27), CH3OOH(34); 
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/NonDeO;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+CH3OO(27)+C6H9(2035)=CH3OOH(34)+C6H8(2025)          7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 60.95
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: R_Recombination
+! Flux pairs: C4H5(110), C4H612(89); H(3), C4H612(89); 
+! BM rule fitted to 2 training reactions at node Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_Sp-3R!H=2CCNNOO_N-3R!H->O_Ext-2CNO-R_Ext-3CS-R
+!     Total Standard Deviation in ln(k): 11.5401827615
+! Exact match found for rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_Sp-3R!H=2CCNNOO_N-3R!H->O_Ext-2CNO-R_Ext-3CS-R]
+! Euclidian distance = 0
+! family: R_Recombination
+H(3)+C4H5(110)=C4H612(89)                           1.528040e+55 -12.789   0.000    
+
+Direction: forward
+Violation factor: 60.64
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [Cd_rad;Cpri_Rrad] for rate rule [Cd_rad/NonDeC;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+C4H5(110)+C6H9(1933)=C4H612(89)+C6H8(2025)          2.420000e+12 0.000     0.000    
+
+Direction: reverse
+Violation factor: 2.12
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [Cd_rad;Cmethyl_Csrad] for rate rule [Cd_rad/NonDeC;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+C4H5(110)+C6H9(2035)=C4H612(89)+C6H8(2025)          4.560000e+14 -0.700    0.000    
+
+Direction: reverse
+Violation factor: 4.11
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_pri_rad;XH_s_Rrad] for rate rule [CO_pri_rad;Cmethyl_Cdrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+HCO(16)+C4H5(110)=CH2O(15)+C4H4(2531)               5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.26
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_pri_rad;XH_s_Rrad] for rate rule [CO_pri_rad;Cmethyl_Cdrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+HCO(16)+C4H5(110)=CH2O(15)+C4H4(2531)               5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.10
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C7H13(341), S(1752); O2(2), HO2(10); 
+! From training reaction 15 used for O2b;C/H2/Nd_Csrad
+! Exact match found for rate rule [O2b;C/H2/Nd_Csrad]
+! Euclidian distance = 0
+! Multiplied by reaction path degeneracy 4.0
+! family: Disproportionation
+O2(2)+C7H13(341)=HO2(10)+S(1752)                    1.833000e+13 0.000     14.850   
+
+Direction: reverse
+Violation factor: 16.05
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C7H13(341), S(1752); CH3OO(27), CH3OOH(34); 
+! Estimated using template [O_rad;C/H2/Nd_Csrad] for rate rule [O_rad/NonDeO;C/H2/Nd_Csrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+CH3OO(27)+C7H13(341)=CH3OOH(34)+S(1752)             4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 4.45
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [Cd_pri_rad;Cmethyl_Csrad] for rate rule [Cd_pri_rad;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 1.0
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+iC4H3(73)+C6H9(2035)=C4H4(2531)+C6H8(2025)          4.560000e+14 -0.700    0.000    
+
+Direction: reverse
+Violation factor: 1.25
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); S(11767), S(11972); 
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(11767)+C6H9(2035)=S(11972)+C6H8(2025)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 1.05
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); S(11767), S(11972); 
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(11767)+C6H9(2035)=S(11972)+C6H8(2025)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 27.07
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C7H13(341), S(1752); S(11767), S(11972); 
+! Estimated using template [O_rad;C/H2/Nd_Csrad] for rate rule [O_rad/OneDe;C/H2/Nd_Csrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(11767)+C7H13(341)=S(11972)+S(1752)                4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 2.04
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C7H13(341), C7H12(261); S(11767), S(11972); 
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(11767)+C7H13(341)=S(11972)+C7H12(261)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 1.21
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(1933), C6H8(2025); S(11767), S(11972); 
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/OneDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(11767)+C6H9(1933)=S(11972)+C6H8(2025)             4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 9.24
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/OneDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(17233)+C6H9(1933)=S(16488)+C6H8(2025)             4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 3.26
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(17233)+C6H9(2035)=S(16488)+C6H8(2025)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 9.54
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(1933), C6H8(2025); S(17233), S(16530); 
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/OneDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(17233)+C6H9(1933)=S(16530)+C6H8(2025)             4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 8.63
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Flux pairs: C6H9(2035), C6H8(2025); S(17233), S(16530); 
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(17233)+C6H9(2035)=S(16530)+C6H8(2025)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 25.26
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(25139)+C7H13(341)=S(16448)+C7H12(261)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 1.20
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/OneDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(25139)+C6H9(1933)=S(16448)+C6H8(2025)             4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 9.02
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(25139)+C6H9(2035)=S(16448)+C6H8(2025)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 26.41
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;C/H2/Nd_Csrad] for rate rule [O_rad/OneDe;C/H2/Nd_Csrad]
+! Euclidian distance = 2.0
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(25139)+C7H13(341)=S(16448)+S(1752)                4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 2.04
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/OneDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(25139)+C6H9(1933)=S(16972)+C6H8(2025)             4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 4.94
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(25139)+C6H9(2035)=S(16972)+C6H8(2025)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 14.48
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [C_rad/H/TwoDe;Cpri_Rrad] for rate rule [C_rad/H/TwoDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.0
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(13229)+C6H9(1933)=C6H8(8657)+C6H8(2025)           3.880000e+12 0.000     0.360    
+
+Direction: reverse
+Violation factor: 3.52
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/OneDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+C6H5O(131)+C6H9(1933)=C6H6O(130)+C6H8(2025)         4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 1.40
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+C6H5O(131)+C6H9(2035)=C6H6O(130)+C6H8(2025)         7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 4.11
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+C2H5(29)+C3H3O(101)=C2H4(21)+C3H4O(81)              5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.20
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+C2H5(29)+C3H3O(101)=C2H4(21)+C3H4O(81)              5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.01
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 6.0
+! family: Disproportionation
+C3H3O(101)+iC3H7(99)=C3H4O(81)+C3H6(82)             1.086000e+15 0.000     0.000    
+
+Direction: forward
+Violation factor: 2.33
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 6.0
+! family: Disproportionation
+C3H3O(101)+iC3H7(99)=C3H4O(81)+C3H6(82)             1.086000e+15 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.97
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Orad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+CH3O(25)+C3H3O(101)=CH2O(15)+C3H4O(81)              5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.31
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Orad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+CH3O(25)+C3H3O(101)=CH2O(15)+C3H4O(81)              5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.13
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Cdrad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+C3H3O(101)+C4H5(110)=C3H4O(81)+C4H4(2531)           5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.14
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+C3H3O(101)+C7H13(341)=C3H4O(81)+C7H12(261)          5.430000e+14 0.000     0.000    
+
+Direction: forward
+Violation factor: 1.06
+Violation condition: 1000.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [CO_rad;XH_s_Rrad] for rate rule [CO_rad/OneDe;Cmethyl_Csrad]
+! Euclidian distance = 2.8284271247461903
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+C3H3O(101)+C7H13(341)=C3H4O(81)+C7H12(261)          5.430000e+14 0.000     0.000    
+
+Direction: reverse
+Violation factor: 4.23
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cpri_Rrad] for rate rule [O_rad/OneDe;C/H2/Cd_Csrad]
+! Euclidian distance = 3.605551275463989
+! Multiplied by reaction path degeneracy 2.0
+! family: Disproportionation
+S(26357)+C6H9(1933)=S(25149)+C6H8(2025)             4.820000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 2.26
+Violation condition: 1800.0 K, 20.3 bar
+
+
+! Template reaction: Disproportionation
+! Estimated using template [O_rad;Cmethyl_Csrad] for rate rule [O_rad/OneDe;Cmethyl_Csrad/H/Cd]
+! Euclidian distance = 2.23606797749979
+! Multiplied by reaction path degeneracy 3.0
+! family: Disproportionation
+S(26357)+C6H9(2035)=S(25149)+C6H8(2025)             7.230000e+13 0.000     0.000    
+
+Direction: reverse
+Violation factor: 6.62
+Violation condition: 1800.0 K, 20.3 bar
+
+

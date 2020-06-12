@@ -1,0 +1,19 @@
+ARC v1.1.0
+ARC project t1072
+
+Levels of theory used:
+
+Conformers:       wb97xd/def2svp
+TS guesses:       wb97xd/def2svp
+Optimization:     b3lyp/6-311+g(3df,2p) (using a fine grid)
+Frequencies:      b3lyp/6-311+g(3df,2p)
+Single point:     b3lyp/6-311+g(3df,2p)
+Rotor scans:      
+Using bond additivity corrections for thermo
+
+Using the following ESS settings: {'gaussian': ['local'], 'orca': ['local']}
+
+Considered the following species and TSs:
+Species Imipramine_1_peroxy_0 (run time: 1 day, 17:28:32)
+
+Overall time since project initiation: 2.0 days, 18:52:12
