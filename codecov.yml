@@ -10,7 +10,6 @@ coverage:
   percision: 2
   ignore:
     - tests/**/*
-    - tandem/_version.py
 comment:
   layout: "reach, diff, flags, files"
   require_changes: false
