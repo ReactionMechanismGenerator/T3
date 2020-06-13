@@ -1,4 +1,6 @@
-![T3 logo](https://github.com/ReactionMechanismGenerator/T3/blob/master/grf/T3_logo_small.jpg)
+<p align="center">
+  <a href="https://reactionmechanismgenerator.github.io/T3/"><img src="https://github.com/ReactionMechanismGenerator/T3/blob/master/grf/T3_logo_small.gif" alt="T3"></a>
+</p>
 
 # The RMG-ARC Tandem Tool (T3) for automated kinetic model generation and refinement
 
@@ -13,4 +15,4 @@
 
 ![T3 scheme][cycle]
 
-[cycle]: /grf/cycle.png "T3 scheme"
+[cycle]: /grf/T3-circle.gif "T3 scheme"
