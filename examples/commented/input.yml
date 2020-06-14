@@ -29,7 +29,7 @@ t3:
     atol: 1e-6  # optional, default: 1e-6
     rtol: 1e-4  # optional, default: 1e-4
     global_observables: ['IgD', 'ESR', 'SL']  # optional, only implemented in the Cantera adapter, default: ``None``
-    SA_threshold: 0.01  # optional, default: 0.01
+    SA_threshold: 0.001  # optional, default: 0.001
     pdep_SA_thershold: 0.001  # optional, used to determine wells and reactions (to be implemented) to calculate
                               # thermo and rates for from a PES of a sensitive reaction, default: 0.001
                               # Pass ``None`` to skip PES SA.
