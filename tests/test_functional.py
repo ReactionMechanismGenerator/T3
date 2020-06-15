@@ -15,9 +15,6 @@ from t3.common import DATA_BASE_PATH
 from t3.utils.dependencies import check_dependencies
 
 
-functional_minimal_directory = os.path.join(DATA_BASE_PATH, 'functional_minimal_example')
-
-
 def test_no_t3_no_qm():
     """Test proper execution of T3 without specifying neither of the t3 nor qm args"""
     rmg_args = {'database': {'thermo_libraries': ['primaryThermoLibrary', 'BurkeH2O2'],
@@ -54,6 +51,7 @@ def test_no_t3_no_qm():
 
 def test_minimal_example():
     """Tests that the minimal example is functional (ARC is not being called)"""
+    functional_minimal_directory = os.path.join(DATA_BASE_PATH, 'functional_minimal_example')
     input_file = os.path.join(functional_minimal_directory, 'input.yml')
     input_dict = read_yaml_file(path=input_file)
     verbose = 20
@@ -69,18 +67,18 @@ def test_minimal_example():
 
     # check that the minimal example ran to completion by checking for existence of some files and directories
     assert os.path.isfile(os.path.join(functional_minimal_directory, 't3.log'))
-    assert os.path.isdir(os.path.join(functional_minimal_directory, 'iteration_0'))
-    assert os.path.isfile(os.path.join(functional_minimal_directory, 'iteration_0',
-                                       'RMG', 'chemkin', 'species_dictionary.txt'))
     assert os.path.isdir(os.path.join(functional_minimal_directory, 'iteration_1'))
     assert os.path.isfile(os.path.join(functional_minimal_directory, 'iteration_1',
+                                       'RMG', 'chemkin', 'species_dictionary.txt'))
+    assert os.path.isdir(os.path.join(functional_minimal_directory, 'iteration_2'))
+    assert os.path.isfile(os.path.join(functional_minimal_directory, 'iteration_2',
                                        'RMG', 'chemkin', 'species_dictionary.txt'))
 
     # remove directories created by this functional test
     log_file = os.path.join(functional_minimal_directory, 't3.log')
     if os.path.isfile(log_file):
         os.remove(log_file)
-    iteration_directories = [os.path.join(functional_minimal_directory, f'iteration_{i}') for i in range(2)]
+    iteration_directories = [os.path.join(functional_minimal_directory, f'iteration_{i + 1}') for i in range(2)]
     for iteration_dir in iteration_directories:
         if os.path.isdir(iteration_dir):
             shutil.rmtree(iteration_dir)
