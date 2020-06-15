@@ -90,6 +90,9 @@ class T3(object):
         project_directory (str, optional): The project directory. Required through the API, optional through an input
                                            file (will be set to the directory of the input file if not specified).
         verbose (int, optional): The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20.
+        clean_dir (bool, optional): Whether to delete all existing files and folders in the project directory prior to
+                                    execution. If set to ``True``, the restart feature will not be triggered.
+                                    Default: ``False``.
         t3 (dict, optional): T3 directives.
         rmg (dict): RMG directives.
         qm (dict, optional): QM directive.
@@ -122,6 +125,7 @@ class T3(object):
                  qm: Optional[dict] = None,
                  project_directory: Optional[str] = None,
                  verbose: int = 20,
+                 clean_dir: bool = False,
                  ):
 
         self.t0 = time.time()  # initialize the timer
@@ -151,6 +155,8 @@ class T3(object):
         self.qm = self.schema['qm']
         self.verbose = self.schema['verbose']
 
+        if clean_dir and os.path.isdir(self.project_directory):
+            shutil.rmtree(self.project_directory)
         if not os.path.isdir(self.project_directory):
             os.makedirs(self.project_directory)
 
