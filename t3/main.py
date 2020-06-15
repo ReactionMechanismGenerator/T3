@@ -128,26 +128,28 @@ class T3(object):
 
         project_directory = project_directory or os.path.join(PROJECTS_BASE_PATH, project)
 
-                           t3=t3,
-                           rmg=rmg,
-                           qm=qm,
-                           verbose=verbose,
-                           ).dict()
+        self.schema = InputBase(project=project,
+                                project_directory=project_directory,
+                                t3=t3,
+                                rmg=rmg,
+                                qm=qm,
+                                verbose=verbose,
+                                ).dict()
 
-        schema_exclude_unset = InputBase(project=project,
-                                         project_directory=project_directory,
-                                         t3=t3,
-                                         rmg=rmg,
-                                         qm=qm,
-                                         verbose=verbose,
-                                         ).dict(exclude_unset=True)
+        self.schema_exclude_unset = InputBase(project=project,
+                                              project_directory=project_directory,
+                                              t3=t3,
+                                              rmg=rmg,
+                                              qm=qm,
+                                              verbose=verbose,
+                                              ).dict(exclude_unset=True)
 
-        self.project = schema['project']
-        self.project_directory = schema['project_directory']
-        self.t3 = schema['t3']
-        self.rmg = schema['rmg']
-        self.qm = schema['qm']
-        self.verbose = schema['verbose']
+        self.project = self.schema['project']
+        self.project_directory = self.schema['project_directory']
+        self.t3 = self.schema['t3']
+        self.rmg = self.schema['rmg']
+        self.qm = self.schema['qm']
+        self.verbose = self.schema['verbose']
 
         if not os.path.isdir(self.project_directory):
             os.makedirs(self.project_directory)
@@ -158,7 +160,7 @@ class T3(object):
                              verbose=self.verbose,
                              t0=self.t0,
                              )
-        self.logger.log_args(schema=schema_exclude_unset)
+        self.logger.log_args(schema=self.schema_exclude_unset)
 
         self.rmg_exceptions_counter = 0
         self.iteration = 0
@@ -201,15 +203,22 @@ class T3(object):
         Useful for creating an input file using the API.
 
         Args:
-             path (str, optional): The full path for the generated input file.
+             path (str, optional): The full path for the generated input file,
+                                   or to the folder where this file will be saved under a default name.
+                                   If ``None``, the input file will be saved to the project directory.
+             all_args (bool, optional): Whether to save all arguments in the generated input file
+                                        including all default values). Default: ``False``.
         """
         if path is None:
-            path = os.path.join(self.project_directory, 'auto_saved_input.yml')
+            path = os.path.join(self.project_directory, 'T3_auto_saved_input.yml')
+        if os.path.isdir(path):
+            path += '/' if path[-1] != '/' else ''
+            path += 'T3_auto_saved_input.yml'
         base_path = os.path.dirname(path)
         if not os.path.isdir(base_path):
             os.makedirs(base_path)
         self.logger.info(f'\n\nWriting input file to {path}')
-        save_yaml_file(path=path, content=self.as_dict())
+        save_yaml_file(path=path, content=self.schema if all_args else self.schema_exclude_unset)
 
     def execute(self):
         """
