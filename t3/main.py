@@ -58,7 +58,7 @@ from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_y
 from arc.main import ARC
 from arc.settings import valid_chars
 
-from t3.common import delete_root_rmg_log
+from t3.common import PROJECTS_BASE_PATH, delete_root_rmg_log
 from t3.logger import Logger
 from t3.schema import InputBase
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -87,10 +87,10 @@ class T3(object):
 
     Args:
         project (str): The project name.
-        project_directory (str): The project directory. Required through the API, optional through an input file
-                                 (will be set to the directory of the input file if not specified)
-        verbose (int): The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20.
-        t3 (dict): T3 directives.
+        project_directory (str, optional): The project directory. Required through the API, optional through an input
+                                           file (will be set to the directory of the input file if not specified).
+        verbose (int, optional): The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20.
+        t3 (dict, optional): T3 directives.
         rmg (dict): RMG directives.
         qm (dict, optional): QM directive.
 
@@ -117,17 +117,17 @@ class T3(object):
 
     def __init__(self,
                  project: str,
-                 project_directory: str,
-                 t3: dict,
                  rmg: dict,
+                 t3: Optional[dict] = None,
                  qm: Optional[dict] = None,
+                 project_directory: Optional[str] = None,
                  verbose: int = 20,
                  ):
 
         self.t0 = time.time()  # initialize the timer
 
-        schema = InputBase(project=project,
-                           project_directory=project_directory,
+        project_directory = project_directory or os.path.join(PROJECTS_BASE_PATH, project)
+
                            t3=t3,
                            rmg=rmg,
                            qm=qm,
@@ -167,8 +167,10 @@ class T3(object):
         self.species, self.reactions, self.paths = dict(), dict(), dict()
         self.rmg_species, self.rmg_reactions, self.executed_networks = list(), list(), list()
 
-        # check args
-        self.check_arc_args()
+        if self.qm:
+            # check args
+            self.check_arc_args()
+
         if any(self.rmg['model']['core_tolerance'][i+1] >= self.rmg['model']['core_tolerance'][i]
                for i in range(len(self.rmg['model']['core_tolerance']) - 1)):
             self.logger.warning(f'The RMG tolerances are not in descending order.')
@@ -190,7 +192,10 @@ class T3(object):
         result['qm'] = self.qm
         return result
 
-    def write_t3_input_file(self, path=None):
+    def write_t3_input_file(self,
+                            path: Optional[str] = None,
+                            all_args: bool = False,
+                            ) -> None:
         """
         Save the current **arguments** (not all attributes) as a T3 input file.
         Useful for creating an input file using the API.
@@ -213,7 +218,9 @@ class T3(object):
         # check whether T3 should be restarted in the project directory
         iteration_start, run_rmg_at_start = self.restart()
 
-        if iteration_start == 0 and self.qm['adapter'] == 'ARC' \
+        if iteration_start == 0 \
+                and self.qm \
+                and self.qm['adapter'] == 'ARC' \
                 and (len(self.qm['species']) or len(self.qm['reactions'])):
             self.set_paths(iteration=iteration_start)
             self.run_arc(arc_kwargs=self.qm)
@@ -224,6 +231,7 @@ class T3(object):
         self.qm['species'], self.qm['reactions'] = list(), list()
 
         additional_calcs_required = False
+        iteration_start = iteration_start or 1
 
         # main T3 loop
         max_t3_iterations = self.t3['options']['max_T3_iterations']
@@ -256,8 +264,12 @@ class T3(object):
 
             # ARC
             if additional_calcs_required:
-                self.run_arc(arc_kwargs=self.qm)
-                self.process_arc_run()
+                if self.qm is None:
+                    self.logger.error('Could not refine the model without any QM arguments.')
+                    additional_calcs_required = None
+                else:
+                    self.run_arc(arc_kwargs=self.qm)
+                    self.process_arc_run()
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
                 # T3 iterated through all of the user requested tolerances, and there are no more calculations required
                 break
@@ -373,6 +385,7 @@ class T3(object):
                 self.process_arc_run()
                 i_max += 1
                 run_rmg_i = True
+
         return i_max, run_rmg_i
 
     def check_arc_args(self):
@@ -382,7 +395,7 @@ class T3(object):
         Returns:
             dict: Updated ARC arguments.
         """
-        if self.qm['adapter'] == 'ARC':
+        if self.qm and self.qm['adapter'] == 'ARC':
             allowed_non_arc_args = ['adapter']
             for key in list(self.qm.keys()):
                 if key not in inspect.getfullargspec(ARC.__init__).args and key not in allowed_non_arc_args:
@@ -653,14 +666,17 @@ class T3(object):
                     species_keys.append(self.add_species(species=species, reasons=['All core species']))
         else:
             # 1. SA observables
+            sa_obserables_exist = False
             for input_species in self.rmg['species']:
                 if input_species['observable'] or input_species['SA_observable']:
+                    sa_obserables_exist = True
                     species_keys.append(self.add_species(
                         species=get_species_by_label(input_species['label'], self.rmg_species),
                         reasons=['SA observable'],
                     ))
             # 2. SA
-            species_keys.extend(self.determine_species_based_on_sa())
+            if sa_obserables_exist:
+                species_keys.extend(self.determine_species_based_on_sa())
             # 3. collision violators
             if self.t3['options']['collision_violators_thermo']:
                 species_keys.extend(self.determine_species_based_on_collision_violators())
