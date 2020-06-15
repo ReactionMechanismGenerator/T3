@@ -234,10 +234,7 @@ class RMGModel(BaseModel):
         RMGModel.core_tolerance validator
         set core_tolerance to always be a list
         """
-        if value is not None:
-            if isinstance(value, float):
-                value = [float]
-        return value
+        return [value] if isinstance(value, float) else value
 
     @validator('tolerance_interrupt_simulation', always=True)
     def check_tolerance_interrupt_simulation(cls, value, values):
@@ -394,12 +391,17 @@ class T3(BaseModel):
     """
     A class for validating input.T3 arguments
     """
-    options: T3Options = None
+    options: Optional[T3Options] = None
     sensitivity: Optional[T3Sensitivity] = None
     uncertainty: Optional[T3Uncertainty] = None
 
     class Config:
         extra = "forbid"
+
+    @validator('options', always=True)
+    def check_options(cls, value):
+        """T3.options validator"""
+        return value or T3Options()
 
 
 class RMG(BaseModel):
@@ -527,17 +529,27 @@ class InputBase(BaseModel):
     project: constr(max_length=255)
     project_directory: Optional[constr(max_length=255)] = None
     verbose: conint(ge=10, le=30, multiple_of=10) = 20
-    t3: T3
+    t3: Optional[T3] = None
     rmg: RMG
     qm: Optional[QM] = None
 
     class Config:
         extra = "forbid"
 
+    @validator('t3', always=True)
+    def check_t3(cls, value):
+        """InputBase.t3 validator"""
+        return value or T3()
+
+    @validator('qm', always=True)
+    def check_qm(cls, value):
+        """InputBase.qm validator"""
+        return value or dict()
+
     @root_validator(pre=True)
     def validate_rmg_t3(cls, values):
         """InputBase.validate_rmg_t3"""
-        if 'rmg' in values and 't3' in values:
+        if 'rmg' in values and 't3' in values and values['t3']:
             # check termination time for global UA
             if 'uncertainty' in values['t3'] and values['t3']['uncertainty'] is not None:
                 ua_termination_time = values['t3']['uncertainty']['termination_time']

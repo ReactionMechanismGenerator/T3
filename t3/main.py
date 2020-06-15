@@ -58,7 +58,7 @@ from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_y
 from arc.main import ARC
 from arc.settings import valid_chars
 
-from t3.common import delete_root_rmg_log
+from t3.common import PROJECTS_BASE_PATH, delete_root_rmg_log
 from t3.logger import Logger
 from t3.schema import InputBase
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -87,10 +87,13 @@ class T3(object):
 
     Args:
         project (str): The project name.
-        project_directory (str): The project directory. Required through the API, optional through an input file
-                                 (will be set to the directory of the input file if not specified)
-        verbose (int): The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20.
-        t3 (dict): T3 directives.
+        project_directory (str, optional): The project directory. Required through the API, optional through an input
+                                           file (will be set to the directory of the input file if not specified).
+        verbose (int, optional): The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20.
+        clean_dir (bool, optional): Whether to delete all existing files and folders in the project directory prior to
+                                    execution. If set to ``True``, the restart feature will not be triggered.
+                                    Default: ``False``.
+        t3 (dict, optional): T3 directives.
         rmg (dict): RMG directives.
         qm (dict, optional): QM directive.
 
@@ -117,38 +120,43 @@ class T3(object):
 
     def __init__(self,
                  project: str,
-                 project_directory: str,
-                 t3: dict,
                  rmg: dict,
+                 t3: Optional[dict] = None,
                  qm: Optional[dict] = None,
+                 project_directory: Optional[str] = None,
                  verbose: int = 20,
+                 clean_dir: bool = False,
                  ):
 
         self.t0 = time.time()  # initialize the timer
 
-        schema = InputBase(project=project,
-                           project_directory=project_directory,
-                           t3=t3,
-                           rmg=rmg,
-                           qm=qm,
-                           verbose=verbose,
-                           ).dict()
+        project_directory = project_directory or os.path.join(PROJECTS_BASE_PATH, project)
 
-        schema_exclude_unset = InputBase(project=project,
-                                         project_directory=project_directory,
-                                         t3=t3,
-                                         rmg=rmg,
-                                         qm=qm,
-                                         verbose=verbose,
-                                         ).dict(exclude_unset=True)
+        self.schema = InputBase(project=project,
+                                project_directory=project_directory,
+                                t3=t3,
+                                rmg=rmg,
+                                qm=qm,
+                                verbose=verbose,
+                                ).dict()
 
-        self.project = schema['project']
-        self.project_directory = schema['project_directory']
-        self.t3 = schema['t3']
-        self.rmg = schema['rmg']
-        self.qm = schema['qm']
-        self.verbose = schema['verbose']
+        self.schema_exclude_unset = InputBase(project=project,
+                                              project_directory=project_directory,
+                                              t3=t3,
+                                              rmg=rmg,
+                                              qm=qm,
+                                              verbose=verbose,
+                                              ).dict(exclude_unset=True)
 
+        self.project = self.schema['project']
+        self.project_directory = self.schema['project_directory']
+        self.t3 = self.schema['t3']
+        self.rmg = self.schema['rmg']
+        self.qm = self.schema['qm']
+        self.verbose = self.schema['verbose']
+
+        if clean_dir and os.path.isdir(self.project_directory):
+            shutil.rmtree(self.project_directory)
         if not os.path.isdir(self.project_directory):
             os.makedirs(self.project_directory)
 
@@ -158,7 +166,7 @@ class T3(object):
                              verbose=self.verbose,
                              t0=self.t0,
                              )
-        self.logger.log_args(schema=schema_exclude_unset)
+        self.logger.log_args(schema=self.schema_exclude_unset)
 
         self.rmg_exceptions_counter = 0
         self.iteration = 0
@@ -167,8 +175,10 @@ class T3(object):
         self.species, self.reactions, self.paths = dict(), dict(), dict()
         self.rmg_species, self.rmg_reactions, self.executed_networks = list(), list(), list()
 
-        # check args
-        self.check_arc_args()
+        if self.qm:
+            # check args
+            self.check_arc_args()
+
         if any(self.rmg['model']['core_tolerance'][i+1] >= self.rmg['model']['core_tolerance'][i]
                for i in range(len(self.rmg['model']['core_tolerance']) - 1)):
             self.logger.warning(f'The RMG tolerances are not in descending order.')
@@ -190,21 +200,31 @@ class T3(object):
         result['qm'] = self.qm
         return result
 
-    def write_t3_input_file(self, path=None):
+    def write_t3_input_file(self,
+                            path: Optional[str] = None,
+                            all_args: bool = False,
+                            ) -> None:
         """
         Save the current **arguments** (not all attributes) as a T3 input file.
         Useful for creating an input file using the API.
 
         Args:
-             path (str, optional): The full path for the generated input file.
+             path (str, optional): The full path for the generated input file,
+                                   or to the folder where this file will be saved under a default name.
+                                   If ``None``, the input file will be saved to the project directory.
+             all_args (bool, optional): Whether to save all arguments in the generated input file
+                                        including all default values). Default: ``False``.
         """
         if path is None:
-            path = os.path.join(self.project_directory, 'auto_saved_input.yml')
+            path = os.path.join(self.project_directory, 'T3_auto_saved_input.yml')
+        if os.path.isdir(path):
+            path += '/' if path[-1] != '/' else ''
+            path += 'T3_auto_saved_input.yml'
         base_path = os.path.dirname(path)
         if not os.path.isdir(base_path):
             os.makedirs(base_path)
         self.logger.info(f'\n\nWriting input file to {path}')
-        save_yaml_file(path=path, content=self.as_dict())
+        save_yaml_file(path=path, content=self.schema if all_args else self.schema_exclude_unset)
 
     def execute(self):
         """
@@ -213,7 +233,9 @@ class T3(object):
         # check whether T3 should be restarted in the project directory
         iteration_start, run_rmg_at_start = self.restart()
 
-        if iteration_start == 0 and self.qm['adapter'] == 'ARC' \
+        if iteration_start == 0 \
+                and self.qm \
+                and self.qm['adapter'] == 'ARC' \
                 and (len(self.qm['species']) or len(self.qm['reactions'])):
             self.set_paths(iteration=iteration_start)
             self.run_arc(arc_kwargs=self.qm)
@@ -224,10 +246,11 @@ class T3(object):
         self.qm['species'], self.qm['reactions'] = list(), list()
 
         additional_calcs_required = False
+        iteration_start = iteration_start or 1
 
         # main T3 loop
         max_t3_iterations = self.t3['options']['max_T3_iterations']
-        for self.iteration in range(iteration_start, max_t3_iterations):
+        for self.iteration in range(iteration_start, max_t3_iterations + 1):
 
             self.logger.info(f'\n\n\nT3 iteration {self.iteration}:\n'
                              f'---------------\n')
@@ -256,8 +279,12 @@ class T3(object):
 
             # ARC
             if additional_calcs_required:
-                self.run_arc(arc_kwargs=self.qm)
-                self.process_arc_run()
+                if self.qm is None:
+                    self.logger.error('Could not refine the model without any QM arguments.')
+                    additional_calcs_required = None
+                else:
+                    self.run_arc(arc_kwargs=self.qm)
+                    self.process_arc_run()
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
                 # T3 iterated through all of the user requested tolerances, and there are no more calculations required
                 break
@@ -373,6 +400,7 @@ class T3(object):
                 self.process_arc_run()
                 i_max += 1
                 run_rmg_i = True
+
         return i_max, run_rmg_i
 
     def check_arc_args(self):
@@ -382,7 +410,7 @@ class T3(object):
         Returns:
             dict: Updated ARC arguments.
         """
-        if self.qm['adapter'] == 'ARC':
+        if self.qm and self.qm['adapter'] == 'ARC':
             allowed_non_arc_args = ['adapter']
             for key in list(self.qm.keys()):
                 if key not in inspect.getfullargspec(ARC.__init__).args and key not in allowed_non_arc_args:
@@ -653,14 +681,17 @@ class T3(object):
                     species_keys.append(self.add_species(species=species, reasons=['All core species']))
         else:
             # 1. SA observables
+            sa_obserables_exist = False
             for input_species in self.rmg['species']:
                 if input_species['observable'] or input_species['SA_observable']:
+                    sa_obserables_exist = True
                     species_keys.append(self.add_species(
                         species=get_species_by_label(input_species['label'], self.rmg_species),
                         reasons=['SA observable'],
                     ))
             # 2. SA
-            species_keys.extend(self.determine_species_based_on_sa())
+            if sa_obserables_exist:
+                species_keys.extend(self.determine_species_based_on_sa())
             # 3. collision violators
             if self.t3['options']['collision_violators_thermo']:
                 species_keys.extend(self.determine_species_based_on_collision_violators())

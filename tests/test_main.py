@@ -234,8 +234,8 @@ def test_write_t3_input_file():
     """Test automatically writing a T3 input file"""
     t3 = run_minimal()
     t3.write_t3_input_file()
-    assert os.path.isfile(os.path.join(test_minimal_project_directory, 'auto_saved_input.yml'))
-    with open(os.path.join(test_minimal_project_directory, 'auto_saved_input.yml'), 'r') as f:
+    assert os.path.isfile(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'))
+    with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'), 'r') as f:
         assert f.readline() == 'project: T3_minimal\n'
     shutil.rmtree(test_minimal_project_directory)
 
@@ -824,12 +824,13 @@ def teardown_module():
             log_archive = os.path.join(directory, 'log_archive')
             if os.path.isdir(log_archive):
                 shutil.rmtree(log_archive)
-    shutil.rmtree(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'output'))
-    shutil.rmtree(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'log_and_restart_archive'))
     os.remove(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'T3_ARC_restart_test.info'))
-    # delete project folders
+    # delete folders
     for directory in [test_minimal_project_directory,
                       dump_species_path,
-                      os.path.join(DATA_BASE_PATH, 'minimal_data', 'log_archive')]:
+                      os.path.join(DATA_BASE_PATH, 'minimal_data', 'log_archive'),
+                      os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'output'),
+                      os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'log_and_restart_archive'),
+                      ]:
         if os.path.isdir(directory):
             shutil.rmtree(directory)

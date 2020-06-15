@@ -191,46 +191,47 @@ class Logger(object):
         Args:
             species_dict (dict): The T3 species dictionary.
         """
-        self.info('\n\n\nSPECIES SUMMARY')
-        converged_keys, unconverged_keys = list(), list()
-        for key, spc_dict in species_dict.items():
-            if spc_dict['converged']:
-                converged_keys.append(key)
+        if species_dict:
+            self.info('\n\n\nSPECIES SUMMARY')
+            converged_keys, unconverged_keys = list(), list()
+            for key, spc_dict in species_dict.items():
+                if spc_dict['converged']:
+                    converged_keys.append(key)
+                else:
+                    unconverged_keys.append(key)
+
+            max_label_length = max([len(spc_dict['QM label'])
+                                    for spc_dict in species_dict.values()] + [6])
+            max_smiles_length = max([len(spc_dict['object'].molecule[0].to_smiles())
+                                     for spc_dict in species_dict.values()] + [6])
+            if len(converged_keys):
+                self.info('\nSpecies for which thermodynamic data was calculate:\n')
+                space1 = ' ' * (max_label_length - len('label') + 1)
+                space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
+                self.info(f'Label{space1} SMILES{space2} Reason for calculating thermo for this species')
+                self.info(f'-----{space1} ------{space2} ----------------------------------------------')
+                for key in converged_keys:
+                    smiles = species_dict[key]['object'].molecule[0].to_smiles()
+                    space1 = ' ' * (max_label_length - len(species_dict[key]['QM label']) + 1)
+                    space2 = ' ' * (max_smiles_length - len(smiles) + 1)
+                    self.info(f"{species_dict[key]['QM label']}{space1} {smiles}{space2} {species_dict[key]['reasons']}")
             else:
-                unconverged_keys.append(key)
+                self.info('\nNo species thermodynamic calculation converged!')
 
-        max_label_length = max([len(spc_dict['QM label'])
-                                for spc_dict in species_dict.values()] + [6])
-        max_smiles_length = max([len(spc_dict['object'].molecule[0].to_smiles())
-                                 for spc_dict in species_dict.values()] + [6])
-        if len(converged_keys):
-            self.info('\nSpecies for which thermodynamic data was calculate:\n')
-            space1 = ' ' * (max_label_length - len('label') + 1)
-            space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
-            self.info(f'Label{space1} SMILES{space2} Reason for calculating thermo for this species')
-            self.info(f'-----{space1} ------{space2} ----------------------------------------------')
-            for key in converged_keys:
-                smiles = species_dict[key]['object'].molecule[0].to_smiles()
-                space1 = ' ' * (max_label_length - len(species_dict[key]['QM label']) + 1)
-                space2 = ' ' * (max_smiles_length - len(smiles) + 1)
-                self.info(f"{species_dict[key]['QM label']}{space1} {smiles}{space2} {species_dict[key]['reasons']}")
-        else:
-            self.info('\nNo species thermodynamic calculation converged!')
-
-        if len(unconverged_keys):
-            self.info('\nSpecies for which thermodynamic data did not converge:')
-            space1 = ' ' * (max_label_length - len('label') + 1)
-            space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
-            self.info(f'         Label{space1} SMILES{space2} Reason for calculating thermo for this species')
-            self.info(f'         -----{space1} ------{space2} ----------------------------------------------')
-            for key in unconverged_keys:
-                smiles = species_dict[key]['object'].molecule[0].to_smiles()
-                space1 = ' ' * (max_label_length - len(species_dict[key]['QM label']) + 1)
-                space2 = ' ' * (max_smiles_length - len(smiles) + 1)
-                self.info(f"(FAILED) {species_dict[key]['QM label']}{space1} "
-                          f"{smiles}{space2} {species_dict[key]['reasons']}")
-        else:
-            self.info('\nAll species calculated in ARC successfully converged')
+            if len(unconverged_keys):
+                self.info('\nSpecies for which thermodynamic data did not converge:')
+                space1 = ' ' * (max_label_length - len('label') + 1)
+                space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
+                self.info(f'         Label{space1} SMILES{space2} Reason for calculating thermo for this species')
+                self.info(f'         -----{space1} ------{space2} ----------------------------------------------')
+                for key in unconverged_keys:
+                    smiles = species_dict[key]['object'].molecule[0].to_smiles()
+                    space1 = ' ' * (max_label_length - len(species_dict[key]['QM label']) + 1)
+                    space2 = ' ' * (max_smiles_length - len(smiles) + 1)
+                    self.info(f"(FAILED) {species_dict[key]['QM label']}{space1} "
+                              f"{smiles}{space2} {species_dict[key]['reasons']}")
+            else:
+                self.info('\nAll species calculated in ARC successfully converged')
 
     def log_unconverged_species(self,
                                 species_keys: List[int],
