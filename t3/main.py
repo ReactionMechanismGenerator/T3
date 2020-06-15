@@ -250,7 +250,7 @@ class T3(object):
 
         # main T3 loop
         max_t3_iterations = self.t3['options']['max_T3_iterations']
-        for self.iteration in range(iteration_start, max_t3_iterations):
+        for self.iteration in range(iteration_start, max_t3_iterations + 1):
 
             self.logger.info(f'\n\n\nT3 iteration {self.iteration}:\n'
                              f'---------------\n')
