@@ -3,6 +3,7 @@ t3 common module
 """
 
 import os
+import string
 
 
 VERSION = '0.1.0'
@@ -11,6 +12,7 @@ t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolut
 DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'data')
 EXAMPLES_BASE_PATH = os.path.join(t3_path, 'examples')
 PROJECTS_BASE_PATH = os.path.join(t3_path, 'Projects')
+VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 
 def dict_to_str(dictionary: dict,

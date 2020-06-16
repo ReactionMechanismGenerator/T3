@@ -56,9 +56,8 @@ from rmgpy.tools.simulate import simulate
 
 from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file, time_lapse
 from arc.main import ARC
-from arc.settings import valid_chars
 
-from t3.common import PROJECTS_BASE_PATH, delete_root_rmg_log
+from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log
 from t3.logger import Logger
 from t3.schema import InputBase
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -1243,7 +1242,7 @@ def legalize_species_label(species: Species):
         species (Species): A species object.
     """
     for char in species.label:
-        if char not in valid_chars:
+        if char not in VALID_CHARS:
             species.label = species.molecule[0].get_formula()
             break
     else:
