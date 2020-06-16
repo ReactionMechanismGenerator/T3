@@ -10,7 +10,7 @@ import os
 from arc.common import read_yaml_file
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH
-from t3.schema import InputBase
+from t3.schema import InputBase, RMG
 from t3.utils.writer import to_camel_case, write_rmg_input_file
 
 
@@ -182,4 +182,77 @@ simulator(atol=1e-16, rtol=1e-08)
     os.remove(minimal_input_file_path)
 
 
+def test_write_rmg_input_file_liquid():
+    """Test writing an RMG input file for a liquid phase reactor"""
+    rmg = {'database': {'thermo_libraries': ['BurkeH2O2', 'api_soup', 'thermo_DFT_CCSDTF12_BAC',
+                                             'DFT_QCI_thermo', 'primaryThermoLibrary', 'CBS_QB3_1dHR', 'CurranPentane'],
+                        'kinetics_libraries': ['BurkeH2O2inN2', 'api_soup', 'NOx2018', 'Klippenstein_Glarborg2016']},
+           'species': [{'label': 'AIBN',
+                        'smiles': 'CC(C)(C#N)/N=N/C(C)(C)C#N',
+                        'concentration': 4.900e-6},
+                       {'label': 'MeOH',
+                        'smiles': 'CO',
+                        'concentration': 0.0124},
+                       {'label': 'water',
+                        'smiles': 'O',
+                        'concentration': 0.0278,
+                        'solvent': True},
+                       {'label': 'O2',
+                        'smiles': '[O][O]',
+                        'constant': True,
+                        'concentration': 2.730e-7},
+                       {'label': 'OHCH2OO',
+                        'smiles': 'OCO[O]',
+                        'SA_observable': True},
+                       {'label': 'cyanoisopropylOO',
+                        'smiles': 'N#CC(C)(C)O[O]',
+                        'SA_observable': True},
+                       {'label': 'N2',
+                        'smiles': 'N#N',
+                        'constant': True,
+                        'concentration': 4.819e-7,
+                        'reactive': False}],
+           'reactors': [{'type': 'liquid batch constant T V',
+                         'T': [293, 393],
+                         'termination_time': 10}],  # 72*24*60*60
+           'model': {'core_tolerance': [0.001]},
+           'options': {'save_edge': True, 'save_html': True},
+           'species_constraints': {'max_C_atoms': 4,
+                                   'max_O_atoms': 3,
+                                   'max_N_atoms': 2,
+                                   'max_Si_atoms': 0,
+                                   'max_S_atoms': 0,
+                                   'max_heavy_atoms': 10,
+                                   'max_radical_electrons': 1}}
 
+    file_path = os.path.join(DATA_BASE_PATH, 'test_write_rmg_input_file_liquid.py')
+    rmg_schema = RMG(**rmg).dict()  # fill in defaults
+    write_rmg_input_file(kwargs=rmg_schema,
+                         iteration=1,
+                         path=file_path)
+
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    for line in ["    thermoLibraries=['BurkeH2O2', 'api_soup', 'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'primaryThermoLibrary', 'CBS_QB3_1dHR', 'CurranPentane'],\n",
+                 "    kineticsDepositories='default',\n",
+                 "    structure=SMILES('CC(C)(C#N)/N=N/C(C)(C)C#N'),\n",
+                 "liquidReactor(\n",
+                 "    temperature=[(293.0, 'K'), (393.0, 'K')],\n",
+                 "    initialConcentrations={\n",
+                 "        'water': (0.0278, 'mol/cm^3'),\n",
+                 "        'AIBN': (4.9e-06, 'mol/cm^3'),\n",
+                 "        'O2': (2.73e-07, 'mol/cm^3'),\n",
+                 "        'cyanoisopropylOO': (0, 'mol/cm^3'),\n",
+                 "    terminationTime=(10.0, 's'),\n",
+                 "    nSims=12,\n",
+                 "    constantSpecies=['O2', 'N2', ],\n",
+                 "    toleranceMoveToCore=0.001,\n",
+                 "    toleranceInterruptSimulation=0.001,\n",
+                 "    filterThreshold=100000000.0,\n",
+                 "simulator(atol=1e-16, rtol=1e-08)\n",
+                 "    generateOutputHTML=True,\n",
+                 "    allowed=['input species', 'seed mechanisms', 'reaction libraries'],\n",
+                 "    maximumCarbonAtoms=4,\n",
+                 ]:
+        assert line in lines
+    os.remove(file_path)
