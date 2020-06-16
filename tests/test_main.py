@@ -645,9 +645,35 @@ def test_species_requires_refinement():
     spc_3 = Species(smiles='C')
     spc_3.thermo = NASA()
     spc_3.thermo.comment = 'Thermo library: primaryThermoLibrary'
+    spc_4 = Species(smiles='CO')
+    spc_4.thermo = NASA()
+    spc_4.thermo.comment = 'Thermo library corrected for liquid phase: thermo_DFT_CCSDTF12_BAC + Solvation correction ' \
+                           'with water as solvent and solute estimated using Data from solute library'
+    spc_5 = Species(smiles='OCO[O]')
+    spc_5.thermo = NASA()
+    spc_5.thermo.comment = 'Thermo library corrected for liquid phase: DFT_QCI_thermo + Solvation correction with ' \
+                           'water as solvent and solute estimated using abraham(Oss- noncyclic) + abraham(OssH) + ' \
+                           'nonacentered(OssH) + abraham(OssH) + nonacentered(OssH) + abraham(CssH2) + radical(ROOJ)'
+    spc_6 = Species(smiles='OCO[O]')
+    spc_6.thermo = NASA()
+    spc_6.thermo.comment = 'Thermo library corrected for liquid phase: api_soup + radical(CCsJO) + Solvation ' \
+                           'correction with water as solvent and solute estimated using abraham(Oss-noncyclic) + ' \
+                           'nonacentered(OxRing) + abraham(N3t) + abraham(Css-noH) + abraham(CssH2) + ' \
+                           'abraham(CssH3) + abraham(Ct)'
+    spc_7 = Species(smiles='OCO[O]')
+    spc_7.thermo = NASA()
+    spc_7.thermo.comment = 'Thermo group additivity estimation: group(O2s-CsCs) + group(O2s-CsH) + group(N3t-CtCs) + ' \
+                           'group(Cs-(Cds-Cds)CsCsOs) + group(Cs-CsOsOsH) + group(Cs-CsHHH) + missing(Ct-CsN3t) + ' \
+                           'ring(Ethylene_oxide) + Solvation correction with water as solvent and solute estimated ' \
+                           'using abraham(Oss-noncyclic) + nonacentered(OxRing) + abraham(OssH) + nonacentered(OssH) + ' \
+                           'abraham(N3t) + abraham(Css-noH) + abraham(CssH) + abraham(CssH3) + abraham(Ct)'
     assert t3.species_requires_refinement(spc_1) is True
     assert t3.species_requires_refinement(spc_2) is True
     assert t3.species_requires_refinement(spc_3) is False
+    assert t3.species_requires_refinement(spc_4) is False
+    assert t3.species_requires_refinement(spc_5) is False
+    assert t3.species_requires_refinement(spc_6) is True
+    assert t3.species_requires_refinement(spc_7) is True
 
 
 def test_get_species_key():

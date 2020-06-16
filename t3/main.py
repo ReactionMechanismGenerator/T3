@@ -56,9 +56,8 @@ from rmgpy.tools.simulate import simulate
 
 from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file, time_lapse
 from arc.main import ARC
-from arc.settings import valid_chars
 
-from t3.common import PROJECTS_BASE_PATH, delete_root_rmg_log
+from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log
 from t3.logger import Logger
 from t3.schema import InputBase
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -90,9 +89,9 @@ class T3(object):
         project_directory (str, optional): The project directory. Required through the API, optional through an input
                                            file (will be set to the directory of the input file if not specified).
         verbose (int, optional): The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20.
-        clean_dir (bool, optional): Whether to delete all existing files and folders in the project directory prior to
-                                    execution. If set to ``True``, the restart feature will not be triggered.
-                                    Default: ``False``.
+        clean_dir (bool, optional): Whether to delete all existing files (other than input and submit files)
+                                    and folders in the project directory prior to execution.
+                                    If set to ``True``, the restart feature will not be triggered. Default: ``False``.
         t3 (dict, optional): T3 directives.
         rmg (dict): RMG directives.
         qm (dict, optional): QM directive.
@@ -156,7 +155,7 @@ class T3(object):
         self.verbose = self.schema['verbose']
 
         if clean_dir and os.path.isdir(self.project_directory):
-            shutil.rmtree(self.project_directory)
+            self.cleanup()
         if not os.path.isdir(self.project_directory):
             os.makedirs(self.project_directory)
 
@@ -1010,8 +1009,9 @@ class T3(object):
         Returns:
             bool: Whether the species thermochemical properties should be calculated. ``True`` if they should be.
         """
+        thermo_comment = species.thermo.comment.split('Solvation')[0]
         if self.get_species_key(species=species) is None \
-                and ('group additivity' in species.thermo.comment or '+ radical(' in species.thermo.comment):
+                and ('group additivity' in thermo_comment or '+ radical(' in thermo_comment):
             return True
         return False
 
@@ -1188,6 +1188,18 @@ class T3(object):
                 mod_spc_dict['object'] = Species().from_adjacency_list(spc_dict['adjlist'])
                 self.species[key] = mod_spc_dict
 
+    def cleanup(self):
+        """
+        Clean the working directory other than the input and submit files and the log archive folder.
+        """
+        for root, dirs, files in os.walk(self.project_directory, topdown=True):
+            for file_ in files:
+                if 'input' not in file_ and 'submit' not in file_:
+                    os.remove(os.path.join(root, file_))
+            for folder in dirs:
+                if folder != 'log_archive':
+                    shutil.rmtree(os.path.join(root, folder))
+
 
 def get_species_by_label(label: str,
                          species_list: list,
@@ -1243,7 +1255,7 @@ def legalize_species_label(species: Species):
         species (Species): A species object.
     """
     for char in species.label:
-        if char not in valid_chars:
+        if char not in VALID_CHARS:
             species.label = species.molecule[0].get_formula()
             break
     else:
