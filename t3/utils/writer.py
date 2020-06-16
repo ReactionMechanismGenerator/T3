@@ -94,7 +94,7 @@ simpleReactor(
 </%def>
 """
     liquid_batch_constant_t_v_template = """
-simpleReactor(
+liquidReactor(
     temperature=${temperature},
     initialConcentrations={${concentrations()}    },
     ${termination}
@@ -102,7 +102,7 @@ simpleReactor(
 )
 <%def name="concentrations()">
 % for spc in species_list:
-        '${spc["label"]}': (${spc["concentration"], 'mol/cm^3')},
+        '${spc["label"]}': (${spc["concentration"]}, 'mol/cm^3'),
 % endfor
 </%def>
 """
