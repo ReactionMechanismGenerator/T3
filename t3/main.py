@@ -1009,8 +1009,9 @@ class T3(object):
         Returns:
             bool: Whether the species thermochemical properties should be calculated. ``True`` if they should be.
         """
+        thermo_comment = species.thermo.comment.split('Solvation')[0]
         if self.get_species_key(species=species) is None \
-                and ('group additivity' in species.thermo.comment or '+ radical(' in species.thermo.comment):
+                and ('group additivity' in thermo_comment or '+ radical(' in thermo_comment):
             return True
         return False
 
