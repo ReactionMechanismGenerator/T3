@@ -89,9 +89,9 @@ class T3(object):
         project_directory (str, optional): The project directory. Required through the API, optional through an input
                                            file (will be set to the directory of the input file if not specified).
         verbose (int, optional): The logging level, optional. 10 - debug, 20 - info, 30 - warning, default: 20.
-        clean_dir (bool, optional): Whether to delete all existing files and folders in the project directory prior to
-                                    execution. If set to ``True``, the restart feature will not be triggered.
-                                    Default: ``False``.
+        clean_dir (bool, optional): Whether to delete all existing files (other than input and submit files)
+                                    and folders in the project directory prior to execution.
+                                    If set to ``True``, the restart feature will not be triggered. Default: ``False``.
         t3 (dict, optional): T3 directives.
         rmg (dict): RMG directives.
         qm (dict, optional): QM directive.
@@ -155,7 +155,7 @@ class T3(object):
         self.verbose = self.schema['verbose']
 
         if clean_dir and os.path.isdir(self.project_directory):
-            shutil.rmtree(self.project_directory)
+            self.cleanup()
         if not os.path.isdir(self.project_directory):
             os.makedirs(self.project_directory)
 
@@ -1187,6 +1187,18 @@ class T3(object):
                 mod_spc_dict = {k: v for k, v in spc_dict.items() if k != 'adjlist'}
                 mod_spc_dict['object'] = Species().from_adjacency_list(spc_dict['adjlist'])
                 self.species[key] = mod_spc_dict
+
+    def cleanup(self):
+        """
+        Clean the working directory other than the input and submit files and the log archive folder.
+        """
+        for root, dirs, files in os.walk(self.project_directory, topdown=True):
+            for file_ in files:
+                if 'input' not in file_ and 'submit' not in file_:
+                    os.remove(os.path.join(root, file_))
+            for folder in dirs:
+                if folder != 'log_archive':
+                    shutil.rmtree(os.path.join(root, folder))
 
 
 def get_species_by_label(label: str,
