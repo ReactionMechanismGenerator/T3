@@ -253,6 +253,7 @@ def test_write_rmg_input_file_liquid():
                  "    generateOutputHTML=True,\n",
                  "    allowed=['input species', 'seed mechanisms', 'reaction libraries'],\n",
                  "    maximumCarbonAtoms=4,\n",
+                 "solvation(solvent='water')\n",
                  ]:
         assert line in lines
     os.remove(file_path)
