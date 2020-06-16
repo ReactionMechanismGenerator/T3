@@ -165,6 +165,23 @@ liquidReactor(
                 constant=constant,
             )
 
+    # solvent
+    solvent_template = """solvation(solvent='${solvent}')
+
+"""
+    solvent = ''
+    for spc in species:
+        # the schema assures that there's only one species defined as the solvent
+        # TODO: assure that the requested solvent actually exists in the RMG database
+        if spc['solvent']:
+            solvent = spc['label']
+            break
+
+    if solvent:
+        rmg_input += Template(solvent_template).render(
+            solvent=solvent,
+        )
+
     # model
     model_input = kwargs['model']
     model_template = """model(
