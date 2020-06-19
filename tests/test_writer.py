@@ -10,7 +10,7 @@ import os
 from arc.common import read_yaml_file
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH
-from t3.schema import InputBase, RMG
+from t3.schema import InputBase, RMG, T3
 from t3.utils.writer import to_camel_case, write_rmg_input_file
 
 
@@ -39,7 +39,8 @@ def test_write_rmg_input_file():
                        qm=input_dict['qm'],
                        verbose=20,
                        ).dict()
-    write_rmg_input_file(kwargs=schema['rmg'],
+    write_rmg_input_file(rmg=schema['rmg'],
+                         t3=schema['t3'],
                          iteration=2,
                          path=minimal_input_file_path,
                          walltime='01:00:00:00')
@@ -104,7 +105,7 @@ model(
     terminateAtMaxObjects=False,
 )
 
-simulator(atol=1e-16, rtol=1e-08)
+simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)
 """
     assert content == expected_input
 
@@ -148,7 +149,8 @@ simulator(atol=1e-16, rtol=1e-08)
         'allow_singlet_O2': False,
     }
 
-    write_rmg_input_file(kwargs=schema['rmg'],
+    write_rmg_input_file(rmg=schema['rmg'],
+                         t3=schema['t3'],
                          iteration=2,
                          path=minimal_input_file_path,
                          walltime='01:00:00:00')
@@ -225,9 +227,19 @@ def test_write_rmg_input_file_liquid():
                                    'max_heavy_atoms': 10,
                                    'max_radical_electrons': 1}}
 
+    t3 = {'sensitivity':
+              {'adapter': 'RMG',
+               'atol': 1e-6,
+               'rtol': 1e-4,
+               }
+          }
+
     file_path = os.path.join(DATA_BASE_PATH, 'test_write_rmg_input_file_liquid.py')
     rmg_schema = RMG(**rmg).dict()  # fill in defaults
-    write_rmg_input_file(kwargs=rmg_schema,
+    t3_schema = T3(**t3).dict()     # fill in defaults
+
+    write_rmg_input_file(rmg=rmg_schema,
+                         t3=t3_schema,
                          iteration=1,
                          path=file_path)
 
@@ -249,7 +261,7 @@ def test_write_rmg_input_file_liquid():
                  "    toleranceMoveToCore=0.001,\n",
                  "    toleranceInterruptSimulation=0.001,\n",
                  "    filterThreshold=100000000.0,\n",
-                 "simulator(atol=1e-16, rtol=1e-08)\n",
+                 "simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)\n",
                  "    generateOutputHTML=True,\n",
                  "    allowed=['input species', 'seed mechanisms', 'reaction libraries'],\n",
                  "    maximumCarbonAtoms=4,\n",
