@@ -13,7 +13,8 @@ METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
               }
 
 
-def write_rmg_input_file(kwargs: dict,
+def write_rmg_input_file(rmg: dict,
+                         t3: dict,
                          iteration: int,
                          path: str,
                          walltime: str = '00:00:00:00',
@@ -23,17 +24,18 @@ def write_rmg_input_file(kwargs: dict,
     Will create the directory if needed.
 
     Args:
-        kwargs (dict): The arguments to write in a keyword argument dictionary format.
+        rmg (dict): The arguments to write in a keyword argument dictionary format.
+        t3 (dict): The T3 arguments in a keyword argument dictionary format. Includes atol and rtol for SA.
         iteration (int): The T3 iteration, used to determine ``core_tolerance`` and ``tolerance_interrupt_simulation``.
         path (str): The path where the RMG input file should be saved.
         walltime (str, optional): The time cap for an RMG run. Should pass here t3['options']['max_RMG_walltime']
     """
-    kwargs = kwargs.copy()
+    rmg = rmg.copy()
     rmg_input = ''
     iteration -= 1  # iteration is 1-indexed, convert to 0-indexed for list indexing
 
     # database
-    database = kwargs['database']
+    database = rmg['database']
     # the following args type could be either str or list, detect str and format accordingly
     if isinstance(database['kinetics_depositories'], str) and database['kinetics_depositories'][0] != "'":
         database['kinetics_depositories'] = f"'{database['kinetics_depositories']}'"
@@ -54,7 +56,7 @@ def write_rmg_input_file(kwargs: dict,
     rmg_input += Template(database_template).render(**database)
 
     # species
-    species = kwargs['species']
+    species = rmg['species']
     species_template = """
 species(
     label='${label}',
@@ -78,7 +80,7 @@ species(
                                                        structure=structure)
 
     # reactors
-    reactors = kwargs['reactors']
+    reactors = rmg['reactors']
     gas_batch_constant_t_p_template_template = """
 simpleReactor(
     temperature=${temperature},
@@ -183,7 +185,7 @@ liquidReactor(
         )
 
     # model
-    model_input = kwargs['model']
+    model_input = rmg['model']
     model_template = """model(
     toleranceMoveToCore=${tol_move_to_core},
     toleranceInterruptSimulation=${tolerance_interrupt_simulation},${args}
@@ -195,7 +197,7 @@ liquidReactor(
     model['tolerance_interrupt_simulation'] = model_input['tolerance_interrupt_simulation'][iteration] \
         if len(model_input['tolerance_interrupt_simulation']) >= iteration + 1 \
         else model_input['tolerance_interrupt_simulation'][-1]
-    model_keys_to_skip = ['core_tolerance', 'tolerance_interrupt_simulation', 'atol', 'rtol']
+    model_keys_to_skip = ['core_tolerance', 'tolerance_interrupt_simulation', 'atol', 'rtol', 'sens_atol', 'sens_rtol']
     args = ''
     for key, value in model_input.items():
         if key not in model_keys_to_skip and value is not None:
@@ -204,13 +206,21 @@ liquidReactor(
     rmg_input += Template(model_template).render(**model)
 
     # simulator
-    simulator_template = """
-simulator(atol=${atol}, rtol=${rtol})
-"""
-    rmg_input += Template(simulator_template).render(atol=model_input['atol'], rtol=model_input['rtol'])
+    if t3['sensitivity'] is not None and t3['sensitivity']['adapter'] == 'RMG':
+        simulator_template = """\nsimulator(atol=${atol}, rtol=${rtol}, sens_atol=${sens_atol}, sens_rtol=${sens_rtol})\n"""
+        rmg_input += Template(simulator_template).render(atol=model_input['atol'],
+                                                         rtol=model_input['rtol'],
+                                                         sens_atol=t3['sensitivity']['atol'],
+                                                         sens_rtol=t3['sensitivity']['rtol']
+                                                         )
+    else:
+        simulator_template = """\nsimulator(atol=${atol}, rtol=${rtol})\n"""
+        rmg_input += Template(simulator_template).render(atol=model_input['atol'],
+                                                         rtol=model_input['rtol'],
+                                                         )
 
     # pressureDependence
-    pdep = kwargs['pdep']
+    pdep = rmg['pdep']
     if pdep is not None:
         pdep_template = """
 pressureDependence(
@@ -237,7 +247,7 @@ pressureDependence(
         rmg_input += Template(pdep_template).render(**pdep)
 
     # options
-    options = kwargs['options']
+    options = rmg['options']
     if options is not None:
         options_template = """
 options(
@@ -260,7 +270,7 @@ options(
         rmg_input += Template(options_template).render(**options)
 
     # generatedSpeciesConstraints
-    species_constraints = kwargs['species_constraints']
+    species_constraints = rmg['species_constraints']
     if species_constraints is not None:
         species_constraints_template = """
 generatedSpeciesConstraints(

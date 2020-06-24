@@ -472,7 +472,8 @@ def test_run_rmg():
     """Test the ability to run RMG from T3"""
     t3 = run_minimal(iteration=1, set_paths=True)
     write_rmg_input_file(
-        kwargs=t3.rmg,
+        rmg=t3.rmg,
+        t3=t3.t3,
         iteration=t3.iteration,
         path=t3.paths['RMG input'],
         walltime=t3.t3['options']['max_RMG_walltime'],
@@ -481,13 +482,13 @@ def test_run_rmg():
     with open(t3.paths['RMG input'], 'r') as f:
         lines = f.readlines()
     for line in ["    thermoLibraries=['primaryThermoLibrary'],\n",
-                 "simulator(atol=1e-16, rtol=1e-08)\n",
+                 "simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)\n",
                  ]:
         assert line in lines
     with open(t3.paths['RMG log'], 'r') as f:
         lines = f.readlines()
     for line in ["    thermoLibraries=['primaryThermoLibrary'],\n",
-                 "simulator(atol=1e-16, rtol=1e-08)\n",
+                 "simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)\n",
                  "No collision rate violators found in the model's core.\n",
                  "MODEL GENERATION COMPLETED\n",
                  "The final model core has 12 species and 18 reactions\n",

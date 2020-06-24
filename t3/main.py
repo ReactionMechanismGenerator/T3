@@ -258,7 +258,8 @@ class T3(object):
             # RMG
             if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
                 write_rmg_input_file(
-                    kwargs=self.rmg,
+                    rmg=self.rmg,
+                    t3=self.t3,
                     iteration=self.iteration,
                     path=self.paths['RMG input'],
                     walltime=self.t3['options']['max_RMG_walltime'],
@@ -296,7 +297,8 @@ class T3(object):
                              f'------------------------------------------------------\n')
             self.set_paths()
             write_rmg_input_file(
-                kwargs=self.rmg,
+                rmg=self.rmg,
+                t3=self.t3,
                 iteration=self.iteration,
                 path=self.paths['RMG input'],
                 walltime=self.t3['options']['max_RMG_walltime'],
