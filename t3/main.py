@@ -212,7 +212,7 @@ class T3(object):
                                    or to the folder where this file will be saved under a default name.
                                    If ``None``, the input file will be saved to the project directory.
              all_args (bool, optional): Whether to save all arguments in the generated input file
-                                        including all default values). Default: ``False``.
+                                        including all default values. Default: ``False``.
         """
         if path is None:
             path = os.path.join(self.project_directory, 'T3_auto_saved_input.yml')
