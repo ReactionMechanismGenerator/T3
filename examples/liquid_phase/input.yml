@@ -1,0 +1,76 @@
+project: T3_liquid_phase_example
+
+t3:
+  options:
+    all_core_species: True
+    max_T3_iterations: 20
+    max_rmg_processes: 10
+  sensitivity:
+    adapter: RMG
+    SA_threshold: 0.01  # although all core species are selected to be calculated, SA is run for additional information (not used by T3)
+
+rmg:
+  database:
+    kinetics_libraries: ['BurkeH2O2inN2', 'api_soup', 'NOx2018', 'Klippenstein_Glarborg2016']  # showing that lists (and dictionaries) can also be specified in YAML using a Python format
+    thermo_libraries:
+    - BurkeH2O2
+    - thermo_DFT_CCSDTF12_BAC
+    - DFT_QCI_thermo
+    - primaryThermoLibrary
+    - CBS_QB3_1dHR
+    - CurranPentane
+  model:
+    core_tolerance:
+    - 0.001
+  options:
+    save_edge: true
+    save_html: true
+  reactors:
+  - T:  # this is a ranged reactor (has a T range)
+    - 293.0
+    - 393.0
+    termination_time: 6220800.0  # in seconds
+    type: liquid batch constant T V
+  species:
+  - label: AIBN
+    concentration: 4.9e-06
+    smiles: CC(C)(C#N)/N=N/C(C)(C)C#N
+  - label: MeOH
+    concentration: 0.0124
+    smiles: CO
+  - label: water
+    concentration: 0.0278
+    smiles: O
+    solvent: true  # defining the solvent used by RMG
+  - label: O2
+    concentration: 2.73e-07
+    smiles: '[O][O]'  # if the SMILES begin with a '[' character, the string must be given within quotation marks so the YAML interpreter won't confuse it for a list
+  - label: OHCH2OO
+    SA_observable: true
+    smiles: OCO[O]
+  - label: cyanoisopropylOO
+    SA_observable: true
+    smiles: N#CC(C)(C)O[O]
+  - label: N2
+    concentration: 4.819e-07
+    reactive: false  # species can be set as non-reactive
+    smiles: N#N
+  species_constraints:
+    max_C_atoms: 4
+    max_N_atoms: 2
+    max_O_atoms: 3
+    max_S_atoms: 0
+    max_Si_atoms: 0
+    max_heavy_atoms: 10
+    max_radical_electrons: 1
+
+qm:
+  adapter: ARC
+  job_types:
+    rotors: True
+    conformers: True
+    fine: True
+    freq: True
+    opt: True
+    sp: True
+  level_of_theory: CBS-QB3
