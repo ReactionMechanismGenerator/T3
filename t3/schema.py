@@ -537,6 +537,11 @@ class RMG(BaseModel):
                                              f'have actual corresponding species.')
         return values
 
+    @validator('options', always=True)
+    def check_options(cls, value):
+        """RMG.options validator"""
+        return value or RMGOptions()
+
 
 class QM(BaseModel):
     """
