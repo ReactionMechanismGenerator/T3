@@ -1,0 +1,29 @@
+repo:
+  - ./*
+  
+examples:
+  - examples/**/*
+
+tests:
+  - tests/**/*
+
+Module common:
+  - t3/common.py
+
+Module docs:
+  - t3/docs/**/*
+
+Module logger:
+  - t3/logger.py
+
+Module main:
+  - t3/main.py
+
+Module schema:
+  - t3/schema.py
+
+Module simulate:
+  - t3/simulate/**/*
+
+Module writer:
+  - t3/utils/writer.py
