@@ -106,6 +106,22 @@ model(
 )
 
 simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)
+
+options(
+    name='Seed',
+    generateSeedEachIteration=True,
+    saveSeedToDatabase=False,
+    units='si',
+    generateOutputHTML=False,
+    generatePlots=False,
+    saveSimulationProfiles=False,
+    verboseComments=False,
+    saveEdgeSpecies=True,
+    keepIrreversible=False,
+    trimolecularProductReversible=True,
+    wallTime='01:00:00:00',
+    saveSeedModulus=-1,
+)
 """
     assert content == expected_input
 
