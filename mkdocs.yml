@@ -28,7 +28,6 @@ nav:
 - Tutorials:
   - tutorials/1_no_qm.md
 - how_to.md
-- API: api/index.html
 - output.md
 - release.md
 - credits.md
@@ -48,7 +47,7 @@ extra:
 
 # Google Analytics
 google_analytics:
-  - UA-XXXXXXXX-X
+  - UA-16019208-2
   - auto
 
 # Extensions
@@ -59,11 +58,11 @@ markdown_extensions:
   - toc:
       permalink: true
 
-## Extra
-#extra_css:
-#  - css/termynal.css
-#  - css/custom.css
-#extra_javascript:
-#  - https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js
-#  - js/termynal.js
-#  - js/custom.js
+# Extra
+extra_css:
+  - css/termynal.css
+  - css/custom.css
+extra_javascript:
+  - https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js
+  - js/termynal.js
+  - js/custom.js

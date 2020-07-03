@@ -1,7 +1,0 @@
-.. _t3:
-
-t3
-==
-
-.. automodule:: t3
-    :members:
