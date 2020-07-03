@@ -16,6 +16,7 @@ t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolut
 DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'data')
 EXAMPLES_BASE_PATH = os.path.join(t3_path, 'examples')
 PROJECTS_BASE_PATH = os.path.join(t3_path, 'Projects')
+test_minimal_project_directory = os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
 VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 
