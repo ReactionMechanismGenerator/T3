@@ -1,3 +1,8 @@
+# Licence
+
+T3 is distributed free of charge under the MIT license.
+
+
 MIT License
 
 Copyright (c) 2019-2020 Dana Research Group

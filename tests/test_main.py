@@ -203,7 +203,7 @@ def test_args_and_attributes():
     assert os.path.isfile(os.path.join(test_minimal_project_directory, 't3.log'))
     assert os.path.isdir(os.path.join(test_minimal_project_directory, 'log_archive'))
 
-    assert t3.project == 'T3_minimal'
+    assert t3.project == 'T3_minimal_example'
     assert t3.project_directory == os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
     assert t3.verbose == 10
 
@@ -221,7 +221,7 @@ def test_args_and_attributes():
 def test_as_dict():
     """Test T3.as_dict()"""
     t3 = run_minimal()
-    assert t3.as_dict() == {'project': 'T3_minimal',
+    assert t3.as_dict() == {'project': 'T3_minimal_example',
                             'project_directory': test_minimal_project_directory,
                             'qm': qm_minimal,
                             'rmg': rmg_minimal,
@@ -236,7 +236,7 @@ def test_write_t3_input_file():
     t3.write_t3_input_file()
     assert os.path.isfile(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'))
     with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'), 'r') as f:
-        assert f.readline() == 'project: T3_minimal\n'
+        assert f.readline() == 'project: T3_minimal_example\n'
     shutil.rmtree(test_minimal_project_directory)
 
 

@@ -1,0 +1,68 @@
+# Project information
+site_name: T3
+site_description: The Tandem Tool for automated kinetic model generation and refinement
+site_author: Alon Grinberg Dana
+site_url: https://reactionmechanismgenerator.github.io/T3/
+
+# Repository
+repo_name: T3
+repo_url: https://github.com/ReactionMechanismGenerator/t3
+
+# Configuration
+theme:
+  name: material
+  language: en
+  palette:
+    primary: indigo
+    accent: amber
+  icon:
+    repo: fontawesome/brands/github-alt
+  features:
+    - instant
+
+# Navigation
+nav:
+- Home: index.md
+- installation.md
+- running.md
+- Tutorials:
+  - tutorials/1_no_qm.md
+- how_to.md
+- output.md
+- release.md
+- credits.md
+- contribute.md
+- cite.md
+- licence.md
+
+# Extras
+extra:
+  social:
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/squidfunk
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/squidfunk
+    - icon: fontawesome/brands/linkedin
+      link: https://linkedin.com/in/squidfunk
+
+# Google Analytics
+google_analytics:
+  - UA-16019208-2
+  - auto
+
+# Extensions
+markdown_extensions:
+  - admonition
+  - codehilite:
+      guess_lang: false
+  - toc:
+      permalink: true
+
+# Extra
+extra_css:
+  - css/termynal.css
+  - css/custom.css
+extra_javascript:
+  - https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js
+  - js/termynal.js
+  - js/custom.js
