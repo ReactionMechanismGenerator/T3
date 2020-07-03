@@ -4,6 +4,7 @@
 """
 t3 tests test_utils module
 """
+import os
 
 import os
 import pytest
