@@ -17,6 +17,7 @@ from rmgpy.thermo import NASA
 from arc.common import read_yaml_file
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH, test_minimal_project_directory
+from tests.common import run_minimal
 from t3.main import (T3,
                      legalize_species_label,
                      get_species_by_label,

@@ -9,6 +9,7 @@ import os
 import shutil
 
 from t3.common import DATA_BASE_PATH
+from tests.common import run_minimal
 from t3.simulate.rmg_simulator import RMGSimulator
 
 
