@@ -44,7 +44,7 @@ dependencies:
   - pandas
   - psutil
   - py3dmol >= 0.8.0
-  - pydas >=1.0.1
+  - pydas
   - pydot
   - pydqed >=1.0.0
   - pymongo
