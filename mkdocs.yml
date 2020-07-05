@@ -39,11 +39,9 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github-alt
-      link: https://github.com/squidfunk
-    - icon: fontawesome/brands/twitter
-      link: https://twitter.com/squidfunk
+      link: https://github.com/ReactionMechanismGenerator/T3
     - icon: fontawesome/brands/linkedin
-      link: https://linkedin.com/in/squidfunk
+      link: https://www.linkedin.com/in/alongd/
 
 # Google Analytics
 google_analytics:
@@ -60,9 +58,9 @@ markdown_extensions:
 
 # Extra
 extra_css:
-  - css/termynal.css
-  - css/custom.css
+  - https://reactionmechanismgenerator.github.io/T3/css/termynal.css
+  - https://reactionmechanismgenerator.github.io/T3/css/custom.css
 extra_javascript:
   - https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js
-  - js/termynal.js
-  - js/custom.js
+  - https://reactionmechanismgenerator.github.io/T3/js/termynal.js
+  - https://reactionmechanismgenerator.github.io/T3/js/custom.js
