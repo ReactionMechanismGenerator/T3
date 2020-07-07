@@ -2,7 +2,7 @@
   <a href="https://reactionmechanismgenerator.github.io/T3/"><img src="https://github.com/ReactionMechanismGenerator/T3/blob/master/grf/T3_logo_small.gif" alt="T3"></a>
 </p>
 
-# The RMG-ARC Tandem Tool (T3) for automated kinetic model generation and refinement
+# The Tandem Tool (T3) for automated kinetic model generation and refinement
 
 ![Release](https://img.shields.io/badge/version-0.1.0-blue.svg)
 [![Build Status](https://travis-ci.com/ReactionMechanismGenerator/T3.svg?branch=master)](https://travis-ci.com/ReactionMechanismGenerator/T3)
