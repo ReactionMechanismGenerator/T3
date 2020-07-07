@@ -37,6 +37,17 @@ jobs:
         - make
         - cd ..
         - conda list
+        - git clone https://github.com/ReactionMechanismGenerator/pyrms.git
+        - cd pyrms
+        - git checkout py3
+        - julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
+        - python3 -m pip install julia
+        - python -c "import julia; julia.install()"
+        - pip install diffeqpy
+        - python -c "import diffeqpy; diffeqpy.install()"
+        - julia install.jl
+        - julia -v
+        - cd ..
         - cd T3
       script:
         - coverage run -m pytest -ra -vv
