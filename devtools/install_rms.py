@@ -2,6 +2,7 @@ import os
 import sys
 
 print("appending pyrms to path")
+os.chdir('../../pyrms')
 path=os.getcwd()
 homepath = os.getenv("HOME")
 
