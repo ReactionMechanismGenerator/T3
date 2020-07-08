@@ -8,7 +8,6 @@ t3 tests test_tandem module
 import datetime
 import os
 import shutil
-from typing import Optional
 
 from rmgpy import settings as rmg_settings
 from rmgpy.rmg.pdep import PDepNetwork, PDepReaction
@@ -18,9 +17,9 @@ from rmgpy.thermo import NASA
 from arc.common import read_yaml_file
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
+from tests.common import run_minimal
 from t3.main import (T3,
                      legalize_species_label,
-                     get_species_by_label,
                      get_reaction_by_index,
                      get_species_label_by_structure)
 from t3.utils.writer import write_rmg_input_file
@@ -173,25 +172,6 @@ def setup_module():
     """
     if os.path.isdir(test_minimal_project_directory):
         shutil.rmtree(test_minimal_project_directory)
-
-
-def run_minimal(project: Optional[str] = None,
-                project_directory: Optional[str] = None,
-                iteration: Optional[int] = None,
-                set_paths: bool = False,
-                ) -> T3:
-    """A helper function for running the minimal example"""
-    minimal_input = os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'input.yml')
-    input_dict = read_yaml_file(path=minimal_input)
-    input_dict['verbose'] = 10
-    input_dict['project_directory'] = project_directory or test_minimal_project_directory
-    if project is not None:
-        input_dict['project'] = project
-    t3 = T3(**input_dict)
-    t3.iteration = iteration or 0
-    if set_paths:
-        t3.set_paths()
-    return t3
 
 
 def test_args_and_attributes():
