@@ -40,15 +40,17 @@ jobs:
         - git clone https://github.com/ReactionMechanismGenerator/pyrms.git
         - cd pyrms
         - git checkout py3
-        - pip install julia
+#        - pip install julia
         - julia -v
         - julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
         - python3 -m pip install julia
         - python -c "import julia; julia.install()"
+        - ln -sfn $(which python-jl) $(which python)
         - pip install diffeqpy
 #        - ln -sfn $(which python-jl) $(which python)
-#        - python -c "import diffeqpy; diffeqpy.install()"
-        - julia install.jl
+        - python -c "import diffeqpy; diffeqpy.install()"
+#        - julia install.jl
+        - julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="master")); using ReactionMechanismSimulator'
         - cd ..
         - cd T3
       script:
