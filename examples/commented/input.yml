@@ -76,6 +76,7 @@ rmg:
       smiles: CC
       concentration: 1
       reactive: true  # optional, default: ``True``
+      seed_all_rads: ['radical', 'alkoxyl', 'peroxyl']  # radical derivatives that will be added the RMG input file
     - label: OH
       smiles: '[OH]'
       observable: true  # optional, will be used as both SA and UA observable, default: ``False``
