@@ -47,7 +47,7 @@ jobs:
         - python -c "import julia; julia.install()"
         - pip install diffeqpy
         - ln -sfn $(which python-jl) $(which python)
-        - python -c "import diffeqpy; diffeqpy.install()"
+#        - python -c "import diffeqpy; diffeqpy.install()"
         - julia install.jl
         - cd ..
         - cd T3
