@@ -8,6 +8,7 @@ import os
 
 import t3.common as common
 from t3.common import DATA_BASE_PATH
+from tests.common import run_minimal
 
 
 def test_dict_to_str():
