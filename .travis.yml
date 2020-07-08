@@ -53,6 +53,7 @@ jobs:
         - julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="master")); Pkg.build("ReactionMechanismSimulator"); using ReactionMechanismSimulator'
         - cd ..
         - cd T3
+        - python devtools/install_rms.py
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
