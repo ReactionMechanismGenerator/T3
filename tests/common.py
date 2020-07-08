@@ -5,6 +5,8 @@ t3 tests common module
 import os
 from typing import Optional
 
+from rmgpy.molecule import Molecule
+
 from arc.common import read_yaml_file
 
 from t3.common import EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
@@ -29,3 +31,21 @@ def run_minimal(project: Optional[str] = None,
     if set_paths:
         t3.set_paths()
     return t3
+
+
+def isomorphic_smiles(smiles_1: str,
+                      smiles_2: str,
+                      ) -> bool:
+    """
+    Check whether two SMILES strings represent isomorphic molecules.
+
+    Args:
+        smiles_1: A SMILES string.
+        smiles_2: A SMILES string.
+
+    Returns:
+        bool: Whether the two SMILES strings represent isomorphic molecules.
+    """
+    mol_1 = Molecule(smiles=smiles_1)
+    mol_2 = Molecule(smiles=smiles_2)
+    return mol_1.is_isomorphic(mol_2)
