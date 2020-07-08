@@ -42,6 +42,9 @@ jobs:
         - git checkout py3
 #        - pip install julia
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - cd pyrms
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - cd ..
         - julia -v
         - julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
         - python3 -m pip install julia
