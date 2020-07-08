@@ -5,6 +5,7 @@ used for input validation
 Todo: add "live" validators for actually implemented adapters, need to access the respective factory register dicts
 """
 
+from enum import Enum
 from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
@@ -121,6 +122,15 @@ class RMGDatabase(BaseModel):
         extra = "forbid"
 
 
+class RadicalTypeEnum(str, Enum):
+    """
+    The supported radical ``types`` entries for ``generate_radicals()``.
+    """
+    radical = 'radical'
+    alkoxyl = 'alkoxyl'
+    peroxyl = 'peroxyl'
+
+
 class RMGSpecies(BaseModel):
     """
     A class for validating input.RMG.species arguments
@@ -137,6 +147,7 @@ class RMGSpecies(BaseModel):
     constant: bool = False
     balance: bool = False
     solvent: bool = False
+    seed_all_rads: Optional[List[RadicalTypeEnum]] = None
 
     class Config:
         extra = "forbid"
