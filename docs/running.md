@@ -19,7 +19,7 @@ the same parameters which will be processed via the same routines.
 
     T3 also has a function for writing a corresponding
     YAML input file after defining parameters via the API,
-    see the [How-to guides](how_to.md#save-an-input-file-from-the-api){.internal-link target=_blank}
+    see the [How-to guides](how_to.md#save-an-input-file-from-the-api)
     for more details.
 
 
@@ -68,16 +68,13 @@ A few RMG arguments have different names altogether in T3. These arguments are:
   replaces the legacy RMG `reactionLibraries` argument.
 - `core_tolerance`: In the RMG model block, the `core_tolerance` argument
   replaces the legacy RMG `toleranceMoveToCore` argument. See the
-  [How-to guides](how_to.md#the-rmg-core-tolerances){.internal-link target=_blank}
-  for more details.
+  [How-to guides](how_to.md#the-rmg-core-tolerances) for more details.
 - `conditions_per_iteration`: In the RMG reactors block, the `conditions_per_iteration` argument
   replaces the legacy RMG `nSims` argument.
 - Species definitions are different than in RMG, see the
-  [How-to guides](how_to.md#species-properties){.internal-link target=_blank}
-  for more details.
+  [How-to guides](how_to.md#species-properties) for more details.
 - Reactors definitions are different than in RMG, see the
-  [How-to guides](how_to.md#reactors){.internal-link target=_blank}
-  for more details.
+  [How-to guides](how_to.md#reactors) for more details.
 
 
 !!! Note
@@ -93,7 +90,7 @@ Use the below **reference guide** to learn more about these arguments.
 
 T3 has several types of reference guides:
 
-- The [tutorials](tutorials/1_no_qm.md){.internal-link target=_blank} are a great place to start with,
+- The [tutorials](tutorials/1_no_qm.md) are a great place to start with,
   and provide an excellent basic reference guide. In T3's tutorials you can find
   complete, functioning, and worked-out examples with explanations.
 - The <a href="https://github.com/ReactionMechanismGenerator/T3/blob/master/examples/commented/input.yml">
@@ -106,7 +103,7 @@ T3 has several types of reference guides:
 ## Where next?
 
 New users should start learning how to use T3 by reading and executing the
-[tutorials](tutorials/1_no_qm.md){.internal-link target=_blank}.
+[tutorials](tutorials/1_no_qm.md).
 
 For advanced features and specific examples for solving complex problems, see the
- [how-to guides](how_to.md){.internal-link target=_blank}. 
+ [how-to guides](how_to.md). 
