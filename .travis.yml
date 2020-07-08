@@ -50,7 +50,7 @@ jobs:
 #        - ln -sfn $(which python-jl) $(which python)
         - python -c "import diffeqpy; diffeqpy.install()"
 #        - julia install.jl
-        - julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="master")); using ReactionMechanismSimulator'
+        - julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="master")); Pkg.build("ReactionMechanismSimulator"); using ReactionMechanismSimulator'
         - cd ..
         - cd T3
       script:
