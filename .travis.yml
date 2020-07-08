@@ -54,6 +54,8 @@ jobs:
         - cd ..
         - cd T3
         - python devtools/install_rms.py
+        - source ~/.bash_profile
+        - source activate t3_env
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
