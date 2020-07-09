@@ -136,7 +136,7 @@ liquidReactor(
             termination += f"terminationConversion={reactor['termination_conversion']},"
         if reactor['termination_time'] is not None:
             termination += '\n    ' if termination else ''
-            termination += f"terminationTime=({reactor['termination_time']}, 's'),"
+            termination += f"terminationTime={reactor['termination_time']},"
         if reactor['termination_rate_ratio'] is not None:
             termination += '\n    ' if termination else ''
             termination += f"terminationRateRatio={reactor['termination_rate_ratio']},"
