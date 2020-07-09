@@ -8,6 +8,7 @@ from typing import Optional
 
 from rmgpy.species import Species
 
+from arc.species.converter import molecules_from_xyz
 
 VERSION = '0.1.0'
 
@@ -75,3 +76,36 @@ def delete_root_rmg_log(project_directory: str) -> None:
     rmg_log_path = os.path.join(project_directory, 'RMG.log')
     if os.path.isfile(rmg_log_path):
         os.remove(rmg_log_path)
+
+
+def get_rmg_species_from_a_species_dict(species_dict: dict,
+                                        raise_error: bool = False,
+                                        ) -> Optional[Species]:
+    """
+    Get an RMG Species instance that corresponds to a species specified under the rmg.species
+    section of the T3 input file (a species dictionary).
+
+    Args:
+        species_dict (dict): The species dictionary to process.
+        raise_error (bool, optional): Whether to raise an error if a Species instance cannot be generated.
+                                      Default: ``False``.
+
+    Raises:
+        ValueError: If the species dictionary does not have a specified structure (if ``raise_error`` is ``True``).
+
+    Returns:
+        Species: The corresponding RMG species instance.
+    """
+    species = None
+    errored = False
+    if species_dict['adjlist'] is not None:
+        species = Species(label=species_dict['label']).from_adjacency_list(species_dict['adjlist'])
+    elif species_dict['smiles'] is not None:
+        species = Species(label=species_dict['label'], smiles=species_dict['smiles'])
+    elif species_dict['inchi'] is not None:
+        species = Species(label=species_dict['label'], inchi=species_dict['inchi'])
+    else:
+        errored = True
+    if errored and raise_error:
+        raise ValueError(f"The species corresponding to {species_dict['label']} does not have a specified structure.")
+    return species
