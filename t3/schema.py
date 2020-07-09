@@ -96,7 +96,7 @@ class T3Uncertainty(BaseModel):
     correlated: bool = True
     local_number: conint(gt=0) = 10
     global_number: conint(gt=0) = 5
-    termination_time: constr(regex=r'\d+:\d\d:\d\d:\d\d') = None
+    termination_time: Optional[constr(regex=r'\d+:\d\d:\d\d:\d\d')] = None
     PCE_run_time: conint(gt=0) = 1800
     PCE_error_tolerance: Optional[confloat(gt=0)] = None
     PCE_max_evals: Optional[conint(gt=0)] = None
@@ -154,7 +154,7 @@ class RMGSpecies(BaseModel):
         extra = "forbid"
 
 
-class RMGReactors(BaseModel):
+class RMGReactor(BaseModel):
     """
     A class for validating input.RMG.reactors arguments
     """
@@ -171,7 +171,7 @@ class RMGReactors(BaseModel):
 
     @validator('type')
     def check_reactor_type(cls, value):
-        """RMGReactors.type validator"""
+        """RMGReactor.type validator"""
         supported_reactors = ['gas batch constant T P', 'liquid batch constant T V']
         # all supporter reactors must contain a 'gas' or 'liquid' keyword, other schema validations depend on it
         if value not in supported_reactors:
@@ -180,7 +180,7 @@ class RMGReactors(BaseModel):
 
     @validator('T')
     def check_t(cls, value):
-        """RMGReactors.T validator"""
+        """RMGReactor.T validator"""
         if isinstance(value, list) and len(value) != 2:
             raise ValueError(f'When specifying the temperature as a list, only two values are allowed (T min, T max),\n'
                              f'got {len(value)} values: {value}.')
@@ -188,7 +188,7 @@ class RMGReactors(BaseModel):
 
     @validator('P', always=True)
     def check_p(cls, value, values):
-        """RMGReactors.P validator"""
+        """RMGReactor.P validator"""
         if isinstance(value, list) and len(value) != 2:
             raise ValueError(f'When specifying the pressure as a list, only two values are allowed (P min, P max),\n'
                              f'got {len(value)} values: {value}.')
@@ -421,7 +421,7 @@ class RMG(BaseModel):
     A class for validating input.RMG arguments
     """
     database: RMGDatabase
-    reactors: List[RMGReactors]
+    reactors: List[RMGReactor]
     species: List[RMGSpecies]
     model: RMGModel
     pdep: Optional[RMGPDep] = None
