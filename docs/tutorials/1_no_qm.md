@@ -29,7 +29,7 @@ rmg_args = {'database': {'thermo_libraries': ['primaryThermoLibrary',
                           'T': 1000,
                           'P': 1,
                           'termination_conversion': {'H2': 0.9},
-                          'termination_time': 1e6}],
+                          'termination_time': [5, 's']}],
             'model': {'core_tolerance': [0.01, 0.001]}}
 
 t3_object = T3(project='T3_tutorial_1',
@@ -63,7 +63,7 @@ rmg_args = {'database': {'thermo_libraries': ['primaryThermoLibrary',
                           'T': 1000,
                           'P': 1,
                           'termination_conversion': {'H2': 0.9},
-                          'termination_time': 1e6}],
+                          'termination_time': [5, 's']}],
             'model': {'core_tolerance': [0.01, 0.001]}}
 
 t3_object = T3(project='T3_tutorial_1',
@@ -118,7 +118,7 @@ rmg_args = {'database': {'thermo_libraries': ['primaryThermoLibrary',
                           'T': 1000,
                           'P': 1,
                           'termination_conversion': {'H2': 0.9},
-                          'termination_time': 1e6}],
+                          'termination_time': [5, 's']}],
             'model': {'core_tolerance': [0.01, 0.001]}}
 
 t3_object = T3(project='T3_tutorial_1',
@@ -146,7 +146,7 @@ rmg_args = {'database': {'thermo_libraries': ['primaryThermoLibrary',
                           'T': 1000,
                           'P': 1,
                           'termination_conversion': {'H2': 0.9},
-                          'termination_time': 1e6}],
+                          'termination_time': [5, 's']}],
             'model': {'core_tolerance': [0.01, 0.001]}}
 
 t3_object = T3(project='T3_tutorial_1',
@@ -177,7 +177,9 @@ rmg:
     T: 1000.0
     termination_conversion:
       H2: 0.9
-    termination_time: 1000000.0
+    termination_time:
+    - 5
+    - 's'
     type: gas batch constant T P
   species:
   - concentration: 0.67
