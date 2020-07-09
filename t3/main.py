@@ -12,6 +12,7 @@ Todo:
     - write an RMG input file for the user to later use.
 """
 
+import datetime
 import inspect
 import os
 import pandas as pd
@@ -287,6 +288,9 @@ class T3(object):
                     self.process_arc_run()
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
                 # T3 iterated through all of the user requested tolerances, and there are no more calculations required
+                break
+
+            if self.check_overtime():
                 break
 
         if additional_calcs_required:
@@ -1190,6 +1194,26 @@ class T3(object):
                 mod_spc_dict = {k: v for k, v in spc_dict.items() if k != 'adjlist'}
                 mod_spc_dict['object'] = Species().from_adjacency_list(spc_dict['adjlist'])
                 self.species[key] = mod_spc_dict
+
+    def check_overtime(self) -> bool:
+        """
+        Check that the timer hasn't run out.
+
+        Returns:
+            bool: Whether T3 is running over time.
+        """
+        if self.t3['options']['max_T3_walltime'] is not None:
+            print(type(self.t0))
+            delta = datetime.datetime.now() - self.t0
+            splits = self.t3['options']['max_T3_walltime'].split(':')  # 01:00:00:00
+            max_delta = datetime.timedelta(days=int(splits[0]),
+                                           hours=int(splits[1]),
+                                           minutes=int(splits[2]),
+                                           seconds=int(splits[3]),
+                                           )
+            if delta > max_delta:
+                return True
+        return False
 
     def cleanup(self):
         """
