@@ -11,6 +11,18 @@ from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
 
 
+class TerminationTimeEnum(str, Enum):
+    """
+    The supported termination type units in an RMG reactor.
+    """
+    micro_s = 'micro-s'
+    ms = 'ms'
+    s = 's'
+    hrs = 'hrs'
+    hours = 'hours'
+    days = 'days'
+
+
 class T3Options(BaseModel):
     """
     A class for validating input.T3.options arguments
@@ -162,7 +174,7 @@ class RMGReactor(BaseModel):
     T: Union[confloat(gt=0), List[confloat(gt=0)]]
     P: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]]
     termination_conversion: Optional[Dict[str, confloat(gt=0, lt=1)]] = None
-    termination_time: Optional[confloat(gt=0)] = None
+    termination_time: Optional[List[Union[confloat(gt=0), TerminationTimeEnum]]] = None
     termination_rate_ratio: Optional[confloat(gt=0, lt=1)] = None
     conditions_per_iteration: conint(gt=0) = 12
 
@@ -197,6 +209,20 @@ class RMGReactor(BaseModel):
         if 'type' in values and 'liquid' in values['type'] and value is not None:
             raise ValueError('A reactor pressure cannot be specified for a liquid phase reactor.')
         return value
+
+    @validator('termination_time')
+    def check_termination_time(cls, value):
+        """RMGReactor.termination_time validator"""
+        if len(value) != 2 or not isinstance(value[0], float) or not isinstance(value[1], str):
+            raise ValueError(f'The specified termination time must be a list of 2 entries: '
+                             f'the value (a float) and the units (a string). Got: {value}')
+        if value[1] == TerminationTimeEnum.micro_s:
+            value[0] *= 1000
+            value[1] = TerminationTimeEnum.ms
+        elif value[1] == TerminationTimeEnum.hrs:
+            value[1] = TerminationTimeEnum.hours
+        value[1] = value[1].value  # convert the Enum class into a string
+        return tuple(value)
 
 
 class RMGModel(BaseModel):
