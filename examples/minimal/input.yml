@@ -31,7 +31,7 @@ rmg:
       P: 1
       termination_conversion:
         'H2': 0.9
-      termination_time: 1e6
+      termination_time: [5, 's']
   model:
     core_tolerance: [0.01, 0.001]
 

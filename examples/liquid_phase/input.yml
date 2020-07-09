@@ -29,7 +29,7 @@ rmg:
   - T:  # this is a ranged reactor (has a T range)
     - 293.0
     - 393.0
-    termination_time: 6220800.0  # in seconds
+    termination_time: [72, 'hrs']
     type: liquid batch constant T V
   species:
   - label: AIBN
