@@ -568,8 +568,9 @@ class InputBase(BaseModel):
                 rmg_reactor_termination_times = [reactor['termination_time'] for reactor in values['rmg']['reactors']]
                 if all([termination_time is None for termination_time in rmg_reactor_termination_times]) \
                         and ua_termination_time is None and values['t3']['uncertainty']['global_analysis']:
-                    raise ValueError('If an global uncertainty analysis is requested, a termination time must be specified '
-                                     'either under "t3.uncertainty.termination_time" or in at least one RMG reactor.')
+                    raise ValueError('If a global uncertainty analysis is requested, a termination time must be '
+                                     'specified either under "t3.uncertainty.termination_time" '
+                                     'or in at least one RMG reactor.')
             # check solvent for liquid phase
             reactor_types = set([reactor['type'] for reactor in values['rmg']['reactors']])
             solvents = list()
