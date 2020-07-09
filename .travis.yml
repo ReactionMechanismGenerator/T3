@@ -49,7 +49,7 @@ jobs:
         - julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
         - python3 -m pip install julia
         - python -c "import julia; julia.install()"
-        - ln -sfn $(which python-jl) $(which python)
+#        - ln -sfn $(which python-jl) $(which python)
         - pip install diffeqpy
 #        - ln -sfn $(which python-jl) $(which python)
         - python -c "import diffeqpy; diffeqpy.install()"
