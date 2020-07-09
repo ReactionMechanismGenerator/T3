@@ -5,6 +5,7 @@
 t3 tests test_tandem module
 """
 
+import datetime
 import os
 import shutil
 from typing import Optional
@@ -838,6 +839,19 @@ def test_get_species_label_by_structure():
 3 H u0 p0 c0 {1,S}"""
     label = get_species_label_by_structure(adj, rmg_species)
     assert label == 'H2O'
+
+
+def test_check_overtime():
+    """Test checking overtime"""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    t3.t3['options']['max_T3_walltime'] = '01:00:00:00'
+    t3.t0 = datetime.datetime.today()
+    assert t3.check_overtime() is False
+    t3.t0 = t3.t0.replace(year=t3.t0.year - 1)
+    assert t3.check_overtime() is True
 
 
 def teardown_module():
