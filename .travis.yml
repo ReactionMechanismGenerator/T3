@@ -2,6 +2,10 @@
 #   http://lint.travis-ci.org/
 
 language: python
+
+os:
+  - linux
+
 python:
   - "3.7"
 
@@ -22,9 +26,10 @@ jobs:
   include:
     - stage: test
       install:
+        - echo $TRAVIS_OS_NAME
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - conda env create -f environment.yml
-        - source activate t3_env
+        - conda activate t3_env
         - cd ..
         - git clone https://github.com/ReactionMechanismGenerator/ARC
         - cd ARC
@@ -35,31 +40,8 @@ jobs:
         - cd RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - make
-        - cd ..
-        - conda list
-        - git clone https://github.com/ReactionMechanismGenerator/pyrms.git
-        - cd pyrms
-        - git checkout py3
-#        - pip install julia
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - cd pyrms
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - cd ..
-        - julia -v
-        - julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
-        - python3 -m pip install julia
-        - python -c "import julia; julia.install(); from julia.api import Julia; jl = Julia(compiled_modules=False)"
-        - ln -sfn $(which python-jl) $(which python)
-        - pip install diffeqpy
-#        - ln -sfn $(which python-jl) $(which python)
-        - python -c "import diffeqpy; diffeqpy.install()"
-#        - julia install.jl
-        - julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="master")); Pkg.build("ReactionMechanismSimulator"); using ReactionMechanismSimulator'
-        - cd ..
-        - cd T3
-        # - python devtools/install_rms.py
-        - source ~/.bash_profile
-        - source activate t3_env
+        - cd ../T3
+        - make install-rms
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
