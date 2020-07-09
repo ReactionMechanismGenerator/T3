@@ -462,6 +462,7 @@ class T3(object):
             arc_kwargs['project'] = 'T3'
         tic = time.time()
         arc = ARC(**arc_kwargs)
+        arc.write_input_file()
         try:
             arc.execute()
         except Exception as e:
