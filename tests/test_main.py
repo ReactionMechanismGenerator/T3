@@ -408,6 +408,7 @@ def test_run_arc():
                  'Total execution time: 00:00:00\n',
                  ]:
         assert line in lines
+    assert os.path.isfile(t3.paths['ARC input'])
     shutil.rmtree(test_minimal_project_directory)
 
 
