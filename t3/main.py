@@ -1230,7 +1230,6 @@ class T3(object):
             bool: Whether T3 is running over time.
         """
         if self.t3['options']['max_T3_walltime'] is not None:
-            print(type(self.t0))
             delta = datetime.datetime.now() - self.t0
             splits = self.t3['options']['max_T3_walltime'].split(':')  # 01:00:00:00
             max_delta = datetime.timedelta(days=int(splits[0]),
