@@ -56,7 +56,10 @@ from rmgpy.tools.loader import load_rmg_py_job
 from rmgpy.tools.simulate import simulate
 
 from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file, time_lapse
+from arc.exceptions import ConverterError
 from arc.main import ARC
+from arc.species import ARCSpecies
+from arc.species.converter import check_xyz_dict
 
 from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label
 from t3.logger import Logger
@@ -1096,7 +1099,7 @@ class T3(object):
         """
         Add a species to self.species and to self.qm['species'].
         If the species already exists in self.species, only the reasons
-        will be extended, and the species will not be considered
+        will be updated (extended), and the species will not be considered
         in self.qm['species'].
 
         Args:
@@ -1123,6 +1126,29 @@ class T3(object):
                                  'converged': None,
                                  'iteration': self.iteration,
                                  }
+
+            # check if T3 has xyz information for this species
+            for rmg_species in self.rmg['species']:
+                if rmg_species['label'] == species.label and rmg_species['xyz'] is not None:
+                    xyzs = list()
+                    for xyz in rmg_species['xyz']:
+                        # Only pass valid xyz's to ARC.
+                        try:
+                            xyz_dict = check_xyz_dict(xyz)
+                        except ConverterError:
+                            pass
+                        else:
+                            xyzs.append(xyz_dict)
+                    if len(xyzs):
+                        if self.qm['adapter'] == 'ARC':
+                            # Make qm_species and ARCSpecies instance to consider the xyz information
+                            qm_species = ARCSpecies(label=qm_species.label,
+                                                    rmg_species=qm_species,
+                                                    xyz=xyzs,
+                                                    )
+                        else:
+                            raise NotImplementedError(f"Passing XYZ information to {self.qm['adapter']} "
+                                                      f"is not yet implemented.")
             self.qm['species'].append(qm_species)
             return key
 
