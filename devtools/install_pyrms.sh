@@ -9,4 +9,4 @@ python devtools/install_pyrms.py
 source ~/.bashrc
 python devtools/install_pyrms.jl
 ln -sfn $(which python-jl) $(which python)
-cd T3
+cd ../T3
