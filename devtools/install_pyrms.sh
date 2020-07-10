@@ -9,7 +9,6 @@ julia -v
 #echo "DONE installing J"
 echo "*****% python devtools/install_pyrms.py"
 echo $(pwd)
-cd ../T3
 python ../T3/devtools/install_pyrms.py
 echo "*****% source ~/.bashrc"
 source ~/.bashrc
