@@ -4,6 +4,7 @@ using Pkg
 link_python = false
 if !("PyCall" in keys(Pkg.installed()))
     Pkg.add("PyCall")
+    println("** link_python 1 *****")
     link_python = true
 else
     println("found PyCall importing")
@@ -22,6 +23,7 @@ else
             Pkg.rm("Conda")
         end
         Pkg.add("PyCall")
+    println("** link_python 2 *****")
         link_python = true
     end
 end
