@@ -1,5 +1,7 @@
-using Pkg
+println("** install_pyrms.jl mssg: in install_pyrms.jl *****")
 
+using Pkg
+println("** install_pyrms.jl mssg: in install_pyrms.jl after using Pkg *****")
 # get the python path
 link_python = false
 if !("PyCall" in keys(Pkg.installed()))

@@ -18,16 +18,20 @@ home_path = os.getenv("HOME")
 ostype = sys.platform
 if "darwin" in ostype:
     bash_path = os.path.join(home_path, ".bash_profile")
+    print(f'install_pyrms.py mssg: darwin, OSX')
 else:
     bash_path = os.path.join(home_path, ".bashrc")
+    print(f'install_pyrms.py mssg: Linux')
 st = f'\n#pyrms\nexport PYTHONPATH=$PYTHONPATH:{path}\nexport PYTHONPATH=$PYTHONPATH:{path}/pyrms'
 with open(bash_path, 'a') as bash_file:
     bash_file.write(st)
 
 julia_path = find_executable("julia")
+print(f'install_pyrms.py mssg: julia_path = {julia_path}')
 
 if not julia_path:
     julia_install_path = os.path.join(os.getenv("HOME"))
+    print(f'install_pyrms.py mssg: not julia_path. julia_install_path = {julia_install_path}')
 
     if sys.platform and "darwin" in sys.platform:
         # Go Mac

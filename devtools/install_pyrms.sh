@@ -11,7 +11,7 @@ echo "*****% python devtools/install_pyrms.py"
 echo $(pwd)
 python ../T3/devtools/install_pyrms.py
 echo "*****% source ~/.bashrc"
-source ~/.bashrc
+. ~/.bashrc
 echo "*****% julia devtools/install_pyrms.jl"
 julia ../T3/devtools/install_pyrms.jl
 # python3 -m pip install julia
