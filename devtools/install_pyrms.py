@@ -11,8 +11,8 @@ from distutils.spawn import find_executable
 
 print("appending pyrms to path")
 original_dir = os.getcwd()
-os.chdir('../../pyrms')
 path = os.getcwd()
+print(f'install_pyrms.py mssg 1: current path is {path}')
 home_path = os.getenv("HOME")
 
 ostype = sys.platform
