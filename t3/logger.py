@@ -67,7 +67,7 @@ class Logger(object):
             level (str, optional): The message level. Controls the prefix and suffix to be added to the message.
                                    Allowed values are: 'info' (default), 'warning', and 'error'.
         """
-        if level not in ['info', 'debug', 'warning', 'error', 'always']:
+        if level not in ['info', 'debug', 'warning', 'error', 'always'] and level is not None:
             self.log(f'Got an illegal level argument "{level}"', level='error')
             level = 'info'
         prefix = {'debug': '', 'info': '', 'warning': '\nWARNING: ', 'error': '\n\n\nERROR: ', 'always': ''}
@@ -76,17 +76,20 @@ class Logger(object):
             message = dict_to_str(message)
         elif not isinstance(message, str):
             message = str(message)
-        message = prefix[level] + message + suffix[level]
+        message = prefix[level] + message + suffix[level] if level is not None else message
         if self.verbose is not None:
             if level == 'debug' and self.verbose <= 10 \
                     or level == 'info' and self.verbose <= 20 \
                     or level == 'warning' and self.verbose <= 30 \
-                    or level in ['error', 'always']:
+                    or level in ['error', 'always'] \
+                    or level is None:
                 # print to stdout
                 print(message)
-                # log to file
-                with open(self.log_file, 'a') as f:
-                    f.write(message + '\n')
+
+                if level is not None:
+                    # log to file
+                    with open(self.log_file, 'a') as f:
+                        f.write(message + '\n')
 
     def debug(self, message: str):
         """
@@ -140,7 +143,19 @@ class Logger(object):
         else:
             self.log('\n', level='always')
         self.log(f'Starting project {self.project}', level='always')
-    
+
+    def log_max_time_reached(self, max_time: str):
+        """
+        Log that the maximum run time was reached.
+
+        Args:
+            max_time (str): The maximum T3 walltime.
+        """
+        execution_time = time_lapse(self.t0)
+        self.log(f'Terminating T3 due to time limit.\n'
+                 f'Max time set: {max_time}\n'
+                 f'Current run time: {execution_time}\n', level='always')
+
     def log_footer(self):
         """
         Output a footer to the log.

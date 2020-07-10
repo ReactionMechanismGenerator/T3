@@ -104,6 +104,14 @@ def get_rmg_species_from_a_species_dict(species_dict: dict,
         species = Species(label=species_dict['label'], smiles=species_dict['smiles'])
     elif species_dict['inchi'] is not None:
         species = Species(label=species_dict['label'], inchi=species_dict['inchi'])
+    elif species_dict['xyz'] is not None:
+        for xyz in species_dict['xyz']:
+            mol_bo = molecules_from_xyz(xyz=xyz)[1]
+            if mol_bo is not None:
+                species = Species(label=species_dict['label']).from_adjacency_list(mol_bo.to_adjacency_list())
+                break
+        else:
+            errored = True
     else:
         errored = True
     if errored and raise_error:

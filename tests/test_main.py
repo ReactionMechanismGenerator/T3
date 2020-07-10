@@ -15,6 +15,7 @@ from rmgpy.species import Species
 from rmgpy.thermo import NASA
 
 from arc.common import read_yaml_file
+from arc.species import ARCSpecies
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
 from tests.common import run_minimal
@@ -108,8 +109,10 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[H][H]',
+                            'xyz': None,
                             'seed_all_rads': None,
-                            'solvent': False},
+                            'solvent': False,
+                            },
                            {'SA_observable': False,
                             'UA_observable': False,
                             'adjlist': None,
@@ -121,8 +124,10 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[O][O]',
+                            'xyz': None,
                             'seed_all_rads': None,
-                            'solvent': False},
+                            'solvent': False,
+                            },
                            {'SA_observable': True,
                             'UA_observable': False,
                             'adjlist': None,
@@ -134,8 +139,10 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[H]',
+                            'xyz': None,
                             'seed_all_rads': None,
-                            'solvent': False},
+                            'solvent': False,
+                            },
                            {'SA_observable': True,
                             'UA_observable': False,
                             'adjlist': None,
@@ -147,8 +154,10 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[OH]',
+                            'xyz': None,
                             'seed_all_rads': None,
-                            'solvent': False}],
+                            'solvent': False,
+                            },],
                'species_constraints': None,
                }
 
@@ -701,7 +710,7 @@ def test_load_species_and_reactions_from_chemkin_file():
 
 def test_add_species():
     """Test adding a species to self.species and to self.qm['species']"""
-    t3 = run_minimal(project_directory = os.path.join(DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -709,6 +718,7 @@ def test_add_species():
     t3.determine_species_to_calculate()
     spc_1 = Species(label='OH', smiles='[OH]')
     spc_2 = Species(label='hydrazine', smiles='NN')
+    spc_3 = Species(label='H2', smiles='[H][H]')
 
     assert t3.get_species_key(species=spc_1) == 0
     assert t3.species[0]['RMG label'] == 'OH'
@@ -725,6 +735,28 @@ def test_add_species():
     assert t3.get_species_key(species=spc_2) == 3
     assert t3.species[3]['RMG label'] == 'hydrazine'
     assert t3.species[3]['reasons'] == ['R1', 'R2']
+
+    h2_xyz = """H  0.0000000  0.0000000  0.3736550
+H  0.0000000  0.0000000 -0.3736550"""
+    for i, rmg_species in enumerate(t3.rmg['species']):
+        if rmg_species['label'] == 'H2':
+            rmg_species['xyz'] = [h2_xyz]
+    t3.add_species(species=spc_3, reasons=['R3'])
+    assert t3.get_species_key(species=spc_3) == 4
+    assert t3.species[4]['RMG label'] == 'H2'
+    assert t3.species[4]['reasons'] == ['R3']
+
+    found_h2 = False
+    for qm_species in t3.qm['species']:
+        if qm_species.label == 'H2_4':
+            found_h2 = True
+            assert isinstance(qm_species, ARCSpecies)
+            assert qm_species.conformers == [{'symbols': ('H', 'H'),
+                                              'isotopes': (1, 1),
+                                              'coords': ((0.0, 0.0, 0.373655),
+                                                         (0.0, 0.0, -0.373655)),
+                                              }]
+    assert found_h2
 
 
 def test_dump_species():

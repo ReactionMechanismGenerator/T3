@@ -28,6 +28,11 @@ values for each species dictionary:
 - `balance` (bool): Whether this is a balance species. Default: `False.`
 - `solvent` (bool): Whether this species should be used as the solvent in RMG. Can only be set to `True`
   for liquid phase simulations. Default: `False.`
+- `xyz` (list): Optional 3D coordinates for a species. Entries could be either string representation,
+  ARC dictionary representation, or a file from which the coordinates could be parsed
+  (either an
+  <a href="https://en.wikipedia.org/wiki/XYZ_file_format" target="_blank">XYZ file format</a>
+  or a supported ESS input/log file).
 - `seed_all_rads` (List[str]): The types of radical derivatives to add to the RMG input file
   for the species. Helpful for solving orphan radical issues early on in the model generation.
   Recommended for the main molecule undergoing oxidation/pyrolysis.
