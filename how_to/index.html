@@ -547,6 +547,10 @@ values for each species dictionary:</p>
 <li><code>balance</code> (bool): Whether this is a balance species. Default: <code>False.</code></li>
 <li><code>solvent</code> (bool): Whether this species should be used as the solvent in RMG. Can only be set to <code>True</code>
   for liquid phase simulations. Default: <code>False.</code></li>
+<li><code>seed_all_rads</code> (List[str]): The types of radical derivatives to add to the RMG input file
+  for the species. Helpful for solving orphan radical issues early on in the model generation.
+  Recommended for the main molecule undergoing oxidation/pyrolysis.
+  Optional types are: 'radical' for simple R., 'alkoxyl' for RO., 'peroxyl' for ROO.</li>
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
