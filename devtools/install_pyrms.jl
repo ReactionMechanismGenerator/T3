@@ -21,17 +21,13 @@ println("* 5")
 # set env variables for installing PyCall
 ENV["CONDA_JL_HOME"] = join(split(pypath, "/")[1:end-2], "/")
 ENV["PYTHON"] = pypath
+ENV["PYTHONHOME"] = pypath
 println("* 6")
 println(ENV["CONDA_JL_HOME"])
 println(ENV["PYTHON"])
-println("* 7.1")
-Pkg.add("Conda")
-println("* 7.2")
-Pkg.build("Conda")
-println("* 7.3")
-using Conda
-println("* 7.4")
-Pkg.build("PyCall")
+println("* 7")
+using PyCall
+# Pkg.build("PyCall")
 println("* 8")
 
 println("adding RMS *************")
