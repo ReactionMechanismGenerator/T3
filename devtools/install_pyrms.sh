@@ -1,3 +1,4 @@
+pushd .
 cd ..
 git clone https://github.com/ReactionMechanismGenerator/pyrms
 cd pyrms
@@ -7,6 +8,7 @@ julia -v
 #julia -e 'out = Pipe(); proc = run(pipeline(`which python`,stdout=out)); close(out.in); pypath = chomp(String(read(out))); ENV["CONDA_JL_HOME"] = join(split(pypath,"/")[1:end-2], "/"); ENV["PYTHON"] = pypath; using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
 #echo "DONE installing J"
 echo "*****% python devtools/install_pyrms.py"
+cd ../T3
 python devtools/install_pyrms.py
 echo "*****% source ~/.bashrc"
 source ~/.bashrc
@@ -19,4 +21,6 @@ pip install diffeqpy
 python -c "import diffeqpy; diffeqpy.install()"
 
 ln -sfn $(which python-jl) $(which python)
-cd ../T3
+
+# Restore original directory
+popd
