@@ -2,55 +2,43 @@ println("** install_pyrms.jl mssg: in install_pyrms.jl *****")
 
 using Pkg
 println("** install_pyrms.jl mssg: in install_pyrms.jl after using Pkg *****")
-# get the python path
-link_python = false
-if !("PyCall" in keys(Pkg.installed()))
-    Pkg.add("PyCall")
-    println("** link_python 1 *****")
-    link_python = true
-else
-    println("found PyCall importing")
-    v = 0
-    try
-        using PyCall
-        sys = pyimport("sys")
-        v = sys.version_info[1]
-    catch
-        v = -1  # PyCall isn't setup right
-    end
-    if v != 3
-        println("removing PyCall and reinstalling")
-        Pkg.rm("PyCall")
-        if "Conda" in keys(Pkg.installed())
-            Pkg.rm("Conda")
-        end
-        Pkg.add("PyCall")
-    println("** link_python 2 *****")
-        link_python = true
-    end
-end
 
-println("PyCall present")
-if link_python
-    println("Linking PyCall properly")
-    out = Pipe()
-    proc = run(pipeline(`which python`,stdout=out))
-    close(out.in)
-    pypath = chomp(String(read(out)))
+Pkg.add("PyCall")
+println("** link_python 1 *****")
+link_python = true
 
-    # set env variables for installing PyCall
-    ENV["CONDA_JL_HOME"] = join(split(pypath, "/")[1:end-2], "/")
-    ENV["PYTHON"] = pypath
-    println(ENV["CONDA_JL_HOME"])
-    println(ENV["PYTHON"])
-    Pkg.build("PyCall")
-end
+println("PyCall present  *************")
+println("Linking PyCall properly *************")
+out = Pipe()
+println("* 2")
+proc = run(pipeline(`which python`,stdout=out))
+println("* 3")
+close(out.in)
+println("* 4")
+pypath = chomp(String(read(out)))
+println("* 5")
 
-println("adding RMS")
+# set env variables for installing PyCall
+ENV["CONDA_JL_HOME"] = join(split(pypath, "/")[1:end-2], "/")
+ENV["PYTHON"] = pypath
+println("* 6")
+println(ENV["CONDA_JL_HOME"])
+println(ENV["PYTHON"])
+println("* 7")
+Pkg.build("PyCall")
+println("* 8")
+
+println("adding RMS *************")
 Pkg.add("DifferentialEquations")
+println("* 9")
 using DifferentialEquations
+println("* 10")
 Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="master"))
+println("* 11")
 Pkg.build("ReactionMechanismSimulator")
-println("importing PyCall and RMS")
+println("* 12")
+println("importing PyCall and RMS **********")
 using PyCall
+println("* 13")
 using ReactionMechanismSimulator
+println("* 14")
