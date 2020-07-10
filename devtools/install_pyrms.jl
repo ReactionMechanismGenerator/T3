@@ -24,7 +24,13 @@ ENV["PYTHON"] = pypath
 println("* 6")
 println(ENV["CONDA_JL_HOME"])
 println(ENV["PYTHON"])
-println("* 7")
+println("* 7.1")
+Pkg.add("Conda")
+println("* 7.2")
+Pkg.build("Conda")
+println("* 7.3")
+using Conda
+println("* 7.4")
 Pkg.build("PyCall")
 println("* 8")
 
