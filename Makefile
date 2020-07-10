@@ -5,7 +5,7 @@
 ################################################################################
 
 install-rms:
-	source devtools/install_pyrms.sh
+	bash devtools/install_pyrms.sh
 
 test:
 	pytest -ra -vv
