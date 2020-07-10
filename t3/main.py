@@ -58,7 +58,7 @@ from rmgpy.tools.simulate import simulate
 from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file, time_lapse
 from arc.main import ARC
 
-from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log
+from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label
 from t3.logger import Logger
 from t3.schema import InputBase
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -1226,31 +1226,6 @@ class T3(object):
             for folder in dirs:
                 if folder != 'log_archive':
                     shutil.rmtree(os.path.join(root, folder))
-
-
-def get_species_by_label(label: str,
-                         species_list: list,
-                         ) -> Optional[Species]:
-    """
-    Get a species from a list of species by its label.
-
-    Args:
-        label (str): A species label.
-        species_list (list): Entries are RMG Species objects.
-
-    Returns:
-        Optional[Species]: The corresponding species from the species_list.
-                           Returns ``None`` if no species was found.
-    """
-    for species in species_list:
-        if species.label == label or species.to_chemkin() == label:
-            return species
-    if '(' in label and ')' in label:
-        # try by the RMG species index
-        for species in species_list:
-            if species.index == int(label.split('(')[-1].split(')')[0]):
-                return species
-    return None
 
 
 def get_reaction_by_index(index: int,

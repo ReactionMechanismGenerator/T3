@@ -8,7 +8,6 @@ t3 tests test_tandem module
 import datetime
 import os
 import shutil
-from typing import Optional
 
 from rmgpy import settings as rmg_settings
 from rmgpy.rmg.pdep import PDepNetwork, PDepReaction
@@ -18,9 +17,9 @@ from rmgpy.thermo import NASA
 from arc.common import read_yaml_file
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
+from tests.common import run_minimal
 from t3.main import (T3,
                      legalize_species_label,
-                     get_species_by_label,
                      get_reaction_by_index,
                      get_species_label_by_structure)
 from t3.utils.writer import write_rmg_input_file
@@ -109,6 +108,7 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[H][H]',
+                            'seed_all_rads': None,
                             'solvent': False},
                            {'SA_observable': False,
                             'UA_observable': False,
@@ -121,6 +121,7 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[O][O]',
+                            'seed_all_rads': None,
                             'solvent': False},
                            {'SA_observable': True,
                             'UA_observable': False,
@@ -133,6 +134,7 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[H]',
+                            'seed_all_rads': None,
                             'solvent': False},
                            {'SA_observable': True,
                             'UA_observable': False,
@@ -145,6 +147,7 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             'observable': False,
                             'reactive': True,
                             'smiles': '[OH]',
+                            'seed_all_rads': None,
                             'solvent': False}],
                'species_constraints': None,
                }
@@ -173,25 +176,6 @@ def setup_module():
     """
     if os.path.isdir(test_minimal_project_directory):
         shutil.rmtree(test_minimal_project_directory)
-
-
-def run_minimal(project: Optional[str] = None,
-                project_directory: Optional[str] = None,
-                iteration: Optional[int] = None,
-                set_paths: bool = False,
-                ) -> T3:
-    """A helper function for running the minimal example"""
-    minimal_input = os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'input.yml')
-    input_dict = read_yaml_file(path=minimal_input)
-    input_dict['verbose'] = 10
-    input_dict['project_directory'] = project_directory or test_minimal_project_directory
-    if project is not None:
-        input_dict['project'] = project
-    t3 = T3(**input_dict)
-    t3.iteration = iteration or 0
-    if set_paths:
-        t3.set_paths()
-    return t3
 
 
 def test_args_and_attributes():
@@ -783,20 +767,6 @@ def test_load_species():
 
 
 # main functions:
-
-
-def test_get_species_by_label():
-    """Test getting species by label"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
-                     iteration=1,
-                     set_paths=True,
-                     )
-    rmg_species, rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
-    label = 'H2O'
-    species = get_species_by_label(label, rmg_species)
-    assert species.label == label
-    assert species.index == 7
-
 
 def test_get_reaction_by_index():
     """Test getting reaction by index"""

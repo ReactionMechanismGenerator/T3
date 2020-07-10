@@ -269,3 +269,59 @@ def test_write_rmg_input_file_liquid():
                  ]:
         assert line in lines
     os.remove(file_path)
+
+
+def test_write_rmg_input_file_seed_all_radicals():
+    """Test writing an RMG input file while seeding all radicals for one species"""
+    rmg = {'database': {'thermo_libraries': ['BurkeH2O2'],
+                        'kinetics_libraries': ['BurkeH2O2inN2']},
+           'species': [{'label': 'methylethylester',
+                        'smiles': 'COCC',
+                        'concentration': 1,
+                        'seed_all_rads': ['radical', 'alkoxyl', 'peroxyl']},
+                       {'label': 'O2',
+                        'smiles': '[O][O]',
+                        'concentration': 2},
+                       {'label': 'N2',
+                        'smiles': 'N#N',
+                        'constant': True,
+                        'concentration': 6,
+                        'reactive': False}],
+           'reactors': [{'type': 'gas batch constant T P',
+                         'T': 1250,
+                         'P': [1, 10],
+                         'termination_time': 10}],
+           'model': {'core_tolerance': [0.001]}}
+
+    t3 = {'sensitivity':
+              {'adapter': 'RMG',
+               'atol': 1e-6,
+               'rtol': 1e-4,
+               }
+          }
+
+    file_path = os.path.join(DATA_BASE_PATH, 'test_write_rmg_input_file_seed_rads.py')
+    rmg_schema = RMG(**rmg).dict()  # fill in defaults
+    t3_schema = T3(**t3).dict()     # fill in defaults
+
+    write_rmg_input_file(rmg=rmg_schema,
+                         t3=t3_schema,
+                         iteration=1,
+                         path=file_path)
+
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    for line in ["    thermoLibraries=['BurkeH2O2'],\n",
+                 "    label='methylethylester',\n",
+                 "    label='methylethylester_radical_0',\n",
+                 "    label='methylethylester_alkoxyl_0',\n",
+                 "    label='methylethylester_peroxyl_0',\n",
+                 "    label='methylethylester_radical_1',\n",
+                 "    label='methylethylester_alkoxyl_1',\n",
+                 "    label='methylethylester_peroxyl_1',\n",
+                 "    label='methylethylester_radical_2',\n",
+                 "    label='methylethylester_alkoxyl_2',\n",
+                 "    label='methylethylester_peroxyl_2',\n",
+                 ]:
+        assert line in lines
+    os.remove(file_path)

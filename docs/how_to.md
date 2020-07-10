@@ -28,6 +28,10 @@ values for each species dictionary:
 - `balance` (bool): Whether this is a balance species. Default: `False.`
 - `solvent` (bool): Whether this species should be used as the solvent in RMG. Can only be set to `True`
   for liquid phase simulations. Default: `False.`
+- `seed_all_rads` (List[str]): The types of radical derivatives to add to the RMG input file
+  for the species. Helpful for solving orphan radical issues early on in the model generation.
+  Recommended for the main molecule undergoing oxidation/pyrolysis.
+  Optional types are: 'radical' for simple R., 'alkoxyl' for RO., 'peroxyl' for ROO.
 
 !!! Note
     Either `smiles`, `inchi`, or `adjlist` must be specified for each species.

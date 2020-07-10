@@ -51,6 +51,7 @@ def test_no_t3_no_qm():
 
 def test_minimal_example():
     """Tests that the minimal example is functional (ARC is not being called)"""
+    delete_minimal_example_dirs()
     functional_minimal_directory = os.path.join(DATA_BASE_PATH, 'functional_minimal_example')
     input_file = os.path.join(functional_minimal_directory, 'input.yml')
     input_dict = read_yaml_file(path=input_file)
@@ -73,8 +74,12 @@ def test_minimal_example():
     assert os.path.isdir(os.path.join(functional_minimal_directory, 'iteration_2'))
     assert os.path.isfile(os.path.join(functional_minimal_directory, 'iteration_2',
                                        'RMG', 'chemkin', 'species_dictionary.txt'))
+    delete_minimal_example_dirs()
 
-    # remove directories created by this functional test
+
+def delete_minimal_example_dirs():
+    """remove directories created by the test_minimal_example functional test"""
+    functional_minimal_directory = os.path.join(DATA_BASE_PATH, 'functional_minimal_example')
     log_file = os.path.join(functional_minimal_directory, 't3.log')
     if os.path.isfile(log_file):
         os.remove(log_file)

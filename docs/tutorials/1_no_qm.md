@@ -90,9 +90,9 @@ throughout the different T3 iterations.
     1. RMG arguments are currently in camelCase style (e.g., ``thermoLibraries``), whereas the respective
        arguments in T3 are in lower_case_underscore style (e.g., ``thermo_libraries``).
     2. Species definitions in T3 are more flexible, see the
-       [how-to guides](how_to.md){.internal-link target=_blank} for more details.
+       [how-to guides](how_to.md) for more details.
     3. Reactor types were re-named for clarity, see the
-       [how-to guides](how_to.md){.internal-link target=_blank} for more details.
+       [how-to guides](how_to.md) for more details.
     4. ``core_tolerance`` is a list of the RMG ``toleranceMoveToCore`` argument to use per T3 iteration.
        If the number of iterations is larger than the length of ``core_tolerance``, the last entry will be used.
        The `core_tolerance`` argument can also be given as flot, in which case it will be treated as a onc-entry list.

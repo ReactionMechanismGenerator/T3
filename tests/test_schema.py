@@ -254,7 +254,8 @@ def test_rmg_species_schema():
                              UA_observable=False,
                              constant=True,
                              balance=True,
-                             solvent=False
+                             solvent=False,
+                             seed_all_rads=['radical', 'alkoxyl', 'peroxyl'],
                              )
     assert rmg_species.label == 'N2'
     assert rmg_species.concentration == 1
@@ -272,10 +273,31 @@ def test_rmg_species_schema():
     assert rmg_species.constant is True
     assert rmg_species.balance is True
     assert rmg_species.solvent is False
+    assert rmg_species.seed_all_rads == ['radical', 'alkoxyl', 'peroxyl']
 
     with pytest.raises(ValidationError):
         # check that concentration is constrained to >= 0
         RMGSpecies(concentration=-1)
+
+    with pytest.raises(ValidationError):
+        # test RadicalTypeEnum
+        RMGSpecies(label='N2',
+                   concentration=1,
+                   smiles='N#N',
+                   inchi='1S/N2/c1-2',
+                   adjlist="""
+        1 N u0 p1 c0 {2,T}
+        2 N u0 p1 c0 {1,T}
+        """,
+                   reactive=False,
+                   observable=False,
+                   SA_observable=False,
+                   UA_observable=False,
+                   constant=True,
+                   balance=True,
+                   solvent=False,
+                   seed_all_rads=['radical', 'non-supported'],
+                   )
 
 
 def test_rmg_reactors_schema():

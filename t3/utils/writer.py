@@ -7,6 +7,9 @@ import shutil
 
 from mako.template import Template
 
+from t3.common import get_rmg_species_from_a_species_dict
+from t3.utils.generator import generate_radicals
+
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
               'RS': 'reservoir state',
               'MSC': 'modified strong collision',
@@ -78,6 +81,16 @@ species(
         rmg_input += Template(species_template).render(label=spc['label'],
                                                        reactive=spc['reactive'],
                                                        structure=structure)
+        if spc['seed_all_rads'] is not None:
+            species_to_process = get_rmg_species_from_a_species_dict(species_dict=spc, raise_error=False)
+            if species_to_process is not None:
+                radical_tuples = generate_radicals(species=species_to_process,
+                                                   types=spc['seed_all_rads'],
+                                                   )
+                for radical_tuple in radical_tuples:
+                    rmg_input += Template(species_template).render(label=radical_tuple[0],
+                                                                   reactive=True,
+                                                                   structure=f"SMILES('{radical_tuple[1]}')")
 
     # reactors
     reactors = rmg['reactors']
