@@ -140,7 +140,19 @@ class Logger(object):
         else:
             self.log('\n', level='always')
         self.log(f'Starting project {self.project}', level='always')
-    
+
+    def log_max_time_reached(self, max_time: str):
+        """
+        Log that the maximum run time was reached.
+
+        Args:
+            max_time (str): The maximum T3 walltime.
+        """
+        execution_time = time_lapse(self.t0)
+        self.log(f'Terminating T3 due to time limit.\n'
+                 f'Max time set: {max_time}\n'
+                 f'Current run time: {execution_time}\n', level='always')
+
     def log_footer(self):
         """
         Output a footer to the log.

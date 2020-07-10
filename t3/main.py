@@ -294,6 +294,7 @@ class T3(object):
                 break
 
             if self.check_overtime():
+                self.logger.log_max_time_reached()
                 break
 
         if additional_calcs_required:
