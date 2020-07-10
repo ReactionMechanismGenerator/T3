@@ -4,7 +4,9 @@
 """
 t3 tests test_utils module
 """
+
 import os
+import pytest
 
 from rmgpy.species import Species
 
@@ -65,3 +67,20 @@ def test_get_rmg_species_from_a_species_dict():
     assert isinstance(species, Species)
     assert species.label == 'spc'
     assert species.molecule[0].to_smiles() == 'C=O'
+
+    xyz = """O  0.0000000  0.0000000  0.7047750
+C  0.0000000  0.0000000 -0.5593030
+H  0.0000000  0.9470590 -1.1411940
+H  0.0000000 -0.9470590 -1.1411940"""
+    species = common.get_rmg_species_from_a_species_dict(
+        species_dict=RMGSpecies(**{'label': 'spc', 'xyz': [xyz]}).dict())
+    assert isinstance(species, Species)
+    assert species.label == 'spc'
+    assert species.molecule[0].to_smiles() == 'C=O'
+
+    species = common.get_rmg_species_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
+                                                         raise_error=False)
+    assert species is None
+    with pytest.raises(ValueError):
+        common.get_rmg_species_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
+                                                   raise_error=True)
