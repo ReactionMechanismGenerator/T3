@@ -11,6 +11,18 @@ from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
 
 
+class TerminationTimeEnum(str, Enum):
+    """
+    The supported termination type units in an RMG reactor.
+    """
+    micro_s = 'micro-s'
+    ms = 'ms'
+    s = 's'
+    hrs = 'hrs'
+    hours = 'hours'
+    days = 'days'
+
+
 class T3Options(BaseModel):
     """
     A class for validating input.T3.options arguments
@@ -96,7 +108,7 @@ class T3Uncertainty(BaseModel):
     correlated: bool = True
     local_number: conint(gt=0) = 10
     global_number: conint(gt=0) = 5
-    termination_time: constr(regex=r'\d+:\d\d:\d\d:\d\d') = None
+    termination_time: Optional[constr(regex=r'\d+:\d\d:\d\d:\d\d')] = None
     PCE_run_time: conint(gt=0) = 1800
     PCE_error_tolerance: Optional[confloat(gt=0)] = None
     PCE_max_evals: Optional[conint(gt=0)] = None
@@ -154,7 +166,7 @@ class RMGSpecies(BaseModel):
         extra = "forbid"
 
 
-class RMGReactors(BaseModel):
+class RMGReactor(BaseModel):
     """
     A class for validating input.RMG.reactors arguments
     """
@@ -162,7 +174,7 @@ class RMGReactors(BaseModel):
     T: Union[confloat(gt=0), List[confloat(gt=0)]]
     P: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]]
     termination_conversion: Optional[Dict[str, confloat(gt=0, lt=1)]] = None
-    termination_time: Optional[confloat(gt=0)] = None
+    termination_time: Optional[List[Union[confloat(gt=0), TerminationTimeEnum]]] = None
     termination_rate_ratio: Optional[confloat(gt=0, lt=1)] = None
     conditions_per_iteration: conint(gt=0) = 12
 
@@ -171,7 +183,7 @@ class RMGReactors(BaseModel):
 
     @validator('type')
     def check_reactor_type(cls, value):
-        """RMGReactors.type validator"""
+        """RMGReactor.type validator"""
         supported_reactors = ['gas batch constant T P', 'liquid batch constant T V']
         # all supporter reactors must contain a 'gas' or 'liquid' keyword, other schema validations depend on it
         if value not in supported_reactors:
@@ -180,7 +192,7 @@ class RMGReactors(BaseModel):
 
     @validator('T')
     def check_t(cls, value):
-        """RMGReactors.T validator"""
+        """RMGReactor.T validator"""
         if isinstance(value, list) and len(value) != 2:
             raise ValueError(f'When specifying the temperature as a list, only two values are allowed (T min, T max),\n'
                              f'got {len(value)} values: {value}.')
@@ -188,7 +200,7 @@ class RMGReactors(BaseModel):
 
     @validator('P', always=True)
     def check_p(cls, value, values):
-        """RMGReactors.P validator"""
+        """RMGReactor.P validator"""
         if isinstance(value, list) and len(value) != 2:
             raise ValueError(f'When specifying the pressure as a list, only two values are allowed (P min, P max),\n'
                              f'got {len(value)} values: {value}.')
@@ -197,6 +209,20 @@ class RMGReactors(BaseModel):
         if 'type' in values and 'liquid' in values['type'] and value is not None:
             raise ValueError('A reactor pressure cannot be specified for a liquid phase reactor.')
         return value
+
+    @validator('termination_time')
+    def check_termination_time(cls, value):
+        """RMGReactor.termination_time validator"""
+        if len(value) != 2 or not isinstance(value[0], float) or not isinstance(value[1], str):
+            raise ValueError(f'The specified termination time must be a list of 2 entries: '
+                             f'the value (a float) and the units (a string). Got: {value}')
+        if value[1] == TerminationTimeEnum.micro_s:
+            value[0] *= 1000
+            value[1] = TerminationTimeEnum.ms
+        elif value[1] == TerminationTimeEnum.hrs:
+            value[1] = TerminationTimeEnum.hours
+        value[1] = value[1].value  # convert the Enum class into a string
+        return tuple(value)
 
 
 class RMGModel(BaseModel):
@@ -421,7 +447,7 @@ class RMG(BaseModel):
     A class for validating input.RMG arguments
     """
     database: RMGDatabase
-    reactors: List[RMGReactors]
+    reactors: List[RMGReactor]
     species: List[RMGSpecies]
     model: RMGModel
     pdep: Optional[RMGPDep] = None
@@ -568,8 +594,9 @@ class InputBase(BaseModel):
                 rmg_reactor_termination_times = [reactor['termination_time'] for reactor in values['rmg']['reactors']]
                 if all([termination_time is None for termination_time in rmg_reactor_termination_times]) \
                         and ua_termination_time is None and values['t3']['uncertainty']['global_analysis']:
-                    raise ValueError('If an global uncertainty analysis is requested, a termination time must be specified '
-                                     'either under "t3.uncertainty.termination_time" or in at least one RMG reactor.')
+                    raise ValueError('If a global uncertainty analysis is requested, a termination time must be '
+                                     'specified either under "t3.uncertainty.termination_time" '
+                                     'or in at least one RMG reactor.')
             # check solvent for liquid phase
             reactor_types = set([reactor['type'] for reactor in values['rmg']['reactors']])
             solvents = list()

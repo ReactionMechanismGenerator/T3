@@ -110,7 +110,7 @@ rmg:
       P: 1e0  # could be a float (single P) or a list (range of P), Units: bar
       termination_conversion:
         'ethane': 0.2
-      termination_time: 5  # units: s
+      termination_time: [5, 's']  # allowed units: 'micro-s', 'ms', 's', 'hours', 'days'
       termination_rate_ratio: 0.01
       conditions_per_iteration: 12  # optional, number of times variable ranged-reactor conditions are ran per RMG iteration (nSims)
 

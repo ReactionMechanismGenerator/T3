@@ -29,7 +29,7 @@ def test_no_t3_no_qm():
                               'T': 1000,
                               'P': 1,
                               'termination_conversion': {'H2': 0.1},
-                              'termination_time': 1e-3}],
+                              'termination_time': [1, 'ms']}],
                 'model': {'core_tolerance': 0.01}}
 
     t3_object = T3(project='T3_functional_test_1',

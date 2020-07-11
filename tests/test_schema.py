@@ -13,7 +13,7 @@ from t3.schema import (T3Options,
                        T3Uncertainty,
                        RMGDatabase,
                        RMGSpecies,
-                       RMGReactors,
+                       RMGReactor,
                        RMGModel,
                        RMGOptions,
                        RMGPDep,
@@ -301,22 +301,44 @@ def test_rmg_species_schema():
 
 
 def test_rmg_reactors_schema():
-    """Test creating an instance of RMGReactors"""
-    rmg_reactors = RMGReactors(type='gas batch constant T P',
-                               T=[800, 1750],
-                               P=[1e0, 1e1],
-                               termination_conversion={'ethane': 0.2},
-                               termination_time=5,
-                               termination_rate_ratio=0.01,
-                               conditions_per_iteration=12
-                               )
-    assert rmg_reactors.type == 'gas batch constant T P'
-    assert rmg_reactors.T == [800, 1750]
-    assert rmg_reactors.P == [1e0, 1e1]
-    assert rmg_reactors.termination_conversion == {'ethane': 0.2}
-    assert rmg_reactors.termination_time == 5
-    assert rmg_reactors.termination_rate_ratio == 0.01
-    assert rmg_reactors.conditions_per_iteration == 12
+    """Test creating an instance of RMGReactor"""
+    rmg_reactor = RMGReactor(type='gas batch constant T P',
+                             T=[800, 1750],
+                             P=[1e0, 1e1],
+                             termination_conversion={'ethane': 0.2},
+                             termination_time=[5, 's'],
+                             termination_rate_ratio=0.01,
+                             conditions_per_iteration=12
+                             )
+    assert rmg_reactor.type == 'gas batch constant T P'
+    assert rmg_reactor.T == [800, 1750]
+    assert rmg_reactor.P == [1e0, 1e1]
+    assert rmg_reactor.termination_conversion == {'ethane': 0.2}
+    assert rmg_reactor.termination_time == (5, 's')
+    assert rmg_reactor.termination_rate_ratio == 0.01
+    assert rmg_reactor.conditions_per_iteration == 12
+
+    # test 'micro-s' units in termination_time
+    rmg_reactor = RMGReactor(type='gas batch constant T P',
+                             T=[800, 1750],
+                             P=[1e0, 1e1],
+                             termination_conversion={'ethane': 0.2},
+                             termination_time=[5, 'micro-s'],
+                             termination_rate_ratio=0.01,
+                             conditions_per_iteration=12
+                             )
+    assert rmg_reactor.termination_time == (5000, 'ms')
+
+    # test 'hrs' units in termination_time
+    rmg_reactor = RMGReactor(type='gas batch constant T P',
+                             T=[800, 1750],
+                             P=[1e0, 1e1],
+                             termination_conversion={'ethane': 0.2},
+                             termination_time=[5, 'hrs'],
+                             termination_rate_ratio=0.01,
+                             conditions_per_iteration=12
+                             )
+    assert rmg_reactor.termination_time == (5, 'hours')
 
     with pytest.raises(ValidationError):
         # check that scalar T is constrained to > 0
@@ -343,8 +365,12 @@ def test_rmg_reactors_schema():
         RMGSpecies(termination_conversion={'ethane': 1})
 
     with pytest.raises(ValidationError):
+        # check wrong units for termination_time
+        RMGSpecies(termination_time=[5, 'wrong'])
+
+    with pytest.raises(ValidationError):
         # check that termination_time is constrained to > 0
-        RMGSpecies(termination_time=0)
+        RMGSpecies(termination_time=[0, 's'])
 
     with pytest.raises(ValidationError):
         # check that termination_rate_ratio is constrained to > 0
