@@ -92,7 +92,7 @@ simpleReactor(
         'OH': 0,
     },
     terminationConversion={'H2': 0.9},
-    terminationTime=(1000000.0, 's'),
+    terminationTime=(5.0, 's'),
     nSims=12,
 )
 
@@ -216,7 +216,7 @@ def test_write_rmg_input_file_liquid():
                         'reactive': False}],
            'reactors': [{'type': 'liquid batch constant T V',
                          'T': [293, 393],
-                         'termination_time': 10}],  # 72*24*60*60
+                         'termination_time': [72, 'hrs']}],
            'model': {'core_tolerance': [0.001]},
            'options': {'save_edge': True, 'save_html': True},
            'species_constraints': {'max_C_atoms': 4,
@@ -255,7 +255,7 @@ def test_write_rmg_input_file_liquid():
                  "        'AIBN': (4.9e-06, 'mol/cm^3'),\n",
                  "        'O2': (2.73e-07, 'mol/cm^3'),\n",
                  "        'cyanoisopropylOO': (0, 'mol/cm^3'),\n",
-                 "    terminationTime=(10.0, 's'),\n",
+                 "    terminationTime=(72.0, 'hours'),\n",
                  "    nSims=12,\n",
                  "    constantSpecies=['O2', 'N2', ],\n",
                  "    toleranceMoveToCore=0.001,\n",
@@ -290,7 +290,7 @@ def test_write_rmg_input_file_seed_all_radicals():
            'reactors': [{'type': 'gas batch constant T P',
                          'T': 1250,
                          'P': [1, 10],
-                         'termination_time': 10}],
+                         'termination_time': [10, 's']}],
            'model': {'core_tolerance': [0.001]}}
 
     t3 = {'sensitivity':
