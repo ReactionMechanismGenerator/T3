@@ -597,7 +597,7 @@ Here's an example:</p>
                           <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
                           <span class="s1">&#39;P&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
                           <span class="s1">&#39;termination_conversion&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;H2&#39;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
-                          <span class="s1">&#39;termination_time&#39;</span><span class="p">:</span> <span class="mf">1e6</span><span class="p">}],</span>
+                          <span class="s1">&#39;termination_time&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;s&#39;</span><span class="p">]}],</span>
             <span class="s1">&#39;model&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;core_tolerance&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]}}</span>
 
 <span class="n">t3_object</span> <span class="o">=</span> <span class="n">T3</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s1">&#39;T3_tutorial_1&#39;</span><span class="p">,</span>
@@ -626,7 +626,9 @@ would be:</p>
     <span class="nt">T</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1000.0</span>
     <span class="nt">termination_conversion</span><span class="p">:</span>
       <span class="nt">H2</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">0.9</span>
-    <span class="nt">termination_time</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">1000000.0</span>
+    <span class="nt">termination_time</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">5</span>
+    <span class="p p-Indicator">-</span> <span class="s">&#39;s&#39;</span>
     <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">gas batch constant T P</span>
   <span class="nt">species</span><span class="p">:</span>
   <span class="p p-Indicator">-</span> <span class="nt">concentration</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">0.67</span>
