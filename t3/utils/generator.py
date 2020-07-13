@@ -39,6 +39,8 @@ def generate_radicals(species: Type[Species],
 
     # generate all normal "radicals", whether requested or not
     for molecule in species.molecule:
+        if not molecule.reactive:
+            continue
         existing_radical_indices = [molecule.atoms.index(atom) for atom in molecule.atoms
                                     if atom.radical_electrons]
         for atom_1 in molecule.atoms:
@@ -88,9 +90,15 @@ def generate_radicals(species: Type[Species],
                     # something went wrong, don't use these molecules
                     continue
                 derivative_mol.update(raise_atomtype_exception=False)
+                species_from_derivative_mol = Species(molecule=[derivative_mol])
+                species_from_derivative_mol.generate_resonance_structures(keep_isomorphic=False,
+                                                                          filter_structures=True)
 
                 for existing_radical in radicals:
-                    if derivative_mol.is_isomorphic(existing_radical):
+                    species_from_existing_radical = Species(molecule=[existing_radical])
+                    species_from_existing_radical.generate_resonance_structures(keep_isomorphic=False,
+                                                                                filter_structures=True)
+                    if species_from_derivative_mol.is_isomorphic(species_from_existing_radical):
                         break
                 else:
                     radicals.append(derivative_mol)
