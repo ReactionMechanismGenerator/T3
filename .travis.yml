@@ -39,6 +39,7 @@ jobs:
         - git clone https://github.com/ReactionMechanismGenerator/RMG-Py
         - cd RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - make
         - cd ../T3
         - make install-rms
       script:
