@@ -15,7 +15,7 @@ echo "*****% source ~/.bashrc"
 echo "*****% julia devtools/install_pyrms.jl"
 julia ../T3/devtools/install_pyrms.jl
 # python3 -m pip install julia
-echo "*****% python -c import julia; julia.install()
+echo "*****% python -c import julia; julia.install()"
 python -c "import julia; julia.install()"
 pip install diffeqpy
 python -c "import diffeqpy; diffeqpy.install()"
@@ -23,4 +23,4 @@ python -c "import diffeqpy; diffeqpy.install()"
 ln -sfn $(which python-jl) $(which python)
 
 # Restore original directory
-popd
+popd || exit
