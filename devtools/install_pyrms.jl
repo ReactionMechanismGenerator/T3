@@ -35,7 +35,7 @@ Pkg.add("DifferentialEquations")
 println("* 9")
 using DifferentialEquations
 println("* 10")
-Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="master"))
+Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="fixcpkgimp"))
 println("* 11")
 Pkg.build("ReactionMechanismSimulator")
 println("* 12")
