@@ -58,7 +58,6 @@ dependencies:
   - rdkit >=2019.09.2.0
   - scikit-learn
   - scipy
-  - setuptools
   - sphinx
   - symmetry
   - xlwt
