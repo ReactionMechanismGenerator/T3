@@ -9,7 +9,7 @@ import os
 import sys
 from distutils.spawn import find_executable
 
-print('**** importing RMG Molecule')
+print('**** importing RMG Molecule 1')
 from rmgpy.molecule import Molecule
 print('**** imported RMG Molecule')
 mol = Molecule(smiles='CC')
@@ -61,5 +61,11 @@ if not julia_path:
     with open(bash_path, 'a') as bash_file:
         bash_file.write(st)
     os.system(f'export PATH=\"{os.path.join(home_path, "julia", "bin")}:$PATH\"')
+
+print('**** importing RMG Molecule 10')
+mol = Molecule(smiles='CC')
+print(mol)
+print(mol.to_smiles())
+print('**** Got RMG Molecule working fine')
 
 os.chdir(original_dir)

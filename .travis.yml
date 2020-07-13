@@ -28,17 +28,20 @@ jobs:
       install:
         - echo $TRAVIS_OS_NAME
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)'' >> ~/.bashrc
         - conda env create -f environment.yml
         - source activate t3_env
         - cd ..
         - git clone https://github.com/ReactionMechanismGenerator/ARC
         - cd ARC
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)'' >> ~/.bashrc
         - cd ..
         - git clone https://github.com/ReactionMechanismGenerator/RMG-database
         - git clone https://github.com/ReactionMechanismGenerator/RMG-Py
         - cd RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)'' >> ~/.bashrc
         - make
         - cd ../T3
         - make install-rms
