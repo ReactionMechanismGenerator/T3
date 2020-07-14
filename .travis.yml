@@ -50,7 +50,7 @@ jobs:
         - julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
         - python3 -m pip install julia
         - python -c "print('**** importing RMG Molecule 1');from rmgpy.molecule import Molecule;print('**** imported RMG Molecule');mol = Molecule(smiles='CC');print(mol);print(mol.to_smiles());print('**** Got RMG Molecule working fine')"
-        - python -c "import julia; julia.install(); from julia.api import Julia; jl = Julia(compiled_modules=False)"
+        - python -c "import julia; julia.install()"
         - python -c "print('**** importing RMG Molecule 1');from rmgpy.molecule import Molecule;print('**** imported RMG Molecule');mol = Molecule(smiles='CC');print(mol);print(mol.to_smiles());print('**** Got RMG Molecule working fine')"
         - ln -sfn $(which python-jl) $(which python)
         - python -c "print('**** importing RMG Molecule 1');from rmgpy.molecule import Molecule;print('**** imported RMG Molecule');mol = Molecule(smiles='CC');print(mol);print(mol.to_smiles());print('**** Got RMG Molecule working fine')"
@@ -65,6 +65,7 @@ jobs:
         # - python devtools/install_rms.py
         - source ~/.bash_profile
         - source activate t3_env
+        - conda env update --file environment.yml
         - python -c "print('**** importing RMG Molecule 1');from rmgpy.molecule import Molecule;print('**** imported RMG Molecule');mol = Molecule(smiles='CC');print(mol);print(mol.to_smiles());print('**** Got RMG Molecule working fine')"
       script:
         - coverage run -m pytest -ra -vv
