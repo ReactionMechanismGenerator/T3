@@ -1,7 +1,8 @@
 echo "***** in install_pyrms.sh"
 pushd .
 cd ..
-echo "***** clone pyrms"
+echo "***** clone pyrms: cloning into:"
+echo $(pwd)
 git clone https://github.com/ReactionMechanismGenerator/pyrms
 cd pyrms
 echo "checkout pyrms py3 branch"
@@ -14,6 +15,8 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)'' >> ~/.bashrc
 export PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms
 echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms'' >> ~/.bashrc
+echo "python path is:"
+echo $PYTHONPATH
 echo "***** source ~/.bashrc"
 . ~/.bashrc
 echo "***** re-activate t3_env"
