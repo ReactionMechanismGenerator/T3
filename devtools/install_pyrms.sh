@@ -12,6 +12,7 @@ echo $(pwd)
 python ../T3/devtools/install_pyrms.py
 echo "*****% source ~/.bashrc"
 . ~/.bashrc
+conda activate t3_env
 echo "*****% julia devtools/install_pyrms.jl"
 julia ../T3/devtools/install_pyrms_1.jl
 cd ../T3
