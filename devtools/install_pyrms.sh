@@ -8,8 +8,12 @@ echo "checkout pyrms py3 branch"
 git checkout py3
 echo "julia version"
 julia -v
-echo "call install_pyrms.py"
-python ../T3/devtools/install_pyrms.py
+#echo "call install_pyrms.py"
+#python ../T3/devtools/install_pyrms.py
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)'' >> ~/.bashrc
+export PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms
+echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms'' >> ~/.bashrc
 echo "***** source ~/.bashrc"
 . ~/.bashrc
 echo "***** re-activate t3_env"
@@ -32,8 +36,7 @@ pip install diffeqpy
 echo "***** python -c import diffeqpy; diffeqpy.install()"
 python -c "import diffeqpy; diffeqpy.install()"
 
-# uncomment if must
-echo "***** lionk python and python-jl"
+echo "***** link python and python-jl"
 ln -sfn $(which python-jl) $(which python)
 
 # Restore original directory
