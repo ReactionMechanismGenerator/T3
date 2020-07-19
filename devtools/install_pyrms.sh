@@ -27,7 +27,7 @@ pip install diffeqpy
 python -c "import diffeqpy; diffeqpy.install()"
 
 # uncomment if must
-# ln -sfn $(which python-jl) $(which python)
+ln -sfn $(which python-jl) $(which python)
 
 # Restore original directory
 popd || exit
