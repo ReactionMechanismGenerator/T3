@@ -1,18 +1,19 @@
+echo "***** in install_pyrms.sh"
 pushd .
 cd ..
+echo "***** clone pyrms"
 git clone https://github.com/ReactionMechanismGenerator/pyrms
 cd pyrms
+echo "checkout pyrms py3 branch"
 git checkout py3
+echo "julia version"
 julia -v
-#echo "about to install J"
-#julia -e 'out = Pipe(); proc = run(pipeline(`which python`,stdout=out)); close(out.in); pypath = chomp(String(read(out))); ENV["CONDA_JL_HOME"] = join(split(pypath,"/")[1:end-2], "/"); ENV["PYTHON"] = pypath; using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall");'
-#echo "DONE installing J"
-echo "*****% python devtools/install_pyrms.py"
-echo $(pwd)
+echo "call install_pyrms.py"
 python ../T3/devtools/install_pyrms.py
-echo "*****% source ~/.bashrc"
+echo "***** source ~/.bashrc"
 . ~/.bashrc
-conda activate t3_env
+echo "***** re-activate t3_env"
+source activate t3_env
 echo "*****% julia devtools/install_pyrms.jl"
 julia ../T3/devtools/install_pyrms_1.jl
 cd ../T3

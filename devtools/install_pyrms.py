@@ -9,14 +9,6 @@ import os
 import sys
 from distutils.spawn import find_executable
 
-print('**** importing RMG Molecule 1')
-from rmgpy.molecule import Molecule
-print('**** imported RMG Molecule')
-mol = Molecule(smiles='CC')
-print(mol)
-print(mol.to_smiles())
-print('**** Got RMG Molecule working fine')
-
 
 print("appending pyrms to path")
 original_dir = os.getcwd()
