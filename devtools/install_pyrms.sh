@@ -18,13 +18,15 @@ cd ../T3
 conda env update -f environment.yml
 cd ../pyrms
 julia ../T3/devtools/install_pyrms_2.jl
-# python3 -m pip install julia
+# install python-jl (simply called julia)
+python3 -m pip install julia
 echo "*****% python -c import julia; julia.install()"
 python -c "import julia; julia.install()"
 pip install diffeqpy
 python -c "import diffeqpy; diffeqpy.install()"
 
-ln -sfn $(which python-jl) $(which python)
+# uncomment if must
+# ln -sfn $(which python-jl) $(which python)
 
 # Restore original directory
 popd || exit
