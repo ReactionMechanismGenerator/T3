@@ -13,7 +13,11 @@ python ../T3/devtools/install_pyrms.py
 echo "*****% source ~/.bashrc"
 . ~/.bashrc
 echo "*****% julia devtools/install_pyrms.jl"
-julia ../T3/devtools/install_pyrms.jl
+julia ../T3/devtools/install_pyrms_1.jl
+cd ../T3
+conda env update -f environment.yml
+cd ../pyrms
+julia ../T3/devtools/install_pyrms_2.jl
 # python3 -m pip install julia
 echo "*****% python -c import julia; julia.install()"
 python -c "import julia; julia.install()"

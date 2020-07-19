@@ -1,4 +1,4 @@
-println("** install_pyrms.jl mssg: in install_pyrms.jl *****")
+println("** install_pyrms_1.jl mssg: in install_pyrms_1.jl *****")
 
 using Pkg
 println("** install_pyrms.jl mssg: in install_pyrms.jl after using Pkg *****")
@@ -26,21 +26,7 @@ println("* 6")
 println(ENV["CONDA_JL_HOME"])
 println(ENV["PYTHON"])
 println("* 7")
-using PyCall
-# Pkg.build("PyCall")
+Pkg.build("PyCall")
 println("* 8")
-
-println("adding RMS *************")
-Pkg.add("DifferentialEquations")
+# using PyCall
 println("* 9")
-using DifferentialEquations
-println("* 10")
-Pkg.add(PackageSpec(url="https://github.com/ReactionMechanismGenerator/ReactionMechanismSimulator.jl", rev="fixcpkgimp"))
-println("* 11")
-Pkg.build("ReactionMechanismSimulator")
-println("* 12")
-println("importing PyCall and RMS **********")
-using PyCall
-println("* 13")
-using ReactionMechanismSimulator
-println("* 14")
