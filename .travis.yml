@@ -45,6 +45,7 @@ jobs:
         - make
         - cd ../T3
         - . ~/.bashrc
+        - conda deactivate
         - conda remove --name t3_env --all -y
         - conda create -n t3_env python=3.7
         - source activate t3_env
