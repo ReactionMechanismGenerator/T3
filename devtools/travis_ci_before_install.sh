@@ -6,8 +6,9 @@ cd $HOME
 mkdir -p ~/temp_Downloads
 
 # Install Miniconda
+MINICONDA=Miniconda3-latest-Linux-x86_64.sh
 MINICONDA_HOME=$HOME/miniconda
-wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+wget -q https://repo.anaconda.com/miniconda/$MINICONDA
 bash $MINICONDA -b -p $MINICONDA_HOME
 
 # Configure miniconda
