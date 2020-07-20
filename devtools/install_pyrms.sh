@@ -2,7 +2,7 @@ echo "***** in install_pyrms.sh"
 pushd .
 cd ..
 echo "***** clone pyrms: cloning into:"
-echo $(pwd)
+echo "$(pwd)"
 git clone https://github.com/ReactionMechanismGenerator/pyrms
 cd pyrms
 echo "checkout pyrms py3 branch"

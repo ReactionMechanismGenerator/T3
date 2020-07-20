@@ -30,7 +30,7 @@ jobs:
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)'' >> ~/.bashrc
         - conda env create -f environment.yml
-        - source activate t3_env
+        - conda activate t3_env
         - cd ..
         - git clone https://github.com/ReactionMechanismGenerator/ARC
         - cd ARC
@@ -44,11 +44,10 @@ jobs:
         - echo 'export 'PYTHONPATH=$PYTHONPATH:$(pwd)'' >> ~/.bashrc
         - make
         - cd ../T3
-        - . ~/.bashrc
         - conda deactivate
         - conda remove --name t3_env --all -y
         - conda create -n t3_env python=3.7
-        - source activate t3_env
+        - conda activate t3_env
         - make install-rms
       script:
         - coverage run -m pytest -ra -vv

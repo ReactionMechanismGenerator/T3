@@ -17,6 +17,7 @@ if [ "$TRAVIS_OS_NAME" == "osx" ]; then hdiutil detach -force /Volumes/Julia*; f
 
 rm -rf ~/temp_Downloads/julia*
 export PATH="$HOME/julia/bin:$PATH"
+echo 'export 'PATH=$HOME/julia/bin:$PATH'' >> ~/.bashrc
 
 # Install Miniconda
 if [ "$TRAVIS_OS_NAME" == "osx" ]; then
@@ -31,10 +32,11 @@ bash $MINICONDA -b -p $MINICONDA_HOME
 # Configure miniconda
 export PIP_ARGS="-U"
 export PATH=$MINICONDA_HOME/bin:$PATH
+echo 'export 'PATH=$MINICONDA_HOME/bin:$PATH'' >> ~/.bashrc
     
 conda config --set always_yes yes --set changeps1 no
 conda update --q conda
 conda info -a
 
 # Restore original directory
-popd
+popd || exit
