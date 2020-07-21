@@ -15,7 +15,7 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms
 echo "export PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms" >> ~/.bashrc
 echo "***** python path 1 is:"
 echo $PYTHONPATH
-echo PATH
+echo $PATH
 cd ../ARC
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
@@ -27,7 +27,7 @@ echo "export PATH=$HOME/julia/bin:$PATH" >> ~/.bashrc
 cd ../pyrms
 echo "***** python path 1.5 is:"
 echo $PYTHONPATH
-echo PATH
+echo $PATH
 # echo "***** source ~/.bashrc"
 # . ~/.bashrc
 #echo "***** re-activate t3_env"
