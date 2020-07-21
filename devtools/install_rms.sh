@@ -15,6 +15,15 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms
 echo "export PYTHONPATH=$PYTHONPATH:$(pwd)/pyrms" >> ~/.bashrc
 echo "***** python path 1 is:"
 echo $PYTHONPATH
+cd ../ARC
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+cd ../RMG-Py
+export PYTHONPATH=$PYTHONPATH:$(pwd)
+echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+cd ../pyrms
+echo "***** python path 1.5 is:"
+echo $PYTHONPATH
 # echo "***** source ~/.bashrc"
 # . ~/.bashrc
 #echo "***** re-activate t3_env"

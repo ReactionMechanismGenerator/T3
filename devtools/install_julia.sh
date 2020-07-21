@@ -24,7 +24,6 @@ rm -rf ~/temp_Downloads/julia*
 export PATH="$HOME/julia/bin:$PATH"
 echo "export PATH=$HOME/julia/bin:$PATH" >> ~/.bashrc
 
-echo "Julia version:"
 julia -v
 
 # Restore original directory
