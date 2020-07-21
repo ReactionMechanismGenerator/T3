@@ -2,10 +2,6 @@
 pushd .
 
 # Create an empty environment with the same name (t3_env) before installing RMS
-#conda deactivate
-#conda remove --name t3_env --all -y
-#conda create -n t3_env python=3.7
-#source activate t3_env
 
 # Install Julia
 cd $HOME

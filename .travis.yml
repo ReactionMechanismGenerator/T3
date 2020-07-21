@@ -32,10 +32,14 @@ jobs:
         - conda env create -f environment.yml
         - source activate t3_env
         - make install-arc
+        - conda deactivate
+        - conda remove --name t3_env --all -y
+        - conda create -n t3_env python=3.7
+        - source activate t3_env
         - make install-julia
         - make install-rms
         - source ~/.bashrc
-        - conda env update -f environment.yml
+        - conda env update --prefix ./env -f environment.yml
         - source activate t3_env
         - pip install diffeqpy
         - python -c "import diffeqpy; diffeqpy.install()"
