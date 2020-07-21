@@ -34,8 +34,8 @@ jobs:
         - make install-arc
         - make install-julia
         - make install-rms
-        - conda env update -f environment.yml
         - source ~/.bashrc
+        - conda env update -f environment.yml
         - source activate t3_env
         - pip install diffeqpy
         - python -c "import diffeqpy; diffeqpy.install()"
