@@ -57,7 +57,6 @@ echo "***** pip install diffeqpy"
 pip install diffeqpy
 echo "***** python -c import diffeqpy; diffeqpy.install()"
 python -c "import diffeqpy; diffeqpy.install()"
-echo "python -c 'import diffeqpy; diffeqpy.install()'" >> ~/.bashrc
 echo "***** python path 6 is:"
 echo $PYTHONPATH
 
