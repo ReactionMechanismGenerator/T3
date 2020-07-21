@@ -32,6 +32,7 @@ jobs:
         - conda env create -f environment.yml
         - source activate t3_env
         - make install-arc
+        - make install-julia
         - make install-rms
       script:
         - coverage run -m pytest -ra -vv

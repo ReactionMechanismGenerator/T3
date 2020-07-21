@@ -7,6 +7,9 @@
 install-arc:
 	bash devtools/install_arc.sh
 
+install-julia:
+	bash devtools/install_julia.sh
+
 install-rms:
 	bash devtools/install_rms.sh
 
