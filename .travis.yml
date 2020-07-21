@@ -34,6 +34,7 @@ jobs:
         - make install-arc
         - make install-julia
         - make install-rms
+        - conda env update -f environment.yml
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
