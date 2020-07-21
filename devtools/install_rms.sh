@@ -60,8 +60,8 @@ python -c "import diffeqpy; diffeqpy.install()"
 echo "***** python path 6 is:"
 echo $PYTHONPATH
 
-echo "***** link python and python-jl"
-ln -sfn $(which python-jl) $(which python)
+#echo "***** link python and python-jl"
+#ln -sfn $(which python-jl) $(which python)
 echo "***** python path 7 is:"
 echo $PYTHONPATH
 
