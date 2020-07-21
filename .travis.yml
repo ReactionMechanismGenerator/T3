@@ -35,6 +35,7 @@ jobs:
         - make install-julia
         - make install-rms
         - conda env update -f environment.yml
+        - source ~/.bashrc
         - source activate t3_env
       script:
         - coverage run -m pytest -ra -vv
