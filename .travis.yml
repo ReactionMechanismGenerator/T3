@@ -37,6 +37,7 @@ jobs:
         - conda env update -f environment.yml
         - source ~/.bashrc
         - source activate t3_env
+        - pip install diffeqpy
         - python -c "import diffeqpy; diffeqpy.install()"
       script:
         - coverage run -m pytest -ra -vv
