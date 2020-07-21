@@ -4,6 +4,9 @@
 #
 ################################################################################
 
+install-arc:
+	bash devtools/install_arc.sh
+
 install-rms:
 	bash devtools/install_rms.sh
 

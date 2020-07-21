@@ -1,5 +1,7 @@
-# Temporarily change directory to $HOME to install software
+# Store original directory
 pushd .
+
+# Temporarily change directory to $HOME to install software
 cd $HOME
 
 # Install Miniconda

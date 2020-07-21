@@ -31,23 +31,7 @@ jobs:
         - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
         - conda env create -f environment.yml
         - conda activate t3_env
-        - cd ..
-        - git clone https://github.com/ReactionMechanismGenerator/ARC
-        - cd ARC
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        - cd ..
-        - git clone https://github.com/ReactionMechanismGenerator/RMG-database
-        - git clone https://github.com/ReactionMechanismGenerator/RMG-Py
-        - cd RMG-Py
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        - make
-        - cd ../T3
-        - conda deactivate
-        - conda remove --name t3_env --all -y
-        - conda create -n t3_env python=3.7
-        - conda activate t3_env
+        - make install-arc
         - make install-rms
       script:
         - coverage run -m pytest -ra -vv
