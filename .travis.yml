@@ -30,7 +30,7 @@ jobs:
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
         - conda env create -f environment.yml
-        - conda activate t3_env
+        - source activate t3_env
         - make install-arc
         - make install-rms
       script:

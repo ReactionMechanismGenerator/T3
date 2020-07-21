@@ -18,11 +18,11 @@ bash $MINICONDA -b -p $MINICONDA_HOME
 export PIP_ARGS="-U"
 export PATH=$MINICONDA_HOME/bin:$PATH
 echo "export PATH=$MINICONDA_HOME/bin:$PATH" >> ~/.bashrc
-echo "export -f conda" >> ~/.bashrc
-echo "export -f __conda_activate" >> ~/.bashrc
-echo "export -f __conda_reactivate" >> ~/.bashrc
-echo "export -f __conda_hashr" >> ~/.bashrc
-echo "export -f __add_sys_prefix_to_path" >> ~/.bashrc
+#echo "export -f conda" >> ~/.bashrc
+#echo "export -f __conda_activate" >> ~/.bashrc
+#echo "export -f __conda_reactivate" >> ~/.bashrc
+#echo "export -f __conda_hashr" >> ~/.bashrc
+#echo "export -f __add_sys_prefix_to_path" >> ~/.bashrc
 
 conda config --set always_yes yes --set changeps1 no
 conda update --q conda

@@ -5,7 +5,7 @@ pushd .
 conda deactivate
 conda remove --name t3_env --all -y
 conda create -n t3_env python=3.7
-conda activate t3_env
+source activate t3_env
 
 # Install Julia
 cd $HOME
