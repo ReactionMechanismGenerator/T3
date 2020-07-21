@@ -39,6 +39,7 @@ jobs:
         - source activate t3_env
         - pip install diffeqpy
         - python -c "import diffeqpy; diffeqpy.install()"
+        - ln -sfn $(which python-jl) $(which python)
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
