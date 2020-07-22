@@ -23,14 +23,14 @@ ENV["PYTHONHOME"] = pypath
 println("* 6")
 println(ENV["CONDA_JL_HOME"])
 println(ENV["PYTHON"])
-println("* 7")
-Pkg.build("PyCall")
-println("* 8")
-# using PyCall
-println("* 9")
 
 println("using Pkg *************")
 using Pkg
+println("* 7")
+Pkg.build("PyCall")
+println("* 8")
+using PyCall
+println("* 9")
 println("adding RMS *************")
 Pkg.add("DifferentialEquations")
 println("* 99")
