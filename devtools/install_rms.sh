@@ -14,6 +14,7 @@ echo "***** pip install diffeqpy"
 pip install diffeqpy
 echo "***** python -c import diffeqpy; diffeqpy.install()"
 python -c "import diffeqpy; diffeqpy.install()"
+python -c "import Pkg; Pkg.add('PyCall')"
 
 # Change python-jl to call python3:
 if [ "$TRAVIS_OS_NAME" == "linux" ]; then sed -i 's|bin/python|bin/python3|g' $(which python-jl); fi
