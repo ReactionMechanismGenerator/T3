@@ -34,7 +34,6 @@ jobs:
         - make install-arc
         - make install-julia
         - make install-rms
-        - python -c 'import Pkg; Pkg.add("PyCall")'
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
