@@ -34,6 +34,7 @@ jobs:
         - make install-arc
         - make install-julia
         - make install-rms
+        - source activate t3_env
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
