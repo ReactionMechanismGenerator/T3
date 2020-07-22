@@ -27,13 +27,14 @@ cd ../T3
 echo "***** update new environment"
 conda env update -f environment.yml
 cd ../pyrms
-echo "***** call install_pyrms_1.jl"
+echo "***** call install_pyrms_2.jl"
 julia ../T3/devtools/install_pyrms_2.jl
 # install python-jl (simply called julia)
 echo "***** install python-jl"
 python3 -m pip install julia
 echo "***** python -c import julia; julia.install()"
 python -c "import julia; julia.install()"
+python -c "import Pkg; Pkg.add('PyCall')"
 echo "***** pip install diffeqpy"
 pip install diffeqpy
 echo "***** python -c import diffeqpy; diffeqpy.install()"
