@@ -1,10 +1,8 @@
 # Store original directory
 pushd .
 
-echo "***** call install_pyrms_1.jl"
-julia devtools/install_pyrms_1.jl
-echo "***** call install_pyrms_2.jl"
-julia devtools/install_pyrms_2.jl
+echo "***** call install_pyrms.jl"
+julia devtools/install_pyrms.jl
 # install python-jl (simply called julia)
 echo "***** install python-jl"
 python3 -m pip install julia
