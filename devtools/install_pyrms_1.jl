@@ -4,8 +4,6 @@ using Pkg
 println("** install_pyrms.jl mssg: in install_pyrms.jl after using Pkg *****")
 
 Pkg.add("PyCall")
-println("** link_python 1 *****")
-link_python = true
 
 println("PyCall present  *************")
 println("Linking PyCall properly *************")

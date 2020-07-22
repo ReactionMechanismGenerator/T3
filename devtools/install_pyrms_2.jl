@@ -17,3 +17,5 @@ println("* 13")
 using ReactionMechanismSimulator
 println("* 14 run RMS test")
 Pkg.test("ReactionMechanismSimulator")
+import Pkg
+Pkg.add("PyCall")
