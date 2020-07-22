@@ -34,12 +34,6 @@ jobs:
         - make install-arc
         - make install-julia
         - make install-rms
-        - source ~/.bashrc
-        - conda env update --prefix ./env -f environment.yml
-        - source activate t3_env
-        - pip install diffeqpy
-        - python -c "import diffeqpy; diffeqpy.install()"
-        - ln -sfn $(which python-jl) $(which python)
       script:
         - coverage run -m pytest -ra -vv
         - coverage report

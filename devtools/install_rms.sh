@@ -25,5 +25,8 @@ ln -sfn $(which python-jl) $(which python)
 echo "***** python path is:"
 echo $PYTHONPATH
 
+echo "ln -sfn $(which python-jl) $(which python)"
+ln -sfn $(which python-jl) $(which python)
+
 # Restore original directory
 popd || exit
