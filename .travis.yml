@@ -38,7 +38,7 @@ jobs:
         - if [ "$TRAVIS_OS_NAME" == "osx" ]; then sed -i ".bak" 's|bin/python|bin/python3|g' $(which python-jl); fi
         - ln -sfn $(which python-jl) $(which python)
         - echo $PYTHONPATH
-        - condal env list
+        - conda env list
         - source activate t3_env
       script:
         - coverage run -m pytest -ra -vv
