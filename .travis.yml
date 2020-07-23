@@ -33,21 +33,18 @@ jobs:
         - source activate t3_env
         - make install-arc
         - make install-julia
-        - python -c "import pyrms; pyrms.install()"
+        - julia devtools/install_rms.jl
         - if [ "$TRAVIS_OS_NAME" == "linux" ]; then sed -i 's|bin/python|bin/python3|g' $(which python-jl); fi
         - if [ "$TRAVIS_OS_NAME" == "osx" ]; then sed -i ".bak" 's|bin/python|bin/python3|g' $(which python-jl); fi
         - ln -sfn $(which python-jl) $(which python)
-        - echo $PYTHONPATH
-        - conda env list
-        - echo $PYTHONPATH
+        - julia devtools/install_pycall.jl
+        - python -c "import pyrms; pyrms.install()"
         - echo $(pwd)
         - cd ../RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - make
         - cd ../ARC
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - echo $PYTHONPATH
-        - conda info
         - cd ../T3
       script:
         - coverage run -m pytest -ra -vv
