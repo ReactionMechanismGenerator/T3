@@ -46,6 +46,8 @@ jobs:
         - cd ../ARC
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - echo $PYTHONPATH
+        - conda info
+        - cd ../T3
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
