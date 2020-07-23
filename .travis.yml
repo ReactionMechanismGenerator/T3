@@ -43,6 +43,7 @@ jobs:
         - echo $(pwd)
         - cd ../RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - make
         - cd ../ARC
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - echo $PYTHONPATH
