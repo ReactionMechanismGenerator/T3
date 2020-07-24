@@ -22,8 +22,5 @@ echo "export PATH=$HOME/julia/bin:$PATH" >> ~/.bashrc
 
 julia -v
 
-#python3 -m pip install julia
-#python3 -c "import julia; julia.install()"
-
 # Restore original directory
 popd || exit

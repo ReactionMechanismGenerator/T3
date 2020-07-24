@@ -38,7 +38,6 @@ jobs:
         - ln -sfn $(which python-jl) $(which python)
         - julia devtools/install_pycall.jl
         - python -c "import pyrms; pyrms.install()"
-        - echo $(pwd)
         - cd ../RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - make
