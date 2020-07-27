@@ -74,7 +74,7 @@ rmg:
   species:
     - label: ethane
       smiles: CC
-      concentration: 1
+      concentration: [1, 1.75]  # a concentration range can be defined (a length-2 list)
       reactive: true  # optional, default: ``True``
       xyz: [ethane.log]  # each entry could be a string/dictionary XYZ format or a file path to parse the information from
       seed_all_rads: ['radical', 'alkoxyl', 'peroxyl']  # radical derivatives that will be added the RMG input file
