@@ -536,7 +536,7 @@ def test_determine_species_to_calculate():
     assert len(list(t3.species.keys())) == 3
     assert all([species_dict['reasons'] == ['All core species'] for species_dict in t3.species.values()])
     assert all([species_dict['RMG label'] in ['OH', 'HO2', 'H2O2'] for species_dict in t3.species.values()])
-    assert all([species_dict['QM label'] in ['OH_0', 'HO2_1', 'H2O2_2'] for species_dict in t3.species.values()])
+    assert all([species_dict['QM label'] in ['0_OH', '1_HO2', '2_H2O2'] for species_dict in t3.species.values()])
 
     # 3. collision violators
     t3.iteration = 3
@@ -813,7 +813,7 @@ H  0.0000000  0.0000000 -0.3736550"""
 
     found_h2 = False
     for qm_species in t3.qm['species']:
-        if qm_species.label == 'H2_4':
+        if qm_species.label == '4_H2':
             found_h2 = True
             assert isinstance(qm_species, ARCSpecies)
             assert qm_species.conformers == [{'symbols': ('H', 'H'),
