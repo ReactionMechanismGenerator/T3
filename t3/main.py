@@ -520,6 +520,7 @@ class T3(object):
             self.add_to_rmg_library()
         # clear the calculated objects from self.qm:
         self.qm['species'], self.qm['reactions'] = list(), list()
+        self.dump_species()
 
     def get_current_rmg_tol(self) -> float:
         """
