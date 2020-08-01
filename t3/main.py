@@ -458,6 +458,8 @@ class T3(object):
         if input_file_path is not None:
             arc_kwargs = read_yaml_file(input_file_path)
 
+        self.dump_species()
+
         arc_kwargs = arc_kwargs.copy()
         if 'adapter' in arc_kwargs:
             del arc_kwargs['adapter']
