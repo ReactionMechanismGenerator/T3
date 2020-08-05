@@ -258,7 +258,9 @@ def test_set_paths():
              'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
              'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
              'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
-                             'species_dictionary.txt'}
+                             'species_dictionary.txt',
+             'RMG T3 thermo lib': 'RMG-database/input/thermo/libraries/T3.py',
+             }
     for key, path in t3.paths.items():
         assert paths[key] in path
 
