@@ -261,13 +261,6 @@ class T3(object):
 
             # RMG
             if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
-                write_rmg_input_file(
-                    rmg=self.rmg,
-                    t3=self.t3,
-                    iteration=self.iteration,
-                    path=self.paths['RMG input'],
-                    walltime=self.t3['options']['max_RMG_walltime'],
-                )
                 self.run_rmg()
 
             # SA
@@ -304,13 +297,6 @@ class T3(object):
             self.logger.info(f'\n\n\nT3 iteration {self.iteration} (just generating a model using RMG):\n'
                              f'------------------------------------------------------\n')
             self.set_paths()
-            write_rmg_input_file(
-                rmg=self.rmg,
-                t3=self.t3,
-                iteration=self.iteration,
-                path=self.paths['RMG input'],
-                walltime=self.t3['options']['max_RMG_walltime'],
-            )
             self.run_rmg()
 
         self.logger.log_species_summary(species_dict=self.species)
@@ -544,16 +530,23 @@ class T3(object):
         Raises:
             Various RMG Exceptions: if RMG crushed too many times.
         """
-        if not os.path.isfile(self.paths['RMG input']):
-            raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be found.")
-
         self.logger.info(f'Running RMG (tolerance = {self.get_current_rmg_tol()})...')
-        tic = time.time()
 
         # use the RMG T3 library if it exists and not already in use
         if self.t3['options']['library_name'] not in self.rmg['database']['thermo_libraries'] \
                 and os.path.isfile(self.paths['RMG T3 thermo lib']):
             self.rmg['database']['thermo_libraries'].append(self.t3['options']['library_name'])
+
+        write_rmg_input_file(
+            rmg=self.rmg,
+            t3=self.t3,
+            iteration=self.iteration,
+            path=self.paths['RMG input'],
+            walltime=self.t3['options']['max_RMG_walltime'],
+        )
+        if not os.path.isfile(self.paths['RMG input']):
+            raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be found.")
+        tic = time.time()
 
         # setup RMG
         initialize_rmg_log(
