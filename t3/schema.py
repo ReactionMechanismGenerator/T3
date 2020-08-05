@@ -61,7 +61,7 @@ class T3Sensitivity(BaseModel):
     atol: confloat(gt=0, lt=1e-1) = 1e-6
     rtol: confloat(gt=0, lt=1e-1) = 1e-4
     global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None
-    SA_threshold: confloat(gt=0, lt=0.5) = 0.01
+    SA_threshold: confloat(gt=0, lt=0.5) = 0.001
     pdep_SA_threshold: Optional[confloat(gt=0, lt=0.5)] = 0.001
     ME_methods: List[constr(min_length=2, max_length=3)] = ['CSE', 'MSC']
     top_SA_species: conint(ge=0) = 10
