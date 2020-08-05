@@ -182,7 +182,7 @@ class T3(object):
             # check args
             self.check_arc_args()
 
-        if any(self.rmg['model']['core_tolerance'][i+1] >= self.rmg['model']['core_tolerance'][i]
+        if any(self.rmg['model']['core_tolerance'][i + 1] > self.rmg['model']['core_tolerance'][i]
                for i in range(len(self.rmg['model']['core_tolerance']) - 1)):
             self.logger.warning(f'The RMG tolerances are not in descending order.')
             self.logger.info(f'Got: {self.rmg["model"]["core_tolerance"]}')
