@@ -1193,7 +1193,7 @@ class T3(object):
                         append = True
                 rmg_thermo_lib.long_desc += description_to_append
                 for entry in arc_thermo_lib.entries.values():
-                    entry_species = Species(molecule=entry.item)
+                    entry_species = Species(molecule=[entry.item])
                     entry_species.generate_resonance_structures(keep_isomorphic=False, filter_structures=True)
                     for existing_entry in rmg_thermo_lib.entries:
                         if entry_species.is_isomorphic(existing_entry.item):
