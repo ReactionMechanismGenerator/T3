@@ -1195,7 +1195,7 @@ class T3(object):
                 for entry in arc_thermo_lib.entries.values():
                     entry_species = Species(molecule=[entry.item])
                     entry_species.generate_resonance_structures(keep_isomorphic=False, filter_structures=True)
-                    for existing_entry in rmg_thermo_lib.entries:
+                    for existing_entry in rmg_thermo_lib.entries.values():
                         if entry_species.is_isomorphic(existing_entry.item):
                             self.logger.warning(f"Not adding species {entry.label} to the "
                                                 f"{self.t3['options']['library_name']} thermo library, "
