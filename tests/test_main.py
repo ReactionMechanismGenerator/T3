@@ -962,6 +962,7 @@ def test_check_overtime():
 
 def teardown_module():
     """teardown any state that was previously setup with a setup_module method."""
+
     # delete log files
     for i in range(10):
         directory = os.path.join(restart_base_path, f'r{i}')
@@ -972,11 +973,25 @@ def teardown_module():
             log_archive = os.path.join(directory, 'log_archive')
             if os.path.isdir(log_archive):
                 shutil.rmtree(log_archive)
-    os.remove(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'T3_ARC_restart_test.info'))
+
+    # other files to delete
+    files = [os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'T3_ARC_restart_test.info'),
+             os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'input.yml'),
+             os.path.join(restart_base_path, 'r6', 'species.yml'),
+             os.path.join(DATA_BASE_PATH, 'process_arc', 'species.yml'),
+             ]
+    for file in files:
+        if os.path.isfile(file):
+            os.remove(file)
+
     # delete folders
     for directory in [test_minimal_project_directory,
                       dump_species_path,
                       os.path.join(DATA_BASE_PATH, 'minimal_data', 'log_archive'),
+                      os.path.join(DATA_BASE_PATH, 'determine_species', 'log_archive'),
+                      os.path.join(DATA_BASE_PATH, 'pdep_network', 'log_archive'),
+                      os.path.join(DATA_BASE_PATH, 'process_arc', 'log_archive'),
+                      os.path.join(DATA_BASE_PATH, 'libraries'),
                       os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'output'),
                       os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'log_and_restart_archive'),
                       ]:
