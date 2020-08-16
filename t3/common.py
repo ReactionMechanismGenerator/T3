@@ -4,7 +4,7 @@ t3 common module
 
 import os
 import string
-from typing import Optional
+from typing import Optional, Union
 
 from rmgpy.species import Species
 
@@ -118,3 +118,27 @@ def get_rmg_species_from_a_species_dict(species_dict: dict,
     if errored and raise_error:
         raise ValueError(f"The species corresponding to {species_dict['label']} does not have a specified structure.")
     return species
+
+
+def convert_termination_time_to_seconds(termination_time: Union[float, str]):
+    """
+    Converts the termination_time tuple from the RMG reactor to seconds.
+    This is necessary for the RMS adapters since the Julia solver expects
+    the integration bounds to be in units of seconds.
+
+    Args:
+        termination_time (Union[float, str]):  Termination time for simulating in the RMG reactor. Example: [5, 'hours']
+
+    Returns:
+        t_final (float): The termination time in seconds.
+    """
+    unit_conversion = {'micro-s': 1e-6,
+                       'ms': 1e-3,
+                       's': 1,
+                       'hrs': 3600,
+                       'hours': 3600,
+                       'days': 3600*24,
+                       }
+    t_final, units = termination_time
+    t_final = t_final*unit_conversion[units]
+    return t_final
