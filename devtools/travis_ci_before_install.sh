@@ -1,5 +1,7 @@
-# Temporarily change directory to $HOME to install software
+# Store original directory
 pushd .
+
+# Temporarily change directory to $HOME to install software
 cd $HOME
 
 # Install Miniconda
@@ -15,10 +17,10 @@ bash $MINICONDA -b -p $MINICONDA_HOME
 # Configure miniconda
 export PIP_ARGS="-U"
 export PATH=$MINICONDA_HOME/bin:$PATH
-    
+echo "export PATH=$MINICONDA_HOME/bin:$PATH" >> ~/.bashrc
 conda config --set always_yes yes --set changeps1 no
 conda update --q conda
 conda info -a
 
 # Restore original directory
-popd
+popd || exit

@@ -2,6 +2,10 @@
 #   http://lint.travis-ci.org/
 
 language: python
+
+os:
+  - linux
+
 python:
   - "3.7"
 
@@ -22,22 +26,19 @@ jobs:
   include:
     - stage: test
       install:
+        - echo $TRAVIS_OS_NAME
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
         - conda env create -f environment.yml
         - source activate t3_env
-        - cd ..
-        - git clone https://github.com/ReactionMechanismGenerator/ARC
-        - cd ARC
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - cd ..
-        - git clone https://github.com/ReactionMechanismGenerator/RMG-database
-        - git clone https://github.com/ReactionMechanismGenerator/RMG-Py
-        - cd RMG-Py
+        - make install-arc
+        - make install-pyrms
+        - cd ../RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - make
-        - cd ..
-        - conda list
-        - cd T3
+        - cd ../ARC
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - cd ../T3
       script:
         - coverage run -m pytest -ra -vv
         - coverage report
