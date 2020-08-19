@@ -40,7 +40,7 @@ jobs:
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - cd ../T3
       script:
-        - coverage run -m pytest -ra -vv
+        - travis_wait 35 coverage run -m pytest -ra -vv
         - coverage report
         - codecov
 
