@@ -155,26 +155,27 @@ class RMSConstantP(SimulateAdapter):
         Returns:
              sa_dict: a SA dictionary, whose structure is given in the docstring for main.py
         """
-        sa_dict = {'thermo': dict(), 'kinetics': dict(), 'time': list(self.sol.t)}
-        species_labels = [spc.name for spc in self.spcs]
-        num_rxns = len(self.rxns)
-        for observable in self.observable_list:
-            # get thermo SA coefficients
-            sa_dict['thermo'][observable] = dict()
-            for label in species_labels:
-                sa_dict['thermo'][observable][label] = list()
-                for t in sa_dict['time']:
-                    sa_dict['thermo'][observable][label].append(rms.getconcentrationsensitivity(
-                        self.bsol, observable, label, t))
-
-            # get kinetics SA coefficients
-            sa_dict['kinetics'][observable] = dict()
-            for rxn_number in range(num_rxns):
-                sa_dict['kinetics'][observable][label] = list()
-                for t in sa_dict['time']:
-                    sa_dict['kinetics'][observable][label].append(rms.getconcentrationsensitivity(
-                        self.bsol, observable, rxn_number, t))
-        return sa_dict
+        pass
+        # sa_dict = {'thermo': dict(), 'kinetics': dict(), 'time': list(self.sol.t)}
+        # species_labels = [spc.name for spc in self.spcs]
+        # num_rxns = len(self.rxns)
+        # for observable in self.observable_list:
+        #     # get thermo SA coefficients
+        #     sa_dict['thermo'][observable] = dict()
+        #     for label in species_labels:
+        #         sa_dict['thermo'][observable][label] = list()
+        #         for t in sa_dict['time']:
+        #             sa_dict['thermo'][observable][label].append(rms.getconcentrationsensitivity(
+        #                 self.bsol, observable, label, t))
+        #
+        #     # get kinetics SA coefficients
+        #     sa_dict['kinetics'][observable] = dict()
+        #     for rxn_number in range(num_rxns):
+        #         sa_dict['kinetics'][observable][label] = list()
+        #         for t in sa_dict['time']:
+        #             sa_dict['kinetics'][observable][label].append(rms.getconcentrationsensitivity(
+        #                 self.bsol, observable, rxn_number, t))
+        # return sa_dict
 
 
 register_simulate_adapter("RMSConstantP", RMSConstantP)
