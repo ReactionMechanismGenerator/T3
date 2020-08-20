@@ -21,40 +21,63 @@ before_install:
   - git config --global user.name "Travis Deploy"
   - git config --global user.email "alongd@mit.edu"
 
+install: 
+  # set up by installing all dependencies
+  - echo $TRAVIS_OS_NAME
+  - export PYTHONPATH=$PYTHONPATH:$(pwd)
+  - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+  - conda env create -f environment.yml
+  - source activate t3_env
+  - make install-arc
+  - make install-pyrms
+  - cd ../RMG-Py
+  - export PYTHONPATH=$PYTHONPATH:$(pwd)
+  - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+  - make
+  - cd ../ARC
+  - export PYTHONPATH=$PYTHONPATH:$(pwd)
+  - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+  - cd ../T3
+
 cache: pip
 
 jobs:
   include:
-    - stage: setup
-      install:
-        - echo $TRAVIS_OS_NAME
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        - conda env create -f environment.yml
-        - source activate t3_env
-        - make install-arc
-        - make install-pyrms
-        - cd ../RMG-Py
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        - make
-        - cd ../ARC
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        - cd ../T3
-      script:
-        - echo setup done
     - stage: test
+      # install:
+        # - echo $TRAVIS_OS_NAME
+        # - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        # - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+        # - conda env create -f environment.yml
+        # - source activate t3_env
+        # - make install-arc
+        # - make install-pyrms
+        # - cd ../RMG-Py
+        # - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        # - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+        # - make
+        # - cd ../ARC
+        # - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        # - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+        # - cd ../T3
       script:
-        - source activate t3_env
-        - cd ../RMG-Py
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - cd ../ARC
-        - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        - cd ../T3
-        - travis_wait 35 coverage run -m pytest -ra -vv
+        - coverage run -m pytest -ra -vv
         - coverage report
         - codecov
+
+      # script:
+      #   - echo setup done
+    # - stage: test
+    #   script:
+    #     - source activate t3_env
+    #     - cd ../RMG-Py
+    #     - export PYTHONPATH=$PYTHONPATH:$(pwd)
+    #     - cd ../ARC
+    #     - export PYTHONPATH=$PYTHONPATH:$(pwd)
+    #     - cd ../T3
+    #     - travis_wait 35 coverage run -m pytest -ra -vv
+    #     - coverage report
+    #     - codecov
 
 notifications:
     email: false
