@@ -61,6 +61,7 @@ jobs:
         # - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
         # - cd ../T3
       script:
+        - source activate t3_env
         - coverage run -m pytest -ra -vv
         - coverage report
         - codecov
