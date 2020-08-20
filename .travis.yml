@@ -46,6 +46,12 @@ jobs:
         - echo setup done
     - stage: test
       script:
+        - source activate t3_env
+        - cd ../RMG-Py
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - cd ../ARC
+        - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - cd ../T3
         - travis_wait 35 coverage run -m pytest -ra -vv
         - coverage report
         - codecov
