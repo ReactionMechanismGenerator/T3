@@ -36,9 +36,11 @@ jobs:
         - make install-pyrms
         - cd ../RMG-Py
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
         - make
         - cd ../ARC
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
+        - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
         - cd ../T3
       script:
         - echo setup done
