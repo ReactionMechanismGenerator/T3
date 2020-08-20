@@ -40,6 +40,8 @@ jobs:
         - cd ../ARC
         - export PYTHONPATH=$PYTHONPATH:$(pwd)
         - cd ../T3
+      script:
+        - echo setup done
     - stage: test
       script:
         - travis_wait 35 coverage run -m pytest -ra -vv
