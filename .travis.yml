@@ -79,9 +79,15 @@ jobs:
         # - cd ../T3
       script:
         - source activate t3_env
-        - coverage run -m pytest -ra -vv
+        - coverage run -m pytest -ra -vv --ignore=tests/test_simulate_adapters/
         - coverage report
         - codecov
+      script:
+        - source activate t3_env
+        - travis_wait 45 coverage run -m pytest tests/test_simulate_adapters/ -vv
+        - coverage report
+        - codecov
+
 
       # script:
       #   - echo setup done
