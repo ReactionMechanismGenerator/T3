@@ -585,6 +585,19 @@ class InputBase(BaseModel):
         """InputBase.qm validator"""
         return value or dict()
 
+    @validator('rmg', always=True)
+    def check_rmg(cls, value):
+        """InputBase.rmg validator"""
+        # Check the presence of at least one inert gas if PDep is requested
+        if value.species and value.pdep and value.pdep.method:
+            for species in value.species:
+                if not species.reactive:
+                    break
+            else:
+                raise ValueError(f'Pressure Dependence calculations require at least one inert (non-reacting) '
+                                 f'species for the bath gas.')
+        return value
+
     @root_validator(pre=True)
     def validate_rmg_t3(cls, values):
         """InputBase.validate_rmg_t3"""
