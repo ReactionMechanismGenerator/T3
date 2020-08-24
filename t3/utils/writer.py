@@ -233,7 +233,7 @@ liquidReactor(
                                                          )
 
     # pressureDependence
-    pdep = rmg['pdep']
+    pdep = rmg['pdep'].copy()
     if pdep is not None:
         pdep_template = """
 pressureDependence(
@@ -246,7 +246,7 @@ pressureDependence(
     maximumAtoms=${max_atoms},
 )
 """
-        pdep['method'] = METHOD_MAP[pdep['method']]
+        pdep['method'] = pdep['method'] if pdep['method'] in list(METHOD_MAP.values()) else METHOD_MAP[pdep['method']]
         pdep['T_min'], pdep['T_max'], pdep['T_count'] = pdep['T']
         pdep['P_min'], pdep['P_max'], pdep['P_count'] = pdep['P']
         pdep['T_count'], pdep['P_count'] = int(pdep['T_count']), int(pdep['P_count'])
