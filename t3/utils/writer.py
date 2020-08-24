@@ -249,6 +249,7 @@ pressureDependence(
         pdep['method'] = METHOD_MAP[pdep['method']]
         pdep['T_min'], pdep['T_max'], pdep['T_count'] = pdep['T']
         pdep['P_min'], pdep['P_max'], pdep['P_count'] = pdep['P']
+        pdep['T_count'], pdep['P_count'] = int(pdep['T_count']), int(pdep['P_count'])
         del pdep['T']
         del pdep['P']
         if pdep['interpolation'] == 'PDepArrhenius':
