@@ -9,10 +9,6 @@ os:
 python:
   - "3.7"
 
-# stages:
-#   - setup
-#   - test
-
 before_install:
   # Setup python environment
   - source devtools/travis_ci_before_install.sh
@@ -43,40 +39,6 @@ cache: pip
 
 jobs:
   include:
-    # - stage: install
-    #   script:
-    #     - echo $TRAVIS_OS_NAME
-    #     - export PYTHONPATH=$PYTHONPATH:$(pwd)
-    #     - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-    #     - conda env create -f environment.yml
-    #     - source activate t3_env
-    #     - make install-arc
-    #     - make install-pyrms
-    #     - cd ../RMG-Py
-    #     - export PYTHONPATH=$PYTHONPATH:$(pwd)
-    #     - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-    #     - make
-    #     - cd ../ARC
-    #     - export PYTHONPATH=$PYTHONPATH:$(pwd)
-    #     - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-    #     - cd ../T3
-    # - stage: test
-      # install:
-        # - echo $TRAVIS_OS_NAME
-        # - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        # - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        # - conda env create -f environment.yml
-        # - source activate t3_env
-        # - make install-arc
-        # - make install-pyrms
-        # - cd ../RMG-Py
-        # - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        # - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        # - make
-        # - cd ../ARC
-        # - export PYTHONPATH=$PYTHONPATH:$(pwd)
-        # - echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-        # - cd ../T3
     - script:
       - source activate t3_env
       - coverage run -m pytest --ignore=tests/test_simulate_adapters/ -ra -vv
@@ -87,21 +49,6 @@ jobs:
       - travis_wait 45 coverage run -m pytest tests/test_simulate_adapters/ -vv
       - coverage report
       - codecov
-
-
-      # script:
-      #   - echo setup done
-    # - stage: test
-    #   script:
-    #     - source activate t3_env
-    #     - cd ../RMG-Py
-    #     - export PYTHONPATH=$PYTHONPATH:$(pwd)
-    #     - cd ../ARC
-    #     - export PYTHONPATH=$PYTHONPATH:$(pwd)
-    #     - cd ../T3
-    #     - travis_wait 35 coverage run -m pytest -ra -vv
-    #     - coverage report
-    #     - codecov
 
 notifications:
     email: false
