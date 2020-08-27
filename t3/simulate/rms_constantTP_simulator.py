@@ -138,9 +138,9 @@ class RMSConstantTP(SimulateAdapter):
 
         if len(self.observable_list):
             react = rms.Reactor(domain, y0, (0.0, t_final), forwardsensitivities=True, p=p)
-            atol = [self.atol]*domain.indexes[-1]  # set atol for the variables being simulated
+            atol = [self.atol]*domain.indexes[1]  # set atol for the variables being simulated
             total_variables = len(self.spcs) + len(p)*len(self.spcs)
-            atol.extend([self.sa_atol]*(total_variables - domain.indexes[-1]))  # set atol for SA
+            atol.extend([self.sa_atol]*(total_variables - domain.indexes[1]))  # set atol for SA
             self.sol = de.solve(react.ode, solver, abstol=atol, reltol=self.rtol)
         else:
             react = rms.Reactor(domain, y0, (0.0, t_final), forwardsensitivities=False, p=p)
