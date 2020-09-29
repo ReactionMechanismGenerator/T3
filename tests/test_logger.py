@@ -8,8 +8,7 @@ t3 tests test_logger module
 import datetime
 import os
 import shutil
-import time
-from typing import Dict, List, Optional
+from typing import Optional
 
 from t3.common import DATA_BASE_PATH
 import t3.logger as logger
@@ -21,11 +20,11 @@ log_project_directory = os.path.join(DATA_BASE_PATH, 'log_file_testing_dir')
 def init_logger(project: str = 'project_name',
                 project_directory: str = log_project_directory,
                 verbose: Optional[int] = 10,
-                t0: Optional[float] = None,
+                t0: Optional[datetime.datetime] = None,
                 ) -> logger.Logger:
     """Initialize the logger"""
     if t0 is None:
-        t0 = time.time()
+        t0 = datetime.datetime.now()
     if not os.path.isdir(log_project_directory):
         os.mkdir(log_project_directory)
     return logger.Logger(project=project,
@@ -42,7 +41,7 @@ def test_initialize_logger():
     assert logger_object.project == 'project_name'
     assert logger_object.project_directory == log_project_directory
     assert logger_object.verbose == 10
-    assert isinstance(logger_object.t0, float)
+    assert isinstance(logger_object.t0, datetime.datetime)
     shutil.rmtree(log_project_directory)
 
 
