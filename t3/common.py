@@ -2,6 +2,7 @@
 t3 common module
 """
 
+import datetime
 import os
 import string
 from typing import Optional
@@ -117,3 +118,16 @@ def get_rmg_species_from_a_species_dict(species_dict: dict,
     if errored and raise_error:
         raise ValueError(f"The species corresponding to {species_dict['label']} does not have a specified structure.")
     return species
+
+
+def time_lapse(t0: datetime.datetime) -> datetime.timedelta:
+    """
+    A helper function returning the elapsed time since t0.
+
+    Args:
+        t0 (datetime.datetime): The initial time the count starts from.
+
+    Returns: datetime.timedelta
+        The time difference between now and t0.
+    """
+    return datetime.datetime.now() - t0
