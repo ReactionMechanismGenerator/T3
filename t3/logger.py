@@ -10,9 +10,9 @@ import shutil
 import time
 from typing import Dict, List, Optional
 
-from arc.common import get_git_branch, get_git_commit, time_lapse
+from arc.common import get_git_branch, get_git_commit
 
-from t3.common import VERSION, dict_to_str, t3_path
+from t3.common import VERSION, dict_to_str, t3_path, time_lapse
 
 
 class Logger(object):
@@ -24,14 +24,14 @@ class Logger(object):
         project_directory (str): The project directory path.
         verbose (Optional[int]): The logging level, optional. 10 - debug, 20 - info, 30 - warning.
                                  ``None`` to avoid logging to file.
-        t0 (float): Initial time when the project was spawned.
+        t0 (datetime.datetime): Initial time when the project was spawned, stored as a datetime object.
 
     Attributes:
         project (str): The project name.
         project_directory (str): The project directory path.
         verbose (Optional[int]): The logging level, optional. 10 - debug, 20 - info, 30 - warning.
                                  ``None`` to avoid logging to file.
-        t0 (float): Initial time when the project was spawned.
+        t0 (datetime.datetime): Initial time when the project was spawned, stored as a datetime object.
         log_file (str): The path to the log file.
     """
 
@@ -39,7 +39,7 @@ class Logger(object):
                  project: str,
                  project_directory: str,
                  verbose: Optional[int],
-                 t0: float,
+                 t0: datetime.datetime,
                  ):
         
         self.project = project
@@ -52,7 +52,7 @@ class Logger(object):
             if not os.path.isdir(os.path.join(os.path.dirname(self.log_file), 'log_archive')):
                 os.mkdir(os.path.join(os.path.dirname(self.log_file), 'log_archive'))
             local_time = datetime.datetime.now().strftime("%H%M%S_%b%d_%Y")
-            log_backup_name = 't3.' + local_time + '.log'
+            log_backup_name = f't3.{local_time}].log'
             shutil.copy(self.log_file, os.path.join(os.path.dirname(self.log_file), 'log_archive', log_backup_name))
             os.remove(self.log_file)
 

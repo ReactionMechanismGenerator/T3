@@ -18,7 +18,6 @@ import os
 import pandas as pd
 import re
 import shutil
-import time
 import traceback
 from typing import List, Optional, Tuple, Union
 
@@ -55,13 +54,13 @@ from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 from rmgpy.tools.loader import load_rmg_py_job
 from rmgpy.tools.simulate import simulate
 
-from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file, time_lapse
+from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file
 from arc.exceptions import ConverterError
 from arc.main import ARC
 from arc.species import ARCSpecies
 from arc.species.converter import check_xyz_dict
 
-from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label
+from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
 from t3.logger import Logger
 from t3.schema import InputBase
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -107,7 +106,7 @@ class T3(object):
         rmg (dict): RMG directives.
         qm (dict, optional): QM directive.
         verbose (int): The logging level.
-        t0 (float): Initial time when the project was spawned.
+        t0 (datetime.datetime): Initial time when the project was spawned, stored as a datetime object.
         logger (Logger): The Logger class instance.
         rmg_exceptions_counter (int): Number of times RMG crashed.
         iteration (int): The current iteration number. Iteration 0 is reserved for pre-running ARC,
@@ -131,7 +130,7 @@ class T3(object):
                  clean_dir: bool = False,
                  ):
 
-        self.t0 = time.time()  # initialize the timer
+        self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
 
         project_directory = project_directory or os.path.join(PROJECTS_BASE_PATH, project)
 
@@ -287,7 +286,7 @@ class T3(object):
                 break
 
             if self.check_overtime():
-                self.logger.log_max_time_reached()
+                self.logger.log_max_time_reached(max_time=self.t3['options']['max_T3_walltime'])
                 break
 
         if additional_calcs_required:
@@ -457,7 +456,7 @@ class T3(object):
 
         if 'project' not in arc_kwargs:
             arc_kwargs['project'] = 'T3'
-        tic = time.time()
+        tic = datetime.datetime.now()
         arc = ARC(**arc_kwargs)
         arc.write_input_file()
         try:
@@ -546,7 +545,7 @@ class T3(object):
         )
         if not os.path.isfile(self.paths['RMG input']):
             raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be found.")
-        tic = time.time()
+        tic = datetime.datetime.now()
 
         # setup RMG
         initialize_rmg_log(
@@ -1238,7 +1237,7 @@ class T3(object):
             bool: Whether T3 is running over time.
         """
         if self.t3['options']['max_T3_walltime'] is not None:
-            delta = datetime.datetime.now() - self.t0
+            delta = time_lapse(self.t0)
             splits = self.t3['options']['max_T3_walltime'].split(':')  # 01:00:00:00
             max_delta = datetime.timedelta(days=int(splits[0]),
                                            hours=int(splits[1]),
