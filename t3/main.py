@@ -67,6 +67,7 @@ from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 
 PDEP_SA_ME_METHODS = ['CSE', 'MSC']
 RMG_THERMO_LIB_BASE_PATH = os.path.join(rmg_settings['database.directory'], 'thermo', 'libraries')
+RMG_KINETICS_LIB_BASE_PATH = os.path.join(rmg_settings['database.directory'], 'kinetics', 'libraries')
 
 
 class T3(object):
@@ -339,6 +340,7 @@ class T3(object):
                                            f"{self.qm['project'] if 'project' in self.qm else 'T3'}.py"),
             'ARC kinetics lib': os.path.join(iteration_path, 'ARC', 'output', 'RMG libraries', 'kinetics'),
             'RMG T3 thermo lib': os.path.join(RMG_THERMO_LIB_BASE_PATH, f"{self.t3['options']['library_name']}.py"),
+            # 'RMG T3 kinetics lib': os.path.join(RMG_KINETICS_LIB_BASE_PATH, f"{self.t3['options']['library_name']}"),
         }
 
     def restart(self) -> Tuple[int, bool]:
@@ -531,10 +533,26 @@ class T3(object):
         """
         self.logger.info(f'Running RMG (tolerance = {self.get_current_rmg_tol()})...')
 
-        # use the RMG T3 library if it exists and not already in use
+        # Use the RMG T3 library if it exists and not already in use.
+        # Also, don't use the library if it doesn't exist yet
+        # 1. thermo
         if self.t3['options']['library_name'] not in self.rmg['database']['thermo_libraries'] \
                 and os.path.isfile(self.paths['RMG T3 thermo lib']):
-            self.rmg['database']['thermo_libraries'].append(self.t3['options']['library_name'])
+            self.rmg['database']['thermo_libraries'] = [self.t3['options']['library_name']] + \
+                                                       self.rmg['database']['thermo_libraries']
+        elif self.t3['options']['library_name'] in self.rmg['database']['thermo_libraries'] \
+                and not os.path.isfile(self.paths['RMG T3 thermo lib']):
+            self.rmg['database']['thermo_libraries'].pop(self.rmg['database']['thermo_libraries'].index(
+                self.t3['options']['library_name']))
+        # 2. kinetics
+        # if self.t3['options']['library_name'] not in self.rmg['database']['kinetics_libraries'] \
+        #         and os.path.isdir(self.paths['RMG T3 kinetics lib']):
+        #     self.rmg['database']['kinetics_libraries'] = self.t3['options']['library_name'] + \
+        #                                                  self.rmg['database']['kinetics_libraries']
+        # elif self.t3['options']['library_name'] in self.rmg['database']['kinetics_libraries'] \
+        #         and not os.path.isdir(self.paths['RMG T3 kinetics lib']):
+        #     self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(
+        #         self.t3['options']['library_name']))
 
         write_rmg_input_file(
             rmg=self.rmg,
