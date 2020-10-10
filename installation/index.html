@@ -15,7 +15,7 @@
         <meta name="author" content="Alon Grinberg Dana">
       
       <link rel="shortcut icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-6.0.1">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-6.0.2">
     
     
       
@@ -200,7 +200,7 @@
 
 
   <li class="md-nav__item">
-    <a href=".." title="Home" class="md-nav__link">
+    <a href=".." class="md-nav__link">
       Home
     </a>
   </li>
@@ -225,7 +225,7 @@
         <span class="md-nav__icon md-icon"></span>
       </label>
     
-    <a href="./" title="Installation" class="md-nav__link md-nav__link--active">
+    <a href="./" class="md-nav__link md-nav__link--active">
       Installation
     </a>
     
@@ -283,7 +283,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../running/" title="Running T3" class="md-nav__link">
+    <a href="../running/" class="md-nav__link">
       Running T3
     </a>
   </li>
@@ -316,7 +316,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../tutorials/1_no_qm/" title="1. Simple system, no QM" class="md-nav__link">
+    <a href="../tutorials/1_no_qm/" class="md-nav__link">
       1. Simple system, no QM
     </a>
   </li>
@@ -333,7 +333,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../how_to/" title="How to guides" class="md-nav__link">
+    <a href="../how_to/" class="md-nav__link">
       How to guides
     </a>
   </li>
@@ -345,7 +345,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../output/" title="Output" class="md-nav__link">
+    <a href="../output/" class="md-nav__link">
       Output
     </a>
   </li>
@@ -357,7 +357,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../release/" title="Release notes" class="md-nav__link">
+    <a href="../release/" class="md-nav__link">
       Release notes
     </a>
   </li>
@@ -369,7 +369,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../credits/" title="Credits" class="md-nav__link">
+    <a href="../credits/" class="md-nav__link">
       Credits
     </a>
   </li>
@@ -381,7 +381,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../contribute/" title="Contribute" class="md-nav__link">
+    <a href="../contribute/" class="md-nav__link">
       Contribute
     </a>
   </li>
@@ -393,7 +393,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../cite/" title="How to cite" class="md-nav__link">
+    <a href="../cite/" class="md-nav__link">
       How to cite
     </a>
   </li>
@@ -405,7 +405,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../licence/" title="Licence" class="md-nav__link">
+    <a href="../licence/" class="md-nav__link">
       Licence
     </a>
   </li>
@@ -498,11 +498,10 @@ as well as on your local desktop / laptop, submitting jobs to the server/s.</p>
 <li>Clone T3's repository by typing the following command in the
   desired folder (e.g., under ~/Code/):</li>
 </ul>
-<div class="codehilite"><pre><span></span><code><span class="gp">$</span> git clone https://github.com/ReactionMechanismGenerator/T3.git
+<div class="console codehilite"><pre><span></span><code><span class="gp">$</span> git clone https://github.com/ReactionMechanismGenerator/T3.git
 
 <span class="go">---&gt; 100%</span>
 </code></pre></div>
-
 
 <ul>
 <li>
@@ -528,7 +527,8 @@ as well as on your local desktop / laptop, submitting jobs to the server/s.</p>
 </ul>
 <div class="termy">
 
-<div class="codehilite"><pre><span></span><code><span class="gp">$</span> conda env create -f environment.yml
+
+<div class="console codehilite"><pre><span></span><code><span class="gp">$</span> conda env create -f environment.yml
 
 <span class="go">INFO:     Collecting package metadata (repodata.json): done</span>
 <span class="go">INFO:     Solving environment: done</span>
@@ -568,7 +568,6 @@ alias t3=&#39;python $t3_path/T3.py input.yml&#39;
 alias t3code=&#39;cd $t3_path&#39;
 </code></pre></div>
 
-
 <p>Then, after sourcing <code>.bashrc</code> or restarting the terminal,
 simply typing <code>t3e</code> will activate the environment,
 typing <code>t3code</code> will change the directory into the T3 repository,
@@ -583,7 +582,6 @@ execute the following commands (make sure to change <code>~/Path/to/T3/</code> a
 git fetch origin
 git pull origin master
 </code></pre></div>
-
 
 <p>The above will update your <strong>master</strong> branch of T3.</p>
                 
@@ -604,7 +602,7 @@ git pull origin master
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid" aria-label="Footer">
         
-          <a href=".." title="Home" class="md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href=".." class="md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-footer-nav__button md-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
             </div>
@@ -619,7 +617,7 @@ git pull origin master
           </a>
         
         
-          <a href="../running/" title="Running T3" class="md-footer-nav__link md-footer-nav__link--next" rel="next">
+          <a href="../running/" class="md-footer-nav__link md-footer-nav__link--next" rel="next">
             <div class="md-footer-nav__title">
               <div class="md-ellipsis">
                 <span class="md-footer-nav__direction">
@@ -675,7 +673,7 @@ git pull origin master
     </div>
     
       <script src="../assets/javascripts/vendor.77e55a48.min.js"></script>
-      <script src="../assets/javascripts/bundle.aa3f9871.min.js"></script><script id="__lang" type="application/json">{"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing"}</script>
+      <script src="../assets/javascripts/bundle.9554a270.min.js"></script><script id="__lang" type="application/json">{"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing"}</script>
       
       <script>
         app = initialize({

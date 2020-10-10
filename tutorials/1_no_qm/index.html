@@ -15,7 +15,7 @@
         <meta name="author" content="Alon Grinberg Dana">
       
       <link rel="shortcut icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-6.0.1">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-6.0.2">
     
     
       
@@ -200,7 +200,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../.." title="Home" class="md-nav__link">
+    <a href="../.." class="md-nav__link">
       Home
     </a>
   </li>
@@ -212,7 +212,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../installation/" title="Installation" class="md-nav__link">
+    <a href="../../installation/" class="md-nav__link">
       Installation
     </a>
   </li>
@@ -224,7 +224,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../running/" title="Running T3" class="md-nav__link">
+    <a href="../../running/" class="md-nav__link">
       Running T3
     </a>
   </li>
@@ -267,7 +267,7 @@
       
     
     
-    <a href="./" title="1. Simple system, no QM" class="md-nav__link md-nav__link--active">
+    <a href="./" class="md-nav__link md-nav__link--active">
       1. Simple system, no QM
     </a>
     
@@ -285,7 +285,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../how_to/" title="How to guides" class="md-nav__link">
+    <a href="../../how_to/" class="md-nav__link">
       How to guides
     </a>
   </li>
@@ -297,7 +297,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../output/" title="Output" class="md-nav__link">
+    <a href="../../output/" class="md-nav__link">
       Output
     </a>
   </li>
@@ -309,7 +309,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../release/" title="Release notes" class="md-nav__link">
+    <a href="../../release/" class="md-nav__link">
       Release notes
     </a>
   </li>
@@ -321,7 +321,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../credits/" title="Credits" class="md-nav__link">
+    <a href="../../credits/" class="md-nav__link">
       Credits
     </a>
   </li>
@@ -333,7 +333,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../contribute/" title="Contribute" class="md-nav__link">
+    <a href="../../contribute/" class="md-nav__link">
       Contribute
     </a>
   </li>
@@ -345,7 +345,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../cite/" title="How to cite" class="md-nav__link">
+    <a href="../../cite/" class="md-nav__link">
       How to cite
     </a>
   </li>
@@ -357,7 +357,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../../licence/" title="Licence" class="md-nav__link">
+    <a href="../../licence/" class="md-nav__link">
       Licence
     </a>
   </li>
@@ -406,7 +406,7 @@ It is an exercise in setting up T3 for a system for which
 <strong>no</strong> quantum mechanical (QM) calculations are executed.</p>
 <p>When using the API, the first directive is to import the main T3 object
 (this is not needed when using an input file):</p>
-<div class="codehilite"><pre><span></span><code><span class="hll"><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="Python codehilite"><pre><span></span><code><span class="hll"><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 </span>
 <span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
                                               <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -430,14 +430,13 @@ It is an exercise in setting up T3 for a system for which
 <span class="n">t3_object</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </code></pre></div>
 
-
 <p><em>(This script is complete, it should run "as is")</em></p>
 <p>Next we'll define arguments related to RMG. This argument is a Python dictionary which
 will be passed to the <code>rmg</code> argument of the <code>T3</code> object imported above.
 You can name this argument with any legal Python name, here we use <code>rmg_args</code>.
 This is the only required primary argument -- this simple example does not
 make use of the additional primary arguments, <code>t3</code> and <code>qm</code>.</p>
-<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="Python codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 
 <span class="hll"><span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
 </span><span class="hll">                                              <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -460,7 +459,6 @@ make use of the additional primary arguments, <code>t3</code> and <code>qm</code
 
 <span class="n">t3_object</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </code></pre></div>
-
 
 <p>Here, the <code>rmg_args</code> argument defines the database libraries to be used by RMG,
 the chemical species with respective structure and concentration, the reactor
@@ -489,7 +487,7 @@ when defining the RMG arguments in T3:</p>
 </div>
 <p>Next, we create the <code>T3</code> object with all desired arguments.
 Here, only the two required arguments, <code>project</code> and <code>rmg</code> are given.</p>
-<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="Python codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 
 <span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
                                               <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -513,9 +511,8 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
 <span class="n">t3_object</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </code></pre></div>
 
-
 <p>Finally, we call the <code>execute()</code> method of <code>T3</code>.</p>
-<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="Python codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 
 <span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
                                               <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -539,9 +536,8 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
 <span class="hll"><span class="n">t3_object</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </span></code></pre></div>
 
-
 <p>Note that the corresponding YAML input file for this tutorial would be:</p>
-<div class="codehilite"><pre><span></span><code><span class="nt">project</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">T3_tutorial_1</span>
+<div class="YAML codehilite"><pre><span></span><code><span class="nt">project</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">T3_tutorial_1</span>
 <span class="nt">rmg</span><span class="p">:</span>
   <span class="nt">database</span><span class="p">:</span>
     <span class="nt">kinetics_libraries</span><span class="p">:</span>
@@ -588,7 +584,7 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid" aria-label="Footer">
         
-          <a href="../../running/" title="Running T3" class="md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../../running/" class="md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-footer-nav__button md-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
             </div>
@@ -603,7 +599,7 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
           </a>
         
         
-          <a href="../../how_to/" title="How to guides" class="md-footer-nav__link md-footer-nav__link--next" rel="next">
+          <a href="../../how_to/" class="md-footer-nav__link md-footer-nav__link--next" rel="next">
             <div class="md-footer-nav__title">
               <div class="md-ellipsis">
                 <span class="md-footer-nav__direction">
@@ -659,7 +655,7 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
     </div>
     
       <script src="../../assets/javascripts/vendor.77e55a48.min.js"></script>
-      <script src="../../assets/javascripts/bundle.aa3f9871.min.js"></script><script id="__lang" type="application/json">{"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing"}</script>
+      <script src="../../assets/javascripts/bundle.9554a270.min.js"></script><script id="__lang" type="application/json">{"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing"}</script>
       
       <script>
         app = initialize({
