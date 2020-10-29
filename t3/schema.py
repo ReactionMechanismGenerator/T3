@@ -331,8 +331,8 @@ class RMGPDep(BaseModel):
     method: constr(min_length=2, max_length=3)
     max_grain_size: confloat(gt=0) = 2
     max_number_of_grains: conint(gt=0) = 250
-    T: List[confloat(gt=0)] = [300, 2500, 10]
-    P: List[confloat(gt=0)] = [0.01, 100, 10]
+    T: List[Union[conint(gt=0), confloat(gt=0)]] = [300, 2500, 10]
+    P: List[Union[conint(gt=0), confloat(gt=0)]] = [0.01, 100, 10]
     interpolation: str = 'Chebyshev'
     T_basis_set: conint(gt=0) = 6
     P_basis_set: conint(gt=0) = 4
@@ -356,6 +356,8 @@ class RMGPDep(BaseModel):
                              f'got a length {len(value)} list: {value}.')
         if value[1] <= value[0]:
             raise ValueError(f'The following T range (T min, T max, T count) does not make sense:\n{value}')
+        if not isinstance(value[2], int):
+            raise ValueError(f'T count {value[2]} must be an integer, got a {type(value[2])}')
         return value
 
     @validator('P')
@@ -366,6 +368,8 @@ class RMGPDep(BaseModel):
                              f'got a length {len(value)} list: {value}.')
         if value[1] <= value[0]:
             raise ValueError(f'The following P range (P min, P max, P count) does not make sense:\n{value}')
+        if not isinstance(value[2], int):
+            raise ValueError(f'P count {value[2]} must be an integer, got a {type(value[2])}')
         return value
 
     @validator('interpolation', always=True)
