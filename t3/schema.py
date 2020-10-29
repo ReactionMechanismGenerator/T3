@@ -493,7 +493,7 @@ class RMG(BaseModel):
     def check_pdep_only_if_gas_phase(cls, value, values):
         """RMG.pdep validator"""
         if value is not None and values['reactors'] is not None:
-            reactor_types = set([reactor['type'] for reactor in values['reactors']])
+            reactor_types = set([reactor.type for reactor in values['reactors']])
             if value is not None and not any(['gas' in reactor for reactor in reactor_types]):
                 raise ValueError(f'A pdep section can only be specified for gas phase reactors, got: {reactor_types}')
         return value
