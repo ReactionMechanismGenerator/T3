@@ -15,7 +15,7 @@
         <meta name="author" content="Alon Grinberg Dana">
       
       <link rel="shortcut icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-6.0.2">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-6.1.0">
     
     
       
@@ -23,10 +23,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.38780c08.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bc7e593a.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.3f72e892.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab28b872.min.css">
         
           
           
@@ -83,7 +83,9 @@
       
     </div>
     
-      <header class="md-header" data-md-component="header">
+      
+
+<header class="md-header" data-md-component="header">
   <nav class="md-header-nav md-grid" aria-label="Header">
     <a href="https://reactionmechanismgenerator.github.io/T3/" title="T3" class="md-header-nav__button md-logo" aria-label="T3">
       
@@ -168,7 +170,9 @@
               <div class="md-sidebar md-sidebar--primary" data-md-component="navigation">
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
-                    <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+                    
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="https://reactionmechanismgenerator.github.io/T3/" title="T3" class="md-nav__button md-logo" aria-label="T3">
       
@@ -406,7 +410,7 @@ It is an exercise in setting up T3 for a system for which
 <strong>no</strong> quantum mechanical (QM) calculations are executed.</p>
 <p>When using the API, the first directive is to import the main T3 object
 (this is not needed when using an input file):</p>
-<div class="Python codehilite"><pre><span></span><code><span class="hll"><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="codehilite"><pre><span></span><code><span class="hll"><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 </span>
 <span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
                                               <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -436,7 +440,7 @@ will be passed to the <code>rmg</code> argument of the <code>T3</code> object im
 You can name this argument with any legal Python name, here we use <code>rmg_args</code>.
 This is the only required primary argument -- this simple example does not
 make use of the additional primary arguments, <code>t3</code> and <code>qm</code>.</p>
-<div class="Python codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 
 <span class="hll"><span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
 </span><span class="hll">                                              <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -487,7 +491,7 @@ when defining the RMG arguments in T3:</p>
 </div>
 <p>Next, we create the <code>T3</code> object with all desired arguments.
 Here, only the two required arguments, <code>project</code> and <code>rmg</code> are given.</p>
-<div class="Python codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 
 <span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
                                               <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -512,7 +516,7 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
 </code></pre></div>
 
 <p>Finally, we call the <code>execute()</code> method of <code>T3</code>.</p>
-<div class="Python codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3</span> <span class="kn">import</span> <span class="n">T3</span>
 
 <span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
                                               <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
@@ -537,7 +541,7 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
 </span></code></pre></div>
 
 <p>Note that the corresponding YAML input file for this tutorial would be:</p>
-<div class="YAML codehilite"><pre><span></span><code><span class="nt">project</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">T3_tutorial_1</span>
+<div class="codehilite"><pre><span></span><code><span class="nt">project</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">T3_tutorial_1</span>
 <span class="nt">rmg</span><span class="p">:</span>
   <span class="nt">database</span><span class="p">:</span>
     <span class="nt">kinetics_libraries</span><span class="p">:</span>
@@ -654,8 +658,8 @@ Here, only the two required arguments, <code>project</code> and <code>rmg</code>
       
     </div>
     
-      <script src="../../assets/javascripts/vendor.77e55a48.min.js"></script>
-      <script src="../../assets/javascripts/bundle.9554a270.min.js"></script><script id="__lang" type="application/json">{"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing"}</script>
+      <script src="../../assets/javascripts/vendor.6a3d08fc.min.js"></script>
+      <script src="../../assets/javascripts/bundle.71201edf.min.js"></script><script id="__lang" type="application/json">{"clipboard.copy": "Copy to clipboard", "clipboard.copied": "Copied to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.placeholder": "Type to start searching", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.term.missing": "Missing"}</script>
       
       <script>
         app = initialize({
