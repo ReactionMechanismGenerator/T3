@@ -30,7 +30,7 @@ t3:
     rtol: 1e-4  # optional, default: 1e-4
     global_observables: ['IgD', 'ESR', 'SL']  # optional, only implemented in the Cantera adapter, default: ``None``
     SA_threshold: 0.01  # optional, default: 0.01
-    pdep_SA_thershold: 0.001  # optional, used to determine wells and reactions (to be implemented) to calculate
+    pdep_SA_threshold: 0.001  # optional, used to determine wells and reactions (to be implemented) to calculate
                               # thermo and rates for from a PES of a sensitive reaction, default: 0.001
                               # Pass ``None`` to skip PES SA.
     ME_methods: ['CSE', 'MSC']  # master equation methods, used to conduct a PES SA,
@@ -122,7 +122,7 @@ rmg:
     rtol: 1e-8  # optional, default: 1e-8
     # filtering:
     filter_reactions: false  # optional, filtering reactions
-    filter_threshold: 1e8  # optional, filtering reactions
+    filter_threshold: 1e+8  # optional, filtering reactions
     # pruning:
     tolerance_interrupt_simulation: [0.05, 0.01]  # optional, float or list, pruning, will be set equal to core_tolerance if not specified
     min_core_size_for_prune: 50  # optional, pruning
@@ -150,18 +150,18 @@ rmg:
     tolerance_move_surface_reaction_to_core: None
     tolerance_move_edge_reaction_to_surface_interrupt: None
 
-    # pressure dependence (optional block)
-    # only allowed for gas phase simulations
-    pdep:
-      method: MSC  # *required*, this is how PDep is requested
-      max_grain_size: 2  # optional, units: kJ/mol, default: 2
-      max_number_of_grains: 250  # optional, default: 250
-      T: [300, 2500, 10]  # optional, [T min, T max, number of points], default: [300, 2500, 10], Units: K
-      P: [0.01, 100, 10]  # optional, [P min, P max, number of points], default: [0.01, 100, 10], Units: bar
-      interpolation: Chebyshev  # optional, either 'PDepArrhenius' or 'Chebyshev', default: 'Chebyshev'
-      T_basis_set: 6  # optional, only used for a Chebyshev interpolation, default: 6
-      P_basis_set: 4  # optional, only used for a Chebyshev interpolation, default: 4
-      max_atoms: 16  # optional, default: 16
+  # pressure dependence (optional block)
+  # only allowed for gas phase simulations
+  pdep:
+    method: MSC  # *required*, this is how PDep is requested
+    max_grain_size: 2  # optional, units: kJ/mol, default: 2
+    max_number_of_grains: 250  # optional, default: 250
+    T: [300, 2500, 10]  # optional, [T min, T max, number of points], default: [300, 2500, 10], Units: K
+    P: [0.01, 100, 10]  # optional, [P min, P max, number of points], default: [0.01, 100, 10], Units: bar
+    interpolation: Chebyshev  # optional, either 'PDepArrhenius' or 'Chebyshev', default: 'Chebyshev'
+    T_basis_set: 6  # optional, only used for a Chebyshev interpolation, default: 6
+    P_basis_set: 4  # optional, only used for a Chebyshev interpolation, default: 4
+    max_atoms: 16  # optional, default: 16
 
   # options (optional block)
   options:
