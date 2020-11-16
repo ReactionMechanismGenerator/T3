@@ -246,7 +246,7 @@ pressureDependence(
     maximumAtoms=${max_atoms},
 )
 """
-        pdep['method'] = METHOD_MAP[pdep['method']]
+        pdep['method'] = METHOD_MAP[pdep['method']] if pdep['method'] not in METHOD_MAP.values() else pdep['method']
         pdep['T_min'], pdep['T_max'], pdep['T_count'] = pdep['T']
         pdep['P_min'], pdep['P_max'], pdep['P_count'] = pdep['P']
         del pdep['T']
