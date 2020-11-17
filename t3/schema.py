@@ -172,7 +172,7 @@ class RMGReactor(BaseModel):
     """
     type: str
     T: Union[confloat(gt=0), List[confloat(gt=0)]]
-    P: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]]
+    P: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
     termination_conversion: Optional[Dict[str, confloat(gt=0, lt=1)]] = None
     termination_time: Optional[List[Union[confloat(gt=0), TerminationTimeEnum]]] = None
     termination_rate_ratio: Optional[confloat(gt=0, lt=1)] = None
@@ -618,6 +618,7 @@ class InputBase(BaseModel):
             # check core_tolerance and max_T3_iterations
             if 'model' in values['rmg'] and 'core_tolerance' in values['rmg']['model'] \
                     and 'options' in values['t3'] and 'max_T3_iterations' in values['t3']['options'] \
+                    and not isinstance(values['rmg']['model']['core_tolerance'], float) \
                     and len(values['rmg']['model']['core_tolerance']) > values['t3']['options']['max_T3_iterations']:
                 raise ValueError(f'The number of RMG core tolerances ({len(values["rmg"]["model"]["core_tolerance"])}) '
                                  f'cannot be greater than the max number of T3 iterations '
