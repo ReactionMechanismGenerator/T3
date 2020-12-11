@@ -939,12 +939,32 @@ def test_get_species_label_by_structure():
                      iteration=1,
                      set_paths=True,
                      )
-    rmg_species, rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    rmg_species = t3.load_species_and_reactions_from_chemkin_file()[0]
     adj = """1 O u0 p2 c0 {2,S} {3,S}
 2 H u0 p0 c0 {1,S}
 3 H u0 p0 c0 {1,S}"""
     label = get_species_label_by_structure(adj, rmg_species)
     assert label == 'H2O'
+
+    spc_1 = Species(label='CH2')
+    adj_1 = """CH2
+multiplicity 3
+1 C u2 p0 c0 {2,S} {3,S}
+2 H u0 p0 c0 {1,S}
+3 H u0 p0 c0 {1,S}"""
+    spc_1.from_adjacency_list(adj_1)
+    spc_2 = Species(label='CH2(S)')
+    adj_2 = """CH2(S)
+multiplicity 1
+1 C u0 p1 c0 {2,S} {3,S}
+2 H u0 p0 c0 {1,S}
+3 H u0 p0 c0 {1,S}"""
+    spc_2.from_adjacency_list(adj_2)
+    species_list = [spc_1, spc_2]
+    label_1 = get_species_label_by_structure(adj_1, species_list)
+    assert label_1 == 'CH2'
+    label_2 = get_species_label_by_structure(adj_2, species_list)
+    assert label_2 == 'CH2(S)'
 
 
 def test_check_overtime():
