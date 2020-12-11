@@ -233,8 +233,8 @@ liquidReactor(
                                                          )
 
     # pressureDependence
-    pdep = rmg['pdep']
-    if pdep is not None:
+    if rmg['pdep'] is not None:
+        pdep = rmg['pdep'].copy()
         pdep_template = """
 pressureDependence(
     method='${method}',
