@@ -832,7 +832,6 @@ class T3(object):
         """
         Determine species to calculate based on a pressure dependent network
         by spawning network sensitivity analyses.
-        First tries the CSE method, if unsuccessful tries the MSC method.
 
         Args:
             pdep_rxns_to_explore (List[Tuple[Reaction, int, str]]):
