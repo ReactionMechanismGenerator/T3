@@ -529,15 +529,36 @@ def test_determine_species_to_calculate():
     t3.t3['options']['collision_violators_thermo'] = True
     additional_calcs_required = t3.determine_species_to_calculate()
     assert additional_calcs_required
-    assert len(list(t3.species.keys())) == 20
+    assert len(list(t3.species.keys())) == 18
     assert all(['Species participates in collision rate violating reaction:' in species_dict['reasons'][0]
                 for species_dict in t3.species.values() if species_dict['RMG label'] not in ['H', 'OH']])
 
     # 4. SA observables
-    assert t3.species[0]['RMG label'] == 'H'
-    assert t3.species[0]['reasons'] == ['SA observable']
-    assert t3.species[1]['RMG label'] == 'OH'
-    assert t3.species[1]['reasons'] == ['SA observable']
+    assert t3.species[0]['RMG label'] == 'CC=[C]CCCC'
+    assert t3.species[0]['reasons'] == \
+           ['Species participates in collision rate violating reaction: H(3)+C7H13(920)=C7H14(323)']
+    assert t3.species[1]['RMG label'] == '[CH2]CC(=C)C=C'
+    assert t3.species[1]['reasons'] == \
+           ['Species participates in collision rate violating reaction: HO2(10)+C6H9(1933)=H2O2(11)+C6H8(2025)']
+
+
+def test_species_requires_refinement():
+    """Test properly identifying the thermo comment of a species to determine whether it requires refinement"""
+
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'))
+    spc = Species(label='CH4', smiles='C')
+    spc.thermo = ThermoData()
+
+    spc.thermo.comment = "Thermo library: JetSurF2.0"
+    assert t3.species_requires_refinement(spc) is False
+
+    spc.thermo.comment = "Thermo group additivity estimation: group(Cds-Cds(Cds-Cds)(Cds-Cds)) + " \
+                         "group(Cds-Cds(Cds-Cds)H) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + " \
+                         "group(Cds-CdsHH) + group(Cds-CdsHH)"
+    assert t3.species_requires_refinement(spc) is True
+
+    spc.thermo.comment = "Thermo library: JetSurF2.0 + radical(RCCJ)"
+    assert t3.species_requires_refinement(spc) is True
 
 
 def test_determine_species_based_on_sa():
