@@ -1100,7 +1100,7 @@ class T3(object):
                     check_duplicates=False,
                 )
             except ChemkinError:
-                self.logger.error(f"Could still not read the Chemkin file {self.paths['chem annotated']}!")
+                self.logger.error(f"Still could not read the Chemkin file {self.paths['chem annotated']}!")
                 raise
             else:
                 self.logger.warning(f"Read the Chemkin file\n{self.paths['chem annotated']}\n"
