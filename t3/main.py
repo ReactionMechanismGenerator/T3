@@ -710,10 +710,10 @@ class T3(object):
                     species_keys.append(self.add_species(species=species, reasons=['All core species']))
         else:
             # 1. SA observables
-            sa_obserables_exist = False
+            sa_observables_exist = False
             for input_species in self.rmg['species']:
                 if input_species['observable'] or input_species['SA_observable']:
-                    sa_obserables_exist = True
+                    sa_observables_exist = True
                     if self.species_requires_refinement(species=get_species_by_label(input_species['label'],
                                                                                      self.rmg_species)):
                         species_keys.append(self.add_species(
@@ -721,7 +721,7 @@ class T3(object):
                             reasons=['SA observable'],
                         ))
             # 2. SA
-            if sa_obserables_exist:
+            if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
             # 3. collision violators
             if self.t3['options']['collision_violators_thermo']:
