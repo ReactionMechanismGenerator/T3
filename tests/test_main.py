@@ -536,10 +536,10 @@ def test_determine_species_to_calculate():
     # 4. SA observables
     assert t3.species[0]['RMG label'] == 'CC=[C]CCCC'
     assert t3.species[0]['reasons'] == \
-           ['Species participates in collision rate violating reaction: H(3)+C7H13(920)=C7H14(323)']
+           ['(i 3) Species participates in collision rate violating reaction: H(3)+C7H13(920)=C7H14(323)']
     assert t3.species[1]['RMG label'] == '[CH2]CC(=C)C=C'
     assert t3.species[1]['reasons'] == \
-           ['Species participates in collision rate violating reaction: HO2(10)+C6H9(1933)=H2O2(11)+C6H8(2025)']
+           ['(i 3) Species participates in collision rate violating reaction: HO2(10)+C6H9(1933)=H2O2(11)+C6H8(2025)']
 
 
 def test_species_requires_refinement():
