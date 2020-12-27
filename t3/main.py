@@ -1002,7 +1002,8 @@ class T3(object):
                     if species is None:
                         self.logger.error(f'Could not identify species {label}!')
                     if self.species_requires_refinement(species=species):
-                        reason = f'Species participates in collision rate violating reaction: {rxn_to_log}'
+                        reason = f'(i {self.iteration}) Species participates in collision rate violating ' \
+                                 f'reaction: {rxn_to_log}'
                         species_keys.append(self.add_species(species=species, reasons=reason))
         return species_keys
 
