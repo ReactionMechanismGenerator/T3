@@ -710,16 +710,18 @@ class T3(object):
                     species_keys.append(self.add_species(species=species, reasons=['All core species']))
         else:
             # 1. SA observables
-            sa_obserables_exist = False
+            sa_observables_exist = False
             for input_species in self.rmg['species']:
                 if input_species['observable'] or input_species['SA_observable']:
-                    sa_obserables_exist = True
-                    species_keys.append(self.add_species(
-                        species=get_species_by_label(input_species['label'], self.rmg_species),
-                        reasons=['SA observable'],
-                    ))
+                    sa_observables_exist = True
+                    if self.species_requires_refinement(species=get_species_by_label(input_species['label'],
+                                                                                     self.rmg_species)):
+                        species_keys.append(self.add_species(
+                            species=get_species_by_label(input_species['label'], self.rmg_species),
+                            reasons=['SA observable'],
+                        ))
             # 2. SA
-            if sa_obserables_exist:
+            if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
             # 3. collision violators
             if self.t3['options']['collision_violators_thermo']:
@@ -830,7 +832,6 @@ class T3(object):
         """
         Determine species to calculate based on a pressure dependent network
         by spawning network sensitivity analyses.
-        First tries the CSE method, if unsuccessful tries the MSC method.
 
         Args:
             pdep_rxns_to_explore (List[Tuple[Reaction, int, str]]):
@@ -870,7 +871,7 @@ class T3(object):
                                    for network_file_name in network_file_names])
             network_name = f'network{reaction.network.index}_{network_version}'  # w/o the '.py' extension
 
-            # try running this network using either the CSE or the MSC method
+            # Try running this network using user-specified methods by order.
             sa_coefficients_path, arkane = None, None
             errors = list()
             for method in PDEP_SA_ME_METHODS:
@@ -883,7 +884,7 @@ class T3(object):
                 arkane = Arkane(input_file=os.path.join(self.paths['PDep SA'], network_name, method, 'input.py'),
                                 output_directory=os.path.join(self.paths['PDep SA'], network_name, method))
                 arkane.plot = True
-                self.logger.info(f'\nRuning Pdep SA for network {network_name} using the {method} method...')
+                self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method...')
                 try:
                     arkane.execute()
                 except (ChemicallySignificantEigenvaluesError,
@@ -893,15 +894,15 @@ class T3(object):
                         TypeError) as e:
                     errors.append(e)
                 else:
-                    # network execution was successful, mark network as executed and don't run the next method
-                    self.logger.info(f'Successfully executed a Pdep SA for network {network_name} '
+                    # Network execution was successful, mark network as executed and don't run the next method.
+                    self.logger.info(f'Successfully executed a PDep SA for network {network_name} '
                                      f'using the {method} method.\n')
                     self.executed_networks.append(isomer_labels)
                     sa_coefficients_path = os.path.join(self.paths['PDep SA'], network_name, method,
                                                         'sensitivity', 'sa_coefficients.yml')
                     break
             else:
-                self.logger.error(f'Could not execute a Pdep SA for network {network_name} using '
+                self.logger.error(f'Could not execute a PDep SA for network {network_name} using '
                                   f'{PDEP_SA_ME_METHODS}.\nGot the following errors:')
                 for method, e in zip(PDEP_SA_ME_METHODS, errors):
                     self.logger.info(f'{e.__class__} for method {method}:\n{e}\n')
@@ -911,7 +912,7 @@ class T3(object):
                 reactants_label = ' + '.join([reactant.to_chemkin() for reactant in reaction.reactants])
                 products_label = ' + '.join([product.to_chemkin() for product in reaction.products])
                 chemkin_reaction_str = f'{reactants_label} <=> {products_label}'
-                labels_map = dict()  # keys are network species labels, values are Chemkin labels of the RMG species
+                labels_map = dict()  # Keys are network species labels, values are Chemkin labels of the RMG species.
                 for network_label, adj in sa_dict['structures'].items():
                     labels_map[network_label] = get_species_label_by_structure(adj=adj, species_list=self.rmg_species)
 
@@ -1001,7 +1002,8 @@ class T3(object):
                     if species is None:
                         self.logger.error(f'Could not identify species {label}!')
                     if self.species_requires_refinement(species=species):
-                        reason = f'Species participates in collision rate violating reaction: {rxn_to_log}'
+                        reason = f'(i {self.iteration}) Species participates in collision rate violating ' \
+                                 f'reaction: {rxn_to_log}'
                         species_keys.append(self.add_species(species=species, reasons=reason))
         return species_keys
 
@@ -1099,7 +1101,7 @@ class T3(object):
                     check_duplicates=False,
                 )
             except ChemkinError:
-                self.logger.error(f"Could still not read the Chemkin file {self.paths['chem annotated']}!")
+                self.logger.error(f"Still could not read the Chemkin file {self.paths['chem annotated']}!")
                 raise
             else:
                 self.logger.warning(f"Read the Chemkin file\n{self.paths['chem annotated']}\n"

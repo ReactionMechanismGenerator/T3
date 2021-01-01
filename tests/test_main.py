@@ -529,15 +529,36 @@ def test_determine_species_to_calculate():
     t3.t3['options']['collision_violators_thermo'] = True
     additional_calcs_required = t3.determine_species_to_calculate()
     assert additional_calcs_required
-    assert len(list(t3.species.keys())) == 20
+    assert len(list(t3.species.keys())) == 18
     assert all(['Species participates in collision rate violating reaction:' in species_dict['reasons'][0]
                 for species_dict in t3.species.values() if species_dict['RMG label'] not in ['H', 'OH']])
 
     # 4. SA observables
-    assert t3.species[0]['RMG label'] == 'H'
-    assert t3.species[0]['reasons'] == ['SA observable']
-    assert t3.species[1]['RMG label'] == 'OH'
-    assert t3.species[1]['reasons'] == ['SA observable']
+    assert t3.species[0]['RMG label'] == 'CC=[C]CCCC'
+    assert t3.species[0]['reasons'] == \
+           ['(i 3) Species participates in collision rate violating reaction: H(3)+C7H13(920)=C7H14(323)']
+    assert t3.species[1]['RMG label'] == '[CH2]CC(=C)C=C'
+    assert t3.species[1]['reasons'] == \
+           ['(i 3) Species participates in collision rate violating reaction: HO2(10)+C6H9(1933)=H2O2(11)+C6H8(2025)']
+
+
+def test_species_requires_refinement():
+    """Test properly identifying the thermo comment of a species to determine whether it requires refinement"""
+
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'))
+    spc = Species(label='CH4', smiles='C')
+    spc.thermo = ThermoData()
+
+    spc.thermo.comment = "Thermo library: JetSurF2.0"
+    assert t3.species_requires_refinement(spc) is False
+
+    spc.thermo.comment = "Thermo group additivity estimation: group(Cds-Cds(Cds-Cds)(Cds-Cds)) + " \
+                         "group(Cds-Cds(Cds-Cds)H) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + " \
+                         "group(Cds-CdsHH) + group(Cds-CdsHH)"
+    assert t3.species_requires_refinement(spc) is True
+
+    spc.thermo.comment = "Thermo library: JetSurF2.0 + radical(RCCJ)"
+    assert t3.species_requires_refinement(spc) is True
 
 
 def test_determine_species_based_on_sa():
@@ -939,12 +960,32 @@ def test_get_species_label_by_structure():
                      iteration=1,
                      set_paths=True,
                      )
-    rmg_species, rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    rmg_species = t3.load_species_and_reactions_from_chemkin_file()[0]
     adj = """1 O u0 p2 c0 {2,S} {3,S}
 2 H u0 p0 c0 {1,S}
 3 H u0 p0 c0 {1,S}"""
     label = get_species_label_by_structure(adj, rmg_species)
     assert label == 'H2O'
+
+    spc_1 = Species(label='CH2')
+    adj_1 = """CH2
+multiplicity 3
+1 C u2 p0 c0 {2,S} {3,S}
+2 H u0 p0 c0 {1,S}
+3 H u0 p0 c0 {1,S}"""
+    spc_1.from_adjacency_list(adj_1)
+    spc_2 = Species(label='CH2(S)')
+    adj_2 = """CH2(S)
+multiplicity 1
+1 C u0 p1 c0 {2,S} {3,S}
+2 H u0 p0 c0 {1,S}
+3 H u0 p0 c0 {1,S}"""
+    spc_2.from_adjacency_list(adj_2)
+    species_list = [spc_1, spc_2]
+    label_1 = get_species_label_by_structure(adj_1, species_list)
+    assert label_1 == 'CH2'
+    label_2 = get_species_label_by_structure(adj_2, species_list)
+    assert label_2 == 'CH2(S)'
 
 
 def test_check_overtime():
