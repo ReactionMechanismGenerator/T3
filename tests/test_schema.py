@@ -245,7 +245,6 @@ def test_rmg_database_schema():
 def test_rmg_species_schema():
     """Test creating an instance of RMGSpecies"""
     rmg_species = RMGSpecies(label='N2',
-                             concentration=1,
                              smiles='N#N',
                              inchi='1S/N2/c1-2',
                              adjlist="""
@@ -262,7 +261,7 @@ def test_rmg_species_schema():
                              seed_all_rads=['radical', 'alkoxyl', 'peroxyl'],
                              )
     assert rmg_species.label == 'N2'
-    assert rmg_species.concentration == 1
+    assert rmg_species.concentration == 1  # automatically set if not specified
     assert rmg_species.smiles == 'N#N'
     assert rmg_species.inchi == '1S/N2/c1-2'
     # adjlist must be in the same column as adjlist above
@@ -278,6 +277,12 @@ def test_rmg_species_schema():
     assert rmg_species.balance is True
     assert rmg_species.solvent is False
     assert rmg_species.seed_all_rads == ['radical', 'alkoxyl', 'peroxyl']
+
+    rmg_species = RMGSpecies(label='H2O',
+                             concentration=[0.203, 0.502],
+                             smiles='O',
+                             )
+    assert rmg_species.concentration == (0.203, 0.502)
 
     with pytest.raises(ValidationError):
         # check that concentration is constrained to >= 0
@@ -301,6 +306,50 @@ def test_rmg_species_schema():
                    balance=True,
                    solvent=False,
                    seed_all_rads=['radical', 'non-supported'],
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that the concentration of a balance species is not a list
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.502],
+                   smiles='O',
+                   balance=True,
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that concentration cannot be a 3-length tuple
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.502, 0.809],
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that concentration cannot be negative
+        RMGSpecies(label='H2O',
+                   concentration=-0.203,
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that a concentration range cannot include a negative number
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, -0.502],
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that a concentration range does not contain two equal boundaries
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.203],
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that species defined with a concentration range cannot be constant
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.502],
+                   smiles='O',
+                   constant=True,
                    )
 
 
