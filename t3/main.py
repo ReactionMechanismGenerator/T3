@@ -698,7 +698,8 @@ class T3(object):
 
         species_keys = list(set([key for key in species_keys if key is not None]))
 
-        additional_calcs_required = bool(len(species_keys))
+        additional_calcs_required = bool(len(species_keys)) \
+            or any(spc['converged'] is None for spc in self.species.values())
         self.logger.info(f'Additional calculations required: {additional_calcs_required}\n')
         if additional_calcs_required:
             self.logger.log_species_to_calculate(species_keys, self.species)
@@ -979,7 +980,8 @@ class T3(object):
             bool: Whether the species thermochemical properties should be calculated. ``True`` if they should be.
         """
         thermo_comment = species.thermo.comment.split('Solvation')[0]
-        if self.get_species_key(species=species) is None \
+        if (self.get_species_key(species=species) is None
+            or self.species[self.get_species_key(species=species)]['converged'] is None) \
                 and ('group additivity' in thermo_comment or '+ radical(' in thermo_comment):
             return True
         return False
