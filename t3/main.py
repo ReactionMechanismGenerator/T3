@@ -707,7 +707,8 @@ class T3(object):
         if self.t3['options']['all_core_species']:
             for species in self.rmg_species:
                 if self.species_requires_refinement(species=species):
-                    species_keys.append(self.add_species(species=species, reasons=['All core species']))
+                    species_keys.append(self.add_species(species=species,
+                                                         reasons=[f'(i {self.iteration}) All core species']))
         else:
             # 1. SA observables
             sa_observables_exist = False
