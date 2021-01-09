@@ -718,20 +718,20 @@ class T3(object):
             return species_keys
 
         # create new dictionary that stores the absolute maximum value from each SA
-        sa_dict_max = {'rxn': dict(), 'spc': dict()}
-        for key, max_key in [['kinetics', 'rxn'], ['thermo', 'spc']]:
+        sa_dict_max = {'kinetics': dict(), 'thermo': dict()}
+        for key in ['kinetics', 'thermo']:
             for observable_label in self.sa_dict[key].keys():
-                if observable_label not in sa_dict_max[max_key]:
-                    sa_dict_max[max_key][observable_label] = list()
+                if observable_label not in sa_dict_max[key]:
+                    sa_dict_max[key][observable_label] = list()
                 for parameter in self.sa_dict[key][observable_label].keys():
                     entry = dict()
                     entry['parameter'] = parameter  # rxn number as int or spc label as str
                     entry['max_sa'] = max(self.sa_dict[key][observable_label][parameter].max(), abs(
                         self.sa_dict[key][observable_label][parameter].min()))  # the coefficient could be negative
-                    sa_dict_max[max_key][observable_label].append(entry)
+                    sa_dict_max[key][observable_label].append(entry)
 
             # get the top X entries from the SA
-            for observable_label, sa_list in sa_dict_max['rxn'].items():
+            for observable_label, sa_list in sa_dict_max['kinetics'].items():
                 sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
                 for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
                     reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
@@ -745,7 +745,7 @@ class T3(object):
                             and reaction not in [rxn_tup[0] for rxn_tup in pdep_rxns_to_explore] \
                             and self.t3['sensitivity']['pdep_SA_threshold'] is not None:
                         pdep_rxns_to_explore.append((reaction, i, observable_label))
-            for observable_label, sa_list in sa_dict_max['spc'].items():
+            for observable_label, sa_list in sa_dict_max['thermo'].items():
                 sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
                 for i in range(min(self.t3['sensitivity']['top_SA_species'], len(sa_list_sorted))):
                     species = get_species_by_label(sa_list_sorted[i]['parameter'], self.rmg_species)
