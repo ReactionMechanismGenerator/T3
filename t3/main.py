@@ -1212,7 +1212,7 @@ class T3(object):
                     os.remove(os.path.join(root, file_))
             for folder in dirs:
                 if folder != 'log_archive':
-                    shutil.rmtree(os.path.join(root, folder))
+                    shutil.rmtree(os.path.join(root, folder), ignore_errors=True)
 
 
 def get_reaction_by_index(index: int,
