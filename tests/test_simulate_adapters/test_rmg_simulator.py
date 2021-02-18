@@ -108,7 +108,7 @@ def teardown_module():
     dirs = [solver_directory, species_directory, sa_directory, log_archive]
     for dir in dirs:
         if os.path.isdir(dir):
-            shutil.rmtree(dir)
+            shutil.rmtree(dir, ignore_errors=True)
     files = [os.path.join(TEST_DIR, 't3.log')]
     for file in files:
         if os.path.isfile(file):

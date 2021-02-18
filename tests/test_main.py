@@ -201,7 +201,7 @@ def setup_module():
     Useful for rerunning these tests after a failed test during development.
     """
     if os.path.isdir(test_minimal_project_directory):
-        shutil.rmtree(test_minimal_project_directory)
+        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
 
 
 def test_args_and_attributes():
@@ -226,7 +226,7 @@ def test_args_and_attributes():
     assert t3.t3 == t3_minimal
     assert t3.rmg == rmg_minimal_defaults
     assert t3.qm == qm_minimal
-    shutil.rmtree(test_minimal_project_directory)
+    shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
 
 
 def test_as_dict():
@@ -238,7 +238,7 @@ def test_as_dict():
                             'rmg': rmg_minimal_defaults,
                             't3': t3_minimal,
                             'verbose': 10}
-    shutil.rmtree(test_minimal_project_directory)
+    shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
 
 
 def test_write_t3_input_file():
@@ -248,7 +248,7 @@ def test_write_t3_input_file():
     assert os.path.isfile(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'))
     with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'), 'r') as f:
         assert f.readline() == 'project: T3_minimal_example\n'
-    shutil.rmtree(test_minimal_project_directory)
+    shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
 
 
 def test_set_paths():
@@ -424,7 +424,7 @@ def test_run_arc():
                  ]:
         assert line in lines
     assert os.path.isfile(t3.paths['ARC input'])
-    shutil.rmtree(test_minimal_project_directory)
+    shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
 
 
 def test_process_arc_run():
@@ -512,7 +512,7 @@ def test_run_rmg():
         assert line in lines
     assert os.path.isfile(t3.paths['chem annotated'])
     assert os.path.isfile(t3.paths['species dict'])
-    shutil.rmtree(test_minimal_project_directory)
+    shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
 
 
 def test_determine_species_to_calculate():
@@ -606,7 +606,7 @@ def test_determine_species_based_on_sa():
     dirs = [t3.paths['SA']] # [os.path.join(t3.paths['SA'], 'species'), t3.paths['SA solver']]
     for dir in dirs:
         if os.path.isdir(dir):
-            shutil.rmtree(dir)
+            shutil.rmtree(dir, ignore_errors=True)
     t3_log = os.path.join(DATA_BASE_PATH, 'minimal_data', 't3.log')
     if os.path.isfile(t3_log):
         os.remove(t3_log)
@@ -630,7 +630,7 @@ def test_determine_species_from_pdep_network():
     pdep_rxns_to_explore = [(pdep_rxn, 2, t3.rmg_species[6].label)]
     species_keys = t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
     assert len(species_keys) == 1
-    shutil.rmtree(t3.paths['PDep SA'])
+    shutil.rmtree(t3.paths['PDep SA'], ignore_errors=True)
 
 
 def test_determine_species_based_on_collision_violators():
@@ -1053,7 +1053,7 @@ def teardown_module():
                 os.remove(log_file)
             log_archive = os.path.join(directory, 'log_archive')
             if os.path.isdir(log_archive):
-                shutil.rmtree(log_archive)
+                shutil.rmtree(log_archive, ignore_errors=True)
 
     # other files to delete
     files = [os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'T3_ARC_restart_test.info'),
@@ -1077,4 +1077,4 @@ def teardown_module():
                       os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'log_and_restart_archive'),
                       ]:
         if os.path.isdir(directory):
-            shutil.rmtree(directory)
+            shutil.rmtree(directory, ignore_errors=True)

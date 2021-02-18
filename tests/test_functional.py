@@ -46,7 +46,7 @@ def test_no_t3_no_qm():
         assert line in lines
     assert not any('T3 iteration 0:\n' in line for line in lines)
     assert any('T3 execution terminated' in line for line in lines)
-    shutil.rmtree(t3_object.project_directory)
+    shutil.rmtree(t3_object.project_directory, ignore_errors=True)
 
 
 def test_minimal_example():
@@ -86,4 +86,4 @@ def delete_minimal_example_dirs():
     iteration_directories = [os.path.join(functional_minimal_directory, f'iteration_{i + 1}') for i in range(2)]
     for iteration_dir in iteration_directories:
         if os.path.isdir(iteration_dir):
-            shutil.rmtree(iteration_dir)
+            shutil.rmtree(iteration_dir, ignore_errors=True)
