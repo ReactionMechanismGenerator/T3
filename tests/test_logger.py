@@ -42,7 +42,7 @@ def test_initialize_logger():
     assert logger_object.project_directory == log_project_directory
     assert logger_object.verbose == 10
     assert isinstance(logger_object.t0, datetime.datetime)
-    shutil.rmtree(log_project_directory)
+    shutil.rmtree(log_project_directory, ignore_errors=True)
 
 
 def log_messages(logger_object):
@@ -73,7 +73,7 @@ def test_log():
     for line in ['not logging this line to file\n',
                  ]:
         assert line not in lines
-    shutil.rmtree(log_project_directory)
+    shutil.rmtree(log_project_directory, ignore_errors=True)
 
     logger_object = init_logger(verbose=20)  # info
     log_messages(logger_object)
@@ -91,7 +91,7 @@ def test_log():
                  'not logging this line to file\n',
                  ]:
         assert line not in lines
-    shutil.rmtree(log_project_directory)
+    shutil.rmtree(log_project_directory, ignore_errors=True)
 
     logger_object = init_logger(verbose=30)  # warning
     log_messages(logger_object)
@@ -109,7 +109,7 @@ def test_log():
                  'not logging this line to file\n',
                  ]:
         assert line not in lines
-    shutil.rmtree(log_project_directory)
+    shutil.rmtree(log_project_directory, ignore_errors=True)
 
 
 def test_log_max_time_reached():
@@ -119,4 +119,4 @@ def test_log_max_time_reached():
     with open(os.path.join(log_project_directory, 't3.log')) as f:
         lines = f.readlines()
     assert 'Terminating T3 due to time limit.\n' in lines
-    shutil.rmtree(log_project_directory)
+    shutil.rmtree(log_project_directory, ignore_errors=True)
