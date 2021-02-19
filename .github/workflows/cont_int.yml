@@ -1,0 +1,56 @@
+name: continuous integration
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up miniconda Python ${{ matrix.python-version }}
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        activate-environment: t3_env
+        environment-file: environment.yml
+        python-version: ${{ matrix.python-version }}
+        auto-activate-base: false
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        conda activate t3_env
+        cd ..
+        git clone https://github.com/ReactionMechanismGenerator/ARC
+        cd ARC
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        cd ..
+        git clone https://github.com/ReactionMechanismGenerator/RMG-Py
+        cd RMG-Py
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        make
+        cd ..
+        git clone https://github.com/ReactionMechanismGenerator/RMG-database
+        cd T3
+        echo $(pwd)
+        conda list
+
+    - name: Test with nosetests
+      shell: bash -l {0}
+      run: |
+        cd ..
+        cd RMG-Py
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        cd ..
+        cd ARC
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        cd ..
+        cd T3
+        conda activate t3_env
+        make test
+        codecov
