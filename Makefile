@@ -4,6 +4,15 @@
 #
 ################################################################################
 
+install-arc:
+	bash devtools/install_arc.sh
+
+install-julia:
+	bash devtools/install_julia.sh
+
+install-pyrms:
+	bash devtools/install_pyrms.sh
+
 test:
 	pytest -ra -vv
 
