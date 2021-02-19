@@ -48,6 +48,8 @@ class T3Options(BaseModel):
     @validator('collision_violators_rates')
     def check_collision_violators_rates(cls, value, values):
         """T3Options.collision_violators_rates validator"""
+        # Compute thermo for species participating in collision rate violating reactions
+        # if their rate coefficients were requested.
         if 'collision_violators_thermo' in values and value:
             values['collision_violators_thermo'] = True
         return value
