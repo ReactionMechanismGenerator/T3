@@ -25,8 +25,11 @@ from t3.main import (T3,
                      legalize_species_label,
                      get_reaction_by_index,
                      get_species_label_by_structure)
+from t3.simulate.factory import simulate_factory
 from t3.utils.writer import write_rmg_input_file
 
+
+test_minimal_project_directory = os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
 
 t3_minimal = {'options': {'all_core_reactions': False,
                           'all_core_species': False,
@@ -162,7 +165,20 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                             },],
                'species_constraints': None,
                }
-
+rmg_minimal_defaults = rmg_minimal.copy()
+rmg_minimal_defaults['options'] = {'seed_name': 'Seed',
+                                   'save_edge': True,
+                                   'save_html': False,
+                                   'generate_seed_each_iteration': True,
+                                   'save_seed_to_database': False,
+                                   'units': 'si',
+                                   'generate_plots': False,
+                                   'save_simulation_profiles': False,
+                                   'verbose_comments': False,
+                                   'keep_irreversible': False,
+                                   'trimolecular_product_reversible': True,
+                                   'save_seed_modulus': -1
+                                   }
 qm_minimal = {'adapter': 'ARC',
               'job_types': {'conformers': True,
                             'fine': False,
@@ -175,7 +191,6 @@ qm_minimal = {'adapter': 'ARC',
               'species': [],
               }
 
-test_minimal_project_directory = os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
 restart_base_path = os.path.join(DATA_BASE_PATH, 'restart')
 dump_species_path = os.path.join(DATA_BASE_PATH, 'test_dump_species')
 
@@ -209,7 +224,7 @@ def test_args_and_attributes():
     assert t3.kinetics_lib_base_path == os.path.join(rmg_settings['database.directory'], 'kinetics', 'libraries')
     assert t3.executed_networks == list()
     assert t3.t3 == t3_minimal
-    assert t3.rmg == rmg_minimal
+    assert t3.rmg == rmg_minimal_defaults
     assert t3.qm == qm_minimal
     shutil.rmtree(test_minimal_project_directory)
 
@@ -220,7 +235,7 @@ def test_as_dict():
     assert t3.as_dict() == {'project': 'T3_minimal_example',
                             'project_directory': test_minimal_project_directory,
                             'qm': qm_minimal,
-                            'rmg': rmg_minimal,
+                            'rmg': rmg_minimal_defaults,
                             't3': t3_minimal,
                             'verbose': 10}
     shutil.rmtree(test_minimal_project_directory)
@@ -254,9 +269,11 @@ def test_set_paths():
              'RMG coll vio': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/collision_rate_violators.log',
              'RMG input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/input.py',
              'RMG log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
+             'RMS': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
              'SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA',
              'SA input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
              'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
+             'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera/chem_annotated.cti',
              'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
              'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
              'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
@@ -568,8 +585,31 @@ def test_determine_species_based_on_sa():
                      set_paths=True,
                      )
     t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    sa_observables = ['H2', 'OH']
+    simulate_adapter = simulate_factory(simulate_method=t3.t3['sensitivity']['adapter'],
+                                        t3=t3.t3,
+                                        rmg=t3.rmg,
+                                        paths=t3.paths,
+                                        logger=t3.logger,
+                                        atol=t3.rmg['model']['atol'],
+                                        rtol=t3.rmg['model']['rtol'],
+                                        observable_list=sa_observables,
+                                        sa_atol=t3.t3['sensitivity']['atol'],
+                                        sa_rtol=t3.t3['sensitivity']['rtol'],
+                                        )
+    simulate_adapter.simulate()
+    # return the dictionary containing all SA coefficients for these species
+    t3.sa_dict = simulate_adapter.get_sa_coefficients()
     species_keys = t3.determine_species_based_on_sa()
     assert species_keys == [0, 1]
+    # remove directories created when performing SA
+    dirs = [t3.paths['SA']] # [os.path.join(t3.paths['SA'], 'species'), t3.paths['SA solver']]
+    for dir in dirs:
+        if os.path.isdir(dir):
+            shutil.rmtree(dir)
+    t3_log = os.path.join(DATA_BASE_PATH, 'minimal_data', 't3.log')
+    if os.path.isfile(t3_log):
+        os.remove(t3_log)
 
 
 def test_determine_species_from_pdep_network():
