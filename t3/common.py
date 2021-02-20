@@ -33,7 +33,7 @@ def get_species_by_label(label: str,
         species_list (list): Entries are RMG Species objects.
 
     Returns:
-        Optional[Species]: The corresponding species from the species_list.
+        Optional[Species]: The corresponding species object from the species_list.
                            Returns ``None`` if no species was found.
     """
     for species in species_list:
