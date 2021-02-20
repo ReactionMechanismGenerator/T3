@@ -6,7 +6,7 @@ t3:
     max_T3_iterations: 20
     max_rmg_processes: 10
   sensitivity:
-    adapter: RMG
+    adapter: RMGSimulatorConstantTP
     SA_threshold: 0.01  # although all core species are selected to be calculated, SA is run for additional information (not used by T3)
 
 rmg:

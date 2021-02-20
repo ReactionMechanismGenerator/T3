@@ -87,7 +87,7 @@ def test_t3_options_schema():
 
 def test_t3_sensitivity_schema():
     """Test creating an instance of T3Sensitivity"""
-    t3_sensitivity = T3Sensitivity(adapter=None,
+    t3_sensitivity = T3Sensitivity(adapter='RMGSimulatorConstantTP',
                                    atol=1e-6,
                                    rtol=1e-4,
                                    global_observables=None,
@@ -97,7 +97,7 @@ def test_t3_sensitivity_schema():
                                    top_SA_species=10,
                                    top_SA_reactions=10
                                    )
-    assert t3_sensitivity.adapter is None
+    assert t3_sensitivity.adapter is 'RMGSimulatorConstantTP'
     assert t3_sensitivity.atol == 1e-6
     assert t3_sensitivity.rtol == 1e-4
     assert t3_sensitivity.global_observables is None

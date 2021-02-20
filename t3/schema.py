@@ -57,7 +57,7 @@ class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
     """
-    adapter: Optional[constr(max_length=255)] = None
+    adapter: constr(max_length=255) = 'RMGSimulatorConstantTP'
     atol: confloat(gt=0, lt=1e-1) = 1e-6
     rtol: confloat(gt=0, lt=1e-1) = 1e-4
     global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None

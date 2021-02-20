@@ -219,7 +219,7 @@ liquidReactor(
     rmg_input += Template(model_template).render(**model)
 
     # simulator
-    if t3['sensitivity'] is not None and t3['sensitivity']['adapter'] == 'RMG':
+    if t3['sensitivity'] is not None and t3['sensitivity']['adapter'] == 'RMGSimulatorConstantTP':
         simulator_template = """\nsimulator(atol=${atol}, rtol=${rtol}, sens_atol=${sens_atol}, sens_rtol=${sens_rtol})\n"""
         rmg_input += Template(simulator_template).render(atol=model_input['atol'],
                                                          rtol=model_input['rtol'],

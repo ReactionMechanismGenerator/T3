@@ -244,7 +244,7 @@ def test_write_rmg_input_file_liquid():
                                    'max_radical_electrons': 1}}
 
     t3 = {'sensitivity':
-              {'adapter': 'RMG',
+              {'adapter': 'RMGSimulatorConstantTP',
                'atol': 1e-6,
                'rtol': 1e-4,
                }
