@@ -915,7 +915,7 @@ def test_add_to_rmg_library():
     t3 = run_minimal()
     t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
     t3.paths['RMG T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
-    t3.add_to_rmg_library()
+    t3.add_to_rmg_libraries()
     with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
         lines = f.readlines()
     for line in ["        H298 = (-92,'kcal/mol'),\n",
