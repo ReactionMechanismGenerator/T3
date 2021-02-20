@@ -147,7 +147,15 @@ all_args (bool, optional):
 
 ## Writing simulation adapters
 
-Coming soon!
+T3 implements many common choices to simulate a chemical mechanism, such as using constant TP, UV,
+or HP batch reactors. To create a custom simulator for your needs, first add a new file to `T3/t3/simulate/`,
+which contains the new simulate adapter. The new class must inherit from the abstract adapter class in
+`T3/t3/simulate/adapter.py` and should implement the following methods: `set_up()`, `simulate()`, `get_sa_coefficients()`,
+and `get_idt_by_T()`. All simulate adapters must accept the same arguments; the currently implemented
+Cantera, RMG, and RMS adapters provide examples. Finally, register the adapter at the bottom of the file,
+and initialize the simulator by importing it in `T3/t3/simulate/__init__.py`. A more detailed coding example
+can be found in the tutorials section. Adding a test to `T3/tests/test_simulate_adapters/` is also recommended.
+We welcome pull-requests to incorporate new simulate adapters.
 
 
 ## Pre-QM, or: T3's iteration 0
