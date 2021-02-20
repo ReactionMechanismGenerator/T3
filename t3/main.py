@@ -25,6 +25,7 @@ from pydas.daspk import DASPKError
 from arkane import Arkane
 from rmgpy import settings as rmg_settings
 from rmgpy.chemkin import load_chemkin_file
+from rmgpy.data.kinetics import KineticsLibrary
 from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.exceptions import (ChemicallySignificantEigenvaluesError,
                               ChemkinError,
@@ -42,6 +43,7 @@ from rmgpy.exceptions import (ChemicallySignificantEigenvaluesError,
                               StatmechError,
                               StatmechFitError,
                               )
+from rmgpy.kinetics import Arrhenius, KineticsData
 from rmgpy.reaction import Reaction
 from rmgpy.rmg.main import initialize_log as initialize_rmg_log
 from rmgpy.rmg.main import RMG
@@ -78,9 +80,24 @@ class T3(object):
                 'Chemkin label': <str: Chemkin label>,
                 'QM label': <str: The label used for the QM calc>,
                 'object': <Species: RMG Species object>,
-                'reasons': <List[str]: Reasons for calculating this species>,
+                'reasons': <List[str]: Reasons for calculating thermodynamic data for this species>,
                 'converged': <Optional[bool]: whether thermo was successfully calculated, ``None`` if pending>,
-                'iteration': <int: The iteration this species was originally added on>,
+                'iteration': <int: The iteration number in which this species was originally considered>,
+            },
+        }
+
+        reactions = {
+            <int: T3_reaction_index>: {
+                'RMG label': <str: RMG label>,
+                'Chemkin label': <str: Chemkin label>,
+                'QM label': <str: The label used for the QM calc>,
+                'SMILES label': <str: A reaction label that consists of the reactants/products SMILES>,
+                'object': <Reaction: RMG Reaction object>,
+                'reactant_keys': <List[int]: Keys of species that participate in this reaction as reactants>,
+                'product_keys': <List[int]: Keys of species that participate in this reaction as products>,
+                'reasons': <List[str]: Reasons for calculating the rate coefficient for this reaction>,
+                'converged': <Optional[bool]: whether the rate coeff was successfully calculated, ``None`` if pending>,
+                'iteration': <int: The iteration number in which this reaction was originally considered>,
             },
         }
 
@@ -305,7 +322,7 @@ class T3(object):
                 self.sa_dict = simulate_adapter.get_sa_coefficients()
 
             # determine what needs to be calculated
-            additional_calcs_required = self.determine_species_to_calculate()
+            additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
             # ARC
             if additional_calcs_required:
@@ -333,6 +350,7 @@ class T3(object):
             self.run_rmg()
 
         self.logger.log_species_summary(species_dict=self.species)
+        self.logger.log_reactions_summary(reactions_dict=self.reactions)
         self.logger.log_footer()
         delete_root_rmg_log(project_directory=self.project_directory)
 
@@ -370,12 +388,12 @@ class T3(object):
             'ARC restart': os.path.join(iteration_path, 'ARC', 'restart.yml'),
             'ARC log': os.path.join(iteration_path, 'ARC', 'arc.log'),
             'ARC info': os.path.join(iteration_path, 'ARC',
-                                     f"{self.qm['project'] if 'project' in self.qm else 'T3'}.info"),
+                                     f"{self.qm['project'] if 'project' in self.qm else 'T3'}_info.yml"),
             'ARC thermo lib': os.path.join(iteration_path, 'ARC', 'output', 'RMG libraries', 'thermo',
                                            f"{self.qm['project'] if 'project' in self.qm else 'T3'}.py"),
             'ARC kinetics lib': os.path.join(iteration_path, 'ARC', 'output', 'RMG libraries', 'kinetics'),
             'RMG T3 thermo lib': os.path.join(RMG_THERMO_LIB_BASE_PATH, f"{self.t3['options']['library_name']}.py"),
-            # 'RMG T3 kinetics lib': os.path.join(RMG_KINETICS_LIB_BASE_PATH, f"{self.t3['options']['library_name']}"),
+            'RMG T3 kinetics lib': os.path.join(RMG_KINETICS_LIB_BASE_PATH, f"{self.t3['options']['library_name']}"),
         }
 
     def restart(self) -> Tuple[int, bool]:
@@ -396,7 +414,7 @@ class T3(object):
         iteration_folders = [folder for folder in folders if 'iteration_' in folder]
 
         if len(iteration_folders):
-            self.load_species()
+            self.load_species_and_reactions()
             i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])  # get the latest iteration number
             self.set_paths(iteration=i_max)
             if i_max != 0 and os.path.isfile(self.paths['RMG log']):
@@ -481,7 +499,7 @@ class T3(object):
         if input_file_path is not None:
             arc_kwargs = read_yaml_file(input_file_path)
 
-        self.dump_species()
+        self.dump_species_and_reactions()
 
         arc_kwargs = arc_kwargs.copy()
         if 'adapter' in arc_kwargs:
@@ -507,45 +525,47 @@ class T3(object):
     def process_arc_run(self):
         """
         Process an ARC run.
-        Sets the self.species[<key>]['converged'] parameter.
+        Sets the self.species[<key>]['converged'] and the self.rxns[<key>]['converged'] parameters.
 
         Todo:
             - Check for non-physical species in unconverged species.
         """
-        unconverged_keys, converged_keys = list(), list()
+        unconverged_spc_keys, converged_spc_keys = list(), list()
+        unconverged_rxn_keys, converged_rxn_keys = list(), list()
         if os.path.isfile(self.paths['ARC info']):
-            with open(self.paths['ARC info'], 'r') as f:
-                read = False
-                for line in f:
-                    if read:
-                        if 'Species' in line:
-                            # e.g.:
-                            # "Species Imipramine_1_peroxy (run time: 1 day, 17:28:32)"
-                            # "Species Imipramine_1_peroxy (Failed!) (run time: 1 day, 17:28:32)"
-                            key = self.get_species_key(label=line.split()[1])
-                            if key is not None:
-                                if '(Failed!)' in line:
-                                    unconverged_keys.append(key)
-                                    self.species[key]['converged'] = False
-                                else:
-                                    converged_keys.append(key)
-                                    self.species[key]['converged'] = True
-                    if 'Considered the following species' in line:
-                        read = True
-                    if 'Overall time since project initiation' in line:
-                        read = False
+            content = read_yaml_file(path=self.paths['ARC info'])
+            for species in content['species']:
+                key = self.get_species_key(label=species['label'])
+                if key is not None:
+                    if species['success']:
+                        converged_spc_keys.append(key)
+                        self.species[key]['converged'] = True
+                    else:
+                        unconverged_spc_keys.append(key)
+                        self.species[key]['converged'] = False
+            for reaction in content['reaction']:
+                key = self.get_reaction_key(label=reaction['label'])
+                if key is not None:
+                    if reaction['success']:
+                        converged_rxn_keys.append(key)
+                        self.reactions[key]['converged'] = True
+                    else:
+                        unconverged_rxn_keys.append(key)
+                        self.reactions[key]['converged'] = False
         else:
-            raise ValueError(f'ARC did not save a project.info file, something must be wrong.')
-        self.logger.log_unconverged_species(
-            species_keys=unconverged_keys,
+            raise ValueError(f'ARC did not save a project_info.yml file, something must be wrong.')
+        self.logger.log_unconverged_species_and_reactions(
+            species_keys=unconverged_spc_keys,
             species_dict=self.species,
+            reaction_keys=unconverged_rxn_keys,
+            reaction_dict=self.reactions,
         )
-        if len(converged_keys):
-            # we calculated something, add to thermo library
-            self.add_to_rmg_library()
+        if len(converged_spc_keys) or len(converged_rxn_keys):
+            # we calculated something, add to thermo/kinetic library
+            self.add_to_rmg_libraries()
         # clear the calculated objects from self.qm:
         self.qm['species'], self.qm['reactions'] = list(), list()
-        self.dump_species()
+        self.dump_species_and_reactions()
 
     def get_current_rmg_tol(self) -> float:
         """
@@ -580,14 +600,14 @@ class T3(object):
             self.rmg['database']['thermo_libraries'].pop(self.rmg['database']['thermo_libraries'].index(
                 self.t3['options']['library_name']))
         # 2. kinetics
-        # if self.t3['options']['library_name'] not in self.rmg['database']['kinetics_libraries'] \
-        #         and os.path.isdir(self.paths['RMG T3 kinetics lib']):
-        #     self.rmg['database']['kinetics_libraries'] = self.t3['options']['library_name'] + \
-        #                                                  self.rmg['database']['kinetics_libraries']
-        # elif self.t3['options']['library_name'] in self.rmg['database']['kinetics_libraries'] \
-        #         and not os.path.isdir(self.paths['RMG T3 kinetics lib']):
-        #     self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(
-        #         self.t3['options']['library_name']))
+        if self.t3['options']['library_name'] not in self.rmg['database']['kinetics_libraries'] \
+                and os.path.isdir(self.paths['RMG T3 kinetics lib']):
+            self.rmg['database']['kinetics_libraries'] = self.t3['options']['library_name'] + \
+                                                         self.rmg['database']['kinetics_libraries']
+        elif self.t3['options']['library_name'] in self.rmg['database']['kinetics_libraries'] \
+                and not os.path.isdir(self.paths['RMG T3 kinetics lib']):
+            self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(
+                self.t3['options']['library_name']))
 
         write_rmg_input_file(
             rmg=self.rmg,
@@ -651,10 +671,10 @@ class T3(object):
         elapsed_time = time_lapse(tic)
         self.logger.info(f'RMG terminated, execution time: {elapsed_time}')
 
-    def determine_species_to_calculate(self) -> bool:
+    def determine_species_and_reactions_to_calculate(self) -> bool:
         """
-        Determine which species in the executed RMG job should be calculated.
-        Species which were previously attempted to be calculated but did not converge
+        Determine which species and reactions in the executed RMG job should be calculated.
+        Species/reactions which were previously attempted to be calculated but did not converge
         will not be reconsidered.
 
         Updates:
@@ -662,12 +682,14 @@ class T3(object):
             self.rmg_reactions
             self.species - via self.add_species()
             self.qm['species'] - via self.add_species()
+            self.reactions - via self.add_reaction()
+            self.qm['reactions'] - via self.add_reaction()
             self.executed_networks - via self.determine_species_from_pdep_network()
 
         Returns:
             bool: Whether additional calculations are required.
         """
-        species_keys = list()
+        species_keys, reaction_keys = list(), list()
 
         self.rmg_species, self.rmg_reactions = self.load_species_and_reactions_from_chemkin_file()
         self.logger.info(f'This RMG model has {len(self.rmg_species)} species '
@@ -678,32 +700,53 @@ class T3(object):
                 if self.species_requires_refinement(species=species):
                     species_keys.append(self.add_species(species=species,
                                                          reasons=[f'(i {self.iteration}) All core species']))
+
+        sa_observables_exist = False
+        for input_species in self.rmg['species']:
+            if input_species['observable'] or input_species['SA_observable']:
+                sa_observables_exist = True
+                break
+
+        if self.t3['options']['collision_violators_thermo'] or self.t3['options']['collision_violators_rates']:
+            coll_vio_spc_keys, coll_vio_rxn_keys = self.determine_species_and_reactions_based_on_collision_violators()
+
+        # 1. Species
         else:
-            # 1. SA observables
-            sa_observables_exist = False
+            # 1.1. SA observables
             for input_species in self.rmg['species']:
                 if input_species['observable'] or input_species['SA_observable']:
-                    sa_observables_exist = True
                     if self.species_requires_refinement(species=get_species_by_label(input_species['label'],
                                                                                      self.rmg_species)):
                         species_keys.append(self.add_species(
                             species=get_species_by_label(input_species['label'], self.rmg_species),
                             reasons=['SA observable'],
                         ))
-            # 2. SA
+            # 1.2. SA
             if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
-            # 3. collision violators
+            # 1.3. collision violators
             if self.t3['options']['collision_violators_thermo']:
-                species_keys.extend(self.determine_species_based_on_collision_violators())
+                species_keys.extend(coll_vio_spc_keys)
+
+        # 2. Reactions
+        # 2.1. SA
+        if sa_observables_exist:
+            reaction_keys.extend(self.determine_reactions_based_on_sa())
+        # 2.2. collision violators
+        if self.t3['options']['collision_violators_rates']:
+            reaction_keys.extend(coll_vio_rxn_keys)
 
         species_keys = list(set([key for key in species_keys if key is not None]))
+        reaction_keys = list(set([key for key in reaction_keys if key is not None]))
 
-        additional_calcs_required = bool(len(species_keys)) \
+        additional_calcs_required = bool(len(species_keys)) or bool(len(reaction_keys)) \
             or any(spc['converged'] is None for spc in self.species.values())
+
         self.logger.info(f'Additional calculations required: {additional_calcs_required}\n')
-        if additional_calcs_required:
+        if len(species_keys):
             self.logger.log_species_to_calculate(species_keys, self.species)
+        if len(reaction_keys):
+            self.logger.log_reactions_to_calculate(reaction_keys, self.reactions)
         return additional_calcs_required
 
     def determine_species_based_on_sa(self) -> List[int]:
@@ -900,25 +943,28 @@ class T3(object):
 
         return species_keys
 
-    def determine_species_based_on_collision_violators(self) -> List[int]:
+    def determine_species_and_reactions_based_on_collision_violators(self) -> Tuple[List[int], List[int]]:
         """
         Determine species to calculate based on collision rate violating reactions.
 
         Returns:
-            List[int]: Entries are T3 species indices of species determined to be calculated based on SA.
+            Tuple[List[int], List[int]]:
+                - Entries are T3 species indices of species determined to be calculated based on SA.
+                - Entries are T3 reaction indices of reactions determined to be calculated based on SA.
         """
-        species_keys = list()
+        species_keys, reaction_keys = list(), list()
         if not os.path.isfile(self.paths['RMG coll vio']):
             self.logger.info('No collision rate violating reactions identified in this model.')
-            return species_keys
+            return species_keys, reaction_keys
 
         with open(self.paths['RMG coll vio'], 'r') as f:
             lines = f.readlines()
 
         for line in lines:
             if line.count('=') == 1 and ('e+' in line or 'e-' in line) and '!' not in line:
-                # `line` might look like one of these:
+                # ``line`` might look like one of these:
                 # C2H3O(66)+O(T)(14)=C2H2O(60)+OH(D)(33)              1.500000e+09  1.500  -0.890
+                # C2H2O(60)+CH2(T)(9)+M=C3H4O(383)+M                  1.000e+10     0.000   5.000
                 # C2H2O(60)+CH2(T)(9)(+M)=C3H4O(383)(+M)              1.000e+00     0.000   0.000
                 # C2H2O(60)+CH2(T)(9)(+N2)=C3H4O(383)(+N2)            1.000e+00     0.000   0.000
                 # C2H2O(60)+CH2(T)(9)(+N2(32))=C3H4O(383)(+N2(32))    1.000e+00     0.000   0.000
@@ -926,15 +972,18 @@ class T3(object):
                 collider = re.search(r'\(\+[^)]+\)', line)
                 modified_line = line
                 if collider is not None:
+                    # Todo: Not considering colliders here. Change this when automating termolecular reactions.
                     collider = collider.group(0)
                     if collider.count('(') == 2 and collider.count(')') == 1:
                         collider += ')'
                     modified_line = line.replace(collider, '')
                 modified_rxn_string = modified_line.split()[0].replace('+M', '')
                 labels = modified_rxn_string.split('=')
-                reactants = labels[0].split('+') if '+' in labels[0] else [labels[0]]
-                products = labels[1].split('+') if '+' in labels[1] else [labels[1]]
-                labels = reactants + products
+                reactant_labels = labels[0].split('+') if '+' in labels[0] else [labels[0]]
+                product_labels = labels[1].split('+') if '+' in labels[1] else [labels[1]]
+
+                # 1. Species
+                labels = reactant_labels + product_labels
                 for label in labels:
                     species = get_species_by_label(label, self.rmg_species)
                     if species is None:
@@ -943,7 +992,20 @@ class T3(object):
                         reason = f'(i {self.iteration}) Species participates in collision rate violating ' \
                                  f'reaction: {rxn_to_log}'
                         species_keys.append(self.add_species(species=species, reasons=reason))
-        return species_keys
+
+                # 2. Reactions (not considering colliders for now)
+                reactants = [get_species_by_label(label, self.rmg_species) for label in reactant_labels]
+                products = [get_species_by_label(label, self.rmg_species) for label in product_labels]
+                if not len(reactants) or not len(products):
+                    self.logger.error(f'Could not identify reaction {rxn_to_log}!')
+                reaction = Reaction(reactants=reactants, products=products)
+                if self.reaction_requires_refinement(reaction) \
+                        and not any(self.species_requires_refinement(species=spc) for spc in reactants + products):
+                    # only consider a rate violating reaction if all the thermo was first fixed
+                    reason = f'(i {self.iteration}) Reaction rate coefficient violates the collision rate.'
+                    reaction_keys.append(self.add_reaction(reaction=reaction, reasons=reason))
+
+        return species_keys, reaction_keys
 
     def trsh_rmg_tol(self, factor: float = 0.5):
         """
@@ -970,7 +1032,7 @@ class T3(object):
     def species_requires_refinement(self, species: Species) -> bool:
         """
         Determine whether a species thermochemical properties
-        should be calculated based on their uncertainty.
+        should be calculated based on the data uncertainty.
         First check that this species was not previously considered.
 
         Args:
@@ -986,6 +1048,40 @@ class T3(object):
             return True
         return False
 
+    def reaction_requires_refinement(self, reaction: Reaction) -> bool:
+        """
+        Determine whether a reaction rate coefficient
+        should be calculated based on the data uncertainty.
+        First check that this reaction was not previously considered.
+        Args:
+            reaction (Reaction): The reaction for which the query is performed.
+        Returns:
+            bool: Whether the reaction rate coefficient should be calculated. ``True`` if it should be.
+        Todo:
+            Consider cases such as:
+            #
+            ! BM rule fitted to 2 training reactions at node Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R
+            !     Total Standard Deviation in ln(k): 2.14551182899
+            ! Exact match found for rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R]
+            ! Euclidian distance = 0
+            ! family: R_Recombination
+            H(5)+S(752)=C12H26(1)                               1.766370e+13 0.153     0.000
+            #
+            Also, sometimes a rate rule is used exactly, but the tree might be too generic
+            and the reaction should in fact be computed.
+        """
+        kinetics_comment = reaction.kinetics.comment
+        if self.get_reaction_key(reaction=reaction) is None \
+                and 'Exact match found for rate rule' not in kinetics_comment \
+                and 'Library reaction' not in kinetics_comment \
+                and ('Estimated using an average for rate rule' in kinetics_comment
+                     or ('Estimated using template' in kinetics_comment and 'for rate rule' in kinetics_comment)
+                     or ('Estimated using average of templates' in kinetics_comment
+                         and 'for rate rule' in kinetics_comment)
+                     or '' in kinetics_comment):
+            return True
+        return False
+
     def get_species_key(self,
                         species: Optional[Species] = None,
                         label: Optional[str] = None,
@@ -998,7 +1094,7 @@ class T3(object):
         Args:
             species (Species, optional): The species for which the query is performed.
             label (str, optional): The species label.
-            label_type (str, optional): The label type, either 'RMG', 'Chemkin', or 'QM'.
+            label_type (str, optional): The label type, either 'RMG', 'Chemkin', or 'QM' (default: 'QM').
 
         Returns:
             Optional[int]: The species T3 index if it exists, ``None`` if it does not.
@@ -1011,6 +1107,32 @@ class T3(object):
             if species is not None and species.is_isomorphic(species_dict['object']):
                 return key
             if label is not None and label == species_dict[f'{label_type} label']:
+                return key
+        return None
+
+    def get_reaction_key(self,
+                         reaction: Optional[Reaction] = None,
+                         label: Optional[str] = None,
+                         label_type: str = 'QM',
+                         ) -> Optional[int]:
+        """
+        Get a reaction key (the T3 reaction index) if the reaction exists in self.reactions.
+        Either ``reaction`` or ``label`` must be given.
+        Args:
+            reaction (Reaction, optional): The reaction for which the query is performed.
+            label (str, optional): The reaction label.
+            label_type (str, optional): The label type, either 'RMG', 'Chemkin', 'QM', or 'SMILES' (default: 'QM').
+        Returns:
+            Optional[int]: The reaction T3 index if it exists, ``None`` if it does not.
+        """
+        if reaction is None and label is None:
+            raise ValueError('Either reaction or label must be specified, got neither.')
+        if label_type not in ['RMG', 'Chemkin', 'QM', 'SMILES']:
+            raise ValueError(f"label type must be either 'RMG', 'Chemkin' or 'QM', got: '{label_type}'.")
+        for key, reaction_dict in self.reactions.items():
+            if reaction is not None and reaction.is_isomorphic(reaction_dict['object']):
+                return key
+            if label is not None and label == reaction_dict[f'{label_type} label']:
                 return key
         return None
 
@@ -1071,14 +1193,11 @@ class T3(object):
             Optional[int]: The T3 species index (the respective self.species key) if the species was just added,
                            ``None`` if the species already exists.
         """
-        if isinstance(reasons, str):
-            reasons = [reasons]
+        reasons = [reasons] if isinstance(reasons, str) else reasons
         key = self.get_species_key(species=species)
         if key is None:
             key = len(list(self.species.keys()))
-            qm_species = species.copy(deep=False)
-            legalize_species_label(species=qm_species)
-            qm_species.label = f's{key}_{qm_species.label}'
+            qm_species = get_species_with_qm_label(species=species, key=key)
             self.species[key] = {'RMG label': species.label,
                                  'Chemkin label': species.to_chemkin(),
                                  'QM label': qm_species.label,
@@ -1093,7 +1212,7 @@ class T3(object):
                 if rmg_species['label'] == species.label and rmg_species['xyz'] is not None:
                     xyzs = list()
                     for xyz in rmg_species['xyz']:
-                        # Only pass valid xyz's to ARC.
+                        # Only pass valid xyzs to ARC.
                         try:
                             xyz_dict = check_xyz_dict(xyz)
                         except ConverterError:
@@ -1113,18 +1232,73 @@ class T3(object):
             self.qm['species'].append(qm_species)
             return key
 
-        # species already exists, extend reasons
+        # The species already exists, extend reasons.
         for reason in reasons:
             if reason not in self.species[key]['reasons']:
                 self.species[key]['reasons'].append(reason)
         return None
 
-    def add_to_rmg_library(self):
+    def add_reaction(self,
+                     reaction: Reaction,
+                     reasons: Union[List[str], str],
+                     ) -> Optional[int]:
+        """
+        Add a species to self.species and to self.qm['species'].
+        If the species already exists in self.species, only the reasons
+        will be updated (extended), and the species will not be considered
+        in self.qm['species'].
+        Args:
+            reaction (Reaction): The reaction to consider.
+            reasons (Union[List[str], str]): Reasons for calculating this reaction.
+        Returns:
+            Optional[int]: The T3 reaction index (the respective self.reactions key) if the reaction was just added,
+                           ``None`` if the reaction already exists.
+        Todo:
+            Add tests.
+        """
+        reasons = [reasons] if isinstance(reasons, str) else reasons
+        key = self.get_reaction_key(reaction=reaction)
+        if key is None:
+            key = len(list(self.reactions.keys()))
+            for spc in reaction.reactants + reaction.products:
+                if self.get_species_key(species=spc) is None:
+                    self.add_species(species=spc, reasons='Participates in a reaction that is being calculated.')
+            qm_label = ' <=> '.join([' + '.join([get_species_with_qm_label(species=spc,
+                                                                           key=self.get_species_key(species=spc)).label
+                                                 for spc in species_list])
+                                     for species_list in reaction.reactants + reaction.products])
+            smiles_label = ' <=> '.join([' + '.join([spc.molecule[0].to_smiles() for spc in species_list])
+                                         for species_list in reaction.reactants + reaction.products])
+            self.reactions[key] = {'RMG label': reaction.label,
+                                   'Chemkin label': reaction.to_chemkin(),
+                                   'QM label': qm_label,
+                                   'SMILES label': smiles_label,
+                                   'object': reaction,
+                                   'reasons': reasons,
+                                   'converged': None,
+                                   'iteration': self.iteration,
+                                   }
+            qm_reaction = reaction.copy()
+            qm_reaction.label = qm_label
+            self.qm['reactions'].append(qm_reaction)
+            return key
+
+        # The reaction already exists, extend reasons.
+        for reason in reasons:
+            if reason not in self.reactions[key]['reasons']:
+                self.reactions[key]['reasons'].append(reason)
+        return None
+
+    def add_to_rmg_libraries(self):
         """
         Creates RMG libraries in the RMG database repository
         if they don't already exist, and appends with the
         respective entries from the libraries generated by ARC.
+
+        Todo:
+            Tests kinetics libraries.
         """
+        # 1. Thermo:
         arc_thermo_lib_path = self.paths['ARC thermo lib']
         rmg_t3_thermo_lib_path = self.paths['RMG T3 thermo lib']
         local_context = {
@@ -1133,53 +1307,103 @@ class T3(object):
             'NASAPolynomial': NASAPolynomial,
             'NASA': NASA,
         }
-        if os.path.isfile(arc_thermo_lib_path):
-            if os.path.isfile(rmg_t3_thermo_lib_path):
-                # this thermo library already exists in the RMG database: Load it, append new entries, and save.
-                rmg_thermo_lib, arc_thermo_lib = ThermoLibrary(), ThermoLibrary()
-                rmg_thermo_lib.load(path=rmg_t3_thermo_lib_path, local_context=local_context, global_context=dict())
-                arc_thermo_lib.load(path=arc_thermo_lib_path, local_context=local_context, global_context=dict())
-                arc_description = arc_thermo_lib.long_desc
-                description_to_append = '\n'
-                append = False
-                for line in arc_description.splitlines():
-                    if 'Overall time since project initiation' in line:
-                        append = False
-                    if append:
-                        description_to_append += line + '\n'
-                    if 'Considered the following' in line:
-                        append = True
-                rmg_thermo_lib.long_desc += description_to_append
-                for entry in arc_thermo_lib.entries.values():
-                    entry_species = Species(molecule=[entry.item])
-                    entry_species.generate_resonance_structures(keep_isomorphic=False, filter_structures=True)
-                    for existing_entry in rmg_thermo_lib.entries.values():
-                        if entry_species.is_isomorphic(existing_entry.item):
-                            self.logger.warning(f"Not adding species {entry.label} to the "
-                                                f"{self.t3['options']['library_name']} thermo library, "
-                                                f"the species seems to already exist under the name "
-                                                f"{existing_entry.label}.")
-                            break
-                    rmg_thermo_lib.entries[entry.label] = entry
-                rmg_thermo_lib.save(path=rmg_t3_thermo_lib_path)
-            else:
-                # this thermo library doesn't exist in the RMG database: Just copy the library generated by ARC.
-                shutil.copy(arc_thermo_lib_path, rmg_t3_thermo_lib_path)
+        if os.path.isfile(arc_thermo_lib_path) and os.path.isfile(rmg_t3_thermo_lib_path):
+            # This thermo library already exists in the RMG database: Load it, append new entries, and save.
+            rmg_thermo_lib, arc_thermo_lib = ThermoLibrary(), ThermoLibrary()
+            rmg_thermo_lib.load(path=rmg_t3_thermo_lib_path, local_context=local_context, global_context=dict())
+            arc_thermo_lib.load(path=arc_thermo_lib_path, local_context=local_context, global_context=dict())
+            arc_description = arc_thermo_lib.long_desc
+            description_to_append = '\n'
+            append = False
+            for line in arc_description.splitlines():
+                if 'Overall time since project initiation' in line:
+                    append = False
+                if append:
+                    description_to_append += line + '\n'
+                if 'Considered the following' in line:
+                    append = True
+            rmg_thermo_lib.long_desc += description_to_append
+            for entry in arc_thermo_lib.entries.values():
+                entry_species = Species(molecule=[entry.item])
+                entry_species.generate_resonance_structures(keep_isomorphic=False, filter_structures=True)
+                for existing_entry in rmg_thermo_lib.entries.values():
+                    if entry_species.is_isomorphic(existing_entry.item):
+                        self.logger.warning(f"Not adding species {entry.label} to the "
+                                            f"{self.t3['options']['library_name']} thermo library, "
+                                            f"the species seems to already exist under the label "
+                                            f"{existing_entry.label}.")
+                        break
+                rmg_thermo_lib.entries[entry.label] = entry
+            rmg_thermo_lib.save(path=rmg_t3_thermo_lib_path)
+        else:
+            # This thermo library doesn't exist in the RMG database: Just copy the library generated by ARC.
+            shutil.copy(arc_thermo_lib_path, rmg_t3_thermo_lib_path)
 
-    def dump_species(self):
+        # 2. Kinetics:
+        arc_kinetics_lib_path = self.paths['ARC kinetics lib']
+        rmg_t3_kinetics_lib_path = self.paths['RMG T3 kinetics lib']
+        local_context = {
+            'KineticsData': KineticsData,
+            'Arrhenius': Arrhenius,
+        }
+        if os.path.isfile(arc_kinetics_lib_path) and os.path.isfile(rmg_t3_kinetics_lib_path):
+            # This kinetics library already exists in the RMG database: Load it, append new entries, and save.
+            rmg_kinetics_lib, arc_kinetics_lib = KineticsLibrary(), KineticsLibrary()
+            rmg_kinetics_lib.load(path=rmg_t3_kinetics_lib_path, local_context=local_context, global_context=dict())
+            arc_kinetics_lib.load(path=arc_kinetics_lib_path, local_context=local_context, global_context=dict())
+            arc_description = arc_kinetics_lib.long_desc
+            description_to_append = '\n'
+            append = False
+            for line in arc_description.splitlines():
+                if 'Overall time since project initiation' in line:
+                    append = False
+                if append:
+                    description_to_append += line + '\n'
+                if 'Considered the following' in line:
+                    append = True
+            rmg_kinetics_lib.long_desc += description_to_append
+            for entry in arc_kinetics_lib.entries.values():
+                entry_reaction = Reaction(reactants=entry.item.reactants[:],
+                                          products=entry.item.products[:],
+                                          specific_collider=entry.item.specific_collider,
+                                          kinetics=entry.data,
+                                          duplicate=entry.item.duplicate,
+                                          reversible=entry.item.reversible,
+                                          allow_pdep_route=entry.item.allow_pdep_route,
+                                          elementary_high_p=entry.item.elementary_high_p,
+                                          )
+                for existing_entry in rmg_kinetics_lib.entries.values():
+                    if entry_reaction.is_isomorphic(existing_entry.item):
+                        self.logger.warning(f"Not adding reaction {entry.label} to the "
+                                            f"{self.t3['options']['library_name']} kinetics library, "
+                                            f"the reaction seems to already exist under the label "
+                                            f"{existing_entry.label}.")
+                        break
+                rmg_kinetics_lib.entries[entry.label] = entry
+            rmg_kinetics_lib.save(path=rmg_t3_kinetics_lib_path)
+        else:
+            # This thermo library doesn't exist in the RMG database: Just copy the library generated by ARC.
+            shutil.copy(arc_kinetics_lib_path, rmg_t3_kinetics_lib_path)
+
+    def dump_species_and_reactions(self):
         """
-        Dump self.species in case T3 needs to be restarted.
+        Dump self.species and self.reactions in case T3 needs to be restarted.
         """
-        species = dict()
+        species, reactions = dict(), dict()
         for key, spc_dict in self.species.items():
             mod_spc_dict = {k: v for k, v in spc_dict.items() if k != 'object'}
             mod_spc_dict['adjlist'] = spc_dict['object'].molecule[0].to_adjacency_list()
             species[key] = mod_spc_dict
         save_yaml_file(path=os.path.join(self.project_directory, 'species.yml'), content=species)
+        for key, rxn_dict in self.reactions.items():
+            mod_rxn_dict = {k: v for k, v in rxn_dict.items() if k != 'object'}
+            reactions[key] = mod_rxn_dict
+        save_yaml_file(path=os.path.join(self.project_directory, 'reactions.yml'), content=reactions)
 
-    def load_species(self):
+    def load_species_and_reactions(self):
         """
-        Load the dumped species dictionary into self.species.
+        Load the dumped species and reactions dictionaries into self.species and self.reactions, respectively.
+        Resurrect the Species and Reaction objects.
         """
         if os.path.isfile(os.path.join(self.project_directory, 'species.yml')):
             species = read_yaml_file(path=os.path.join(self.project_directory, 'species.yml'))
@@ -1187,6 +1411,18 @@ class T3(object):
                 mod_spc_dict = {k: v for k, v in spc_dict.items() if k != 'adjlist'}
                 mod_spc_dict['object'] = Species().from_adjacency_list(spc_dict['adjlist'])
                 self.species[key] = mod_spc_dict
+        if os.path.isfile(os.path.join(self.project_directory, 'reactions.yml')):
+            reactions = read_yaml_file(path=os.path.join(self.project_directory, 'reactions.yml'))
+            for key, rxn_dict in reactions.items():
+                mod_rxn_dict = rxn_dict.copy()
+                mod_rxn_dict['object'] = Reaction(reactants=[spc_dict['object']
+                                                             for key, spc_dict in self.species.items()
+                                                             if key in mod_rxn_dict['reactant_keys']],
+                                                  products=[spc_dict['object']
+                                                            for key, spc_dict in self.species.items()
+                                                            if key in mod_rxn_dict['product_keys']],
+                                                  )
+                self.reactions[key] = mod_rxn_dict
 
     def check_overtime(self) -> bool:
         """
@@ -1240,13 +1476,19 @@ def get_reaction_by_index(index: int,
     return None
 
 
-def legalize_species_label(species: Species):
+def legalize_species_label(species: Species,
+                           return_label: bool = False,
+                           ) -> Optional[str]:
     """
     ARC uses the species label as the folder name on the server and the local machine.
     Make sure a label is legal, correct it if it's not.
 
     Args:
         species (Species): A species object.
+        return_label (bool, optional): Whether to return the new label.
+
+    Returns:
+        str: The legalized species label.
     """
     for char in species.label:
         if char not in VALID_CHARS:
@@ -1256,6 +1498,9 @@ def legalize_species_label(species: Species):
         if species.label[:2] == 'S(' and species.label[-1] == ')' \
                 and all([char.isdigit() for char in species.label[2:-1]]):
             species.label = species.molecule[0].get_formula()
+    if return_label:
+        return species.label
+    return None
 
 
 def get_species_label_by_structure(adj: str,
@@ -1277,3 +1522,23 @@ def get_species_label_by_structure(adj: str,
         if spc.is_isomorphic(new_spc):
             return spc.label
     return None
+
+
+def get_species_with_qm_label(species: Species,
+                              key: int,
+                              ) -> Species:
+    """
+    Get a copy of the species with an updated QM label.
+    This also adds the species to self.species if it's not already there.
+    Args:
+         species (Species): The species to consider.
+         key (int): The respective species key, if exists.
+    Returns:
+        Species: A copy of the original species with a formatted QM species label.
+    Todo:
+        Add tests.
+    """
+    qm_species = species.copy(deep=False)
+    legalize_species_label(species=qm_species)
+    qm_species.label = f's{key}_{qm_species.label}'
+    return qm_species
