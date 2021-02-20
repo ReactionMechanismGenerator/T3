@@ -9,9 +9,7 @@
 <a href="https://github.com/ReactionMechanismGenerator/T3/releases" target="_blank">
     <img src="https://img.shields.io/badge/version-0.1.0-blue.svg" alt="Release">
 </a>
-<a href="https://travis-ci.com/ReactionMechanismGenerator/T3" target="_blank">
-    <img src="https://travis-ci.com/ReactionMechanismGenerator/T3.svg?branch=master" alt="Build Status">
-</a>
+<img src="https://github.com/ReactionMechanismGenerator/T3/actions/workflows/cont_int.yml/badge.svg" alt="Build Status">
 <a href="https://lgtm.com/projects/g/ReactionMechanismGenerator/T3/context:python" target="_blank">
     <img src="https://img.shields.io/lgtm/grade/python/g/ReactionMechanismGenerator/T3.svg?logo=lgtm&logoWidth=18" alt="Language grade: Python">
 </a>
