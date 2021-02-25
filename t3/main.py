@@ -697,10 +697,10 @@ class T3(object):
             # 3. collision violators
             if self.t3['options']['collision_violators_thermo']:
                 species_keys.extend(self.determine_species_based_on_collision_violators())
-            # 4. Species which were not calculated yet (i.e., loaded from a restart file)
-            for key, species in self.species.items():
-                if species['converged'] is None:
-                    species_keys.append(key)
+        # 4. Species which were not calculated yet (i.e., loaded from a restart file)
+        for key, species in self.species.items():
+            if species['converged'] is None:
+                species_keys.append(key)
 
         species_keys = list(set([key for key in species_keys if key is not None]))
 
