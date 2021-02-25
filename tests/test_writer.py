@@ -244,7 +244,7 @@ def test_write_rmg_input_file_liquid():
                                    'max_radical_electrons': 1}}
 
     t3 = {'sensitivity':
-              {'adapter': 'RMG',
+              {'adapter': 'RMGConstantTP',
                'atol': 1e-6,
                'rtol': 1e-4,
                }
@@ -310,7 +310,7 @@ def test_write_rmg_input_file_seed_all_radicals():
            'model': {'core_tolerance': [0.001]}}
 
     t3 = {'sensitivity':
-              {'adapter': 'RMG',
+              {'adapter': 'RMGConstantTP',
                'atol': 1e-6,
                'rtol': 1e-4,
                }

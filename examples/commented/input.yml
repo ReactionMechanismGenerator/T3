@@ -25,7 +25,7 @@ t3:
 
   # sensitivity analysis (optional block, T3 can ran w/o SA)
   sensitivity:
-    adapter: RMG  # *required* (this is how SA is requested), can use any implemented simulation adapter
+    adapter: RMGConstantTP  # *required* (this is how SA is requested), can use any implemented simulation adapter
     atol: 1e-6  # optional, default: 1e-6
     rtol: 1e-4  # optional, default: 1e-4
     global_observables: ['IgD', 'ESR', 'SL']  # optional, only implemented in the Cantera adapter, default: ``None``

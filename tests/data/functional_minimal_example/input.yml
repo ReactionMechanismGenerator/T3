@@ -5,7 +5,7 @@ t3:
     max_T3_iterations: 2
     max_RMG_walltime: '00:00:05:00'
   sensitivity:
-    adapter: RMG  # *required* (this is how SA is requested), can use any implemented simulation adapter
+    adapter: RMGConstantTP  # *required* (this is how SA is requested), can use any implemented simulation adapter
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
 
 rmg:
