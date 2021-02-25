@@ -112,6 +112,10 @@ def test_t3_sensitivity_schema():
         T3Sensitivity(adapter=quote)
 
     with pytest.raises(ValidationError):
+        # check that given adapter is supported and registered properly
+        T3Sensitivity(adapter='RMG')
+
+    with pytest.raises(ValidationError):
         # check that atol is constrained to > 0
         T3Sensitivity(atol=0)
 
