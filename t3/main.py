@@ -388,25 +388,37 @@ class T3(object):
                 - The current iteration number.
                 - Whether to run RMG for this iteration.
         """
+        print('in restart')
         # set default values
         i_max = 0
         run_rmg_i, restart_arc_i = True, False
+        print(f'i_max: {i_max}')
+        print(f'run_rmg_i: {run_rmg_i}')
+        print(f'restart_arc_i: {restart_arc_i}')
 
         folders = tuple(os.walk(self.project_directory))[0][1]  # returns a 3-tuple: (dirpath, dirnames, filenames)
-        iteration_folders = [folder for folder in folders if 'iteration_' in folder]
+        print(folders)
+        iteration_folders = [folder for folder in folders
+                             if str(folder).startswith('iteration_')
+                             and all([s.isdigit() for s in str(folder).split('iteration_')[1]])]
+        print(iteration_folders)
 
         if len(iteration_folders):
             self.load_species()
             i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])  # get the latest iteration number
+            print(f'i_max after reading folders: {i_max}')
             self.set_paths(iteration=i_max)
             if i_max != 0 and os.path.isfile(self.paths['RMG log']):
-                # iteration 0 is reserved for ARC only if needed
+                print('had RMG.log')
+                # Iteration 0 is reserved for ARC (no RMG run).
                 with open(self.paths['RMG log'], 'r') as f:
                     lines = f.readlines()
                     for line in lines[::-1]:
                         if 'MODEL GENERATION COMPLETED' in line:
-                            # RMG terminated, no need to regenerate the model
+                            print(line)
+                            # RMG terminated, no need to regenerate the model.
                             run_rmg_i = False
+                            print('no need to run RMG')
                             break
             if os.path.isfile(self.paths['ARC log']) and (not run_rmg_i or i_max == 0):
                 # The ARC log file exists, and no need to run RMG (converged) or this is iteration 0
