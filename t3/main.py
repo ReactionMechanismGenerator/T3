@@ -689,17 +689,11 @@ class T3(object):
         Returns:
             bool: Whether additional calculations are required.
         """
-        species_keys, reaction_keys = list(), list()
+        species_keys, reaction_keys, coll_vio_spc_keys, coll_vio_rxn_keys = list(), list(), list(), list()
 
         self.rmg_species, self.rmg_reactions = self.load_species_and_reactions_from_chemkin_file()
         self.logger.info(f'This RMG model has {len(self.rmg_species)} species '
                          f'and {len(self.rmg_reactions)} reactions in its core.')
-
-        if self.t3['options']['all_core_species']:
-            for species in self.rmg_species:
-                if self.species_requires_refinement(species=species):
-                    species_keys.append(self.add_species(species=species,
-                                                         reasons=[f'(i {self.iteration}) All core species']))
 
         sa_observables_exist = False
         for input_species in self.rmg['species']:
@@ -709,6 +703,12 @@ class T3(object):
 
         if self.t3['options']['collision_violators_thermo'] or self.t3['options']['collision_violators_rates']:
             coll_vio_spc_keys, coll_vio_rxn_keys = self.determine_species_and_reactions_based_on_collision_violators()
+
+        if self.t3['options']['all_core_species']:
+            for species in self.rmg_species:
+                if self.species_requires_refinement(species=species):
+                    species_keys.append(self.add_species(species=species,
+                                                         reasons=[f'(i {self.iteration}) All core species']))
 
         # 1. Species
         else:
@@ -762,7 +762,7 @@ class T3(object):
                               "Not performing refinement based on sensitivity analysis!")
             return species_keys
 
-        # create new dictionary that stores the absolute maximum value from each SA
+        # Create a new dictionary that stores the absolute maximum value from each SA.
         sa_dict_max = {'kinetics': dict(), 'thermo': dict()}
         for key in ['kinetics', 'thermo']:
             for observable_label in self.sa_dict[key].keys():
@@ -775,7 +775,7 @@ class T3(object):
                         self.sa_dict[key][observable_label][parameter].min()))  # the coefficient could be negative
                     sa_dict_max[key][observable_label].append(entry)
 
-            # get the top X entries from the SA
+            # Get the top X entries from the SA.
             for observable_label, sa_list in sa_dict_max['kinetics'].items():
                 sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
                 for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
@@ -804,6 +804,49 @@ class T3(object):
         species_keys.extend(self.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore))
 
         return species_keys
+
+    def determine_reactions_based_on_sa(self) -> List[int]:
+        """
+        Determine reaction rate coefficients to calculate based on sensitivity analysis.
+
+        Returns:
+            List[int]: Entries are T3 reaction indices of reactions determined to be calculated based on SA.
+        """
+        reaction_keys, pdep_rxns_to_explore = list(), list()
+        if not os.path.isdir(self.paths['SA solver']):
+            self.logger.error("Could not find the path to RMG's SA solver output folder.\n"  # todo: it doesn't have to be RMG
+                              "Not performing refinement based on sensitivity analysis!")
+            return reaction_keys
+
+        # Create a new dictionary that stores the absolute maximum value from each SA.
+        sa_dict_max = dict()
+        for observable_label in self.sa_dict['kinetics'].keys():
+            if observable_label not in sa_dict_max:
+                sa_dict_max[observable_label] = list()
+            for parameter in self.sa_dict['kinetics'][observable_label].keys():
+                entry = dict()
+                entry['parameter'] = parameter  # rxn number as int or spc label as str
+                entry['max_sa'] = max(self.sa_dict['kinetics'][observable_label][parameter].max(),
+                                      abs(self.sa_dict['kinetics'][observable_label][parameter].min()))
+                sa_dict_max[observable_label].append(entry)
+
+        # Get the top X entries from the SA.
+        for observable_label, sa_list in sa_dict_max.items():
+            sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
+            for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
+                reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
+                if self.reaction_requires_refinement(reaction=reaction):
+                    num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
+                    reason = f'(i {self.iteration}) the {num}most sensitive reaction for {observable_label}'
+                    reaction_keys.append(self.add_reaction(reaction=reaction, reasons=reason))
+                # if reaction.kinetics.is_pressure_dependent() \
+                #         and reaction not in [rxn_tup[0] for rxn_tup in pdep_rxns_to_explore] \
+                #         and self.t3['sensitivity']['pdep_SA_threshold'] is not None:
+                #     pdep_rxns_to_explore.append((reaction, i, observable_label))
+
+        # reaction_keys.extend(self.determine_reactions_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore))  # Todo: make sure rate coefficients are perturbed in Arkane PDep SA, consider these rxns here
+
+        return reaction_keys
 
     def determine_species_from_pdep_network(self,
                                             pdep_rxns_to_explore: List[Tuple[Union[Reaction, PDepReaction], int, str]],
