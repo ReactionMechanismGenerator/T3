@@ -887,11 +887,13 @@ class T3(object):
                 self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method...')
                 try:
                     arkane.execute()
-                except (ChemicallySignificantEigenvaluesError,
+                except (AttributeError,
+                        ChemicallySignificantEigenvaluesError,
                         ModifiedStrongCollisionError,
-                        AttributeError,
+                        NetworkError,
+                        TypeError,
                         ValueError,
-                        TypeError) as e:
+                        ) as e:
                     errors.append(e)
                 else:
                     # Network execution was successful, mark network as executed and don't run the next method.
