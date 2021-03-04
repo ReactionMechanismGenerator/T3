@@ -543,7 +543,7 @@ class T3(object):
                     else:
                         unconverged_spc_keys.append(key)
                         self.species[key]['converged'] = False
-            for reaction in content['reaction']:
+            for reaction in content['reactions']:
                 key = self.get_reaction_key(label=reaction['label'])
                 if key is not None:
                     if reaction['success']:
@@ -1314,7 +1314,7 @@ class T3(object):
                                      for species_list in [reaction.reactants, reaction.products]])
             smiles_label = ' <=> '.join([' + '.join([spc.molecule[0].to_smiles() for spc in species_list])
                                          for species_list in [reaction.reactants, reaction.products]])
-            self.reactions[key] = {'RMG label': reaction.label,
+            self.reactions[key] = {'RMG label': reaction.label or str(reaction),
                                    'Chemkin label': reaction.to_chemkin(),
                                    'QM label': qm_label,
                                    'SMILES label': smiles_label,
