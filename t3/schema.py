@@ -172,7 +172,7 @@ class RMGSpecies(BaseModel):
     constant: bool = False
     balance: bool = False
     solvent: bool = False
-    xyz: Optional[Union[List[Union[dict, str]]], dict, str] = None
+    xyz: Optional[Union[List[Union[dict, str]], dict, str]] = None
     seed_all_rads: Optional[List[RadicalTypeEnum]] = None
 
     class Config:
