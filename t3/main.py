@@ -1161,10 +1161,12 @@ class T3(object):
         """
         Get a reaction key (the T3 reaction index) if the reaction exists in self.reactions.
         Either ``reaction`` or ``label`` must be given.
+
         Args:
             reaction (Reaction, optional): The reaction for which the query is performed.
             label (str, optional): The reaction label.
             label_type (str, optional): The label type, either 'RMG', 'Chemkin', 'QM', or 'SMILES' (default: 'QM').
+
         Returns:
             Optional[int]: The reaction T3 index if it exists, ``None`` if it does not.
         """
@@ -1309,9 +1311,9 @@ class T3(object):
             qm_label = ' <=> '.join([' + '.join([get_species_with_qm_label(species=spc,
                                                                            key=self.get_species_key(species=spc)).label
                                                  for spc in species_list])
-                                     for species_list in reaction.reactants + reaction.products])
+                                     for species_list in [reaction.reactants, reaction.products]])
             smiles_label = ' <=> '.join([' + '.join([spc.molecule[0].to_smiles() for spc in species_list])
-                                         for species_list in reaction.reactants + reaction.products])
+                                         for species_list in [reaction.reactants, reaction.products]])
             self.reactions[key] = {'RMG label': reaction.label,
                                    'Chemkin label': reaction.to_chemkin(),
                                    'QM label': qm_label,
