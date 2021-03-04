@@ -1257,7 +1257,7 @@ class T3(object):
                 if rmg_species['label'] == species.label and rmg_species['xyz'] is not None:
                     xyzs = list()
                     if not isinstance(rmg_species['xyz'], list):
-                        rmg_species['xyz'] = list(rmg_species['xyz'])
+                        rmg_species['xyz'] = [rmg_species['xyz']]
                     for xyz in rmg_species['xyz']:
                         # Only pass valid xyzs to ARC.
                         try:
