@@ -1322,6 +1322,10 @@ class T3(object):
                                    'reasons': reasons,
                                    'converged': None,
                                    'iteration': self.iteration,
+                                   'reactant_keys': [self.get_species_key(label=spc.label, label_type='RMG')
+                                                     for spc in reaction.reactants],
+                                   'product_keys': [self.get_species_key(label=spc.label, label_type='RMG')
+                                                    for spc in reaction.products],
                                    }
             qm_reaction = reaction.copy()
             qm_reaction.label = qm_label
