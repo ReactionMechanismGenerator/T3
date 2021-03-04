@@ -6,6 +6,7 @@ channels:
   - omnia
   - conda-forge
   - mjohnson541
+  - psi4
 dependencies:
   - ase >=3.15.0
   - cairo
@@ -40,6 +41,7 @@ dependencies:
   - openbabel
   - paramiko >=2.6.0
   - pandas
+  - psi4
   - psutil
   - py3dmol >= 0.8.0
   - rmg::pydas >=1.0.2
