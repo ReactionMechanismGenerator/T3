@@ -998,7 +998,7 @@ def test_load_species():
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    t3.dump_species_and_reactions()
+    t3.load_species_and_reactions()
     assert t3.species[0]['Chemkin label'] == 'Imipramine_1_peroxy'
     assert t3.species[0]['QM label'] == 'Imipramine_1_peroxy_0'
 
