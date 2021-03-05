@@ -54,7 +54,7 @@ from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file
 from arc.exceptions import ConverterError
 from arc.main import ARC
-from arc.species import ARCSpecies
+from arc.species.species import ARCSpecies, check_label
 from arc.species.converter import check_xyz_dict
 
 from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
@@ -1534,6 +1534,7 @@ def get_reaction_by_index(index: int,
 
 def legalize_species_label(species: Species,
                            return_label: bool = False,
+                           check_arc_label: bool = True,
                            ) -> Optional[str]:
     """
     ARC uses the species label as the folder name on the server and the local machine.
@@ -1542,6 +1543,7 @@ def legalize_species_label(species: Species,
     Args:
         species (Species): A species object.
         return_label (bool, optional): Whether to return the new label.
+        check_arc_label (bool, optional): Whether to also check the label with ARC.
 
     Returns:
         str: The legalized species label.
@@ -1554,6 +1556,8 @@ def legalize_species_label(species: Species,
         if species.label[:2] == 'S(' and species.label[-1] == ')' \
                 and all([char.isdigit() for char in species.label[2:-1]]):
             species.label = species.molecule[0].get_formula()
+    if check_arc_label:
+        species.label = check_label(species.label, verbose=False)[0]
     if return_label:
         return species.label
     return None
