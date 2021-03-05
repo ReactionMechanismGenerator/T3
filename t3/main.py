@@ -1317,8 +1317,13 @@ class T3(object):
                                      for species_list in [reaction.reactants, reaction.products]])
             smiles_label = ' <=> '.join([' + '.join([spc.molecule[0].to_smiles() for spc in species_list])
                                          for species_list in [reaction.reactants, reaction.products]])
+            chemkin_label = ''
+            try:
+                chemkin_label = reaction.to_chemkin()
+            except (TypeError, ChemkinError) as e:
+                self.logger.debug(f'Could not generate a Chemkin label for reaction {reaction}. Got:\n{e}')
             self.reactions[key] = {'RMG label': reaction.label or str(reaction),
-                                   'Chemkin label': reaction.to_chemkin(),
+                                   'Chemkin label': chemkin_label,
                                    'QM label': qm_label,
                                    'SMILES label': smiles_label,
                                    'object': reaction,
