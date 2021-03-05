@@ -1122,6 +1122,8 @@ class T3(object):
                      or ('Estimated using average of templates' in kinetics_comment
                          and 'for rate rule' in kinetics_comment)
                      or '' in kinetics_comment):
+            print(reaction)
+            print(kinetics_comment)
             return True
         return False
 
