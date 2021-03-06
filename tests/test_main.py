@@ -621,6 +621,21 @@ def test_species_requires_refinement():
     assert t3.species_requires_refinement(spc_10) is True
 
 
+def test_reaction_requires_refinement():
+    """Test properly identifying the kinetic comment of a reaction to determine whether it requires refinement"""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_reactions'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    reactions = t3.load_species_and_reactions_from_chemkin_file()[1]
+
+    rxn_55_kinetic_comment = """Estimated using average of templates [N3d/H/NonDe;NH_triplet] + [N3d/H/NonDeO;Y_1centerbirad] for rate rule [N3d/H/NonDeO;NH_triplet]
+Euclidian distance = 1.0
+family: H_Abstraction"""
+    assert rxn_55_kinetic_comment == reactions[66].kinetics.comment
+
+
+
 def test_determine_species_based_on_sa():
     """Test determining species to calculate based on sensitivity analysis"""
     t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
@@ -834,7 +849,7 @@ def test_add_reaction():
     t3.add_reaction(reaction=rmg_reactions[14], reasons=['reason 3a', 'reason 3b'])
 
     assert t3.get_reaction_key(reaction=rmg_reactions[0]) == 0
-    assert t3.reactions[0]['RMG label'] == ''
+    assert t3.reactions[0]['RMG label'] == 's0_H + s0_H <=> s1_H2'
     assert 'H(3)+H(3)=H2(1)' in t3.reactions[0]['Chemkin label']
     assert t3.reactions[0]['QM label'] == 's0_H + s0_H <=> s1_H2'
     assert t3.reactions[0]['SMILES label'] == '[H] + [H] <=> [H][H]'
@@ -844,7 +859,7 @@ def test_add_reaction():
     assert t3.reactions[0]['iteration'] == 2
 
     assert t3.get_reaction_key(reaction=rmg_reactions[4]) == 1
-    assert t3.reactions[1]['RMG label'] == ''
+    assert t3.reactions[1]['RMG label'] == 's0_H + s2_H2O2 <=> s3_HO2 + s1_H2'
     assert 'H(3)+H2O2(9)=HO2(6)+H2(1)' in t3.reactions[1]['Chemkin label']
     assert t3.reactions[1]['QM label'] == 's0_H + s2_H2O2 <=> s3_HO2 + s1_H2'
     assert t3.reactions[1]['SMILES label'] == '[H] + OO <=> [O]O + [H][H]'
@@ -854,7 +869,7 @@ def test_add_reaction():
     assert t3.reactions[1]['iteration'] == 2
 
     assert t3.get_reaction_key(reaction=rmg_reactions[14]) == 2
-    assert t3.reactions[2]['RMG label'] == ''
+    assert t3.reactions[2]['RMG label'] == 's4_O + s5_H2O <=> s6_OH + s6_OH'
     assert 'O(T)(5)+H2O(7)=OH(4)+OH(4)' in t3.reactions[2]['Chemkin label']
     assert t3.reactions[2]['QM label'] == 's4_O + s5_H2O <=> s6_OH + s6_OH'
     assert t3.reactions[2]['SMILES label'] == '[O] + O <=> [OH] + [OH]'
@@ -862,6 +877,27 @@ def test_add_reaction():
     assert t3.reactions[2]['reasons'] == ['reason 3a', 'reason 3b']
     assert t3.reactions[2]['converged'] is None
     assert t3.reactions[2]['iteration'] == 2
+
+    # check that reactant and product labels of an RMG reaction are set correctly when adding a reaction
+    rmg_rxn_1 = Reaction(label='[N-]=[N+](N=O)[O] + HON <=> [O-][N+](=N)N=O + NO',
+                         reactants=[Species(label='[N-]=[N+](N=O)[O]', smiles='[N-]=[N+](N=O)[O]'),
+                                    Species(label='HON', smiles='[N-]=[OH+]')],
+                         products=[Species(label='[O-][N+](=N)N=O', smiles='[O-][N+](=N)N=O'),
+                                   Species(label='NO', smiles='[N]=O')])
+    t3.add_reaction(reaction=rmg_rxn_1, reasons='reason 4')
+    assert t3.get_reaction_key(reaction=rmg_rxn_1) == 3
+    assert t3.reactions[3]['RMG label'] == 's7_N3O2 + s8_HON <=> s9_HN3O2 + s10_NO'
+    assert t3.reactions[3]['Chemkin label'] == ''
+    assert t3.reactions[3]['QM label'] == 's7_N3O2 + s8_HON <=> s9_HN3O2 + s10_NO'
+    assert t3.reactions[3]['SMILES label'] == '[N-]=[N+](N=O)[O] + [N-]=[OH+] <=> [O-][N+](=N)N=O + [N]=O'
+    assert isinstance(t3.reactions[3]['object'], Reaction)
+    assert t3.reactions[3]['reasons'] == ['reason 4']
+    assert t3.reactions[3]['converged'] is None
+    assert t3.reactions[3]['iteration'] == 2
+    assert rmg_rxn_1.reactants[0].label == 's7_N3O2'
+    assert rmg_rxn_1.reactants[1].label == 's8_HON'
+    assert rmg_rxn_1.products[0].label == 's9_HN3O2'
+    assert rmg_rxn_1.products[1].label == 's10_NO'
 
 
 def test_add_to_rmg_library():
