@@ -10,6 +10,7 @@ Todo:
     - scan pdep networks and the core, mark non-physical species
     - utilize the uncertainty analysis script
     - write an RMG input file for the user to later use.
+    - SA dict: dump and load for restart, inc. pdep SA
 """
 
 import datetime
@@ -1133,7 +1134,6 @@ class T3(object):
                      or ('Estimated using average of templates' in kinetics_comment
                          and 'for rate rule' in kinetics_comment)
                      or '' in kinetics_comment):
-            self.logger.error(f'\nThe following reaction requires refinement:\n{reaction}\n{kinetics_comment}')  # Todo: TEMP DELETE
             return True
         return False
 
@@ -1264,7 +1264,7 @@ class T3(object):
                                  'iteration': self.iteration,
                                  }
 
-            # check if T3 has xyz information for this species
+            # Check whether T3 has xyz information for this species, if so process it.
             for rmg_species in self.rmg['species']:
                 if rmg_species['label'] == species.label and rmg_species['xyz'] is not None:
                     xyzs = list()
@@ -1316,46 +1316,53 @@ class T3(object):
             Add tests.
         """
         reasons = [reasons] if isinstance(reasons, str) else reasons
-        key = self.get_reaction_key(reaction=reaction)
-        if key is None:
-            key = len(list(self.reactions.keys()))
-            for spc in reaction.reactants + reaction.products:
-                if self.get_species_key(species=spc) is None:
-                    self.add_species(species=spc, reasons='Participates in a reaction that is being calculated.')
-            qm_label = ' <=> '.join([' + '.join([get_species_with_qm_label(species=spc,
-                                                                           key=self.get_species_key(species=spc)).label
-                                                 for spc in species_list])
-                                     for species_list in [reaction.reactants, reaction.products]])
-            smiles_label = ' <=> '.join([' + '.join([spc.molecule[0].to_smiles() for spc in species_list])
-                                         for species_list in [reaction.reactants, reaction.products]])
+        rxn_key = self.get_reaction_key(reaction=reaction)
+        if rxn_key is None:
             chemkin_label = ''
             try:
                 chemkin_label = reaction.to_chemkin()
-            except (TypeError, ChemkinError) as e:
+            except (AttributeError, ChemkinError, TypeError) as e:
                 self.logger.debug(f'Could not generate a Chemkin label for reaction {reaction}. Got:\n{e}')
-            self.reactions[key] = {'RMG label': reaction.label or str(reaction),
-                                   'Chemkin label': chemkin_label,
-                                   'QM label': qm_label,
-                                   'SMILES label': smiles_label,
-                                   'object': reaction,
-                                   'reasons': reasons,
-                                   'converged': None,
-                                   'iteration': self.iteration,
-                                   'reactant_keys': [self.get_species_key(label=spc.label, label_type='RMG')
-                                                     for spc in reaction.reactants],
-                                   'product_keys': [self.get_species_key(label=spc.label, label_type='RMG')
-                                                    for spc in reaction.products],
-                                   }
-            self.logger.error(f'Adding reaction:\n{self.reactions[key]}')  # Todo: TEMP DELETE
+
+            rxn_key = len(list(self.reactions.keys()))
+            reactants, products = list(), list()
+            for spc in reaction.reactants + reaction.products:
+                if self.get_species_key(species=spc) is None:
+                    self.add_species(species=spc, reasons='Participates in a reaction that is being calculated.')
+                if spc in reaction.reactants:
+                    reactants.append(get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc)))
+                else:
+                    products.append(get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc)))
+            reaction.reactants, reaction.products = reactants, products
+
+            qm_label = ' <=> '.join([' + '.join([spc.label for spc in species_list])
+                                     for species_list in [reaction.reactants, reaction.products]])
+            smiles_label = ' <=> '.join([' + '.join([spc.molecule[0].to_smiles() for spc in species_list])
+                                         for species_list in [reaction.reactants, reaction.products]])
+            reaction.label = qm_label
+
+            self.reactions[rxn_key] = {'RMG label': reaction.label or str(reaction),
+                                       'Chemkin label': chemkin_label,
+                                       'QM label': qm_label,
+                                       'SMILES label': smiles_label,
+                                       'object': reaction,
+                                       'reasons': reasons,
+                                       'converged': None,
+                                       'iteration': self.iteration,
+                                       'reactant_keys': [self.get_species_key(label=spc.label, label_type='RMG')
+                                                         for spc in reaction.reactants],
+                                       'product_keys': [self.get_species_key(label=spc.label, label_type='RMG')
+                                                        for spc in reaction.products],
+                                       }
             qm_reaction = reaction.copy()
             qm_reaction.label = qm_label
             self.qm['reactions'].append(qm_reaction)
-            return key
+            return rxn_key
 
         # The reaction already exists, extend reasons.
         for reason in reasons:
-            if reason not in self.reactions[key]['reasons']:
-                self.reactions[key]['reasons'].append(reason)
+            if reason not in self.reactions[rxn_key]['reasons']:
+                self.reactions[rxn_key]['reasons'].append(reason)
         return None
 
     def add_to_rmg_libraries(self):
