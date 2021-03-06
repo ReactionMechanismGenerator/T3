@@ -25,6 +25,7 @@ from pydas.daspk import DASPKError
 from arkane import Arkane
 from rmgpy import settings as rmg_settings
 from rmgpy.chemkin import load_chemkin_file
+from rmgpy.data.kinetics.library import LibraryReaction
 from rmgpy.data.kinetics import KineticsLibrary
 from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.exceptions import (ChemicallySignificantEigenvaluesError,
@@ -982,7 +983,7 @@ class T3(object):
                                     reason = f'(i {self.iteration}) a sensitive well in PDep ' \
                                         f'network {network_name} from which {chemkin_reaction_str} was ' \
                                         f'derived, which is the {num}most sensitive reaction for observable ' \
-                                        f'{reaction_tuple[2]}, at the {conditions}.'
+                                        f'{reaction_tuple[2]}, at {conditions}.'
                                     species_keys.append(self.add_species(species=species, reasons=reason))
 
         return species_keys
@@ -1114,10 +1115,11 @@ class T3(object):
             Also, sometimes a rate rule is used exactly, but the tree might be too generic
             and the reaction should in fact be computed.
         """
+        if isinstance(reaction, LibraryReaction):
+            return False
         kinetics_comment = reaction.kinetics.comment
         if self.get_reaction_key(reaction=reaction) is None \
                 and 'Exact match found for rate rule' not in kinetics_comment \
-                and 'Library reaction' not in kinetics_comment \
                 and ('Estimated using an average for rate rule' in kinetics_comment
                      or ('Estimated using template' in kinetics_comment and 'for rate rule' in kinetics_comment)
                      or ('Estimated using average of templates' in kinetics_comment
