@@ -512,6 +512,8 @@ class T3(object):
         if 'project' not in arc_kwargs:
             arc_kwargs['project'] = 'T3'
         tic = datetime.datetime.now()
+        import pprint
+        pprint.pprint(arc_kwargs)
         arc = ARC(**arc_kwargs)
         if not os.path.isfile(self.paths['ARC input']):
             save_yaml_file(path=self.paths['ARC input'], content=arc.as_dict())
