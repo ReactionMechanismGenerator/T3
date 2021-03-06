@@ -182,7 +182,7 @@ class Logger(object):
             Log the reasons one by one with line breaks and enumerate
         """
         if len(species_keys):
-            self.info('Species to calculate thermodynamic data for:')
+            self.info('\n\nSpecies to calculate thermodynamic data for:')
             max_label_length = max([len(spc_dict['QM label'])
                                     for key, spc_dict in species_dict.items() if key in species_keys])
             max_smiles_length = max([len(spc_dict['object'].molecule[0].to_smiles())
@@ -211,7 +211,7 @@ class Logger(object):
             Log the reasons one by one with line breaks and enumerate
         """
         if len(reaction_keys):
-            self.info('Reactions to calculate high-pressure limit rate coefficients for:')
+            self.info('\n\nReactions to calculate high-pressure limit rate coefficients for:')
             max_label_length = max([len(rxn_dict['QM label'])
                                     for key, rxn_dict in reaction_dict.items() if key in reaction_keys])
             max_smiles_length = max([len(rxn_dict['SMILES label'])
