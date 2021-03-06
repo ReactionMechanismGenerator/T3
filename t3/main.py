@@ -514,12 +514,15 @@ class T3(object):
             arc_kwargs['project'] = 'T3'
         tic = datetime.datetime.now()
         arc = ARC(**arc_kwargs)
-        arc.write_input_file()
+        if not os.path.isfile(self.paths['ARC input']):
+            save_yaml_file(path=self.paths['ARC input'], content=arc.as_dict())
+
         try:
             arc.execute()
         except Exception as e:
             self.logger.error(f'ARC crashed with {e.__class__}. Got the following error message:\n{e}')
             raise
+
         elapsed_time = time_lapse(tic)
         self.logger.info(f'ARC terminated, execution time: {elapsed_time}')
 
@@ -1115,6 +1118,10 @@ class T3(object):
             #
             Also, sometimes a rate rule is used exactly, but the tree might be too generic
             and the reaction should in fact be computed.
+            #
+            PDep reactions: need to check whether the reaction is elementary, then a high pressure limit of it could be
+            computed by ARC. But if it's a network reaction, then don't send it directly into ARC, make sure to check the wells and path reactions
+            via Arkane SA.
         """
         if isinstance(reaction, LibraryReaction):
             return False
@@ -1339,6 +1346,7 @@ class T3(object):
                                    'product_keys': [self.get_species_key(label=spc.label, label_type='RMG')
                                                     for spc in reaction.products],
                                    }
+            self.logger.error(f'Adding reaction:\n{self.reactions[key]}')  # Todo: TEMP DELETE
             qm_reaction = reaction.copy()
             qm_reaction.label = qm_label
             self.qm['reactions'].append(qm_reaction)
