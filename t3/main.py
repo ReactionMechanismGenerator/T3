@@ -915,6 +915,7 @@ class T3(object):
                         ModifiedStrongCollisionError,
                         NetworkError,
                         TypeError,
+                        UnboundLocalError,
                         ValueError,
                         ) as e:
                     errors.append(e)
@@ -1124,7 +1125,7 @@ class T3(object):
                      or ('Estimated using average of templates' in kinetics_comment
                          and 'for rate rule' in kinetics_comment)
                      or '' in kinetics_comment):
-            self.logger.info(f'\nThe following reaction requires refinement:\n{reaction}\n{kinetics_comment}')
+            self.logger.error(f'\nThe following reaction requires refinement:\n{reaction}\n{kinetics_comment}')  # Todo: TEMP DELETE
             return True
         return False
 
