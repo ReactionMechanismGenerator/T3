@@ -64,7 +64,6 @@ from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 
-PDEP_SA_ME_METHODS = ['CSE', 'MSC']
 RMG_THERMO_LIB_BASE_PATH = os.path.join(rmg_settings['database.directory'], 'thermo', 'libraries')
 RMG_KINETICS_LIB_BASE_PATH = os.path.join(rmg_settings['database.directory'], 'kinetics', 'libraries')
 
@@ -900,7 +899,7 @@ class T3(object):
             # Try running this network using user-specified methods by order.
             sa_coefficients_path, arkane = None, None
             errors = list()
-            for method in PDEP_SA_ME_METHODS:
+            for method in self.t3['sensitivity']['ME_methods']:
                 isomer_labels = write_pdep_network_file(
                     network_name=network_name,
                     method=method,
@@ -931,9 +930,9 @@ class T3(object):
                                                         'sensitivity', 'sa_coefficients.yml')
                     break
             else:
-                self.logger.error(f'Could not execute a PDep SA for network {network_name} using '
-                                  f'{PDEP_SA_ME_METHODS}.\nGot the following errors:')
-                for method, e in zip(PDEP_SA_ME_METHODS, errors):
+                self.logger.error(f"Could not execute a PDep SA for network {network_name} using "
+                                  f"{self.t3['sensitivity']['ME_methods']}.\nGot the following errors:")
+                for method, e in zip(self.t3['sensitivity']['ME_methods'], errors):
                     self.logger.info(f'{e.__class__} for method {method}:\n{e}\n')
 
             if sa_coefficients_path is not None:
