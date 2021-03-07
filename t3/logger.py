@@ -315,7 +315,6 @@ class Logger(object):
             else:
                 self.info('\nAll rate coefficients calculated by ARC successfully converged.')
 
-
     def log_unconverged_species_and_reactions(self,
                                               species_keys: List[int],
                                               species_dict: Dict[int, dict],
@@ -347,7 +346,7 @@ class Logger(object):
             self.info('\nAll species thermodynamic calculations in this iteration successfully converged.\n')
         if len(reaction_keys):
             self.info('\nRate coefficient calculations for the following reactions did NOT converge:')
-            for key in species_keys:
+            for key in reaction_keys:
                 self.info(reaction_dict[key]['QM label'])
             self.info('\n')
         else:
