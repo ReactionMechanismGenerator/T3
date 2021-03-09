@@ -15,7 +15,6 @@ Todo:
 import datetime
 import inspect
 import os
-import pandas as pd
 import re
 import shutil
 import traceback
@@ -47,12 +46,8 @@ from rmgpy.reaction import Reaction
 from rmgpy.rmg.main import initialize_log as initialize_rmg_log
 from rmgpy.rmg.main import RMG
 from rmgpy.rmg.pdep import PDepReaction
-from rmgpy.solver.simple import SimpleReactor
-from rmgpy.solver.liquid import LiquidReactor
 from rmgpy.species import Species
 from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
-from rmgpy.tools.loader import load_rmg_py_job
-from rmgpy.tools.simulate import simulate
 
 from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file
 from arc.exceptions import ConverterError
@@ -63,6 +58,7 @@ from arc.species.converter import check_xyz_dict
 from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
 from t3.logger import Logger
 from t3.schema import InputBase
+from t3.simulate.factory import simulate_factory
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 
 PDEP_SA_ME_METHODS = ['CSE', 'MSC']
@@ -86,6 +82,22 @@ class T3(object):
                 'converged': <Optional[bool]: whether thermo was successfully calculated, ``None`` if pending>,
                 'iteration': <int: The iteration this species was originally added on>,
             },
+        }
+
+        sa_dict = {
+            'thermo': {
+                <str: SA observable>: {
+                    <str: RMG species label>: <array: 1D array with one entry per time point. Each entry is
+                                     dLn(observable_1) / dG_species_1 in mol / kcal at the respective time>,
+                }
+            }
+            'kinetcs': {
+                <str: SA observable>: {
+                    <int: reaction number>: <array: 1D array with one entry per time point. Each entry is
+                                             dLn(observable_1) / dLn(k_1) at the respective time>,
+                }
+            }
+            'time': <array: 1D array of time points in seconds>
         }
 
     Args:
@@ -119,6 +131,8 @@ class T3(object):
         executed_networks (list): PDep networks for which SA was already executed. Entries are tuples of isomer labels.
         rmg_species (List[Species]): Entries are RMG species objects in the model core for a certain T3 iteration.
         rmg_reactions (List[Reaction]): Entries are RMG reaction objects in the model core for a certain T3 iteration.
+        sa_observables (list): Entries are RMG species labels for the SA observables.
+        sa_dict (dict): Dictionary with keys of `kinetics`, `thermo`, and `time`.
     """
 
     def __init__(self,
@@ -131,6 +145,8 @@ class T3(object):
                  clean_dir: bool = False,
                  ):
 
+        self.sa_dict = None
+        self.sa_observables = list()
         self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
 
         project_directory = project_directory or os.path.join(PROJECTS_BASE_PATH, project)
@@ -265,11 +281,28 @@ class T3(object):
 
             # SA
             if self.t3['sensitivity'] is not None:
-                sa_success = self.run_sa()
-                if not sa_success:
-                    self.logger.error(f"Could not complete the sensitivity analysis using "
-                                      f"{self.t3['sensitivity']['adapter']}.")
-                    self.trsh_rmg_tol()
+                # determine species to run SA for
+                if not self.sa_observables:
+                    for species in self.rmg['species']:
+                        if species['observable'] or species['SA_observable']:
+                            self.sa_observables.append(species['label'])
+
+                # use simulate_factory to create the corresponding adapter for SA
+                simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
+                                                    t3=self.t3,
+                                                    rmg=self.rmg,
+                                                    paths=self.paths,
+                                                    logger=self.logger,
+                                                    atol=self.rmg['model']['atol'],
+                                                    rtol=self.rmg['model']['rtol'],
+                                                    observable_list=self.sa_observables,
+                                                    sa_atol=self.t3['sensitivity']['atol'],
+                                                    sa_rtol=self.t3['sensitivity']['rtol'],
+                                                    global_observables=None,
+                                                    )
+                simulate_adapter.simulate()
+                # obtain the dictionary containing all SA coefficients for these species
+                self.sa_dict = simulate_adapter.get_sa_coefficients()
 
             # determine what needs to be calculated
             additional_calcs_required = self.determine_species_to_calculate()
@@ -324,6 +357,8 @@ class T3(object):
             'RMG input': os.path.join(iteration_path, 'RMG', 'input.py'),
             'RMG log': os.path.join(iteration_path, 'RMG', 'RMG.log'),
             'RMG coll vio': os.path.join(iteration_path, 'RMG', 'collision_rate_violators.log'),
+            'RMS': os.path.join(iteration_path, 'RMG', 'rms'),
+            'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.cti'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
             'SA': os.path.join(iteration_path, 'SA'),
@@ -616,72 +651,6 @@ class T3(object):
         elapsed_time = time_lapse(tic)
         self.logger.info(f'RMG terminated, execution time: {elapsed_time}')
 
-    def run_sa(self) -> bool:
-        """
-        Run a sensitivity analysis.
-
-        Returns:
-            bool: Whether the SA ran successfully. ``True`` if it did.
-
-        Todo:
-            - Run SA per SA condition for batch instead of averaging Trange/Prange (extend the schema as needed)
-        """
-        sa_observables = list()
-        for species in self.rmg['species']:
-            if species['observable'] or species['SA_observable']:
-                sa_observables.append(species['label'])
-
-        method = self.t3['sensitivity']['adapter']
-        self.logger.info(f'Running SA using {method}...')
-        if method == 'RMG':
-            if not os.path.isdir(self.paths['SA']):
-                os.mkdir(self.paths['SA'])
-            if os.path.isfile(self.paths['SA input']):
-                os.remove(self.paths['SA input'])
-            shutil.copyfile(src=self.paths['RMG input'], dst=self.paths['SA input'])
-
-            rmg = load_rmg_py_job(
-                input_file=self.paths['SA input'],
-                chemkin_file=self.paths['chem annotated'],
-                species_dict=self.paths['species dict'],
-                generate_images=True,
-                use_chemkin_names=False,
-                check_duplicates=False,
-            )
-
-            rmg_observable_species = [species for species in rmg.reaction_model.core.species
-                                      if species.label in sa_observables]
-
-            for reaction_system in rmg.reaction_systems:
-                reaction_system.sensitive_species = rmg_observable_species
-                reaction_system.sensitivity_threshold = self.t3['sensitivity']['SA_threshold']
-                if hasattr(reaction_system, 'Trange') and reaction_system.Trange is not None:
-                    temperature = sum([t.value_si for t in reaction_system.Trange]) / len(reaction_system.Trange)
-                else:
-                    temperature = reaction_system.T.value_si
-                reaction_system.sens_conditions['T'] = temperature
-                if isinstance(reaction_system, SimpleReactor):
-                    if hasattr(reaction_system, 'Prange') and reaction_system.Prange is not None:
-                        pressure = sum([p.value_si for p in reaction_system.Prange]) / len(reaction_system.Prange)
-                    else:
-                        pressure = reaction_system.P.value_si
-                    reaction_system.sens_conditions['P'] = pressure
-                elif isinstance(reaction_system, LiquidReactor):
-                    if hasattr(reaction_system, 'Vrange') and reaction_system.Vrange is not None:
-                        volume = sum([v for v in reaction_system.Vrange]) / len(reaction_system.Vrange)
-                    else:
-                        volume = reaction_system.V
-                    reaction_system.sens_conditions['V'] = volume
-                else:
-                    raise NotImplementedError(f'RMG SA not implemented for Reactor type {type(reaction_system)}.')
-            try:
-                simulate(rmg)
-            except FileNotFoundError:
-                return False
-        else:
-            raise NotImplementedError(f'Currently only RMG is implemented as a SA method.\nGot: {method}')
-        return True
-
     def determine_species_to_calculate(self) -> bool:
         """
         Determine which species in the executed RMG job should be calculated.
@@ -741,63 +710,29 @@ class T3(object):
 
         Returns:
             List[int]: Entries are T3 species indices of species determined to be calculated based on SA.
-
-        Adapters notes:
-            - This method should remain and still return a list of indices.
-            - Now we don't need to check whether the observables themselves should be refined,
-              it's done in determine_species_to_calculate()
-            - Perhaps the get_species_by_label() and get_reaction_by_index() functions
-              should be relocated to the RMG adapter.
-            - Consider passing self.logger to the adapters instead if instantiating a new Logger
-              (there should only be a single instance of it).
-            - Need to pass self.t3['sensitivity'] to the adapters instead of ``arguments``.
         """
         species_keys, pdep_rxns_to_explore = list(), list()
-        if not os.path.isdir(self.paths['SA solver']):
-            self.logger.error("Could not find the path to RMG's SA solver output folder.\n"
-                              "Not performing refinement based on sensitivity analysis!")
+        if self.sa_dict is None:
+            self.logger.error(f"T3's sa_dict was None. Please check that the input file contains a proper 'sensitivity'"
+                              f"block and/or that SA was run successfully.\n"
+                              f"Not performing refinement based on sensitivity analysis!")
             return species_keys
 
-        sa_files = list()
-        for file_ in os.listdir(self.paths['SA solver']):
-            if 'sensitivity' in file_ and file_.endswith(".csv"):
-                sa_files.append(file_)
-
-        for sa_file in sa_files:
-            # iterate through all SA .csv files in the solver folder
-            df = pd.read_csv(os.path.join(self.paths['SA solver'], sa_file))
-            sa_dict = {'rxn': dict(), 'spc': dict()}
-            for header in df.columns:
-                # iterate through all headers in the SA .csv file, but skip the `Time (s)` column
-                sa_type = None
-                if 'dln[k' in header and self.t3['sensitivity']['top_SA_reactions']:
-                    sa_type = 'rxn'
-                elif 'dG' in header and self.t3['sensitivity']['top_SA_species']:
-                    sa_type = 'spc'
-                if sa_type is not None:
-                    # proceed only if we care about this column
+        # create new dictionary that stores the absolute maximum value from each SA
+        sa_dict_max = {'rxn': dict(), 'spc': dict()}
+        for key, max_key in [['kinetics', 'rxn'], ['thermo', 'spc']]:
+            for observable_label in self.sa_dict[key].keys():
+                if observable_label not in sa_dict_max[max_key]:
+                    sa_dict_max[max_key][observable_label] = list()
+                for parameter in self.sa_dict[key][observable_label].keys():
                     entry = dict()
-                    # check whether the observable requires calculations:
-                    observable_label = header.split('[')[1].split(']')[0]
-                    observable = get_species_by_label(observable_label, self.rmg_species)
-                    if observable is None:
-                        self.logger.error(f'Could not identify observable species {observable_label}!')
-                    # continue with the parameter this column represents
-                    observable_label = observable.to_chemkin()
-                    if observable_label not in sa_dict[sa_type]:
-                        sa_dict[sa_type][observable_label] = list()
-                    # parameter extraction examples:
-                    # for species get 'C2H4(8)' from `dln[ethane(1)]/dG[C2H4(8)]`
-                    # for reaction, get 8 from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)`
-                    parameter = header.split('[')[2].split(']')[0]
-                    if sa_type == 'rxn':
-                        parameter = int(parameter[1:])
-                    entry['parameter'] = parameter  # rxn number or spc label
-                    entry['max_sa'] = max(df[header].max(), abs(df[header].min()))  # the coefficient could be negative
-                    sa_dict[sa_type][observable_label].append(entry)
+                    entry['parameter'] = parameter  # rxn number as int or spc label as str
+                    entry['max_sa'] = max(self.sa_dict[key][observable_label][parameter].max(), abs(
+                        self.sa_dict[key][observable_label][parameter].min()))  # the coefficient could be negative
+                    sa_dict_max[max_key][observable_label].append(entry)
 
             # get the top X entries from the SA
-            for observable_label, sa_list in sa_dict['rxn'].items():
+            for observable_label, sa_list in sa_dict_max['rxn'].items():
                 sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
                 for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
                     reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
@@ -811,7 +746,7 @@ class T3(object):
                             and reaction not in [rxn_tup[0] for rxn_tup in pdep_rxns_to_explore] \
                             and self.t3['sensitivity']['pdep_SA_threshold'] is not None:
                         pdep_rxns_to_explore.append((reaction, i, observable_label))
-            for observable_label, sa_list in sa_dict['spc'].items():
+            for observable_label, sa_list in sa_dict_max['spc'].items():
                 sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
                 for i in range(min(self.t3['sensitivity']['top_SA_species'], len(sa_list_sorted))):
                     species = get_species_by_label(sa_list_sorted[i]['parameter'], self.rmg_species)
