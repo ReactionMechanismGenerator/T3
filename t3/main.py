@@ -512,9 +512,18 @@ class T3(object):
 
         if 'project' not in arc_kwargs:
             arc_kwargs['project'] = 'T3'
+        if 'species' in arc_kwargs.keys() and arc_kwargs['species']:
+            species = list()
+            for spc in arc_kwargs['species']:
+                key = self.get_species_key(species=spc)
+                if key is not None \
+                        and all('no need to compute thermo' in reason for reason in self.species[key]['reasons']):
+                    species.append(ARCSpecies(rmg_species=spc, compute_thermo=False))
+                else:
+                    species.append(spc)
+            arc_kwargs['species'] = species
+
         tic = datetime.datetime.now()
-        import pprint
-        pprint.pprint(arc_kwargs)
         arc = ARC(**arc_kwargs)
         if not os.path.isfile(self.paths['ARC input']):
             save_yaml_file(path=self.paths['ARC input'], content=arc.as_dict())
@@ -1328,7 +1337,8 @@ class T3(object):
             reactants, products = list(), list()
             for spc in reaction.reactants + reaction.products:
                 if self.get_species_key(species=spc) is None:
-                    self.add_species(species=spc, reasons='Participates in a reaction that is being calculated.')
+                    self.add_species(species=spc, reasons='Participates in a reaction that is being calculated '
+                                                          '(no need to compute thermo).')
                 if spc in reaction.reactants:
                     reactants.append(get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc)))
                 else:
@@ -1349,10 +1359,8 @@ class T3(object):
                                        'reasons': reasons,
                                        'converged': None,
                                        'iteration': self.iteration,
-                                       'reactant_keys': [self.get_species_key(label=spc.label, label_type='RMG')
-                                                         for spc in reaction.reactants],
-                                       'product_keys': [self.get_species_key(label=spc.label, label_type='RMG')
-                                                        for spc in reaction.products],
+                                       'reactant_keys': [self.get_species_key(species=spc) for spc in reaction.reactants],
+                                       'product_keys': [self.get_species_key(species=spc) for spc in reaction.products],
                                        }
             qm_reaction = reaction.copy()
             qm_reaction.label = qm_label
