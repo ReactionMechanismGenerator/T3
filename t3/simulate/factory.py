@@ -5,7 +5,6 @@ A module for generating simulate adapters.
 from typing import TYPE_CHECKING, List, Optional, Type
 
 from t3.logger import Logger
-from t3.simulate.adapter import SimulateAdapter
 if TYPE_CHECKING:
     from t3.simulate.adapter import SimulateAdapter
 
@@ -34,14 +33,14 @@ def simulate_factory(simulate_method: str,
                      t3: dict,
                      rmg: dict,
                      paths: dict,
-                     logger: Type[Logger],
+                     logger: Logger,
                      atol: float,
                      rtol: float,
                      observable_list: Optional[list] = None,
                      sa_atol: float = 1e-6,
                      sa_rtol: float = 1e-4,
                      global_observables: Optional[List[str]] = None,
-                     ) -> Type['SimulateAdapter']:
+                     ) -> 'SimulateAdapter':
     """
     A factory generating the simulate adapter corresponding to ``simulate_adapter``.
 
