@@ -4,6 +4,16 @@
 #
 ################################################################################
 
+install:
+	bash devtools/install_arc.sh
+	bash devtools/install_pyrms.sh
+
+install-arc:
+	bash devtools/install_arc.sh
+
+install-pyrms:
+	bash devtools/install_pyrms.sh
+
 test:
 	pytest -ra -vv
 

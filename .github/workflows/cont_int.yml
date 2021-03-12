@@ -25,18 +25,7 @@ jobs:
       run: |
         export PYTHONPATH=$PYTHONPATH:$(pwd)
         conda activate t3_env
-        cd ..
-        git clone https://github.com/ReactionMechanismGenerator/ARC
-        cd ARC
-        export PYTHONPATH=$PYTHONPATH:$(pwd)
-        cd ..
-        git clone https://github.com/ReactionMechanismGenerator/RMG-Py
-        cd RMG-Py
-        export PYTHONPATH=$PYTHONPATH:$(pwd)
-        make
-        cd ..
-        git clone https://github.com/ReactionMechanismGenerator/RMG-database
-        cd T3
+        make install
         echo $(pwd)
         conda list
 

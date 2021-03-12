@@ -106,6 +106,22 @@ model(
 )
 
 simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)
+
+options(
+    name='Seed',
+    generateSeedEachIteration=True,
+    saveSeedToDatabase=False,
+    units='si',
+    generateOutputHTML=False,
+    generatePlots=False,
+    saveSimulationProfiles=False,
+    verboseComments=False,
+    saveEdgeSpecies=True,
+    keepIrreversible=False,
+    trimolecularProductReversible=True,
+    wallTime='01:00:00:00',
+    saveSeedModulus=-1,
+)
 """
     assert content == expected_input
 
@@ -228,7 +244,7 @@ def test_write_rmg_input_file_liquid():
                                    'max_radical_electrons': 1}}
 
     t3 = {'sensitivity':
-              {'adapter': 'RMG',
+              {'adapter': 'RMGConstantTP',
                'atol': 1e-6,
                'rtol': 1e-4,
                }
@@ -294,7 +310,7 @@ def test_write_rmg_input_file_seed_all_radicals():
            'model': {'core_tolerance': [0.001]}}
 
     t3 = {'sensitivity':
-              {'adapter': 'RMG',
+              {'adapter': 'RMGConstantTP',
                'atol': 1e-6,
                'rtol': 1e-4,
                }

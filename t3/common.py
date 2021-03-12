@@ -5,7 +5,7 @@ t3 common module
 import datetime
 import os
 import string
-from typing import Optional
+from typing import Optional, Tuple
 
 from rmgpy.species import Species
 
@@ -15,7 +15,9 @@ VERSION = '0.1.0'
 
 t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolute path to the T3 folder
 DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'data')
+SIMULATE_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'test_simulate_adapters', 'data')
 EXAMPLES_BASE_PATH = os.path.join(t3_path, 'examples')
+IPYTHON_SIMULATOR_EXAMPLES_PATH = os.path.join(t3_path, 'ipython', 'simulator_adapter_examples')
 PROJECTS_BASE_PATH = os.path.join(t3_path, 'Projects')
 VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
@@ -131,3 +133,27 @@ def time_lapse(t0: datetime.datetime) -> datetime.timedelta:
         The time difference between now and t0.
     """
     return datetime.datetime.now() - t0
+
+
+def convert_termination_time_to_seconds(termination_time: Tuple[float, str]):
+    """
+    Converts the termination_time tuple from the RMG reactor to seconds.
+    This is necessary for the RMS adapters since the Julia solver expects
+    the integration bounds to be in units of seconds.
+
+    Args:
+        termination_time (Tuple[float, str]):  Termination time for simulating in the RMG reactor. Example: [5, 'hours']
+
+    Returns:
+        t_final (float): The termination time in seconds.
+    """
+    unit_conversion = {'micro-s': 1e-6,
+                       'ms': 1e-3,
+                       's': 1,
+                       'hrs': 3600,
+                       'hours': 3600,
+                       'days': 3600*24,
+                       }
+    t_final, units = termination_time
+    t_final = t_final * unit_conversion[units]
+    return t_final

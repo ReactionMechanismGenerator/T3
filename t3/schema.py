@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
 
+from t3.simulate.factory import _registered_simulate_adapters
 
 class TerminationTimeEnum(str, Enum):
     """
@@ -57,7 +58,7 @@ class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
     """
-    adapter: Optional[constr(max_length=255)] = None
+    adapter: constr(max_length=255) = 'RMGConstantTP'
     atol: confloat(gt=0, lt=1e-1) = 1e-6
     rtol: confloat(gt=0, lt=1e-1) = 1e-4
     global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None
@@ -71,6 +72,16 @@ class T3Sensitivity(BaseModel):
 
     class Config:
         extra = "forbid"
+
+    @validator('adapter')
+    def check_adapter(cls, value):
+        """T3Sensitivity.adapter validator"""
+        if value not in _registered_simulate_adapters.keys():
+            raise ValueError(
+                f'The "T3 sensitivity adapter" argument of {value} was not present in the keys for the '
+                f'_registered_simulate_adapters dictionary: {list(_registered_simulate_adapters.keys())}'
+                f'\nPlease check that the simulate adapter was registered properly.')
+        return value
 
     @validator('global_observables')
     def check_global_observables(cls, value):
@@ -536,6 +547,11 @@ class RMG(BaseModel):
                                              f'Make sure all species labels defined under termination_conversion '
                                              f'have actual corresponding species.')
         return values
+
+    @validator('options', always=True)
+    def check_options(cls, value):
+        """RMG.options validator"""
+        return value or RMGOptions()
 
 
 class QM(BaseModel):
