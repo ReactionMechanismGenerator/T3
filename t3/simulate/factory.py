@@ -4,16 +4,16 @@ A module for generating simulate adapters.
 
 from typing import TYPE_CHECKING, List, Optional, Type
 
-from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
+
 if TYPE_CHECKING:
-    from t3.simulate.adapter import SimulateAdapter
+    from t3.logger import Logger
 
 _registered_simulate_adapters = {}
 
 
 def register_simulate_adapter(simulator: str,
-                              simulate_class: SimulateAdapter,
+                              simulate_class: Type[SimulateAdapter],
                               ) -> None:
     """
     A register for the simulate adapters.
@@ -34,7 +34,7 @@ def simulate_factory(simulate_method: str,
                      t3: dict,
                      rmg: dict,
                      paths: dict,
-                     logger: Type[Logger],
+                     logger: Logger,
                      atol: float,
                      rtol: float,
                      observable_list: Optional[list] = None,
