@@ -281,6 +281,7 @@ def test_set_paths():
              'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
                              'species_dictionary.txt',
              'RMG T3 thermo lib': 'RMG-database/input/thermo/libraries/T3.py',
+             'RMG T3 kinetics lib': 'RMG-database/input/kinetics/libraries/T3',
              }
     for key, path in t3.paths.items():
         assert paths[key] in path
@@ -438,14 +439,14 @@ def test_process_arc_run():
                      )
     t3.species = {0: {'RMG label': 'imipramine_ol_2_ket_4',
                       'Chemkin label': 'imipramine_ol_2_ket_4',
-                      'QM label': 'imipramine_ol_2_ket_4_0',
+                      'QM label': 'imipramine_ol_2_ket_4',
                       'object': Species(smiles='C'),
                       'reasons': ['reason 1', 'reason 2'],
                       'converged': None,
                       'iteration': 1},
                   1: {'RMG label': 'imipramine_ol_2_ket_5',
                       'Chemkin label': 'imipramine_ol_2_ket_5',
-                      'QM label': 'imipramine_ol_2_ket_5_1',
+                      'QM label': 'imipramine_ol_2_ket_5',
                       'object': Species(smiles='CC'),
                       'reasons': ['reason 3'],
                       'converged': None,
@@ -536,9 +537,9 @@ def test_determine_species_to_calculate():
     additional_calcs_required = t3.determine_species_and_reactions_to_calculate()
     assert additional_calcs_required
     assert len(list(t3.species.keys())) == 3
-    assert all([species_dict['reasons'] == ['All core species'] for species_dict in t3.species.values()])
+    assert all([species_dict['reasons'] == ['(i 2) All core species'] for species_dict in t3.species.values()])
     assert all([species_dict['RMG label'] in ['OH', 'HO2', 'H2O2'] for species_dict in t3.species.values()])
-    assert all([species_dict['QM label'] in ['0_OH', '1_HO2', '2_H2O2'] for species_dict in t3.species.values()])
+    assert all([species_dict['QM label'] in ['s0_OH', 's1_HO2', 's2_H2O2'] for species_dict in t3.species.values()])
 
     # 3. collision violators
     t3.iteration = 3
@@ -698,7 +699,10 @@ def test_determine_species_based_on_collision_violators():
     t3.paths['chem annotated'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'chem_annotated.inp')
     t3.paths['species dict'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'species_dictionary.txt')
     t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
-    species_to_calc = t3.determine_species_and_reactions_based_on_collision_violators()
+    species_to_calc = t3.determine_species_and_reactions_based_on_collision_violators()[0]
+    print('\n\nspecies to cals:')
+    print(species_to_calc)
+    print('\n\ndone')
     assert len(species_to_calc) == 18
     expected_species_to_calc = [
         'C7H13(920)',
@@ -800,12 +804,12 @@ def test_add_species():
 
     assert t3.get_species_key(species=spc_1) == 0
     assert t3.species[0]['RMG label'] == 'OH'
-    assert t3.species[0]['reasons'] == ['All core species']
+    assert t3.species[0]['reasons'] == ['(i 2) All core species']
 
     t3.add_species(species=spc_1, reasons='Some other reason')
     assert t3.get_species_key(species=spc_1) == 0
     assert t3.species[0]['RMG label'] == 'OH'
-    assert t3.species[0]['reasons'] == ['All core species', 'Some other reason']
+    assert t3.species[0]['reasons'] == ['(i 2) All core species', 'Some other reason']
 
     assert t3.get_species_key(species=spc_2) is None
 
@@ -826,7 +830,7 @@ H  0.0000000  0.0000000 -0.3736550"""
 
     found_h2 = False
     for qm_species in t3.qm['species']:
-        if qm_species.label == '4_H2':
+        if qm_species.label == 's4_H2':
             found_h2 = True
             assert isinstance(qm_species, ARCSpecies)
             assert qm_species.conformers == [{'symbols': ('H', 'H'),
@@ -956,7 +960,7 @@ def test_add_to_rmg_library():
 
     spc_3 = Species(
         index=2,
-        label='CH4',
+        label='C3H7',
         thermo=ThermoData(
             Tdata=([300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0], 'K'),
             Cpdata=([3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0], 'cal/(mol*K)'),
@@ -974,9 +978,10 @@ def test_add_to_rmg_library():
             spin_multiplicity=1,
             optical_isomers=1,
         ),
-        smiles='C',
+        smiles='[CH2]CC',
     )
 
+    # 1. Test adding one species to an existing library.
     for lib_name, spc_list in [('RMG_library', [spc_1, spc_2]), ('ARC_library', [spc_3])]:
         thermo_library = ThermoLibrary(name=lib_name, long_desc=lib_name)
         for i, spc in enumerate(spc_list):
@@ -989,6 +994,7 @@ def test_add_to_rmg_library():
         thermo_library.save(os.path.join(libraries_path, f'{lib_name}.py'))
 
     t3 = run_minimal()
+    t3.set_paths()
     t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
     t3.paths['RMG T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
     t3.add_to_rmg_libraries()
@@ -998,6 +1004,32 @@ def test_add_to_rmg_library():
                  "        S298 = (12,'cal/(mol*K)'),\n",
                  ]:
         assert line in lines
+
+    # 2. Test adding one species to an existing library when the new library has a species that also exists.
+    for lib_name, spc_list in [('RMG_library', [spc_1, spc_2]), ('ARC_library', [spc_1, spc_3])]:
+        thermo_library = ThermoLibrary(name=lib_name, long_desc=lib_name)
+        for i, spc in enumerate(spc_list):
+            thermo_library.load_entry(index=i,
+                                      label=spc.label,
+                                      molecule=spc.to_adjacency_list(),
+                                      thermo=spc.thermo,
+                                      shortDesc=spc.label,
+                                      longDesc=spc.label)
+        thermo_library.save(os.path.join(libraries_path, f'{lib_name}.py'))
+
+    t3 = run_minimal()
+    t3.set_paths()
+    t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
+    t3.paths['RMG T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
+    t3.add_to_rmg_libraries()
+    with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
+        lines = f.readlines()
+    count = 0
+    for line in lines:
+        if 'entry(' in line:
+            count += 1
+        print(line)
+    assert count == 3
 
 
 def test_dump_species():
