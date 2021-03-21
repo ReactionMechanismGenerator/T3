@@ -1,5 +1,54 @@
-Dummy ARC log file
+ARC execution initiated on Thu Mar  4 09:53:08 2021
 
+###############################################################
+#                                                             #
+#                 Automatic Rate Calculator                   #
+#                            ARC                              #
+#                                                             #
+#   Version: 1.1.0                                            #
+#                                                             #
+###############################################################
+
+The current git HEAD for ARC is:
+    758f9a5b59bb8571cbbd58ef3af35a6841d1f576
+    Tue Mar 2 23:06:21 2021 +0200
+    (running on the job15 branch)
+
+Starting project T3_ARC_restart_test
+
+Using the following ESS settings:
+{'gaussian': ['local', 'server2'],
+ 'molpro': ['local', 'server2'],
+ 'onedmin': ['server1'],
+ 'orca': ['local'],
+ 'qchem': ['server1'],
+ 'terachem': ['server1']}
+
+
+
+Using the following levels of theory:
+
+Conformers: (default) wb97xd/def2svp, software: gaussian (dft)
+Geometry optimization: (default) wb97xd/def2tzvp, software: gaussian (dft)
+Frequencies: (user-defined opt) wb97xd/def2tzvp, software: gaussian (dft)
+Energy: (default) ccsd(t)-f12/cc-pvtz-f12, software: molpro (wavefunction)
+Rotor scans: (user-defined opt) wb97xd/def2tzvp, software: gaussian (dft)
+IRC: (default) wb97xd/def2tzvp, software: gaussian (dft)
+
+
+Writing input file to /mnt/Data/Code/T3/tests/data/restart/r6/iteration_6/ARC/input.yml
+
+
+
+
+
+
+
+All jobs terminated. Summary for project T3_ARC_restart_test:
+
+
+Total execution time: 00:00:00
+ARC execution terminated on Thu Mar  4 09:53:08 2021
 
 Considering the following job types: ['conformers', 'freq', 'opt', 'sp', 'irc']
 
