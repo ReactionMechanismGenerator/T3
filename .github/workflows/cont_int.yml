@@ -25,7 +25,7 @@ jobs:
     - name: Install codecov
       run: conda install -y -c conda-forge codecov
 
-    - name: Install dependencies
+    - name: Install dependencies and test with PyTest
       shell: bash -l {0}
       run: |
         export PYTHONPATH=$PYTHONPATH:$(pwd)
@@ -33,10 +33,6 @@ jobs:
         make install
         echo $(pwd)
         conda list
-
-    - name: Test with PyTest
-      shell: bash -l {0}
-      run: |
         cd ..
         cd RMG-Py
         export PYTHONPATH=$PYTHONPATH:$(pwd)
