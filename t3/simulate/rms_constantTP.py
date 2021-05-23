@@ -11,13 +11,12 @@ from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
 
-HAS_RMS = True
 try:
     from diffeqpy import de
     from pyrms import rms
 except (ImportError, ModuleNotFoundError):
     # diffeqpy and/or pyrms are missing
-    HAS_RMS = False
+    Logger.error('Missing diffeqpy and/or pyrms. Please ensure these dependencies were correctly installed.')
 
 
 class RMSConstantTP(SimulateAdapter):
@@ -146,10 +145,6 @@ class RMSConstantTP(SimulateAdapter):
         """
         Simulate the mechanism with RMS
         """
-        if not HAS_RMS:
-            self.logger.error('Missing diffeqpy and/or pyrms. Please ensure these dependencies were'
-                              'correctly installed.')
-
         if len(self.observable_list):
             self.logger.info('Running a simulation with SA using RMSConstantTP...')
         else:
