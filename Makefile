@@ -22,3 +22,9 @@ test-main:
 
 test-functional:
 	pytest tests/test_functional.py -ra -vv
+
+test-no-pyrms:
+	pytest -ra -vv -m "not skip"
+
+test-pyrms:
+	pytest -ra -vv -m "skip"
