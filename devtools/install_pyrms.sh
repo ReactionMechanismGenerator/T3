@@ -17,5 +17,5 @@ python -c "import pyrms; pyrms.install()"
 # v0.3.2 is needed to use the latest SA features
 # once there is a functional package for v0.3.2, 
 # the line below can be deleted since pyrms.install() will pull the latest version
-echo installing RMS v0.3.2...
-julia devtools/install_RMS_v032.jl
+# echo installing RMS v0.3.2...
+# julia devtools/install_RMS_v032.jl
