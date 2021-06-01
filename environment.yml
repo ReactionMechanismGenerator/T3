@@ -57,4 +57,5 @@ dependencies:
   - conda-forge::mkdocs-material-extensions
   - conda-forge::mock
   - mjohnson541::pyrms
+  - mjohnson541::julia >= 1.6
   - anaconda::pytest
