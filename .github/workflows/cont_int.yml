@@ -41,5 +41,6 @@ jobs:
         cd ..
         cd T3
         conda activate t3_env
-        make test
+        make test-no-pyrms
+        make test-pyrms
         codecov
