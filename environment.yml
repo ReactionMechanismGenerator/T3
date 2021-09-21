@@ -11,7 +11,7 @@ dependencies:
   - cairo
   - cairocffi
   - rmg::cantera >=2.3.0
-  - cclib >=1.6
+  - conda-forge::cclib >=1.6.3
   - rmg::chemprop
   - codecov
   - coolprop
@@ -37,7 +37,7 @@ dependencies:
   - nose
   - rmg::numdifftools
   - numpy >=1.15.4
-  - openbabel
+  - conda-forge::openbabel >= 3
   - paramiko >=2.6.0
   - pandas
   - psutil
