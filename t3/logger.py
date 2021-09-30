@@ -137,7 +137,7 @@ class Logger(object):
             self.log(f'The current git HEAD for T3 is:\n'
                      f'    {head}\n    {date}',
                      level='always')
-        if branch_name and branch_name != 'master':
+        if branch_name and branch_name != 'main':
             self.log(f'    (running on the {branch_name} branch)\n',
                      level='always')
         else:
