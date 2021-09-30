@@ -103,6 +103,6 @@ execute the following commands (make sure to change ```~/Path/to/T3/``` accordin
 
 	cd ~/Path/to/T3/
 	git fetch origin
-	git pull origin master
+	git pull origin main
 
-The above will update your **master** branch of T3.
+The above will update your **main** branch of T3.

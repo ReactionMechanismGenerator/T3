@@ -8,7 +8,7 @@ Please see the
 <a href="https://github.com/ReactionMechanismGenerator/T3/wiki/Contributor-Guidelines" target="_blank">
 contributor guidelines</a>
 on T3's GitHub page, as well as the
-<a href="https://github.com/ReactionMechanismGenerator/T3/blob/master/CODE_OF_CONDUCT.md" target="_blank">
+<a href="https://github.com/ReactionMechanismGenerator/T3/blob/main/CODE_OF_CONDUCT.md" target="_blank">
 Code of Conduct</a>.
 
 It is recommended to first open an issue on GitHub,
