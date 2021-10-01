@@ -79,7 +79,7 @@ A few RMG arguments have different names altogether in T3. These arguments are:
 
 !!! Note
     Some of the RMG default values have been changed in T3, see the
-    <a href="https://github.com/ReactionMechanismGenerator/T3/blob/master/t3/schema.py" target="_blank">
+    <a href="https://github.com/ReactionMechanismGenerator/T3/blob/main/t3/schema.py" target="_blank">
     schema for details.
 
 
@@ -93,9 +93,9 @@ T3 has several types of reference guides:
 - The [tutorials](tutorials/1_no_qm.md) are a great place to start with,
   and provide an excellent basic reference guide. In T3's tutorials you can find
   complete, functioning, and worked-out examples with explanations.
-- The <a href="https://github.com/ReactionMechanismGenerator/T3/blob/master/examples/commented/input.yml">
+- The <a href="https://github.com/ReactionMechanismGenerator/T3/blob/main/examples/commented/input.yml">
   commented input file</a> in T3's examples shows all available input arguments along with a brief explanation.
-- A <a href="https://github.com/ReactionMechanismGenerator/T3/blob/master/t3/schema.py" target="_blank">
+- A <a href="https://github.com/ReactionMechanismGenerator/T3/blob/main/t3/schema.py" target="_blank">
   pydentic schema</a> is used to validate the input file,
   and could also be used as a reference for the various allowed arguments.
 

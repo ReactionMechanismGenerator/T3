@@ -14,7 +14,7 @@
     <img src="https://img.shields.io/lgtm/grade/python/g/ReactionMechanismGenerator/T3.svg?logo=lgtm&logoWidth=18" alt="Language grade: Python">
 </a>
 <a href="https://codecov.io/gh/ReactionMechanismGenerator/T3" target="_blank">
-    <img src="https://codecov.io/gh/ReactionMechanismGenerator/T3/branch/master/graph/badge.svg" alt="Coverage">
+    <img src="https://codecov.io/gh/ReactionMechanismGenerator/T3/branch/main/graph/badge.svg" alt="Coverage">
 </a>
 <a href="http://opensource.org/licenses/MIT" target="_blank">
     <img src="http://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT license">
