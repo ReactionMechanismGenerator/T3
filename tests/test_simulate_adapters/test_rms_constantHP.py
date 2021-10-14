@@ -6,6 +6,7 @@ t3 tests test_rms_constantHP module
 """
 
 import os
+import pytest
 import shutil
 
 from t3.common import SIMULATE_DATA_BASE_PATH
@@ -15,7 +16,7 @@ from t3.simulate.rms_constantHP import RMSConstantHP
 
 TEST_DIR = os.path.join(SIMULATE_DATA_BASE_PATH, 'rms_simulator_test')
 
-
+@pytest.mark.skip(reason="Skipping pyrms tests.")
 def test_set_up_no_sa():
     """
     Run RMG's minimal example without SA by testing the `set_up` method within the RMSSimulator init method.
@@ -36,7 +37,7 @@ def test_set_up_no_sa():
     # check that there are over 20 time steps (as an arbitrary number) to indicate that the solver completed
     assert len(rms_simulator_adapter.sol.t) > 20
 
-
+@pytest.mark.skip(reason="Skipping pyrms tests.")
 def test_get_sa_coefficients():
     """
     Run RMG's minimal example with SA.
@@ -65,7 +66,7 @@ def test_get_sa_coefficients():
     assert len(sa_dict['kinetics']) == 2
     assert len(sa_dict['thermo']) == 2
 
-
+@pytest.mark.skip(reason="Skipping pyrms tests.")
 def test_get_idt_by_T():
     """
     Calculate the ignition delay time for RMG's minimal example.
@@ -87,7 +88,7 @@ def test_get_idt_by_T():
     assert len(idt_dict['idt']) == 1
     assert len(idt_dict['idt_index']) == 1
 
-
+@pytest.mark.skip(reason="Skipping pyrms tests.")
 def teardown_module():
     """
     A method that is run after all unit tests in this class.
