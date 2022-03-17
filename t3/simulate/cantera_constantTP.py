@@ -209,6 +209,8 @@ class CanteraConstantTP(SimulateAdapter):
         """
         # assign initial conditions
         if V0 is None:
+            T0 = T0[0] if isinstance(T0, np.ndarray) else T0
+            P0 = T0[0] if isinstance(T0, np.ndarray) else P0
             self.model.TPX = T0, P0, X0
         elif P0 is None:
             self.model.TDX = T0, 1 / V0, X0
@@ -394,6 +396,7 @@ class CanteraConstantTP(SimulateAdapter):
         Returns:
              sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
         """
+
         sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
 
         for condition_data in self.all_data:
