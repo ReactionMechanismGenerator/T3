@@ -1,26 +1,31 @@
 name: continuous integration
 
-on: [push]
+on:
+  push:
+  pull_request:
+    branches:
+      - master
+    types: [opened, synchronize, reopened, ready_for_review, review_requested]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.7, 3.8]
 
     steps:
     - uses: actions/checkout@v2
 
-    - name: Set up miniconda Python ${{ matrix.python-version }}
+    - name: Set up miniconda Python 3.7
       uses: conda-incubator/setup-miniconda@v2
       with:
         activate-environment: t3_env
         environment-file: environment.yml
-        python-version: ${{ matrix.python-version }}
+        python-version: 3.7
         auto-activate-base: false
 
-    - name: Install dependencies
+    - name: Install codecov
+      run: conda install -y -c conda-forge codecov
+
+    - name: Install dependencies and test with PyTest
       shell: bash -l {0}
       run: |
         export PYTHONPATH=$PYTHONPATH:$(pwd)
@@ -28,10 +33,6 @@ jobs:
         make install
         echo $(pwd)
         conda list
-
-    - name: Test with nosetests
-      shell: bash -l {0}
-      run: |
         cd ..
         cd RMG-Py
         export PYTHONPATH=$PYTHONPATH:$(pwd)
