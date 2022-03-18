@@ -55,7 +55,13 @@ from arc.main import ARC
 from arc.species import ARCSpecies
 from arc.species.converter import check_xyz_dict
 
-from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
+from t3.common import (PROJECTS_BASE_PATH,
+                       VALID_CHARS,
+                       delete_root_rmg_log,
+                       get_rmg_species_from_a_species_dict,
+                       get_species_by_label,
+                       time_lapse,
+                       )
 from t3.logger import Logger
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
@@ -303,6 +309,7 @@ class T3(object):
                 simulate_adapter.simulate()
                 # obtain the dictionary containing all SA coefficients for these species
                 self.sa_dict = simulate_adapter.get_sa_coefficients()
+
 
             # determine what needs to be calculated
             additional_calcs_required = self.determine_species_to_calculate()
@@ -683,8 +690,12 @@ class T3(object):
             for input_species in self.rmg['species']:
                 if input_species['observable'] or input_species['SA_observable']:
                     sa_observables_exist = True
-                    if self.species_requires_refinement(species=get_species_by_label(input_species['label'],
-                                                                                     self.rmg_species)):
+                    species = get_species_by_label(input_species['label'], self.rmg_species) or \
+                                get_rmg_species_from_a_species_dict(input_species)
+                    if species is None:
+                        raise ValueError(f'Cannot find species\n{input_species} in the species list,'
+                                         f'and cannot create a species without a proper structure.')
+                    if self.species_requires_refinement(species=species):
                         species_keys.append(self.add_species(
                             species=get_species_by_label(input_species['label'], self.rmg_species),
                             reasons=['SA observable'],
@@ -978,6 +989,8 @@ class T3(object):
         Returns:
             bool: Whether the species thermochemical properties should be calculated. ``True`` if they should be.
         """
+        if species is None:
+            raise ValueError('Cannot process value None for argument species.')
         thermo_comment = species.thermo.comment.split('Solvation')[0]
         if self.get_species_key(species=species) is None \
                 and ('group additivity' in thermo_comment or '+ radical(' in thermo_comment):
