@@ -50,7 +50,7 @@ dependencies:
   - rmg::symmetry
   - xlrd
   - xlwt
-  - anaconda::paramiko >=2.10.1
+  - anaconda::paramiko ==2.7.2
   - conda-forge::py3dmol >= 0.8.0
   - conda-forge::ase >=3.15.0
   - anaconda::ipython
@@ -64,4 +64,4 @@ dependencies:
   - mock
   - pytest
   - sphinx
-  - anaconda::libffi
+  - anaconda::libffi ==3.3
