@@ -13,6 +13,7 @@ dependencies:
   - coverage
   - cython >=0.25.2
   - ffmpeg
+  - rmg::diffeqpy
   - rmg::gprof2dot
   - graphviz
   - h5py
@@ -25,6 +26,7 @@ dependencies:
   - mpmath
   - rmg::muq2
   - networkx
+  - nomkl
   - nose
   - rmg::numdifftools
   - numpy >=1.10.0
@@ -33,10 +35,12 @@ dependencies:
   - psutil
   - rmg::pydas >=1.0.2
   - pydot
+  - rmg::pyjulia
   - rmg::pydqed >=1.0.1
   - pymongo
   - pyparsing
   - rmg::pyrdl
+  - rmg::pyrms
   - python >=3.7
   - pyyaml
   - rmg::quantities
