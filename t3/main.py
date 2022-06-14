@@ -1179,15 +1179,11 @@ class T3(object):
         Returns:
             Optional[int]: The species T3 index if it exists, ``None`` if it does not.
         """
-        print(f'In get_species_key, got: {species} type: {type(species)}')
         if species is None and label is None:
             raise ValueError('Either species or label must be specified, got neither.')
         if label_type not in ['RMG', 'Chemkin', 'QM']:
             raise ValueError(f"label type must be either 'RMG', 'Chemkin' or 'QM', got: '{label_type}'.")
         for key, species_dict in self.species.items():
-            print(species_dict)
-            print(f'exec is_isomorphic between {type(species)} and {type(species_dict["object"])}')
-            print(f'molecules: {species.molecule}, {species_dict["object"].molecule}')
             if species is not None and species.molecule not in [None, [None]] \
                     and species_dict['object'] is not None and species_dict['object'].molecule not in [None, [None]] \
                     and species.is_isomorphic(species_dict['object']):
