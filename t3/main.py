@@ -519,9 +519,8 @@ class T3(object):
                 key = self.get_species_key(species=spc)
                 if key is not None \
                         and all('no need to compute thermo' in reason for reason in self.species[key]['reasons']):
-                    species.append(ARCSpecies(rmg_species=spc, compute_thermo=False))
+                    species.append(ARCSpecies(rmg_species=spc, compute_thermo=False) if isinstance(spc, Species) else spc)
                 else:
-                    # todo: pass better from spc_dict
                     species.append(spc)
             arc_kwargs['species'] = species
 
