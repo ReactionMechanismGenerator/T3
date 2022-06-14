@@ -515,26 +515,7 @@ class T3(object):
         if 'species' in arc_kwargs.keys() and arc_kwargs['species']:
             species = list()
             for spc_ in arc_kwargs['species']:
-                if isinstance(spc_, dict):
-                    if 'mol' in spc_.keys():
-                        print('***********************')
-                        print(spc_['mol'])
-                        print(rmg_mol_from_dict_repr(spc_['mol']))
-                        spc = Species(label=spc_['label'], molecule=[rmg_mol_from_dict_repr(spc_['mol'])])
-                        if not spc.molecule or spc.molecule == [None]:
-                            raise
-                    else:
-                        print('+++++++++++++++++++++++')
-                        print(spc_)
-                        print(ARCSpecies(species_dict=spc_))
-                        print(ARCSpecies(species_dict=spc_).mol)
-                        spc = Species(label=spc_['label'], molecule=[ARCSpecies(species_dict=spc_).mol])
-                        if not spc.molecule or spc.molecule == [None]:
-                            raise
-                else:
-                    spc = spc_
-                    if not spc.molecule or spc.molecule == [None]:
-                        raise
+                spc = ARCSpecies(species_dict=spc_) if isinstance(spc_, dict) else spc_
                 key = self.get_species_key(species=spc)
                 if key is not None \
                         and all('no need to compute thermo' in reason for reason in self.species[key]['reasons']):
@@ -1171,7 +1152,7 @@ class T3(object):
         return False
 
     def get_species_key(self,
-                        species: Optional[Species] = None,
+                        species: Optional[Union[Species, ARCSpecies]] = None,
                         label: Optional[str] = None,
                         label_type: str = 'QM',
                         ) -> Optional[int]:
@@ -1180,7 +1161,7 @@ class T3(object):
         Either ``species`` or ``label`` must be given.
 
         Args:
-            species (Species, optional): The species for which the query is performed.
+            species (Union[Species, ARCSpecies], optional): The species for which the query is performed.
             label (str, optional): The species label.
             label_type (str, optional): The label type, either 'RMG', 'Chemkin', or 'QM' (default: 'QM').
 
@@ -1192,9 +1173,7 @@ class T3(object):
         if label_type not in ['RMG', 'Chemkin', 'QM']:
             raise ValueError(f"label type must be either 'RMG', 'Chemkin' or 'QM', got: '{label_type}'.")
         for key, species_dict in self.species.items():
-            if species is not None and species.molecule not in [None, [None]] \
-                    and species_dict['object'] is not None and species_dict['object'].molecule not in [None, [None]] \
-                    and species.is_isomorphic(species_dict['object']):
+            if species is not None and species.is_isomorphic(species_dict['object']):
                 return key
             if label is not None and label == species_dict[f'{label_type} label']:
                 return key
