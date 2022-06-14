@@ -1180,6 +1180,7 @@ class T3(object):
         for key, species_dict in self.species.items():
             print(species_dict)
             print(f'exec is_isomorphic between {type(species)} and {type(species_dict["object"])}')
+            print(f'molecules: {species.molecule}, {species_dict["object"].molecule}')
             if species is not None and species_dict['object'] is not None and species.is_isomorphic(species_dict['object']):
                 return key
             if label is not None and label == species_dict[f'{label_type} label']:  # Todo: put in a different loop, first
