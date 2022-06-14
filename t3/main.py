@@ -524,6 +524,10 @@ class T3(object):
                         if not spc.molecule or spc.molecule == [None]:
                             raise
                     else:
+                        print('+++++++++++++++++++++++')
+                        print(spc_)
+                        print(ARCSpecies(species_dict=spc_))
+                        print(ARCSpecies(species_dict=spc_).mol)
                         spc = Species(label=spc_['label'], molecule=[ARCSpecies(species_dict=spc_).mol])
                         if not spc.molecule or spc.molecule == [None]:
                             raise
