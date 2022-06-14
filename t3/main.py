@@ -53,7 +53,7 @@ from rmgpy.rmg.pdep import PDepReaction
 from rmgpy.species import Species
 from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 
-from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file
+from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, rmg_mol_from_dict_repr, save_yaml_file
 from arc.exceptions import ConverterError
 from arc.main import ARC
 from arc.species.species import ARCSpecies, check_label
@@ -515,9 +515,12 @@ class T3(object):
         if 'species' in arc_kwargs.keys() and arc_kwargs['species']:
             species = list()
             for spc_ in arc_kwargs['species']:
-                print(f'spc_: {spc_}, type: {type(spc_)}')
-                spc = Species(label=spc_['label'], molecule=[ARCSpecies(species_dict=spc_).mol]) \
-                    if isinstance(spc_, dict) else spc_
+                if isinstance(spc_, dict):
+                    if 'mol' in spc_.keys():
+                        spc = Species(label=spc_['label'], molecule=[rmg_mol_from_dict_repr(spc_['mol'])])
+                    else:
+                        spc = Species(label=spc_['label'], molecule=[ARCSpecies(species_dict=spc_).mol])
+                else: spc = spc_
                 key = self.get_species_key(species=spc)
                 if key is not None \
                         and all('no need to compute thermo' in reason for reason in self.species[key]['reasons']):
@@ -1169,12 +1172,12 @@ class T3(object):
         Returns:
             Optional[int]: The species T3 index if it exists, ``None`` if it does not.
         """
+        print(f'In get_species_key, got: {species} type: {type(species)}')
         if species is None and label is None:
             raise ValueError('Either species or label must be specified, got neither.')
         if label_type not in ['RMG', 'Chemkin', 'QM']:
             raise ValueError(f"label type must be either 'RMG', 'Chemkin' or 'QM', got: '{label_type}'.")
         for key, species_dict in self.species.items():
-            print(species)
             print(species_dict)
             if species is not None and species_dict['object'] is not None and species.is_isomorphic(species_dict['object']):
                 return key
