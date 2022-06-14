@@ -517,6 +517,9 @@ class T3(object):
             for spc_ in arc_kwargs['species']:
                 if isinstance(spc_, dict):
                     if 'mol' in spc_.keys():
+                        print('***********************')
+                        print(spc_['mol'])
+                        print(rmg_mol_from_dict_repr(spc_['mol']))
                         spc = Species(label=spc_['label'], molecule=[rmg_mol_from_dict_repr(spc_['mol'])])
                         if not spc.molecule or spc.molecule == [None]:
                             raise
