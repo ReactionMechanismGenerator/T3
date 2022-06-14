@@ -1173,6 +1173,8 @@ class T3(object):
         if label_type not in ['RMG', 'Chemkin', 'QM']:
             raise ValueError(f"label type must be either 'RMG', 'Chemkin' or 'QM', got: '{label_type}'.")
         for key, species_dict in self.species.items():
+            print(species)
+            print(species_dict)
             if species is not None and species_dict['object'] is not None and species.is_isomorphic(species_dict['object']):
                 return key
             if label is not None and label == species_dict[f'{label_type} label']:
