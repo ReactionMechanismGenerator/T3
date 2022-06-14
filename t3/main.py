@@ -515,6 +515,7 @@ class T3(object):
         if 'species' in arc_kwargs.keys() and arc_kwargs['species']:
             species = list()
             for spc_ in arc_kwargs['species']:
+                print(f'spc_: {spc_}, type: {type(spc_)}')
                 spc = Species(label=spc_['label'], molecule=[ARCSpecies(species_dict=spc_).mol]) \
                     if isinstance(spc_, dict) else spc_
                 key = self.get_species_key(species=spc)
