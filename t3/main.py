@@ -518,21 +518,22 @@ class T3(object):
                 if isinstance(spc_, dict):
                     if 'mol' in spc_.keys():
                         spc = Species(label=spc_['label'], molecule=[rmg_mol_from_dict_repr(spc_['mol'])])
-                        if spc.molecule is None:
+                        if not spc.molecule or spc.molecule == [None]:
                             raise
                     else:
                         spc = Species(label=spc_['label'], molecule=[ARCSpecies(species_dict=spc_).mol])
-                        if spc.molecule is None:
+                        if not spc.molecule or spc.molecule == [None]:
                             raise
                 else:
                     spc = spc_
-                    if spc.molecule is None:
+                    if not spc.molecule or spc.molecule == [None]:
                         raise
                 key = self.get_species_key(species=spc)
                 if key is not None \
                         and all('no need to compute thermo' in reason for reason in self.species[key]['reasons']):
                     species.append(ARCSpecies(rmg_species=spc, compute_thermo=False))
                 else:
+                    # todo: pass better from spc_dict
                     species.append(spc)
             arc_kwargs['species'] = species
 
