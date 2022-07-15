@@ -5,7 +5,7 @@ Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor a
 
 import cantera as ct
 import numpy as np
-from typing import List, Optional, Type
+from typing import List, Optional
 
 from rmgpy.tools.canteramodel import generate_cantera_conditions
 from rmgpy.tools.data import GenericData
@@ -63,13 +63,13 @@ class CanteraConstantUV(SimulateAdapter):
                  t3: dict,
                  rmg: dict,
                  paths: dict,
-                 logger: Type[Logger],
+                 logger: Logger,
                  atol: float = 1e-16,
                  rtol: float = 1e-8,
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[Type[List[str]]] = None
+                 global_observables: Optional[List[str]] = None
                  ):
 
         self.t3 = t3
@@ -157,12 +157,12 @@ class CanteraConstantUV(SimulateAdapter):
         self.generate_conditions(reactor_type_list, reaction_time_list, mol_frac_list, Tlist, Plist)
 
     def generate_conditions(self,
-                            reactor_type_list: Type[List[tuple]],
-                            reaction_time_list: Type[List[tuple]],
-                            mol_frac_list: Type[List[dict]],
-                            T0_list: Type[List[tuple]] = None,
-                            P0_list: Type[List[tuple]] = None,
-                            V0_list: Type[List[tuple]] = None,
+                            reactor_type_list: List[tuple],
+                            reaction_time_list: List[tuple],
+                            mol_frac_list: List[dict],
+                            T0_list: Optional[tuple] = None,
+                            P0_list: Optional[tuple] = None,
+                            V0_list: Optional[tuple] = None,
                             ):
         """
         Saves all the reaction conditions.
@@ -171,7 +171,7 @@ class CanteraConstantUV(SimulateAdapter):
             reactor_type_list (list): A list of strings specifying the type of supported Cantera reactor:
                                       IdealGasReactor: A constant volume, zero-dimensional reactor for ideal gas mixtures
                                       IdealGasConstPressureReactor: A homogeneous, constant pressure, zero-dimensional reactor for ideal gas mixtures
-                                      IdealGasConstPressureTemperatureReactor: A homogenous, constant pressure and constant temperature, zero-dimensional reactor
+                                      IdealGasConstPressureTemperatureReactor: A homogeneous, constant pressure and constant temperature, zero-dimensional reactor
                                                                               for ideal gas mixtures (the same as RMG's SimpleReactor)
             reaction_time_list (tuple): A tuple object giving the ([list of reaction times], units)
             mol_frac_list (list): A list of molfrac dictionaries with species object keys
@@ -256,7 +256,7 @@ class CanteraConstantUV(SimulateAdapter):
             try:
                 V0 = self.conditions[0].V0.value_si
                 P0 = None
-            except AttributeError as e:
+            except AttributeError:
                 P0 = condition.P0.value_si
                 V0 = None
             self.reinitialize_simulation(T0=T0,
@@ -337,7 +337,7 @@ class CanteraConstantUV(SimulateAdapter):
             kinetic_sensitivity_data = np.array(kinetic_sensitivity_data)
             thermo_sensitivity_data = np.array(thermo_sensitivity_data)
 
-            # Resave data into generic data objects
+            # Re-save data into generic data objects
             time = GenericData(label='Time',
                                data=times,
                                units='s')
@@ -347,9 +347,7 @@ class CanteraConstantUV(SimulateAdapter):
             pressure = GenericData(label='Pressure',
                                    data=pressure,
                                    units='Pa')
-            condition_data = []
-            condition_data.append(temperature)
-            condition_data.append(pressure)
+            condition_data = [temperature, pressure]
 
             for index, species in enumerate(self.model.species()):
                 # Create generic data object that saves the species object into the species object.  To allow easier manipulate later.
@@ -464,7 +462,7 @@ class CanteraConstantUV(SimulateAdapter):
             try:
                 V0 = self.conditions[0].V0.value_si
                 P0 = None
-            except AttributeError as e:
+            except AttributeError:
                 P0 = condition.P0.value_si
                 V0 = None
 
@@ -502,7 +500,7 @@ class CanteraConstantUV(SimulateAdapter):
             try:
                 V0 = self.conditions[0].V0.value_si
                 P0 = None
-            except AttributeError as e:
+            except AttributeError:
                 P0 = condition.P0.value_si
                 V0 = None
             self.reinitialize_simulation(T0=T0,
