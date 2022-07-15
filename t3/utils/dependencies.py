@@ -21,7 +21,7 @@ def check_dependencies():
         msg = 'Error: Cannot execute T3. Missing the following critical component(s):\n'
         if not rmg_available:
             msg += '  - RMG\n'
-            msg += '    (See http://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/index.html)\n'
+            msg += '    (See https://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/index.html)\n'
         if not arc_available:
             msg += '  - ARC\n'
             msg += '    (See https://reactionmechanismgenerator.github.io/ARC/installation.html)\n'
