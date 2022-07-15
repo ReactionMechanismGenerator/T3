@@ -4,14 +4,14 @@ t3 utils generator module
 Used to generate specific species and reactions.
 """
 
-from typing import List, Type
+from typing import List
 
 import rmgpy.molecule.element as elements
 from rmgpy.molecule.molecule import Atom, Bond
 from rmgpy.species import Species
 
 
-def generate_radicals(species: Type[Species],
+def generate_radicals(species: Species,
                       types: List[str],
                       react_aromatic_rings: bool = False,
                       ):
