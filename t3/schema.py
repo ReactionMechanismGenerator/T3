@@ -280,7 +280,7 @@ class RMGModel(BaseModel):
     rtol: confloat(gt=0, lt=1e-1) = 1e-8
     # filtering:
     filter_reactions: bool = False
-    filter_threshold: conint(gt=0) = 1e8
+    filter_threshold: Union[confloat(gt=0), conint(gt=0)] = 1e+8
     # pruning:
     tolerance_interrupt_simulation: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
     min_core_size_for_prune: Optional[conint(gt=0)] = None
@@ -318,6 +318,15 @@ class RMGModel(BaseModel):
         set core_tolerance to always be a list
         """
         return [value] if isinstance(value, float) else value
+
+    @validator('filter_threshold')
+    def check_filter_threshold(cls, value):
+        """
+        RMGModel.filter_threshold validator
+        set filter_threshold to always be an integer
+        Usually it is given in scientific writing, e.g., 1e+8, which cannot be automatically parsed as an int.
+        """
+        return int(value) if isinstance(value, float) else value
 
     @validator('tolerance_interrupt_simulation', always=True)
     def check_tolerance_interrupt_simulation(cls, value, values):
