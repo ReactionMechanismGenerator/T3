@@ -5,7 +5,7 @@ Used to run mechanism analysis with RMS as an ideal gas in a batch reactor at co
 
 import numpy as np
 import os
-from typing import List, Optional, Type
+from typing import List, Optional
 
 from t3.common import convert_termination_time_to_seconds
 from t3.logger import Logger
@@ -69,13 +69,13 @@ class RMSConstantUV(SimulateAdapter):
                  t3: dict,
                  rmg: dict,
                  paths: dict,
-                 logger: Type[Logger],
+                 logger: Logger,
                  atol: float = 1e-16,
                  rtol: float = 1e-8,
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[Type[List[str]]] = None
+                 global_observables: Optional[List[str]] = None
                  ):
 
         self.t3 = t3
