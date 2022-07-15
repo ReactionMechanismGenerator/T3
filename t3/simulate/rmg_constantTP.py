@@ -8,10 +8,13 @@ import pandas as pd
 import shutil
 from typing import List, Optional
 
+from rmgpy.kinetics.diffusionLimited import diffusion_limiter
+from rmgpy.rmg.listener import SimulationProfilePlotter, SimulationProfileWriter
+from rmgpy.rmg.settings import ModelSettings
 from rmgpy.solver.simple import SimpleReactor
 from rmgpy.solver.liquid import LiquidReactor
 from rmgpy.tools.loader import load_rmg_py_job
-from rmgpy.tools.simulate import simulate
+from rmgpy.tools.plot import plot_sensitivity
 
 from t3.common import get_species_by_label
 from t3.logger import Logger
@@ -96,10 +99,7 @@ class RMGConstantTP(SimulateAdapter):
             FileNotFoundError: If the RMG adapter does not properly read the rmg input file.
             ValueError: If RMG SA is not implemented for the given reactor type.
         """
-
-        # set up directories
         if len(self.observable_list):
-            # store SA results in an SA directory
             self.rmg_input_file = self.paths['SA input']
             if not os.path.isdir(self.paths['SA']):
                 os.mkdir(self.paths['SA'])
@@ -108,14 +108,11 @@ class RMGConstantTP(SimulateAdapter):
             if os.path.isfile(self.paths['SA input']):
                 os.remove(self.paths['SA input'])
         else:
-            # store regular simulation results in solver directory that RMG creates automatically
             self.rmg_input_file = self.paths['RMG input']
 
-        # must copy the input file since load_rmg_py_job creates many directories based on the input file's location
         if not os.path.isfile(self.rmg_input_file):
             shutil.copyfile(src=self.paths['RMG input'], dst=self.rmg_input_file)
 
-        # create rmg object that all methods can access
         self.rmg_model = load_rmg_py_job(input_file=self.rmg_input_file,
                                          chemkin_file=self.paths['chem annotated'],
                                          species_dict=self.paths['species dict'],
@@ -126,35 +123,33 @@ class RMGConstantTP(SimulateAdapter):
         if self.rmg_model is None:
             raise FileNotFoundError('The RMG adapter did not properly read the rmg input file.')
 
-        # update the rmg object to perform SA if applicable
         if len(self.observable_list):
             self.logger.info('Running a simulation with SA using RMGConstantTP...')
             self.observable_species = [species for species in self.rmg_model.reaction_model.core.species
                                        if species.label in self.observable_list]
-
             for i, reaction_system in enumerate(self.rmg_model.reaction_systems):
                 reaction_system.sensitive_species = self.observable_species
                 reaction_system.sensitivity_threshold = self.t3['sensitivity']['SA_threshold']
                 if hasattr(reaction_system, 'Trange') and reaction_system.Trange is not None:
                     temperature = sum([t.value_si for t in reaction_system.Trange]) / len(reaction_system.Trange)
-                    self.logger.info(f'An average temperature of {temperature} K is taken for the SA'
-                                     f'for the RMG reactor number {i}')
+                    self.logger.info(f'An average temperature of {temperature:.1f} K is taken for the SA'
+                                     f' for RMG reactor {i}')
                 else:
                     temperature = reaction_system.T.value_si
                 reaction_system.sens_conditions['T'] = temperature
                 if isinstance(reaction_system, SimpleReactor):
                     if hasattr(reaction_system, 'Prange') and reaction_system.Prange is not None:
                         pressure = sum([p.value_si for p in reaction_system.Prange]) / len(reaction_system.Prange)
-                        self.logger.info(f'An average pressure of {pressure} Pa is taken for the SA'
-                                         f'for the RMG reactor number {i}')
+                        self.logger.info(f'An average pressure of {pressure * 1e-5:.2f} bar is taken for the SA'
+                                         f' for RMG reactor {i}')
                     else:
                         pressure = reaction_system.P.value_si
                     reaction_system.sens_conditions['P'] = pressure
                 elif isinstance(reaction_system, LiquidReactor):
                     if hasattr(reaction_system, 'Vrange') and reaction_system.Vrange is not None:
                         volume = sum([v for v in reaction_system.Vrange]) / len(reaction_system.Vrange)
-                        self.logger.info(f'An average volume of {volume} m^3 is taken for the SA'
-                                         f'for the RMG reactor number {i}')
+                        self.logger.info(f'An average volume of {volume:.2f} m^3 is taken for the SA'
+                                         f' for RMG reactor {i}')
                     else:
                         volume = reaction_system.V
                     reaction_system.sens_conditions['V'] = volume
@@ -165,34 +160,84 @@ class RMGConstantTP(SimulateAdapter):
 
     def simulate(self):
         """
-        Simulates the model using the RMG simulator
+        Simulates the model using the RMG constant T and P simulator adapter.
         """
-        simulate(self.rmg_model)
+        solver_path = os.path.join(self.rmg_model.output_directory, 'solver')
+        if os.path.exists(solver_path):
+            shutil.rmtree(solver_path, ignore_errors=True)
+        if not os.path.exists(solver_path):
+            os.mkdir(solver_path)
 
-    def get_sa_coefficients(self):
+        for index, reaction_system in enumerate(self.rmg_model.reaction_systems):
+            if reaction_system.sensitive_species and reaction_system.sensitive_species == ['all']:
+                reaction_system.sensitive_species = self.rmg_model.reaction_model.core.species
+            reaction_system.attach(SimulationProfileWriter(output_directory=self.rmg_model.output_directory,
+                                                           reaction_sys_index=index,
+                                                           core_species=self.rmg_model.reaction_model.core.species))
+            reaction_system.attach(SimulationProfilePlotter(output_directory=self.rmg_model.output_directory,
+                                                            reaction_sys_index=index,
+                                                            core_species=self.rmg_model.reaction_model.core.species))
+
+            sens_worksheet, pdep_networks = list(), list()
+            for spc in reaction_system.sensitive_species:
+                csv_path = os.path.join(self.rmg_model.output_directory, 'solver', f'sensitivity_{index + 1}_SPC_{spc.index}.csv')
+                sens_worksheet.append(csv_path)
+            for source, networks in self.rmg_model.reaction_model.network_dict.items():
+                pdep_networks.extend(networks)
+
+            model_settings = ModelSettings(tol_keep_in_edge=0, tol_move_to_core=1, tol_interrupt_simulation=1)
+            simulator_settings = self.rmg_model.simulator_settings_list[-1]
+
+            if isinstance(reaction_system, LiquidReactor):  # Relocate to a liquid reactor RMG adapter once created.
+                self.rmg_model.load_database()
+                solvent_data = self.rmg_model.database.solvation.get_solvent_data(self.rmg_model.solvent)
+                diffusion_limiter.enable(solvent_data, self.rmg_model.database.solvation)
+            elif self.rmg_model.uncertainty is not None:
+                self.rmg_model.verbose_comments = True
+                self.rmg_model.load_database()
+
+            if reaction_system.const_spc_names is not None:
+                reaction_system.get_const_spc_indices(self.rmg_model.reaction_model.core.species)
+
+            reaction_system.simulate(
+                core_species=self.rmg_model.reaction_model.core.species,
+                core_reactions=self.rmg_model.reaction_model.core.reactions,
+                edge_species=self.rmg_model.reaction_model.edge.species,
+                edge_reactions=self.rmg_model.reaction_model.edge.reactions,
+                surface_species=[],
+                surface_reactions=[],
+                pdep_networks=pdep_networks,
+                sensitivity=True if reaction_system.sensitive_species else False,
+                sens_worksheet=sens_worksheet,
+                model_settings=model_settings,
+                simulator_settings=simulator_settings,
+                conditions={'T': reaction_system.sens_conditions['T'], 'P': reaction_system.sens_conditions['P']},
+                prune=False,
+            )
+
+            if reaction_system.sensitive_species:
+                plot_sensitivity(self.rmg_model.output_directory, index, reaction_system.sensitive_species)
+                self.rmg_model.run_uncertainty_analysis()
+
+    def get_sa_coefficients(self) -> Optional[dict]:
         """
         Obtain the SA coefficients.
 
         Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
+             sa_dict (Optional[dict]): An SA dictionary, structure is given in the docstring for T3/t3/main.py
         """
-
         solver_path = os.path.join(self.paths['SA'], 'solver')
         if not os.path.exists(solver_path):
             self.logger.error("Could not find the path to RMG's SA solver output folder.")
             return None
-
         sa_files = list()
         for file_ in os.listdir(solver_path):
             if 'sensitivity' in file_ and file_.endswith(".csv"):
                 sa_files.append(file_)
-
         sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
         for sa_file in sa_files:
-            # iterate through all SA .csv files in the solver folder
             df = pd.read_csv(os.path.join(solver_path, sa_file))
             for header in df.columns:
-                # iterate through all headers in the SA .csv file,
                 sa_type = None
                 if 'Time' in header:
                     sa_dict['time'] = df[header].values
@@ -201,31 +246,23 @@ class RMGConstantTP(SimulateAdapter):
                 elif 'dG' in header:
                     sa_type = 'thermo'
                 if sa_type is not None:
-                    # proceed only if we care about this column
-
-                    # check whether the observable requires calculations:
                     observable_label = header.split('[')[1].split(']')[0]
                     observable = get_species_by_label(observable_label, self.rmg_model.reaction_model.core.species)
                     if observable is None:
                         self.logger.error(f'Could not identify observable species {observable_label}!')
-
-                    # continue with the parameter this column represents
                     observable_label = observable.to_chemkin()
                     if observable_label not in sa_dict[sa_type]:
                         sa_dict[sa_type][observable_label] = dict()
-
                     # parameter extraction examples:
                     # for species get 'C2H4(8)' from `dln[ethane(1)]/dG[C2H4(8)]`
                     # for reaction, get 8 from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)`
                     parameter = header.split('[')[2].split(']')[0]
                     if sa_type == 'kinetics':
                         parameter = int(parameter[1:])
-
                     sa_dict[sa_type][observable_label][parameter] = df[header].values
-
         return sa_dict
 
-    def get_idt_by_T(self):
+    def get_idt_by_T(self) -> dict:
         """
         Finds the ignition point by approximating dT/dt as a first order forward difference and then finds
         the point of maximum slope. However, the RMG reactors only simulate at constant T, so this method
@@ -238,7 +275,6 @@ class RMGConstantTP(SimulateAdapter):
         idt_dict = {'idt': list(),
                     'idt_index': list(),
                     }
-
         return idt_dict
 
 
