@@ -8,7 +8,7 @@ import datetime
 import os
 import shutil
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from arc.common import get_git_branch, get_git_commit
 
@@ -239,12 +239,7 @@ class Logger(object):
         """
         if species_dict:
             self.info('\n\n\nSPECIES SUMMARY')
-            converged_keys, unconverged_keys = list(), list()
-            for key, spc_dict in species_dict.items():
-                if spc_dict['converged']:
-                    converged_keys.append(key)
-                else:
-                    unconverged_keys.append(key)
+            converged_keys, unconverged_keys = _get_converged_and_unconverged_keys(species_dict)
 
             max_label_length = max([len(spc_dict['QM label'])
                                     for spc_dict in species_dict.values()] + [6])
@@ -288,12 +283,7 @@ class Logger(object):
         """
         if reactions_dict:
             self.info('\n\n\nRATE COEFFICIENTS SUMMARY')
-            converged_keys, unconverged_keys = list(), list()
-            for key, rxn_dict in reactions_dict.items():
-                if rxn_dict['converged']:
-                    converged_keys.append(key)
-                else:
-                    unconverged_keys.append(key)
+            converged_keys, unconverged_keys = _get_converged_and_unconverged_keys(reactions_dict)
 
             max_label_length = max([len(rxn_dict['QM label'])
                                     for rxn_dict in reactions_dict.values()] + [6])
@@ -367,3 +357,22 @@ class Logger(object):
         schema['verbose'] = verbose_map[schema.get('verbose', 20)]
         self.info(f'\n\nUsing the following arguments:\n\n'
                   f'{dict_to_str(schema)}')
+
+
+def _get_converged_and_unconverged_keys(object_dict: Dict[int, dict]) -> Tuple[List[int], List[int]]:
+    """
+    Get converged keys and unconverged keys from a dictionary representing species or reactions.
+
+    Args:
+        object_dict (dict): A dictionary representing ``species_dict`` or ``reactions_dict``.
+
+    Returns:
+        Tuple[List[int], List[int]]: ``converged_keys`` and ``unconverged_keys``.
+    """
+    converged_keys, unconverged_keys = list(), list()
+    for key, sub_dict in object_dict.items():
+        if 'converged' in sub_dict.keys() and sub_dict['converged']:
+            converged_keys.append(key)
+        else:
+            unconverged_keys.append(key)
+    return converged_keys, unconverged_keys
