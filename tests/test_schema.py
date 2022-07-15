@@ -309,6 +309,50 @@ def test_rmg_species_schema():
                    seed_all_rads=['radical', 'non-supported'],
                    )
 
+    with pytest.raises(ValidationError):
+        # check that the concentration of a balance species is not a list
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.502],
+                   smiles='O',
+                   balance=True,
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that concentration cannot be a 3-length tuple
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.502, 0.809],
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that concentration cannot be negative
+        RMGSpecies(label='H2O',
+                   concentration=-0.203,
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that a concentration range cannot include a negative number
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, -0.502],
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that a concentration range does not contain two equal boundaries
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.203],
+                   smiles='O',
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that species defined with a concentration range cannot be constant
+        RMGSpecies(label='H2O',
+                   concentration=[0.203, 0.502],
+                   smiles='O',
+                   constant=True,
+                   )
+
 
 def test_rmg_reactors_schema():
     """Test creating an instance of RMGReactor"""
