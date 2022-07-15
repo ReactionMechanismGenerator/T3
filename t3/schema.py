@@ -6,11 +6,12 @@ Todo: add "live" validators for actually implemented adapters, need to access th
 """
 
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
 
 from t3.simulate.factory import _registered_simulate_adapters
+
 
 class TerminationTimeEnum(str, Enum):
     """
@@ -49,6 +50,8 @@ class T3Options(BaseModel):
     @validator('collision_violators_rates')
     def check_collision_violators_rates(cls, value, values):
         """T3Options.collision_violators_rates validator"""
+        # Compute thermo for species participating in collision rate violating reactions
+        # if computations of the respective rate coefficients were requested.
         if 'collision_violators_thermo' in values and value:
             values['collision_violators_thermo'] = True
         return value
@@ -159,7 +162,7 @@ class RMGSpecies(BaseModel):
     A class for validating input.RMG.species arguments
     """
     label: str
-    concentration: confloat(ge=0) = 0
+    concentration: Union[confloat(ge=0), Tuple[confloat(ge=0), confloat(ge=0)]] = 0
     smiles: Optional[str] = None
     inchi: Optional[str] = None
     adjlist: Optional[str] = None
@@ -170,11 +173,42 @@ class RMGSpecies(BaseModel):
     constant: bool = False
     balance: bool = False
     solvent: bool = False
-    xyz: Optional[List[Union[dict, str]]] = None
+    xyz: Optional[Union[List[Union[dict, str]], dict, str]] = None
     seed_all_rads: Optional[List[RadicalTypeEnum]] = None
 
     class Config:
         extra = "forbid"
+
+    @validator('constant')
+    def check_ranged_concentration_not_constant(cls, value, values):
+        """RMGSpecies.constant validator"""
+        label = ' for ' + values['label'] if 'label' in values else ''
+        if value and isinstance(values['concentration'], tuple):
+            raise ValueError(f"A constant species cannot have a concentration range.\n"
+                             f"Got{label}: {values['concentration']}.")
+        return value
+
+    @validator('concentration')
+    def check_concentration_range_order(cls, value, values):
+        """Make sure the concentration range is ordered from the smallest to the largest"""
+        label = ' for ' + values['label'] if 'label' in values else ''
+        if isinstance(value, tuple):
+            if value[0] == value[1]:
+                raise ValueError(f"A concentration range cannot contain to identical concentrations.\n"
+                                 f"Got{label}: {value}.")
+            if value[0] > value[1]:
+                value = (value[1], value[0])
+        return value
+
+    @validator('balance')
+    def check_concentration_of_balance_species(cls, value, values):
+        """Make sure the concentration of the balance species is defined, default to 1"""
+        if value and 'concentration' in values:
+            if not isinstance(values['concentration'], (int, float)):
+                raise ValueError(f"The balance species concentration cannot be defined as a range, "
+                                 f"got: {values['concentration']}.")
+            values['concentration'] = values['concentration'] or 1
+        return value
 
 
 class RMGReactor(BaseModel):
@@ -503,7 +537,7 @@ class RMG(BaseModel):
     @validator('pdep')
     def check_pdep_only_if_gas_phase(cls, value, values):
         """RMG.pdep validator"""
-        if value is not None and values['reactors'] is not None:
+        if value is not None and 'reactors' in values and values['reactors'] is not None:
             reactor_types = set([reactor.type for reactor in values['reactors']])
             if value is not None and not any(['gas' in reactor for reactor in reactor_types]):
                 raise ValueError(f'A pdep section can only be specified for gas phase reactors, got: {reactor_types}')
