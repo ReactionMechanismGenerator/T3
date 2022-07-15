@@ -88,20 +88,20 @@ H  0.0000000 -0.9470590 -1.1411940"""
 
 def test_convert_termination_time_to_seconds():
     """Test converting the termination_time from an RMG reactor to seconds"""
-    t_final = [1, 'micro-s']
+    t_final = (1, 'micro-s')
     assert common.convert_termination_time_to_seconds(t_final) == 1e-6
 
-    t_final = [1, 'ms']
+    t_final = (1, 'ms')
     assert common.convert_termination_time_to_seconds(t_final) == 1e-3
 
-    t_final = [1, 's']
+    t_final = (1, 's')
     assert common.convert_termination_time_to_seconds(t_final) == 1
 
-    t_final = [1, 'hours']
+    t_final = (1, 'hours')
     assert common.convert_termination_time_to_seconds(t_final) == 3600
 
-    t_final = [1, 'hrs']
+    t_final = (1, 'hrs')
     assert common.convert_termination_time_to_seconds(t_final) == 3600
 
-    t_final = [1, 'days']
+    t_final = (1, 'days')
     assert common.convert_termination_time_to_seconds(t_final) == 3600*24
