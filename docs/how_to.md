@@ -8,8 +8,9 @@ a chemical species. The following are possible keys and corresponding
 values for each species dictionary:
 
 - `label` (str, required): The species label.
-- `concentration` (float): concentration units are mole fraction for gas phase
+- `concentration` (Union[float, Tuple[float, float]]): Concentration units are mole fraction for gas phase
   and mol/cm3 for liquid phase. Defaults to `0`.
+  A concentration range can also be specified (a length-2 tuple).
 - `smiles` (str): The
   <a href="https://en.wikipedia.org/wiki/Simplified_molecular-input_line-entry_system" target="_blank">
   SMILES</a> representation.
