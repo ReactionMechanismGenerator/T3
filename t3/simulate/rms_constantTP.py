@@ -4,7 +4,7 @@ Used to run mechanism analysis with RMS that simulates ideal gases at constant T
 """
 
 import os
-from typing import List, Optional, Type
+from typing import List, Optional
 
 from t3.common import convert_termination_time_to_seconds
 from t3.logger import Logger
@@ -68,13 +68,13 @@ class RMSConstantTP(SimulateAdapter):
                  t3: dict,
                  rmg: dict,
                  paths: dict,
-                 logger: Type[Logger],
+                 logger: Logger,
                  atol: float = 1e-16,
                  rtol: float = 1e-8,
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[Type[List[str]]] = None
+                 global_observables: Optional[List[str]] = None
                  ):
 
         self.t3 = t3
