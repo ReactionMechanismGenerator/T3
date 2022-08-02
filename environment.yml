@@ -2,22 +2,43 @@ name: t3_env
 channels:
   - defaults
   - rmg
+  - anaconda
+  - omnia
   - conda-forge
+  - cantera
 dependencies:
-  - conda-forge::ase >=3.15.0
-  - conda-forge::cantera >=2.3.0
-  - conda-forge::cclib >=1.7.0
-  - coverage
-  - conda-forge::julia
-  - mako
-  - mkdocs-material >=5.1.7
-  - mkdocs-material-extensions
-  - numpy >=1.10.0
   - anaconda::paramiko >=2.6.0
   - conda-forge::py3dmol >= 0.8.0
+  - conda-forge::ase >=3.15.0
+  - anaconda::ipython
+  - anaconda::sphinx
+  - conda-forge::qcelemental
+  - mako
+  - pytables
+  - pytorch::pytorch >=1.12.0
+  - anaconda::pytest
+  - conda-forge::torchani
+  - conda-forge::xtb
+  - cantera::cantera >=2.5.0
+  - rmg::rmg >=3.1.0
+  - codecov
+  - coverage
+  - h5py
+  - ipython
+  - jupyter
+  - mako
+  - matplotlib >=2.2.2
+  - mkdocs-material >=5.1.7
+  - mkdocs-material-extensions
+  - numpy >=1.15.4
+  - openbabel
+  - pandas
+  - py3dmol >= 0.8.0
+  - pyrms
   - python >=3.7
   - pytest
   - pyyaml
-  - conda-forge::qcelemental
-  - rmg::rmg
-  - sphinx
+  - qcelemental
+  - rmg::rdkit >=2020.03.3.0
+  - scikit-learn
+  - scipy
