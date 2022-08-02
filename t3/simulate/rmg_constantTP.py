@@ -11,8 +11,8 @@ from typing import List, Optional
 from rmgpy.kinetics.diffusionLimited import diffusion_limiter
 from rmgpy.rmg.listener import SimulationProfilePlotter, SimulationProfileWriter
 from rmgpy.rmg.settings import ModelSettings
-from rmgpy.solver.simple import SimpleReactor
 from rmgpy.solver.liquid import LiquidReactor
+from rmgpy.solver.simple import SimpleReactor
 from rmgpy.tools.loader import load_rmg_py_job
 from rmgpy.tools.plot import plot_sensitivity
 
@@ -217,6 +217,8 @@ class RMGConstantTP(SimulateAdapter):
 
             if reaction_system.sensitive_species:
                 plot_sensitivity(self.rmg_model.output_directory, index, reaction_system.sensitive_species)
+
+            if self.rmg_model.uncertainty is not None:
                 self.rmg_model.run_uncertainty_analysis()
 
     def get_sa_coefficients(self) -> Optional[dict]:
