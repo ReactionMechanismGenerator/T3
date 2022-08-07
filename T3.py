@@ -46,7 +46,6 @@ def main() -> None:
     """
     The main T3 executable function.
     """
-
     args = parse_command_line_arguments()
     input_file = args.file
     project_directory = os.path.abspath(os.path.dirname(args.file))
