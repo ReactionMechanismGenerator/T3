@@ -569,7 +569,8 @@ class T3(object):
                         unconverged_rxn_keys.append(key)
                         self.reactions[key]['converged'] = False
         else:
-            raise ValueError(f'ARC did not save a project_info.yml file, something must be wrong.')
+            raise ValueError(f'ARC did not save a project_info.yml file (expected to find it in {self.paths["ARC info"]}, '
+                             f'something must be wrong.')
         self.logger.log_unconverged_species_and_reactions(
             species_keys=unconverged_spc_keys,
             species_dict=self.species,
@@ -774,7 +775,7 @@ class T3(object):
         """
         species_keys, pdep_rxns_to_explore = list(), list()
         if self.sa_dict is None:
-            self.logger.error(f"T3's sa_dict was None. Please check that the input file contains a proper 'sensitivity'"
+            self.logger.error(f"T3's sa_dict was None. Please check that the input file contains a proper 'sensitivity' "
                               f"block and/or that SA was run successfully.\n"
                               f"Not performing refinement based on sensitivity analysis!")
             return species_keys
