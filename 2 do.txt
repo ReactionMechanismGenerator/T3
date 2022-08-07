@@ -1,0 +1,43 @@
+why dont we get species in thermo SA? try different observable
+also, we dont get PDEp SA - we did get network 36, but its not reported in the log?
+
+add the species in the sensitive reaction
+
+
+
+
+*
+fix the log so that its consisten: the same for 1st and 2nd runs
+
+
+*
+wrap up for Rafael presentation (compute rate? flux diagram? show PDep net 36?)
+
+
+*
+commit branch and see tests
+
+
+
+
+
+other:
+run GCN & autotst & Kinbot as queue jobs
+
+
+
+removed from atlas3 when created TS_improvements:
+
+Tests: checks ts do_other_bonds_change_more()
+Added checks ts do_other_bonds_change_more()
+Tests: Replaced ts checks determine_changing_bond > check_bond_changes()
+Changed ts checks determine_changing_bonds() to check_bond_changes()
+
+
+
+
+
+Normal mode displacement - fix and test for many cases
+
+
+
