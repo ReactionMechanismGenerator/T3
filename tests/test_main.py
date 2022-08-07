@@ -19,7 +19,7 @@ from rmgpy.species import Species
 from rmgpy.thermo import NASA, ThermoData
 from rmgpy.statmech import Conformer, IdealGasTranslation, NonlinearRotor, HarmonicOscillator
 
-from arc.common import read_yaml_file
+from arc.common import read_yaml_file, save_yaml_file
 from arc.species import ARCSpecies
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
@@ -260,7 +260,7 @@ def test_set_paths():
     """Test updating self.paths"""
     t3 = run_minimal(iteration=1, set_paths=True)
     paths = {'ARC': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC',
-             'ARC info': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3.info',
+             'ARC info': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3_info.yml',
              'ARC input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/input.yml',
              'ARC kinetics lib': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
                                  'libraries/kinetics',
@@ -368,15 +368,14 @@ def test_restart():
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    t3.species = {0: {
-                'RMG label': 'Imipramine_1_peroxy',
-                'Chemkin label': 'Imipramine_1_peroxy',
-                'QM label': 'Imipramine_1_peroxy_0',
-                'object': Species(smiles='C'),
-                'reasons': ['reason'],
-                'converged': None,
-                'iteration': 2,
-            }}
+    t3.species = {0: {'RMG label': 'Imipramine_1_peroxy',
+                      'Chemkin label': 'Imipramine_1_peroxy',
+                      'QM label': 'Imipramine_1_peroxy_0',
+                      'object': Species(smiles='C'),
+                      'reasons': ['reason'],
+                      'converged': None,
+                      'iteration': 2,
+                      }}
     t3.dump_species_and_reactions()
     assert t3.restart() == (7, True)
     t3.process_arc_run()
