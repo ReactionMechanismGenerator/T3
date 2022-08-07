@@ -626,6 +626,19 @@ class T3(object):
             self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(
                 self.t3['options']['library_name']))
 
+
+        # add to input file or command line args:
+        # - verbose=self.verbose
+        # -
+        # if self.t3['options']['max_rmg_processes'] is not None:
+        #     rmg_kwargs['maxproc'] = self.t3['options']['max_rmg_processes']
+        # if self.t3['options']['max_rmg_iterations'] is not None:
+        #     rmg_kwargs['max_iterations'] = self.t3['options']['max_rmg_iterations']
+        # -
+        # -
+        # -
+
+
         write_rmg_input_file(
             rmg=self.rmg,
             t3=self.t3,
@@ -636,6 +649,10 @@ class T3(object):
         if not os.path.isfile(self.paths['RMG input']):
             raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be found.")
         tic = datetime.datetime.now()
+
+
+
+
 
         # setup RMG
         initialize_rmg_log(
