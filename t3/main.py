@@ -18,10 +18,7 @@ import inspect
 import os
 import re
 import shutil
-import traceback
 from typing import List, Optional, Tuple, Union
-
-from pydas.daspk import DASPKError
 
 from arkane import Arkane
 from rmgpy import settings as rmg_settings
@@ -31,24 +28,12 @@ from rmgpy.data.kinetics.library import LibraryReaction
 from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.exceptions import (ChemicallySignificantEigenvaluesError,
                               ChemkinError,
-                              CollisionError,
-                              CoreError,
-                              ILPSolutionError,
                               InputError,
-                              InvalidMicrocanonicalRateError,
-                              KineticsError,
                               ModifiedStrongCollisionError,
                               NetworkError,
-                              PressureDependenceError,
-                              ReactionError,
-                              ReservoirStateError,
-                              StatmechError,
-                              StatmechFitError,
                               )
 from rmgpy.kinetics import Arrhenius, KineticsData
 from rmgpy.reaction import Reaction
-from rmgpy.rmg.main import initialize_log as initialize_rmg_log
-from rmgpy.rmg.main import RMG
 from rmgpy.rmg.pdep import PDepReaction
 from rmgpy.species import Species
 from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
@@ -61,6 +46,7 @@ from arc.species.converter import check_xyz_dict
 
 from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
 from t3.logger import Logger
+from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -605,8 +591,7 @@ class T3(object):
         """
         self.logger.info(f'Running RMG (tolerance = {self.get_current_rmg_tol()})...')
 
-        # Use the RMG T3 library if it exists and not already in use.
-        # Also, don't use the library if it doesn't exist yet
+        # Use the RMG T3 libraries only if they exist and not already in use.
         # 1. thermo
         if self.t3['options']['library_name'] not in self.rmg['database']['thermo_libraries'] \
                 and os.path.isfile(self.paths['RMG T3 thermo lib']):
@@ -626,19 +611,6 @@ class T3(object):
             self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(
                 self.t3['options']['library_name']))
 
-
-        # add to input file or command line args:
-        # - verbose=self.verbose
-        # -
-        # if self.t3['options']['max_rmg_processes'] is not None:
-        #     rmg_kwargs['maxproc'] = self.t3['options']['max_rmg_processes']
-        # if self.t3['options']['max_rmg_iterations'] is not None:
-        #     rmg_kwargs['max_iterations'] = self.t3['options']['max_rmg_iterations']
-        # -
-        # -
-        # -
-
-
         write_rmg_input_file(
             rmg=self.rmg,
             t3=self.t3,
@@ -647,60 +619,26 @@ class T3(object):
             walltime=self.t3['options']['max_RMG_walltime'],
         )
         if not os.path.isfile(self.paths['RMG input']):
-            raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be found.")
+            raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be written.")
         tic = datetime.datetime.now()
 
-
-
-
-
-        # setup RMG
-        initialize_rmg_log(
-            verbose=self.verbose,
-            log_file_name=self.paths['RMG log'],
-        )
-        rmg = RMG(input_file=self.paths['RMG input'], output_directory=self.paths['RMG'])
-        rmg_kwargs = dict()
-        if self.t3['options']['max_rmg_processes'] is not None:
-            rmg_kwargs['maxproc'] = self.t3['options']['max_rmg_processes']
-        if self.t3['options']['max_rmg_iterations'] is not None:
-            rmg_kwargs['max_iterations'] = self.t3['options']['max_rmg_iterations']
-
-        max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
-        try:
-            rmg.execute(initialize=True, **rmg_kwargs)
-
-        except (ChemicallySignificantEigenvaluesError,
-                ChemkinError,
-                CollisionError,
-                CoreError,
-                DASPKError,
-                ILPSolutionError,
-                InvalidMicrocanonicalRateError,
-                KineticsError,
-                ModifiedStrongCollisionError,
-                NetworkError,
-                PressureDependenceError,
-                ReactionError,
-                ReservoirStateError,
-                StatmechError,
-                StatmechFitError) as e:
-            self.logger.error(f'RMG Errored with {e.__class__}. Got the following trace:')
-            self.logger.info(traceback.format_exc())
-
+        max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']  # keep!
+        rmg_exception_encountered = rmg_runner(rmg_input_file_path=self.paths['RMG input'],
+                                               logger=self.logger,
+                                               max_iterations=self.t3['options']['max_rmg_iterations'],
+                                               verbose=self.verbose,
+                                               )
+        if rmg_exception_encountered:
+            self.rmg_exceptions_counter += 1
             if self.rmg_exceptions_counter > max_rmg_exceptions_allowed:
                 self.logger.error(f'This is the {self.rmg_exceptions_counter} exception raised by RMG.\n'
+                                  f'Cannot allow more than {max_rmg_exceptions_allowed} RMG exceptions during a T3 run.\n'
                                   f'Not allowing additional exceptions, terminating.')
-                raise
+                raise ValueError('Terminating due to RMG exceptions.')
             else:
-                self.logger.warning(f'This is the {self.rmg_exceptions_counter} exception raised by RMG.\n'
+                self.logger.warning(f'RMG did not converge. '
+                                    f'This is the {self.rmg_exceptions_counter} exception raised by RMG.\n'
                                     f'The maximum number of exceptions allowed is {max_rmg_exceptions_allowed}.')
-            self.rmg_exceptions_counter += 1
-
-        except InputError:
-            # this exception should not be raised if the schema is functioning properly
-            self.logger.error('Something seems to be wrong with the RMG input file, please check your input.')
-            raise
 
         elapsed_time = time_lapse(tic)
         self.logger.info(f'RMG terminated, execution time: {elapsed_time}')
