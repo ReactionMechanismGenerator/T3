@@ -8,12 +8,16 @@ t3 tests test_utils module
 import os
 import pytest
 
+from julia.api import Julia
+
 from rmgpy.species import Species
 
 import t3.common as common
 from t3.common import DATA_BASE_PATH
 from t3.schema import RMGSpecies
 from tests.common import run_minimal
+
+jl = Julia(compiled_modules=False)
 
 
 def test_dict_to_str():

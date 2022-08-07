@@ -5,10 +5,14 @@
 t3 tests test_generator module
 """
 
+from julia.api import Julia
+
 from rmgpy.species import Species
 
 from t3.utils.generator import generate_radicals
 from tests.common import isomorphic_smiles
+
+jl = Julia(compiled_modules=False)
 
 
 def test_generate_radicals():

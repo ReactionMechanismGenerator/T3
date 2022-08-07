@@ -8,6 +8,8 @@ schema test module
 import pytest
 from pydantic import ValidationError
 
+from julia.api import Julia
+
 from t3.schema import (T3Options,
                        T3Sensitivity,
                        T3Uncertainty,
@@ -18,7 +20,10 @@ from t3.schema import (T3Options,
                        RMGOptions,
                        RMGPDep,
                        RMGSpeciesConstraints,
-                       QM)
+                       QM,
+                       )
+
+jl = Julia(compiled_modules=False)
 
 # define a long quote of length 444 characters to test constraints on string length
 quote = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et ' \

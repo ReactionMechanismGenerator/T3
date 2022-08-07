@@ -8,11 +8,15 @@ functional test that runs T3's minimal example
 import os
 import shutil
 
+from julia.api import Julia
+
 from arc.common import read_yaml_file
 
 from t3 import T3
 from t3.common import DATA_BASE_PATH
 from t3.utils.dependencies import check_dependencies
+
+jl = Julia(compiled_modules=False)
 
 
 def test_no_t3_no_qm():

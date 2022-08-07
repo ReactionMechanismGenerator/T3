@@ -7,11 +7,15 @@ t3 tests test_writer module
 
 import os
 
+from julia.api import Julia
+
 from arc.common import read_yaml_file
 
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH
 from t3.schema import InputBase, RMG, T3
 from t3.utils.writer import to_camel_case, write_rmg_input_file
+
+jl = Julia(compiled_modules=False)
 
 
 def test_to_camel_case():

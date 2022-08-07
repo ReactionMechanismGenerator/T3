@@ -10,8 +10,12 @@ import os
 import shutil
 from typing import Optional
 
+from julia.api import Julia
+
 from t3.common import DATA_BASE_PATH
 import t3.logger as logger
+
+jl = Julia(compiled_modules=False)
 
 
 log_project_directory = os.path.join(DATA_BASE_PATH, 'log_file_testing_dir')

@@ -9,6 +9,8 @@ import datetime
 import os
 import shutil
 
+from julia.api import Julia
+
 from rmgpy import settings as rmg_settings
 from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.reaction import Reaction
@@ -28,6 +30,8 @@ from t3.main import (T3,
                      get_species_label_by_structure)
 from t3.simulate.factory import simulate_factory
 from t3.utils.writer import write_rmg_input_file
+
+jl = Julia(compiled_modules=False)
 
 
 test_minimal_project_directory = os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
