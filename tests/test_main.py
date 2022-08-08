@@ -512,7 +512,7 @@ def test_run_rmg():
                  "simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)\n",
                  "No collision rate violators found in the model's core.\n",
                  "MODEL GENERATION COMPLETED\n",
-                 "The final model core has 12 species and 18 reactions\n",
+                 "The final model core has 13 species and 20 reactions\n",
                  ]:
         assert line in lines
     assert os.path.isfile(t3.paths['chem annotated'])
@@ -551,17 +551,21 @@ def test_determine_species_to_calculate():
     t3.t3['options']['collision_violators_thermo'] = True
     additional_calcs_required = t3.determine_species_and_reactions_to_calculate()
     assert additional_calcs_required
-    assert len(list(t3.species.keys())) == 18
+    assert len(list(t3.species.keys())) == 38
     assert all(['Species participates in collision rate violating reaction:' in species_dict['reasons'][0]
+                or 'Participates in a reaction for which a rate coefficient is computed' in species_dict['reasons'][0]
                 for species_dict in t3.species.values() if species_dict['RMG label'] not in ['H', 'OH']])
 
     # 4. SA observables
-    assert t3.species[0]['RMG label'] == 'CC=[C]CCCC'
+    assert t3.species[0]['RMG label'] == 'H'
     assert t3.species[0]['reasons'] == \
+           ['(i 3) Participates in a reaction for which a rate coefficient is computed.']
+    assert t3.species[3]['RMG label'] == 'CC=[C]CCCC'
+    assert t3.species[3]['reasons'] == \
            ['(i 3) Species participates in collision rate violating reaction: H(3)+C7H13(920)=C7H14(323)']
-    assert t3.species[1]['RMG label'] == '[CH2]CC(=C)C=C'
-    assert t3.species[1]['reasons'] == \
-           ['(i 3) Species participates in collision rate violating reaction: HO2(10)+C6H9(1933)=H2O2(11)+C6H8(2025)']
+    assert t3.species[10]['RMG label'] == '[CH2]CC(=C)[C]=C'
+    assert t3.species[10]['reasons'] == \
+           ['(i 3) Species participates in collision rate violating reaction: C6H8(2027)=C2H4(21)+C4H4(2531)']
 
 
 def test_species_requires_refinement():
@@ -631,12 +635,11 @@ def test_reaction_requires_refinement():
                      set_paths=True,
                      )
     reactions = t3.load_species_and_reactions_from_chemkin_file()[1]
-
-    rxn_55_kinetic_comment = """Estimated using average of templates [N3d/H/NonDe;NH_triplet] + [N3d/H/NonDeO;Y_1centerbirad] for rate rule [N3d/H/NonDeO;NH_triplet]
-Euclidian distance = 1.0
+    rxn_100_kinetic_comment = """Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+Euclidian distance = 0
+Multiplied by reaction path degeneracy 4.0
 family: H_Abstraction"""
-    assert rxn_55_kinetic_comment == reactions[66].kinetics.comment
-
+    assert rxn_100_kinetic_comment == reactions[100].kinetics.comment
 
 
 def test_determine_species_based_on_sa():
@@ -702,9 +705,6 @@ def test_determine_species_based_on_collision_violators():
     t3.paths['species dict'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'species_dictionary.txt')
     t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
     species_to_calc = t3.determine_species_and_reactions_based_on_collision_violators()[0]
-    print('\n\nspecies to cals:')
-    print(species_to_calc)
-    print('\n\ndone')
     assert len(species_to_calc) == 18
     expected_species_to_calc = [
         'C7H13(920)',
@@ -726,8 +726,7 @@ def test_determine_species_based_on_collision_violators():
         'S(26357)',
         'S(25149)'
     ]
-    for index in species_to_calc:
-        assert t3.species[index]['Chemkin label'] == expected_species_to_calc[index]
+    assert [t3.species[index]['Chemkin label'] for index in species_to_calc] == expected_species_to_calc
 
 
 def test_trsh_rmg_tol():
@@ -846,43 +845,43 @@ H  0.0000000  0.0000000 -0.3736550"""
 def test_add_reaction():
     """Test adding a reaction to self.reactions and to self.qm['reactions']"""
     t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_reactions'),
-                     iteration=2,
+                     iteration=1,
                      set_paths=True,
                      )
     rmg_species, rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
-    t3.add_reaction(reaction=rmg_reactions[0], reasons='reason 1')
-    t3.add_reaction(reaction=rmg_reactions[4], reasons='reason 2')
+    t3.add_reaction(reaction=rmg_reactions[342], reasons='reason 1')
+    t3.add_reaction(reaction=rmg_reactions[100], reasons='reason 2')
     t3.add_reaction(reaction=rmg_reactions[14], reasons=['reason 3a', 'reason 3b'])
 
-    assert t3.get_reaction_key(reaction=rmg_reactions[0]) == 0
-    assert t3.reactions[0]['RMG label'] == 's0_H + s0_H <=> s1_H2'
-    assert 'H(3)+H(3)=H2(1)' in t3.reactions[0]['Chemkin label']
-    assert t3.reactions[0]['QM label'] == 's0_H + s0_H <=> s1_H2'
-    assert t3.reactions[0]['SMILES label'] == '[H] + [H] <=> [H][H]'
+    assert t3.get_reaction_key(reaction=rmg_reactions[342]) == 0
+    assert t3.reactions[0]['RMG label'] == 's0_H + s1_CC=CCCC <=> s2_S2XC6H13'
+    assert 'H(2)+S(1229)=C6H13(794)' in t3.reactions[0]['Chemkin label']
+    assert t3.reactions[0]['QM label'] == 's0_H + s1_CC=CCCC <=> s2_S2XC6H13'
+    assert t3.reactions[0]['SMILES label'] == '[H] + CC=CCCC <=> CC[CH]CCC'
     assert isinstance(t3.reactions[0]['object'], Reaction)
     assert t3.reactions[0]['reasons'] == ['reason 1']
     assert t3.reactions[0]['converged'] is None
-    assert t3.reactions[0]['iteration'] == 2
+    assert t3.reactions[0]['iteration'] == 1
 
-    assert t3.get_reaction_key(reaction=rmg_reactions[4]) == 1
-    assert t3.reactions[1]['RMG label'] == 's0_H + s2_H2O2 <=> s3_HO2 + s1_H2'
-    assert 'H(3)+H2O2(9)=HO2(6)+H2(1)' in t3.reactions[1]['Chemkin label']
-    assert t3.reactions[1]['QM label'] == 's0_H + s2_H2O2 <=> s3_HO2 + s1_H2'
-    assert t3.reactions[1]['SMILES label'] == '[H] + OO <=> [O]O + [H][H]'
+    assert t3.get_reaction_key(reaction=rmg_reactions[100]) == 1
+    assert t3.reactions[1]['RMG label'] == 's3_S2XC12H25 + s4_fuel <=> s5_S3XC12H25 + s4_fuel'
+    assert 'S(839)+fuel(1)=S(840)+fuel(1)' in t3.reactions[1]['Chemkin label']
+    assert t3.reactions[1]['QM label'] == 's3_S2XC12H25 + s4_fuel <=> s5_S3XC12H25 + s4_fuel'
+    assert t3.reactions[1]['SMILES label'] == 'CC[CH]CCCCCCCCC + CCCCCCCCCCCC <=> CCC[CH]CCCCCCCC + CCCCCCCCCCCC'
     assert isinstance(t3.reactions[1]['object'], Reaction)
     assert t3.reactions[1]['reasons'] == ['reason 2']
     assert t3.reactions[1]['converged'] is None
-    assert t3.reactions[1]['iteration'] == 2
+    assert t3.reactions[1]['iteration'] == 1
 
     assert t3.get_reaction_key(reaction=rmg_reactions[14]) == 2
-    assert t3.reactions[2]['RMG label'] == 's4_O + s5_H2O <=> s6_OH + s6_OH'
-    assert 'O(T)(5)+H2O(7)=OH(4)+OH(4)' in t3.reactions[2]['Chemkin label']
-    assert t3.reactions[2]['QM label'] == 's4_O + s5_H2O <=> s6_OH + s6_OH'
-    assert t3.reactions[2]['SMILES label'] == '[O] + O <=> [OH] + [OH]'
+    assert t3.reactions[2]['RMG label'] == 's6_PC4H9 <=> s7_C2H4 + s8_C2H5'
+    assert 'PC4H9(191)=C2H4(22)+C2H5(52)' in t3.reactions[2]['Chemkin label']
+    assert t3.reactions[2]['QM label'] == 's6_PC4H9 <=> s7_C2H4 + s8_C2H5'
+    assert t3.reactions[2]['SMILES label'] == '[CH2]CCC <=> C=C + C[CH2]'
     assert isinstance(t3.reactions[2]['object'], Reaction)
     assert t3.reactions[2]['reasons'] == ['reason 3a', 'reason 3b']
     assert t3.reactions[2]['converged'] is None
-    assert t3.reactions[2]['iteration'] == 2
+    assert t3.reactions[2]['iteration'] == 1
 
     # check that reactant and product labels of an RMG reaction are set correctly when adding a reaction
     rmg_rxn_1 = Reaction(label='[N-]=[N+](N=O)[O] + HON <=> [O-][N+](=N)N=O + NO',
@@ -892,18 +891,18 @@ def test_add_reaction():
                                    Species(label='NO', smiles='[N]=O')])
     t3.add_reaction(reaction=rmg_rxn_1, reasons='reason 4')
     assert t3.get_reaction_key(reaction=rmg_rxn_1) == 3
-    assert t3.reactions[3]['RMG label'] == 's7_N3O2 + s8_HON <=> s9_HN3O2 + s10_NO'
+    assert t3.reactions[3]['RMG label'] == 's9_N3O2 + s10_HON <=> s11_HN3O2 + s12_NO'
     assert t3.reactions[3]['Chemkin label'] == ''
-    assert t3.reactions[3]['QM label'] == 's7_N3O2 + s8_HON <=> s9_HN3O2 + s10_NO'
+    assert t3.reactions[3]['QM label'] == 's9_N3O2 + s10_HON <=> s11_HN3O2 + s12_NO'
     assert t3.reactions[3]['SMILES label'] == '[N-]=[N+](N=O)[O] + [N-]=[OH+] <=> [O-][N+](=N)N=O + [N]=O'
     assert isinstance(t3.reactions[3]['object'], Reaction)
     assert t3.reactions[3]['reasons'] == ['reason 4']
     assert t3.reactions[3]['converged'] is None
-    assert t3.reactions[3]['iteration'] == 2
-    assert rmg_rxn_1.reactants[0].label == 's7_N3O2'
-    assert rmg_rxn_1.reactants[1].label == 's8_HON'
-    assert rmg_rxn_1.products[0].label == 's9_HN3O2'
-    assert rmg_rxn_1.products[1].label == 's10_NO'
+    assert t3.reactions[3]['iteration'] == 1
+    assert rmg_rxn_1.reactants[0].label == 's9_N3O2'
+    assert rmg_rxn_1.reactants[1].label == 's10_HON'
+    assert rmg_rxn_1.products[0].label == 's11_HN3O2'
+    assert rmg_rxn_1.products[1].label == 's12_NO'
 
 
 def test_add_to_rmg_library():
