@@ -17,6 +17,7 @@ Usage::
 
 import argparse
 import os
+import sys
 import traceback
 
 from pydas.daspk import DASPKError
@@ -75,8 +76,8 @@ def main() -> None:
     )
     rmg = RMG(input_file=input_file, output_directory=project_directory)
     rmg_kwargs = dict()
-    if args.maxiter[0]:
-        rmg_kwargs['max_iterations'] = args.maxiter[0]
+    if args.maxiter:
+        rmg_kwargs['max_iterations'] = args.maxiter
 
     try:
         rmg.execute(initialize=True, **rmg_kwargs)
@@ -96,6 +97,10 @@ def main() -> None:
             StatmechError,
             StatmechFitError,
             ) as e:
+        sys.stderr.write(f'\n\n********\n'
+                         f'RMG threw an exception and did not converge.\n'  # Keep this text unchanged.
+                         f'Exception type: {e.__class__}\n'
+                         f'********\n')
         print(f'RMG Errored with {e.__class__}. Got the following trace:')
         print(traceback.format_exc())
 
