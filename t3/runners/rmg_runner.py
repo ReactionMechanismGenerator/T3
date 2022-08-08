@@ -32,8 +32,6 @@ else:
     SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME = ''
 
 
-
-
 def write_submit_script(name: str) -> None:
     """
     Write the submit script.
@@ -225,19 +223,33 @@ def update_names_and_dicts(names: List[str],
 def run_rmg_incore(rmg_input_file_path: str,
                    verbose: Optional[int] = None,
                    max_iterations: Optional[int] = None,
-                   ):
+                   ) -> bool:
     """
     Run RMG incore under the rmg_env.
+
+    Args:
+        rmg_input_file_path (str): The path to the RMG input file.
+        max_iterations(int, optional): Max RMG iterations.
+        verbose(int, optional): Level of verbosity.
+
+    Returns:
+        bool: Whether an exception was raised.
     """
     project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
     verbose = f' -v {verbose}' if verbose is not None else ''
     max_iterations = f' -m {max_iterations}' if max_iterations is not None else ''
-    commands = ['conda activate rmg_env',
+    script_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'rmg_incore_script.py')
+    commands = ['CONDA_BASE=$(conda info --base)',
+                'source $CONDA_BASE/etc/profile.d/conda.sh',
+                'conda activate rmg_env',
                 f'cd {project_directory}',
-                f'python-jl rmg_incore_script.py full/path/to/rmg/input.py{verbose}{max_iterations} '
+                f'python-jl {script_path} {rmg_input_file_path}{verbose}{max_iterations} '
                 f'> >(tee -a out.txt) 2> >(tee -a err.txt >&2)',
                 ]
-    execute_command(commands, shell=True, no_fail=True, executable='/bin/bash')
+    stdout, stderr = execute_command(commands, shell=True, no_fail=True, executable='/bin/bash')
+    if 'RMG threw an exception and did not converge.\n' in stderr:
+        return True
+    return False
 
 
 def run_rmg_in_local_queue():
@@ -251,7 +263,7 @@ def rmg_runner(rmg_input_file_path: str,
                logger: 'Logger',
                verbose: Optional[int] = None,
                max_iterations: Optional[int] = None,
-               ):
+               ) -> bool:
     """
     Run an RMG job as a subprocess under the rmg_env.
 
@@ -262,16 +274,17 @@ def rmg_runner(rmg_input_file_path: str,
         verbose(int, optional): Level of verbosity.
 
     Returns:
-        bool: Whether an exception was raised (then add to .rmg_exceptions_counter counter)
+        bool: Whether an exception was raised.
     """
     if not os.path.isdir(local_t3_path):
         os.makedirs(local_t3_path)
 
     if rmg_execution_type == 'incore':
-        run_rmg_incore(rmg_input_file_path=rmg_input_file_path,
-                       verbose=verbose,
-                       max_iterations=max_iterations,
-                       )
+        rmg_exception_encountered = run_rmg_incore(rmg_input_file_path=rmg_input_file_path,
+                                                   verbose=verbose,
+                                                   max_iterations=max_iterations,
+                                                   )
+        return rmg_exception_encountered
     elif rmg_execution_type == 'local':
         run_rmg_in_local_queue()
         # job_id_yml_path = os.path.join(local_t3_path, 'jobs.yml')
