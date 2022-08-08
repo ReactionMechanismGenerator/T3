@@ -622,7 +622,7 @@ class T3(object):
             raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be written.")
         tic = datetime.datetime.now()
 
-        max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']  # keep!
+        max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
         rmg_exception_encountered = rmg_runner(rmg_input_file_path=self.paths['RMG input'],
                                                logger=self.logger,
                                                max_iterations=self.t3['options']['max_rmg_iterations'],
@@ -679,8 +679,9 @@ class T3(object):
         if self.t3['options']['all_core_species']:
             for species in self.rmg_species:
                 if self.species_requires_refinement(species=species):
-                    species_keys.append(self.add_species(species=species,
-                                                         reasons=[f'(i {self.iteration}) All core species']))
+                    key = self.add_species(species=species, reasons=[f'(i {self.iteration}) All core species'])
+                    if key is not None:
+                        species_keys.append(key)
 
         # 1. Species
         else:
@@ -689,10 +690,10 @@ class T3(object):
                 if input_species['observable'] or input_species['SA_observable']:
                     if self.species_requires_refinement(species=get_species_by_label(input_species['label'],
                                                                                      self.rmg_species)):
-                        species_keys.append(self.add_species(
-                            species=get_species_by_label(input_species['label'], self.rmg_species),
-                            reasons=['SA observable'],
-                        ))
+                        key = self.add_species(species=get_species_by_label(input_species['label'], self.rmg_species),
+                                               reasons=['SA observable'])
+                        if key is not None:
+                            species_keys.append(key)
             # 1.2. SA
             if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
@@ -758,7 +759,9 @@ class T3(object):
                             num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
                             reason = f'(i {self.iteration}) participates in the {num}most sensitive reaction ' \
                                      f'for {observable_label}: {reaction}'
-                            species_keys.append(self.add_species(species=species, reasons=reason))
+                            key = self.add_species(species=species, reasons=reason)
+                            if key is not None:
+                                species_keys.append(key)
                     if reaction.kinetics.is_pressure_dependent() \
                             and reaction not in [rxn_tup[0] for rxn_tup in pdep_rxns_to_explore] \
                             and self.t3['sensitivity']['pdep_SA_threshold'] is not None:
@@ -772,7 +775,9 @@ class T3(object):
                     if self.species_requires_refinement(species=species):
                         num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
                         reason = f'(i {self.iteration}) the {num}most sensitive species thermo for {observable_label}'
-                        species_keys.append(self.add_species(species=species, reasons=reason))
+                        key = self.add_species(species=species, reasons=reason)
+                        if key is not None:
+                            species_keys.append(key)
 
         species_keys.extend(self.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore))
 
@@ -811,7 +816,9 @@ class T3(object):
                 if self.reaction_requires_refinement(reaction=reaction):
                     num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
                     reason = f'(i {self.iteration}) the {num}most sensitive reaction for {observable_label}'
-                    reaction_keys.append(self.add_reaction(reaction=reaction, reasons=reason))
+                    key = self.add_reaction(reaction=reaction, reasons=reason)
+                    if key is not None:
+                        reaction_keys.append(key)
                 # if reaction.kinetics.is_pressure_dependent() \
                 #         and reaction not in [rxn_tup[0] for rxn_tup in pdep_rxns_to_explore] \
                 #         and self.t3['sensitivity']['pdep_SA_threshold'] is not None:
@@ -956,7 +963,9 @@ class T3(object):
                                         f'network {network_name} from which {chemkin_reaction_str} was ' \
                                         f'derived, which is the {num}most sensitive reaction for observable ' \
                                         f'{reaction_tuple[2]}, at {conditions}.'
-                                    species_keys.append(self.add_species(species=species, reasons=reason))
+                                    key = self.add_species(species=species, reasons=reason)
+                                    if key is not None:
+                                        species_keys.append(key)
 
         return species_keys
 
@@ -1008,7 +1017,9 @@ class T3(object):
                     if self.species_requires_refinement(species=species):
                         reason = f'(i {self.iteration}) Species participates in collision rate violating ' \
                                  f'reaction: {rxn_to_log}'
-                        species_keys.append(self.add_species(species=species, reasons=reason))
+                        key = self.add_species(species=species, reasons=reason)
+                        if key is not None:
+                            species_keys.append(key)
 
                 # 2. Reactions (not considering colliders for now)
                 reactants = [get_species_by_label(label, self.rmg_species) for label in reactant_labels]
@@ -1020,7 +1031,9 @@ class T3(object):
                         and not any(self.species_requires_refinement(species=spc) for spc in reactants + products):
                     # only consider a rate violating reaction if all the thermo was first fixed
                     reason = f'(i {self.iteration}) Reaction rate coefficient violates the collision rate.'
-                    reaction_keys.append(self.add_reaction(reaction=reaction, reasons=reason))
+                    key = self.add_reaction(reaction=reaction, reasons=reason)
+                    if key is not None:
+                        reaction_keys.append(key)
 
         return species_keys, reaction_keys
 
@@ -1296,7 +1309,8 @@ class T3(object):
             rxn_key = len(list(self.reactions.keys()))
             for spc in reaction.reactants + reaction.products:
                 if self.get_species_key(species=spc) is None:
-                    self.add_species(species=spc, reasons='Participates in a reaction for which a rate coefficient is computed.')
+                    self.add_species(species=spc, reasons=f'(i {self.iteration}) Participates in a reaction for which '
+                                                          f'a rate coefficient is computed.')
 
             reaction.reactants = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
                                   for spc in reaction.reactants]
