@@ -189,14 +189,18 @@ class Logger(object):
                                     for key, spc_dict in species_dict.items() if key in species_keys])
             space1 = ' ' * (max_label_length - len('Label') + 1)
             space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
-            self.info(f'Label{space1} SMILES{space2} Reason for calculating thermo')
-            self.info(f'-----{space1} ------{space2} -----------------------------')
+            self.info(f'Label{space1} SMILES{space2}    Reason for calculating thermo')
+            self.info(f'-----{space1} ------{space2}    -----------------------------')
             for key in species_keys:
                 spc_dict = species_dict[key]
                 smiles = spc_dict['object'].molecule[0].to_smiles()
                 space1 = ' ' * (max_label_length - len(spc_dict['QM label']) + 1)
                 space2 = ' ' * (max_smiles_length - len(smiles) + 1)
-                self.info(f"{spc_dict['QM label']}{space1} {smiles}{space2} {spc_dict['reasons']}")
+                one = '1. ' if len(spc_dict['reasons']) > 1 else '   '
+                self.info(f"{spc_dict['QM label']}{space1} {smiles}{space2} {one}{spc_dict['reasons'][0]}")
+                for j, reason in enumerate(spc_dict['reasons']):
+                    if j:
+                        self.info(f"                                    {j + 1}. {spc_dict['reasons'][j]}")
 
     def log_reactions_to_calculate(self,
                                    reaction_keys: List[int],
