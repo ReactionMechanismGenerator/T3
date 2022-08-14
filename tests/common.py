@@ -49,3 +49,15 @@ def isomorphic_smiles(smiles_1: str,
     mol_1 = Molecule(smiles=smiles_1)
     mol_2 = Molecule(smiles=smiles_2)
     return mol_1.is_isomorphic(mol_2)
+
+
+def check_expected_generated_radicals(radicals: list, expected_radicals: list):
+    """
+    A helper function for testing the generator.
+    """
+    assert len(expected_radicals) == len(set([rad[0] for rad in radicals]))
+    assert len(expected_radicals) == len(set([rad[1] for rad in radicals]))
+    expected_labels = [expected_rad_tuple[0] for expected_rad_tuple in expected_radicals]
+    for rad_tuple in radicals:
+        assert rad_tuple[0] in expected_labels
+        assert any(isomorphic_smiles(rad_tuple[1], expected_rad_tuple[1]) for expected_rad_tuple in expected_radicals)
