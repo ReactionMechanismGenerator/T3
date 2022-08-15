@@ -18,7 +18,8 @@ from t3.schema import (T3Options,
                        RMGOptions,
                        RMGPDep,
                        RMGSpeciesConstraints,
-                       QM)
+                       QM,
+                       )
 
 # define a long quote of length 444 characters to test constraints on string length
 quote = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et ' \
@@ -245,7 +246,6 @@ def test_rmg_database_schema():
 def test_rmg_species_schema():
     """Test creating an instance of RMGSpecies"""
     rmg_species = RMGSpecies(label='N2',
-                             concentration=1,
                              smiles='N#N',
                              inchi='1S/N2/c1-2',
                              adjlist="""
@@ -262,7 +262,7 @@ def test_rmg_species_schema():
                              seed_all_rads=['radical', 'alkoxyl', 'peroxyl'],
                              )
     assert rmg_species.label == 'N2'
-    assert rmg_species.concentration == 1
+    assert rmg_species.concentration == 1  # automatically set if not specified
     assert rmg_species.smiles == 'N#N'
     assert rmg_species.inchi == '1S/N2/c1-2'
     # adjlist must be in the same column as adjlist above
@@ -278,6 +278,12 @@ def test_rmg_species_schema():
     assert rmg_species.balance is True
     assert rmg_species.solvent is False
     assert rmg_species.seed_all_rads == ['radical', 'alkoxyl', 'peroxyl']
+
+    rmg_species = RMGSpecies(label='H2O',
+                             concentration=[0.203, 0.502],
+                             smiles='O',
+                             )
+    assert rmg_species.concentration == (0.203, 0.502)
 
     with pytest.raises(ValidationError):
         # check that concentration is constrained to >= 0
