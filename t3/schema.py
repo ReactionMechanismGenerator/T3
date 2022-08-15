@@ -279,7 +279,7 @@ class RMGModel(BaseModel):
     atol: confloat(gt=0, lt=1e-1) = 1e-16
     rtol: confloat(gt=0, lt=1e-1) = 1e-8
     # filtering:
-    filter_reactions: bool = False
+    filter_reactions: bool = True
     filter_threshold: Union[confloat(gt=0), conint(gt=0)] = 1e+8
     # pruning:
     tolerance_interrupt_simulation: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
