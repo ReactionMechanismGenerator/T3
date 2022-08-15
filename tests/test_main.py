@@ -11,6 +11,7 @@ import shutil
 
 from rmgpy import settings as rmg_settings
 from rmgpy.data.thermo import ThermoLibrary
+from rmgpy.reaction import Reaction
 from rmgpy.rmg.pdep import PDepNetwork, PDepReaction
 from rmgpy.species import Species
 from rmgpy.thermo import NASA, ThermoData
@@ -74,7 +75,7 @@ rmg_minimal = {'database': {'kinetics_depositories': 'default',
                          'branching_ratio_max': None,
                          'core_tolerance': [0.01, 0.001],
                          'dynamics_time_scale': None,
-                         'filter_reactions': False,
+                         'filter_reactions': True,
                          'filter_threshold': 100000000.0,
                          'ignore_overall_flux_criterion': None,
                          'max_num_objs_per_iter': 1,
@@ -255,7 +256,7 @@ def test_set_paths():
     """Test updating self.paths"""
     t3 = run_minimal(iteration=1, set_paths=True)
     paths = {'ARC': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC',
-             'ARC info': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3.info',
+             'ARC info': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3_info.yml',
              'ARC input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/input.yml',
              'ARC kinetics lib': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
                                  'libraries/kinetics',
@@ -279,6 +280,7 @@ def test_set_paths():
              'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
                              'species_dictionary.txt',
              'RMG T3 thermo lib': 'RMG-database/input/thermo/libraries/T3.py',
+             'RMG T3 kinetics lib': 'RMG-database/input/kinetics/libraries/T3',
              }
     for key, path in t3.paths.items():
         assert paths[key] in path
@@ -362,16 +364,15 @@ def test_restart():
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    t3.species = {0: {
-                'RMG label': 'Imipramine_1_peroxy',
-                'Chemkin label': 'Imipramine_1_peroxy',
-                'QM label': 'Imipramine_1_peroxy_0',
-                'object': Species(smiles='C'),
-                'reasons': ['reason'],
-                'converged': None,
-                'iteration': 2,
-            }}
-    t3.dump_species()
+    t3.species = {0: {'RMG label': 'Imipramine_1_peroxy',
+                      'Chemkin label': 'Imipramine_1_peroxy',
+                      'QM label': 'Imipramine_1_peroxy_0',
+                      'object': Species(smiles='C'),
+                      'reasons': ['reason'],
+                      'converged': None,
+                      'iteration': 2,
+                      }}
+    t3.dump_species_and_reactions()
     assert t3.restart() == (7, True)
     t3.process_arc_run()
     assert t3.species[0]['converged'] is True
@@ -436,14 +437,14 @@ def test_process_arc_run():
                      )
     t3.species = {0: {'RMG label': 'imipramine_ol_2_ket_4',
                       'Chemkin label': 'imipramine_ol_2_ket_4',
-                      'QM label': 'imipramine_ol_2_ket_4_0',
+                      'QM label': 'imipramine_ol_2_ket_4',
                       'object': Species(smiles='C'),
                       'reasons': ['reason 1', 'reason 2'],
                       'converged': None,
                       'iteration': 1},
                   1: {'RMG label': 'imipramine_ol_2_ket_5',
                       'Chemkin label': 'imipramine_ol_2_ket_5',
-                      'QM label': 'imipramine_ol_2_ket_5_1',
+                      'QM label': 'imipramine_ol_2_ket_5',
                       'object': Species(smiles='CC'),
                       'reasons': ['reason 3'],
                       'converged': None,
@@ -507,7 +508,7 @@ def test_run_rmg():
                  "simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)\n",
                  "No collision rate violators found in the model's core.\n",
                  "MODEL GENERATION COMPLETED\n",
-                 "The final model core has 12 species and 18 reactions\n",
+                 "The final model core has 13 species and 20 reactions\n",
                  ]:
         assert line in lines
     assert os.path.isfile(t3.paths['chem annotated'])
@@ -524,19 +525,19 @@ def test_determine_species_to_calculate():
     t3.iteration = 1
     t3.set_paths()
     t3.t3['options']['all_core_species'] = True
-    additional_calcs_required = t3.determine_species_to_calculate()
+    additional_calcs_required = t3.determine_species_and_reactions_to_calculate()
     assert not additional_calcs_required
 
     # 2. All core species
     t3.iteration = 2
     t3.set_paths()
     t3.t3['options']['all_core_species'] = True
-    additional_calcs_required = t3.determine_species_to_calculate()
+    additional_calcs_required = t3.determine_species_and_reactions_to_calculate()
     assert additional_calcs_required
     assert len(list(t3.species.keys())) == 3
-    assert all([species_dict['reasons'] == ['All core species'] for species_dict in t3.species.values()])
+    assert all([species_dict['reasons'] == ['(i 2) All core species'] for species_dict in t3.species.values()])
     assert all([species_dict['RMG label'] in ['OH', 'HO2', 'H2O2'] for species_dict in t3.species.values()])
-    assert all([species_dict['QM label'] in ['OH_0', 'HO2_1', 'H2O2_2'] for species_dict in t3.species.values()])
+    assert all([species_dict['QM label'] in ['s0_OH', 's1_HO2', 's2_H2O2'] for species_dict in t3.species.values()])
 
     # 3. collision violators
     t3.iteration = 3
@@ -544,157 +545,28 @@ def test_determine_species_to_calculate():
     t3.species = dict()
     t3.t3['options']['all_core_species'] = False
     t3.t3['options']['collision_violators_thermo'] = True
-    additional_calcs_required = t3.determine_species_to_calculate()
+    additional_calcs_required = t3.determine_species_and_reactions_to_calculate()
     assert additional_calcs_required
-    assert len(list(t3.species.keys())) == 18
+    assert len(list(t3.species.keys())) == 38
     assert all(['Species participates in collision rate violating reaction:' in species_dict['reasons'][0]
+                or 'Participates in a reaction for which a rate coefficient is computed' in species_dict['reasons'][0]
                 for species_dict in t3.species.values() if species_dict['RMG label'] not in ['H', 'OH']])
 
     # 4. SA observables
-    assert t3.species[0]['RMG label'] == 'CC=[C]CCCC'
+    assert t3.species[0]['RMG label'] == 'H'
     assert t3.species[0]['reasons'] == \
+           ['(i 3) Participates in a reaction for which a rate coefficient is computed.']
+    assert t3.species[3]['RMG label'] == 'CC=[C]CCCC'
+    assert t3.species[3]['reasons'] == \
            ['(i 3) Species participates in collision rate violating reaction: H(3)+C7H13(920)=C7H14(323)']
-    assert t3.species[1]['RMG label'] == '[CH2]CC(=C)C=C'
-    assert t3.species[1]['reasons'] == \
-           ['(i 3) Species participates in collision rate violating reaction: HO2(10)+C6H9(1933)=H2O2(11)+C6H8(2025)']
+    assert t3.species[10]['RMG label'] == '[CH2]CC(=C)[C]=C'
+    assert t3.species[10]['reasons'] == \
+           ['(i 3) Species participates in collision rate violating reaction: C6H8(2027)=C2H4(21)+C4H4(2531)']
 
 
 def test_species_requires_refinement():
     """Test properly identifying the thermo comment of a species to determine whether it requires refinement"""
-
     t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'))
-    spc = Species(label='CH4', smiles='C')
-    spc.thermo = ThermoData()
-
-    spc.thermo.comment = "Thermo library: JetSurF2.0"
-    assert t3.species_requires_refinement(spc) is False
-
-    spc.thermo.comment = "Thermo group additivity estimation: group(Cds-Cds(Cds-Cds)(Cds-Cds)) + " \
-                         "group(Cds-Cds(Cds-Cds)H) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + " \
-                         "group(Cds-CdsHH) + group(Cds-CdsHH)"
-    assert t3.species_requires_refinement(spc) is True
-
-    spc.thermo.comment = "Thermo library: JetSurF2.0 + radical(RCCJ)"
-    assert t3.species_requires_refinement(spc) is True
-
-
-def test_determine_species_based_on_sa():
-    """Test determining species to calculate based on sensitivity analysis"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
-                     iteration=1,
-                     set_paths=True,
-                     )
-    t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
-    sa_observables = ['H2', 'OH']
-    simulate_adapter = simulate_factory(simulate_method=t3.t3['sensitivity']['adapter'],
-                                        t3=t3.t3,
-                                        rmg=t3.rmg,
-                                        paths=t3.paths,
-                                        logger=t3.logger,
-                                        atol=t3.rmg['model']['atol'],
-                                        rtol=t3.rmg['model']['rtol'],
-                                        observable_list=sa_observables,
-                                        sa_atol=t3.t3['sensitivity']['atol'],
-                                        sa_rtol=t3.t3['sensitivity']['rtol'],
-                                        )
-    simulate_adapter.simulate()
-    # return the dictionary containing all SA coefficients for these species
-    t3.sa_dict = simulate_adapter.get_sa_coefficients()
-    species_keys = t3.determine_species_based_on_sa()
-    assert species_keys == [0, 1]
-    # remove directories created when performing SA
-    dirs = [t3.paths['SA']]
-    for dir in dirs:
-        if os.path.isdir(dir):
-            shutil.rmtree(dir, ignore_errors=True)
-    t3_log = os.path.join(DATA_BASE_PATH, 'minimal_data', 't3.log')
-    if os.path.isfile(t3_log):
-        os.remove(t3_log)
-
-
-def test_determine_species_from_pdep_network():
-    """Test determining species from pdep network"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'pdep_network'),
-                     iteration=1,
-                     set_paths=True,
-                     )
-    t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
-    # focus on reaction 2 in network4_2.py, whose species correspond to the indices below
-    # reactants = ['H(34)', 'C4ene(26)'],
-    # products = ['C4rad(5)'],
-    pdep_rxn = PDepReaction(index=1,
-                            reactants=[t3.rmg_species[35],
-                                       t3.rmg_species[27]],
-                            products=[t3.rmg_species[6]],
-                            network=PDepNetwork(index=4))
-    pdep_rxns_to_explore = [(pdep_rxn, 2, t3.rmg_species[6].label)]
-    species_keys = t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
-    assert len(species_keys) == 1
-    shutil.rmtree(t3.paths['PDep SA'], ignore_errors=True)
-
-
-def test_determine_species_based_on_collision_violators():
-    """Test determining species to calculate based on collision rate violating reactions"""
-    t3 = run_minimal()
-    t3.paths['RMG coll vio'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'collision_rate_violators.log')
-    t3.paths['chem annotated'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'chem_annotated.inp')
-    t3.paths['species dict'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'species_dictionary.txt')
-    t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
-    species_to_calc = t3.determine_species_based_on_collision_violators()
-    assert len(species_to_calc) == 18
-    expected_species_to_calc = [
-        'C7H13(920)',
-        'C6H9(1933)',
-        'C6H8(2025)',
-        'C6H9(2035)',
-        'C6H8(2027)',
-        'S(1752)',
-        'S(11767)',
-        'S(11972)',
-        'S(17233)',
-        'S(16488)',
-        'S(16530)',
-        'S(25139)',
-        'S(16448)',
-        'S(16972)',
-        'S(13229)',
-        'C6H8(8657)',
-        'S(26357)',
-        'S(25149)'
-    ]
-    for index in species_to_calc:
-        assert t3.species[index]['Chemkin label'] == expected_species_to_calc[index]
-
-
-def test_trsh_rmg_tol():
-    """Test troubleshooting the RMG tolerance"""
-    t3 = run_minimal()
-    t3.t3['options']['max_T3_iterations'] = 10
-
-    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
-    t3.iteration = 1
-    t3.trsh_rmg_tol()
-    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.05, 0.001, 0.0001]
-
-    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
-    t3.iteration = 2
-    t3.trsh_rmg_tol()
-    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.1, 0.001, 0.0001]
-
-    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
-    t3.iteration = 6
-    t3.trsh_rmg_tol()
-    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.1, 0.001, 0.0001, 0.00005, 0.00005, 0.00005]
-
-    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
-    t3.iteration = 12
-    t3.trsh_rmg_tol()
-    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.1, 0.001, 0.0001]
-
-
-def test_species_requires_refinement():
-    """Test whether a species thermo requires refinement"""
-    t3 = run_minimal()
     spc_1 = Species(smiles='C')
     spc_1.thermo = NASA()
     spc_1.thermo.comment = 'Thermo group additivity estimation: group(O2s-(Cds-Cd)H) + missing(O2d-CO) + ' \
@@ -728,6 +600,18 @@ def test_species_requires_refinement():
                            'ring(Ethylene_oxide) + Solvation correction with water as solvent and solute estimated ' \
                            'using abraham(Oss-noncyclic) + nonacentered(OxRing) + abraham(OssH) + nonacentered(OssH) + ' \
                            'abraham(N3t) + abraham(Css-noH) + abraham(CssH) + abraham(CssH3) + abraham(Ct)'
+    spc_8 = Species(label='CH4', smiles='C')
+    spc_8.thermo = ThermoData()
+    spc_8.thermo.comment = "Thermo library: JetSurF2.0"
+    spc_9 = Species(label='CH4', smiles='C')
+    spc_9.thermo = ThermoData()
+    spc_9.thermo.comment = "Thermo group additivity estimation: group(Cds-Cds(Cds-Cds)(Cds-Cds)) + " \
+                           "group(Cds-Cds(Cds-Cds)H) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + " \
+                           "group(Cds-CdsHH) + group(Cds-CdsHH)"
+    spc_10 = Species(label='CH4', smiles='C')
+    spc_10.thermo = ThermoData()
+    spc_10.thermo.comment = "Thermo library: JetSurF2.0 + radical(RCCJ)"
+
     assert t3.species_requires_refinement(spc_1) is True
     assert t3.species_requires_refinement(spc_2) is True
     assert t3.species_requires_refinement(spc_3) is False
@@ -735,16 +619,146 @@ def test_species_requires_refinement():
     assert t3.species_requires_refinement(spc_5) is False
     assert t3.species_requires_refinement(spc_6) is True
     assert t3.species_requires_refinement(spc_7) is True
+    assert t3.species_requires_refinement(spc_8) is False
+    assert t3.species_requires_refinement(spc_9) is True
+    assert t3.species_requires_refinement(spc_10) is True
+
+
+def test_reaction_requires_refinement():
+    """Test properly identifying the kinetic comment of a reaction to determine whether it requires refinement"""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_reactions'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    reactions = t3.load_species_and_reactions_from_chemkin_file()[1]
+    rxn_100_kinetic_comment = """Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+Euclidian distance = 0
+Multiplied by reaction path degeneracy 4.0
+family: H_Abstraction"""
+    assert rxn_100_kinetic_comment == reactions[100].kinetics.comment
+
+
+def test_determine_species_based_on_sa():
+    """Test determining species to calculate based on sensitivity analysis"""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    sa_observables = ['H2', 'OH']
+    simulate_adapter = simulate_factory(simulate_method=t3.t3['sensitivity']['adapter'],
+                                        t3=t3.t3,
+                                        rmg=t3.rmg,
+                                        paths=t3.paths,
+                                        logger=t3.logger,
+                                        atol=t3.rmg['model']['atol'],
+                                        rtol=t3.rmg['model']['rtol'],
+                                        observable_list=sa_observables,
+                                        sa_atol=t3.t3['sensitivity']['atol'],
+                                        sa_rtol=t3.t3['sensitivity']['rtol'],
+                                        )
+    simulate_adapter.simulate()
+    # return the dictionary containing all SA coefficients for these species
+    t3.sa_dict = simulate_adapter.get_sa_coefficients()
+    species_keys = t3.determine_species_based_on_sa()
+    assert species_keys == [0, 1]
+    # remove directories created when performing SA
+    dirs = [t3.paths['SA']]
+    for dir_ in dirs:
+        if os.path.isdir(dir_):
+            shutil.rmtree(dir_, ignore_errors=True)
+    t3_log = os.path.join(DATA_BASE_PATH, 'minimal_data', 't3.log')
+    if os.path.isfile(t3_log):
+        os.remove(t3_log)
+
+
+def test_determine_species_from_pdep_network():
+    """Test determining species from pdep network"""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'pdep_network'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    # focus on reaction 2 in network4_2.py, whose species correspond to the indices below
+    # reactants = ['H(34)', 'C4ene(26)'],
+    # products = ['C4rad(5)'],
+    pdep_rxn = PDepReaction(index=1,
+                            reactants=[t3.rmg_species[35],
+                                       t3.rmg_species[27]],
+                            products=[t3.rmg_species[6]],
+                            network=PDepNetwork(index=4))
+    pdep_rxns_to_explore = [(pdep_rxn, 2, t3.rmg_species[6].label)]
+    species_keys = t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+    assert len(species_keys) == 1
+    shutil.rmtree(t3.paths['PDep SA'], ignore_errors=True)
+
+
+def test_determine_species_based_on_collision_violators():
+    """Test determining species to calculate based on collision rate violating reactions"""
+    t3 = run_minimal()
+    t3.paths['RMG coll vio'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'collision_rate_violators.log')
+    t3.paths['chem annotated'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'chem_annotated.inp')
+    t3.paths['species dict'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'species_dictionary.txt')
+    t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    species_to_calc = t3.determine_species_and_reactions_based_on_collision_violators()[0]
+    assert len(species_to_calc) == 18
+    expected_species_to_calc = [
+        'C7H13(920)',
+        'C6H9(1933)',
+        'C6H8(2025)',
+        'C6H9(2035)',
+        'C6H8(2027)',
+        'S(1752)',
+        'S(11767)',
+        'S(11972)',
+        'S(17233)',
+        'S(16488)',
+        'S(16530)',
+        'S(25139)',
+        'S(16448)',
+        'S(16972)',
+        'S(13229)',
+        'C6H8(8657)',
+        'S(26357)',
+        'S(25149)'
+    ]
+    assert [t3.species[index]['Chemkin label'] for index in species_to_calc] == expected_species_to_calc
+
+
+def test_trsh_rmg_tol():
+    """Test troubleshooting the RMG tolerance"""
+    t3 = run_minimal()
+    t3.t3['options']['max_T3_iterations'] = 10
+
+    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
+    t3.iteration = 1
+    t3.trsh_rmg_tol()
+    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.05, 0.001, 0.0001]
+
+    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
+    t3.iteration = 2
+    t3.trsh_rmg_tol()
+    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.1, 0.001, 0.0001]
+
+    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
+    t3.iteration = 6
+    t3.trsh_rmg_tol()
+    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.1, 0.001, 0.0001, 0.00005, 0.00005, 0.00005]
+
+    t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
+    t3.iteration = 12
+    t3.trsh_rmg_tol()
+    assert t3.rmg['model']['core_tolerance'] == [0.1, 0.1, 0.001, 0.0001]
 
 
 def test_get_species_key():
     """Test checking whether a species already exists in self.species and getting its key"""
-    t3 = run_minimal(project_directory = os.path.join(DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
     t3.t3['options']['all_core_species'] = True
-    t3.determine_species_to_calculate()
+    t3.determine_species_and_reactions_to_calculate()
 
     # 1. by species
     assert t3.get_species_key(species=Species(smiles='[OH]')) == 0
@@ -760,7 +774,7 @@ def test_get_species_key():
 
 def test_load_species_and_reactions_from_chemkin_file():
     """Test loading RMG species and reactions from a Chemkin file"""
-    t3 = run_minimal(project_directory = os.path.join(DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -780,19 +794,19 @@ def test_add_species():
                      set_paths=True,
                      )
     t3.t3['options']['all_core_species'] = True
-    t3.determine_species_to_calculate()
+    t3.determine_species_and_reactions_to_calculate()
     spc_1 = Species(label='OH', smiles='[OH]')
     spc_2 = Species(label='hydrazine', smiles='NN')
     spc_3 = Species(label='H2', smiles='[H][H]')
 
     assert t3.get_species_key(species=spc_1) == 0
     assert t3.species[0]['RMG label'] == 'OH'
-    assert t3.species[0]['reasons'] == ['All core species']
+    assert t3.species[0]['reasons'] == ['(i 2) All core species']
 
     t3.add_species(species=spc_1, reasons='Some other reason')
     assert t3.get_species_key(species=spc_1) == 0
     assert t3.species[0]['RMG label'] == 'OH'
-    assert t3.species[0]['reasons'] == ['All core species', 'Some other reason']
+    assert t3.species[0]['reasons'] == ['(i 2) All core species', 'Some other reason']
 
     assert t3.get_species_key(species=spc_2) is None
 
@@ -813,7 +827,7 @@ H  0.0000000  0.0000000 -0.3736550"""
 
     found_h2 = False
     for qm_species in t3.qm['species']:
-        if qm_species.label == 'H2_4':
+        if qm_species.label == 's4_H2':
             found_h2 = True
             assert isinstance(qm_species, ARCSpecies)
             assert qm_species.conformers == [{'symbols': ('H', 'H'),
@@ -822,6 +836,69 @@ H  0.0000000  0.0000000 -0.3736550"""
                                                          (0.0, 0.0, -0.373655)),
                                               }]
     assert found_h2
+
+
+def test_add_reaction():
+    """Test adding a reaction to self.reactions and to self.qm['reactions']"""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_reactions'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    rmg_species, rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    t3.add_reaction(reaction=rmg_reactions[342], reasons='reason 1')
+    t3.add_reaction(reaction=rmg_reactions[100], reasons='reason 2')
+    t3.add_reaction(reaction=rmg_reactions[14], reasons=['reason 3a', 'reason 3b'])
+
+    assert t3.get_reaction_key(reaction=rmg_reactions[342]) == 0
+    assert t3.reactions[0]['RMG label'] == 's0_H + s1_CC=CCCC <=> s2_S2XC6H13'
+    assert 'H(2)+S(1229)=C6H13(794)' in t3.reactions[0]['Chemkin label']
+    assert t3.reactions[0]['QM label'] == 's0_H + s1_CC=CCCC <=> s2_S2XC6H13'
+    assert t3.reactions[0]['SMILES label'] == '[H] + CC=CCCC <=> CC[CH]CCC'
+    assert isinstance(t3.reactions[0]['object'], Reaction)
+    assert t3.reactions[0]['reasons'] == ['reason 1']
+    assert t3.reactions[0]['converged'] is None
+    assert t3.reactions[0]['iteration'] == 1
+
+    assert t3.get_reaction_key(reaction=rmg_reactions[100]) == 1
+    assert t3.reactions[1]['RMG label'] == 's3_S2XC12H25 + s4_fuel <=> s5_S3XC12H25 + s4_fuel'
+    assert 'S(839)+fuel(1)=S(840)+fuel(1)' in t3.reactions[1]['Chemkin label']
+    assert t3.reactions[1]['QM label'] == 's3_S2XC12H25 + s4_fuel <=> s5_S3XC12H25 + s4_fuel'
+    assert t3.reactions[1]['SMILES label'] == 'CC[CH]CCCCCCCCC + CCCCCCCCCCCC <=> CCC[CH]CCCCCCCC + CCCCCCCCCCCC'
+    assert isinstance(t3.reactions[1]['object'], Reaction)
+    assert t3.reactions[1]['reasons'] == ['reason 2']
+    assert t3.reactions[1]['converged'] is None
+    assert t3.reactions[1]['iteration'] == 1
+
+    assert t3.get_reaction_key(reaction=rmg_reactions[14]) == 2
+    assert t3.reactions[2]['RMG label'] == 's6_PC4H9 <=> s7_C2H4 + s8_C2H5'
+    assert 'PC4H9(191)=C2H4(22)+C2H5(52)' in t3.reactions[2]['Chemkin label']
+    assert t3.reactions[2]['QM label'] == 's6_PC4H9 <=> s7_C2H4 + s8_C2H5'
+    assert t3.reactions[2]['SMILES label'] == '[CH2]CCC <=> C=C + C[CH2]'
+    assert isinstance(t3.reactions[2]['object'], Reaction)
+    assert t3.reactions[2]['reasons'] == ['reason 3a', 'reason 3b']
+    assert t3.reactions[2]['converged'] is None
+    assert t3.reactions[2]['iteration'] == 1
+
+    # check that reactant and product labels of an RMG reaction are set correctly when adding a reaction
+    rmg_rxn_1 = Reaction(label='[N-]=[N+](N=O)[O] + HON <=> [O-][N+](=N)N=O + NO',
+                         reactants=[Species(label='[N-]=[N+](N=O)[O]', smiles='[N-]=[N+](N=O)[O]'),
+                                    Species(label='HON', smiles='[N-]=[OH+]')],
+                         products=[Species(label='[O-][N+](=N)N=O', smiles='[O-][N+](=N)N=O'),
+                                   Species(label='NO', smiles='[N]=O')])
+    t3.add_reaction(reaction=rmg_rxn_1, reasons='reason 4')
+    assert t3.get_reaction_key(reaction=rmg_rxn_1) == 3
+    assert t3.reactions[3]['RMG label'] == 's9_N3O2 + s10_HON <=> s11_HN3O2 + s12_NO'
+    assert t3.reactions[3]['Chemkin label'] == ''
+    assert t3.reactions[3]['QM label'] == 's9_N3O2 + s10_HON <=> s11_HN3O2 + s12_NO'
+    assert t3.reactions[3]['SMILES label'] == '[N-]=[N+](N=O)[O] + [N-]=[OH+] <=> [O-][N+](=N)N=O + [N]=O'
+    assert isinstance(t3.reactions[3]['object'], Reaction)
+    assert t3.reactions[3]['reasons'] == ['reason 4']
+    assert t3.reactions[3]['converged'] is None
+    assert t3.reactions[3]['iteration'] == 1
+    assert rmg_rxn_1.reactants[0].label == 's9_N3O2'
+    assert rmg_rxn_1.reactants[1].label == 's10_HON'
+    assert rmg_rxn_1.products[0].label == 's11_HN3O2'
+    assert rmg_rxn_1.products[1].label == 's12_NO'
 
 
 def test_add_to_rmg_library():
@@ -880,7 +957,7 @@ def test_add_to_rmg_library():
 
     spc_3 = Species(
         index=2,
-        label='CH4',
+        label='C3H7',
         thermo=ThermoData(
             Tdata=([300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0], 'K'),
             Cpdata=([3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0], 'cal/(mol*K)'),
@@ -898,9 +975,10 @@ def test_add_to_rmg_library():
             spin_multiplicity=1,
             optical_isomers=1,
         ),
-        smiles='C',
+        smiles='[CH2]CC',
     )
 
+    # 1. Test adding one species to an existing library.
     for lib_name, spc_list in [('RMG_library', [spc_1, spc_2]), ('ARC_library', [spc_3])]:
         thermo_library = ThermoLibrary(name=lib_name, long_desc=lib_name)
         for i, spc in enumerate(spc_list):
@@ -913,15 +991,41 @@ def test_add_to_rmg_library():
         thermo_library.save(os.path.join(libraries_path, f'{lib_name}.py'))
 
     t3 = run_minimal()
+    t3.set_paths()
     t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
     t3.paths['RMG T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
-    t3.add_to_rmg_library()
+    t3.add_to_rmg_libraries()
     with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
         lines = f.readlines()
     for line in ["        H298 = (-92,'kcal/mol'),\n",
                  "        S298 = (12,'cal/(mol*K)'),\n",
                  ]:
         assert line in lines
+
+    # 2. Test adding one species to an existing library when the new library has a species that also exists.
+    for lib_name, spc_list in [('RMG_library', [spc_1, spc_2]), ('ARC_library', [spc_1, spc_3])]:
+        thermo_library = ThermoLibrary(name=lib_name, long_desc=lib_name)
+        for i, spc in enumerate(spc_list):
+            thermo_library.load_entry(index=i,
+                                      label=spc.label,
+                                      molecule=spc.to_adjacency_list(),
+                                      thermo=spc.thermo,
+                                      shortDesc=spc.label,
+                                      longDesc=spc.label)
+        thermo_library.save(os.path.join(libraries_path, f'{lib_name}.py'))
+
+    t3 = run_minimal()
+    t3.set_paths()
+    t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
+    t3.paths['RMG T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
+    t3.add_to_rmg_libraries()
+    with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
+        lines = f.readlines()
+    count = 0
+    for line in lines:
+        if 'entry(' in line:
+            count += 1
+    assert count == 3
 
 
 def test_dump_species():
@@ -944,7 +1048,7 @@ def test_dump_species():
         'converged': None,
         'iteration': 2,
     }}
-    t3.dump_species()
+    t3.dump_species_and_reactions()
     assert os.path.isfile(os.path.join(dump_species_path, 't3.log'))
     assert os.path.isfile(os.path.join(dump_species_path, 'species.yml'))
     assert t3.restart() == (5, True)
@@ -958,7 +1062,7 @@ def test_load_species():
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    t3.load_species()
+    t3.load_species_and_reactions()
     assert t3.species[0]['Chemkin label'] == 'Imipramine_1_peroxy'
     assert t3.species[0]['QM label'] == 'Imipramine_1_peroxy_0'
 

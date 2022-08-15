@@ -1,0 +1,6 @@
+reactions: []
+species:
+- label: imipramine_ol_2_ket_4
+  success: true
+- label: imipramine_ol_2_ket_5
+  success: false
