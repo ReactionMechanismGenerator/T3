@@ -43,7 +43,8 @@ def test_write_rmg_input_file():
                          t3=schema['t3'],
                          iteration=2,
                          path=minimal_input_file_path,
-                         walltime='01:00:00:00')
+                         walltime='01:00:00:00',
+                         )
 
     # minimal input file
     with open(minimal_input_file_path, 'r') as f:
@@ -88,8 +89,6 @@ simpleReactor(
     initialMoleFractions={
         'H2': 0.67,
         'O2': 0.33,
-        'H': 0,
-        'OH': 0,
     },
     terminationConversion={'H2': 0.9},
     terminationTime=(5.0, 's'),
@@ -99,7 +98,7 @@ simpleReactor(
 model(
     toleranceMoveToCore=0.001,
     toleranceInterruptSimulation=0.001,
-    filterReactions=False,
+    filterReactions=True,
     filterThreshold=100000000.0,
     maxNumObjsPerIter=1,
     terminateAtMaxObjects=False,
@@ -270,7 +269,6 @@ def test_write_rmg_input_file_liquid():
                  "        'water': [(0.0278, 'mol/cm^3'), (0.0502, 'mol/cm^3')],\n",
                  "        'AIBN': (4.9e-06, 'mol/cm^3'),\n",
                  "        'O2': (2.73e-07, 'mol/cm^3'),\n",
-                 "        'cyanoisopropylOO': (0, 'mol/cm^3'),\n",
                  "    terminationTime=(72.0, 'hours'),\n",
                  "    nSims=12,\n",
                  "    constantSpecies=['O2', 'N2', ],\n",
@@ -327,7 +325,7 @@ def test_write_rmg_input_file_seed_all_radicals():
 
     with open(file_path, 'r') as f:
         lines = f.readlines()
-    for line in ["        'O2': [2, 2.5],\n",
+    for line in ["        'O2': [2.0, 2.5],\n",
                  "    thermoLibraries=['BurkeH2O2'],\n",
                  "    label='methylethylester',\n",
                  "    label='methylethylester_radical_0',\n",
