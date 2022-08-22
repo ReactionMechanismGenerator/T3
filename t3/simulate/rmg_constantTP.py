@@ -230,7 +230,7 @@ class RMGConstantTP(SimulateAdapter):
         """
         solver_path = os.path.join(self.paths['SA'], 'solver')
         if not os.path.exists(solver_path):
-            self.logger.error("Could not find the path to RMG's solver output folder.")
+            self.logger.error("Could not find the path to RMG's SA solver output folder.")
             return None
         sa_files = list()
         for file_ in os.listdir(solver_path):
