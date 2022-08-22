@@ -23,6 +23,7 @@ rmg:
       smiles: '[H]'
     - label: OH
       smiles: '[OH]'
+      SA_observable: true
   reactors:
     - type: gas batch constant T P
       T: 1000
