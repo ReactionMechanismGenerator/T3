@@ -336,14 +336,14 @@ class Logger(object):
                 space1 = ' ' * (max_label_length - len(label))
                 self.info(f"{label}{space1} {species_dict[key]['object'].molecule[0].to_smiles()}")
             self.info('\n')
-        else:
+        elif len(species_dict.keys()):
             self.info('\nAll species thermodynamic calculations in this iteration successfully converged.\n')
         if len(reaction_keys):
             self.info('\nRate coefficient calculations for the following reactions did NOT converge:')
             for key in reaction_keys:
                 self.info(reaction_dict[key]['QM label'])
             self.info('\n')
-        else:
+        elif len(reaction_dict.keys()):
             self.info('\nAll reaction rate coefficients calculations in this iteration successfully converged.\n')
 
     def log_args(self, schema: dict):
