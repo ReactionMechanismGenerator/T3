@@ -32,11 +32,11 @@ def generate_radicals(species: Species,
                                the first entry in the tuple is a label,
                                the second entry is the respective SMILES representation.
     """
-    existing_radical_indices, output, aromatic_rings = list(), list(), list()
+    existing_radical_indices, output, aromatic_rings, output_species = list(), list(), list(), list()
     if species is None or len(species.molecule[0].atoms) == 1 \
             or not any(atom.is_hydrogen() for atom in species.molecule[0].atoms):
         return output
-    spc = ARCSpecies(label=species.label, adjlist=species.copy(deep=True).to_adjacency_list())
+    spc = ARCSpecies(label=species.label, adjlist=species.copy(deep=True).to_adjacency_list(), keep_mol=True)
     res_structures = generate_resonance_structures(spc.mol)
     spc.mol = res_structures[0] if res_structures is not None else spc.mol
     spc.mol.atoms = [a for a in spc.mol.atoms if not a.is_hydrogen()] + [a for a in spc.mol.atoms if a.is_hydrogen()]
@@ -59,30 +59,38 @@ def generate_radicals(species: Species,
             i += 1
             spc.bdes.append((spc.mol.atoms.index(atom_1) + 1, spc.mol.atoms.index(atom_2) + 1))
 
-    radicals = [rad for rad in spc.scissors() if rad.label != 'H']
+    radicals = [rad for rad in spc.scissors(sort_atom_labels=True) if rad.label != 'H']
 
     for i, rad in enumerate(radicals):
         if 'radical' in types:
-            output.append((f'{species.label}_radical_{i}', rad.mol.copy(deep=True).to_smiles()))
+            if not any(rad.is_isomorphic(spc) for spc in output_species):
+                output_species.append(rad)
+                output.append((f'{species.label}_radical_{i}', rad.mol.copy(deep=True).to_smiles()))
         if 'alkoxyl' in types:
-            alkoxyl = rad.mol.copy(deep=True)
+            alkoxyl = rad.copy()
+            alkoxyl.mol_list = None
             oxygen = Atom(element='O', radical_electrons=1, charge=0, lone_pairs=2)
-            alkoxyl.add_atom(oxygen)
-            alkoxyl.atoms[existing_radical_indices[i]].decrement_radical()
-            new_bond = Bond(atom1=alkoxyl.atoms[existing_radical_indices[i]], atom2=oxygen, order=1)
-            alkoxyl.add_bond(new_bond)
-            output.append((f'{species.label}_alkoxyl_{i}', alkoxyl.to_smiles()))
+            alkoxyl.mol.add_atom(oxygen)
+            alkoxyl.mol.atoms[existing_radical_indices[i]].decrement_radical()
+            new_bond = Bond(atom1=alkoxyl.mol.atoms[existing_radical_indices[i]], atom2=oxygen, order=1)
+            alkoxyl.mol.add_bond(new_bond)
+            if not any(alkoxyl.is_isomorphic(spc) for spc in output_species):
+                output_species.append(alkoxyl)
+                output.append((f'{species.label}_alkoxyl_{i}', alkoxyl.mol.to_smiles()))
         if 'peroxyl' in types:
-            peroxyl = rad.mol.copy(deep=True)
+            peroxyl = rad.copy()
+            peroxyl.mol_list = None
             oxygen_1 = Atom(element='O', radical_electrons=0, charge=0, lone_pairs=2)
             oxygen_2 = Atom(element='O', radical_electrons=1, charge=0, lone_pairs=2)
-            peroxyl.add_atom(oxygen_1)
-            peroxyl.add_atom(oxygen_2)
-            peroxyl.atoms[existing_radical_indices[i]].decrement_radical()
-            new_bond_1 = Bond(atom1=peroxyl.atoms[existing_radical_indices[i]], atom2=oxygen_1, order=1)
+            peroxyl.mol.add_atom(oxygen_1)
+            peroxyl.mol.add_atom(oxygen_2)
+            peroxyl.mol.atoms[existing_radical_indices[i]].decrement_radical()
+            new_bond_1 = Bond(atom1=peroxyl.mol.atoms[existing_radical_indices[i]], atom2=oxygen_1, order=1)
             new_bond_2 = Bond(atom1=oxygen_1, atom2=oxygen_2, order=1)
-            peroxyl.add_bond(new_bond_1)
-            peroxyl.add_bond(new_bond_2)
-            output.append((f'{species.label}_peroxyl_{i}', peroxyl.to_smiles()))
+            peroxyl.mol.add_bond(new_bond_1)
+            peroxyl.mol.add_bond(new_bond_2)
+            if not any(peroxyl.is_isomorphic(spc) for spc in output_species):
+                output_species.append(peroxyl)
+                output.append((f'{species.label}_peroxyl_{i}', peroxyl.mol.to_smiles()))
 
     return output
