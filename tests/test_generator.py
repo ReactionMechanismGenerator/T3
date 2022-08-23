@@ -100,19 +100,14 @@ def test_generate_radicals():
                          ('benzyl_alcohol_peroxyl_1', '[O]OC(O)C1=CC=CC=C1')]
     check_expected_generated_radicals(radicals, expected_radicals)
 
-    # # test benzyl alcohol, react_aromatic_rings
-    # radicals = generate_radicals(species=Species(label='benzyl_alcohol', smiles='c1ccccc1CO'),
-    #                              types=['peroxyl'],
-    #                              react_aromatic_rings=True,
-    #                              )
-    # print(radicals)
-    # expected_radicals = [('imipramine_peroxyl_0', '[O]OC(CN(C)C)CN1C2=CC=CC=C2CCC2=C1C=CC=C2'),
-    #                      ('imipramine_peroxyl_1', '[O]OC(N(C)C)CCN1C2C=CC=CC=2CCC2C1=CC=CC=2'),
-    #                      ('imipramine_peroxyl_2', '[O]OC(N1C2C=CC=CC=2CCC2C1=CC=CC=2)CCN(C)C'),
-    #                      ('imipramine_peroxyl_3', '[O]OC1CC2=CC=CC=C2N(C2=C1C=CC=C2)CCCN(C)C'),
-    #                      ('imipramine_peroxyl_4', '[O]OCN(CCCN1C2=CC=CC=C2CCC2=C1C=CC=C2)C'),
-    #                      ('imipramine_peroxyl_5', '[O]OC1=CC=CC2=C1N(CCCN(C)C)C1=CC=CC=C1CC2'),
-    #                      ('imipramine_peroxyl_6', '[O]OC1C=CC2=C(C=1)N(CCCN(C)C)C1=CC=CC=C1CC2'),
-    #                      ('imipramine_peroxyl_7', '[O]OC1C=CC2=C(C=1)CCC1C(N2CCCN(C)C)=CC=CC=1'),
-    #                      ('imipramine_peroxyl_8', '[O]OC1=CC=CC2=C1CCC1C(N2CCCN(C)C)=CC=CC=1')]
-    # check_expected_generated_radicals(radicals, expected_radicals)
+    # test benzyl alcohol, react_aromatic_rings
+    radicals = generate_radicals(species=Species(label='benzyl_alcohol', smiles='c1ccccc1CO'),
+                                 types=['peroxyl'],
+                                 react_aromatic_rings=True,
+                                 )
+    expected_radicals = [('benzyl_alcohol_peroxyl_0', '[O]OOCc1ccccc1'),
+                         ('benzyl_alcohol_peroxyl_1', '[O]OC(O)c1ccccc1'),
+                         ('benzyl_alcohol_peroxyl_2', '[O]Oc1ccccc1CO'),
+                         ('benzyl_alcohol_peroxyl_4', '[O]Oc1cccc(CO)c1'),
+                         ('benzyl_alcohol_peroxyl_5', '[O]Oc1ccc(CO)cc1')]
+    check_expected_generated_radicals(radicals, expected_radicals)
