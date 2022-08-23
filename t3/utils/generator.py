@@ -61,11 +61,13 @@ def generate_radicals(species: Species,
 
     radicals = [rad for rad in spc.scissors(sort_atom_labels=True) if rad.label != 'H']
 
+    rad_i, alkoxyl_i, peroxyl_i = 0, 0, 0
     for i, rad in enumerate(radicals):
         if 'radical' in types:
             if not any(rad.is_isomorphic(spc) for spc in output_species):
                 output_species.append(rad)
-                output.append((f'{species.label}_radical_{i}', rad.mol.copy(deep=True).to_smiles()))
+                output.append((f'{species.label}_radical_{rad_i}', rad.mol.copy(deep=True).to_smiles()))
+                rad_i += 1
         if 'alkoxyl' in types:
             alkoxyl = rad.copy()
             alkoxyl.mol_list = None
@@ -76,7 +78,8 @@ def generate_radicals(species: Species,
             alkoxyl.mol.add_bond(new_bond)
             if not any(alkoxyl.is_isomorphic(spc) for spc in output_species):
                 output_species.append(alkoxyl)
-                output.append((f'{species.label}_alkoxyl_{i}', alkoxyl.mol.to_smiles()))
+                output.append((f'{species.label}_alkoxyl_{alkoxyl_i}', alkoxyl.mol.to_smiles()))
+                alkoxyl_i += 1
         if 'peroxyl' in types:
             peroxyl = rad.copy()
             peroxyl.mol_list = None
@@ -91,6 +94,7 @@ def generate_radicals(species: Species,
             peroxyl.mol.add_bond(new_bond_2)
             if not any(peroxyl.is_isomorphic(spc) for spc in output_species):
                 output_species.append(peroxyl)
-                output.append((f'{species.label}_peroxyl_{i}', peroxyl.mol.to_smiles()))
+                output.append((f'{species.label}_peroxyl_{peroxyl_i}', peroxyl.mol.to_smiles()))
+                peroxyl_i += 1
 
     return output
