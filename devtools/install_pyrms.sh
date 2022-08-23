@@ -2,7 +2,7 @@
 CONDA_BASE=$(conda info --base)
 source $CONDA_BASE/etc/profile.d/conda.sh
 
-conda activate t3_evn
+conda activate t3_env
 # check that Python and Julia are being accessed from the t3_env
 echo checking which python...
 which python
