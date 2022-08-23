@@ -1,3 +1,8 @@
+# Properly configure the shell to use 'conda activate'.
+CONDA_BASE=$(conda info --base)
+source $CONDA_BASE/etc/profile.d/conda.sh
+
+conda activate t3_env
 # check that Python and Julia are being accessed from the t3_env
 echo checking which python...
 which python
@@ -19,3 +24,5 @@ python -c "import pyrms; pyrms.install()"
 # the line below can be deleted since pyrms.install() will pull the latest version
 echo installing RMS v0.3.2...
 julia devtools/install_RMS_v032.jl
+
+conda deactivate
