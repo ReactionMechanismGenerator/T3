@@ -108,6 +108,6 @@ def test_generate_radicals():
     expected_radicals = [('benzyl_alcohol_peroxyl_0', '[O]OOCc1ccccc1'),
                          ('benzyl_alcohol_peroxyl_1', '[O]OC(O)c1ccccc1'),
                          ('benzyl_alcohol_peroxyl_2', '[O]Oc1ccccc1CO'),
-                         ('benzyl_alcohol_peroxyl_4', '[O]Oc1cccc(CO)c1'),
-                         ('benzyl_alcohol_peroxyl_5', '[O]Oc1ccc(CO)cc1')]
+                         ('benzyl_alcohol_peroxyl_3', '[O]Oc1cccc(CO)c1'),
+                         ('benzyl_alcohol_peroxyl_4', '[O]Oc1ccc(CO)cc1')]
     check_expected_generated_radicals(radicals, expected_radicals)
