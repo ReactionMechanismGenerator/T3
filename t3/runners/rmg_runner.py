@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 import os
 import time
 
-from arc.job.local import _determine_job_id, execute_command, parse_running_jobs_ids, submit_job
+from arc.job.local import _determine_job_id, change_mode, execute_command, parse_running_jobs_ids, submit_job
 
 from t3.imports import local_t3_path, settings, submit_scripts
 
@@ -63,6 +63,7 @@ def write_submit_script(project_directory: str,
                                                                       )
         with open(os.path.join(project_directory, 'job.sh'), 'w') as f:
             f.write(aux_submit_scripts_content)
+            change_mode(mode='+x', file_name='job.sh', path=project_directory)
 
 
 def submit_job(project_directory: str,
