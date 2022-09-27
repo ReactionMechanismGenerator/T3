@@ -3,12 +3,11 @@ A "keep alive" runner tool for RMG on a server.
 Should be executed locally on the head node using the t3 environment.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import os
 import time
 
-from arc.common import read_yaml_file, save_yaml_file
 from arc.job.local import _determine_job_id, execute_command, parse_running_jobs_ids, submit_job
 
 from t3.imports import local_t3_path, settings, submit_scripts
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
 
 
 CPUS = 16  # A recommended value for RMG when running on a server (not incore)
-MEM = 10000
+MEM = 10000  # 10 GB
 SLEEP_TIME = 6  # hours
 
 rmg_execution_type = settings['execution_type']['rmg']
@@ -66,14 +65,14 @@ def write_submit_script(project_directory: str,
             f.write(aux_submit_scripts_content)
 
 
-def submit_job(name: str,
+def submit_job(project_directory: str,
                logger: 'Logger',
                ) -> Tuple[Optional[str], Optional[str]]:
     """
     Submit an RMG job.
 
     Args:
-        name (str): The job (folder) name.
+        project_directory (str): The job (folder) name.
         logger (Logger): The T3 Logger object instance.
 
     Returns:
@@ -81,7 +80,7 @@ def submit_job(name: str,
     """
     job_status = ''
     job_id = 0
-    cmd = f"cd {name}; {SUBMIT_COMMAND} {SUBMIT_FILENAME}; cd .."
+    cmd = f"cd {project_directory}; {SUBMIT_COMMAND} {SUBMIT_FILENAME}; cd .."
     stdout, stderr = execute_command(cmd)
     if not len(stdout):
         time.sleep(10)
@@ -89,11 +88,11 @@ def submit_job(name: str,
     if not len(stdout):
         return None, None
     if len(stderr) > 0 or len(stdout) == 0:
-        logger.info(f'Got the following error when trying to submit job {name}:\n{stderr}.')
+        logger.info(f'Got the following error when trying to submit job {project_directory}:\n{stderr}.')
         job_status = 'errored'
     else:
         job_id = _determine_job_id(stdout=stdout, cluster_soft='slurm')
-    logger.info(f'Successfully submitted job {name}, ID = {job_id}.')
+    logger.info(f'Successfully submitted job {project_directory}, job ID = {job_id}.')
     return job_status, job_id
 
 
@@ -109,18 +108,18 @@ def check_running_jobs_ids() -> List[str]:
     return running_job_ids
 
 
-def rmg_job_converged(name: str) -> bool:
+def rmg_job_converged(project_directory: str) -> bool:
     """
     Determine whether an RMG job has converged.
 
     Args:
-        name (str): The job (folder) name.
+        project_directory (str): The job (folder) name.
 
     Returns:
         bool: Whether this RMG run has converged.
     """
     rmg_converged = False
-    rmg_log_path = os.path.join(name, 'RMG.log')
+    rmg_log_path = os.path.join(project_directory, 'RMG.log')
     if os.path.isfile(rmg_log_path):
         with open(rmg_log_path, 'r') as f:
             lines = f.readlines()
@@ -132,7 +131,7 @@ def rmg_job_converged(name: str) -> bool:
     return rmg_converged
 
 
-def write_restart_file(name: str,
+def write_restart_file(name: str,  # Todo: implement this
                        logger: 'Logger',
                        ) -> None:
     """
@@ -153,24 +152,24 @@ def write_restart_file(name: str,
             f.write(content)
 
 
-def get_names_by_sub_folders(pwd: str) -> List[str]:
-    """
-    Get the names of the runs.
-
-    Args:
-        pwd (str): The present working directory.
-
-    Returns:
-        List[str]: the names of all runs.
-    """
-    names = list()
-    for _, folders, _ in os.walk(pwd):
-        for folder in folders:
-            if folder[0] == 'x':
-                names.append(folder)
-        # Don't continue to sub folders.
-        break
-    return sorted(names)
+# def get_names_by_sub_folders(pwd: str) -> List[str]:
+#     """
+#     Get the names of the runs.
+#
+#     Args:
+#         pwd (str): The present working directory.
+#
+#     Returns:
+#         List[str]: the names of all runs.
+#     """
+#     names = list()
+#     for _, folders, _ in os.walk(pwd):
+#         for folder in folders:
+#             if folder[0] == 'x':
+#                 names.append(folder)
+#         # Don't continue to sub folders.
+#         break
+#     return sorted(names)
 
 
 # def initialize_rmg_job(names: List[str],   # rewrite for a single RMG job, wait for it to finish, trsh mem if needed
@@ -215,31 +214,31 @@ def get_names_by_sub_folders(pwd: str) -> List[str]:
 #     return convergence, status, job_ids
 
 
-def update_names_and_dicts(names: List[str],
-                           convergence: Dict[str, bool],
-                           status: Dict[str, str],
-                           job_ids: Dict[str, str],
-                           ) -> Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]:
-    """
-    Check wheether new folders were added, and update the data dictionaries accordingly.
-
-    Args:
-        names (List[str]): Updated list of job names / folders.
-        convergence (Dict[str, bool]): convergence.
-        status (Dict[str, str]): status.
-        job_ids (Dict[str, str]): job IDs.
-
-    Returns:
-        Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]: convergence, status, job_ids.
-    """
-    for name in names:
-        if name not in convergence.keys():
-            convergence[name] = False
-        if name not in status.keys():
-            status[name] = ''
-        if name not in job_ids.keys():
-            job_ids[name] = 0
-    return convergence, status, job_ids
+# def update_names_and_dicts(names: List[str],
+#                            convergence: Dict[str, bool],
+#                            status: Dict[str, str],
+#                            job_ids: Dict[str, str],
+#                            ) -> Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]:
+#     """
+#     Check whether new folders were added, and update the data dictionaries accordingly.
+#
+#     Args:
+#         names (List[str]): Updated list of job names / folders.
+#         convergence (Dict[str, bool]): convergence.
+#         status (Dict[str, str]): status.
+#         job_ids (Dict[str, str]): job IDs.
+#
+#     Returns:
+#         Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]: convergence, status, job_ids.
+#     """
+#     for name in names:
+#         if name not in convergence.keys():
+#             convergence[name] = False
+#         if name not in status.keys():
+#             status[name] = ''
+#         if name not in job_ids.keys():
+#             job_ids[name] = 0
+#     return convergence, status, job_ids
 
 
 def run_rmg_incore(rmg_input_file_path: str,
@@ -274,7 +273,7 @@ def run_rmg_incore(rmg_input_file_path: str,
     return False
 
 
-def run_rmg_in_local_queue(rmg_input_file_path: str,
+def run_rmg_in_local_queue(project_directory: str,
                            logger: 'Logger',
                            verbose: Optional[int] = None,
                            max_iterations: Optional[int] = None,
@@ -283,7 +282,7 @@ def run_rmg_in_local_queue(rmg_input_file_path: str,
     Run RMG on the queue of the local server (under the rmg_env).
 
     Args:
-        rmg_input_file_path (str): The path to the RMG input file.
+        project_directory (str): The path to the RMG folder.
         logger (Logger): The T3 Logger object instance.
         max_iterations(int, optional): Max RMG iterations.
         verbose(int, optional): Level of verbosity.
@@ -291,7 +290,6 @@ def run_rmg_in_local_queue(rmg_input_file_path: str,
     Returns:
         Optional[str]: The job ID.
     """
-    project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
     verbose = f' -v {verbose}' if verbose is not None else ''
     max_iterations = f' -m {max_iterations}' if max_iterations is not None else ''
 
@@ -302,12 +300,9 @@ def run_rmg_in_local_queue(rmg_input_file_path: str,
                         max_iterations=max_iterations,
                         )
 
-    job_status, job_id = submit_job(path=project_directory,
-                                    cluster_soft=settings['servers']['local']['cluster_soft'],
-                                    submit_cmd=SUBMIT_COMMAND,
-                                    submit_filename=SUBMIT_FILENAME,
+    job_status, job_id = submit_job(project_directory=project_directory,
+                                    logger=logger,
                                     )
-    logger.info(f'Running RMG job on local server, job ID: {job_id}')
     return job_id
 
 
@@ -338,14 +333,16 @@ def rmg_runner(rmg_input_file_path: str,
                                                    )
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':
-        job_id = run_rmg_in_local_queue(rmg_input_file_path=rmg_input_file_path,
+        project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
+        job_id = run_rmg_in_local_queue(project_directory=project_directory,
+                                        logger=logger,
                                         verbose=verbose,
                                         max_iterations=max_iterations,
-                                        logger=logger,
                                         )
         while job_id in check_running_jobs_ids():
             time.sleep(120)
-
+        converged = rmg_job_converged(project_directory=project_directory)
+        return not converged
 
         # job_id_yml_path = os.path.join(local_t3_path, 'jobs.yml')
         # convergence, status, job_ids = initialize_rmg_job(names, job_id_yml_path, logger)
