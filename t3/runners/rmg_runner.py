@@ -8,9 +8,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 import os
 import time
 
-from arc.imports import settings as arc_settings
 from arc.common import read_yaml_file, save_yaml_file
-from arc.job.local import execute_command, parse_running_jobs_ids, _determine_job_id
+from arc.job.local import _determine_job_id, execute_command, parse_running_jobs_ids, submit_job
 
 from t3.imports import local_t3_path, settings, submit_scripts
 
@@ -19,29 +18,52 @@ if TYPE_CHECKING:
 
 
 CPUS = 16  # A recommended value for RMG when running on a server (not incore)
+MEM = 10000
 SLEEP_TIME = 6  # hours
 
 rmg_execution_type = settings['execution_type']['rmg']
 
 if rmg_execution_type == 'local':
-    local_cluster_software = arc_settings['servers']['local']['cluster_soft']
-    SUBMIT_COMMAND = arc_settings['submit_command'][local_cluster_software]
-    CHECK_STATUS_COMMAND = arc_settings['check_status_command'][local_cluster_software]
-    SUBMIT_FILENAME = arc_settings['submit_filenames'][local_cluster_software]
+    local_cluster_software = settings['servers']['local']['cluster_soft']
+    SUBMIT_COMMAND = settings['submit_command'][local_cluster_software]
+    CHECK_STATUS_COMMAND = settings['check_status_command'][local_cluster_software]
+    SUBMIT_FILENAME = settings['submit_filenames'][local_cluster_software]
 else:
     SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME = ''
 
 
-def write_submit_script(name: str) -> None:
+def write_submit_script(project_directory: str,
+                        cpus: Optional[int] = None,
+                        memory: Optional[int] = None,
+                        verbose: Optional[str] = None,
+                        max_iterations: Optional[str] = None,
+                        ) -> None:
     """
-    Write the submit script.
+    Write an RMG submit script.
 
     Args:
-        name (str): The job (folder) name.
+        project_directory (str): The full path to the project directory.
+        cpus (int, optional): The number of CPUs for an RMG parallelization, defaults to ``CPUS``.
+        memory (int, optional): The memory in MB for an RMG run, defaults to ``MEM``.
+        verbose (str, optional): Level of verbosity, e.g., ``-v 10``.
+        max_iterations (str, optional): Max RMG iterations, e.g., ``-m 100``.
     """
-    content = submit_scripts['rmg'].format(name=name, cpus=CPUS)
-    with open(os.path.join(name, SUBMIT_FILENAME), 'w') as f:
-        f.write(content)
+    submit_scripts_content = submit_scripts['rmg'].format(name='T3_RMG',
+                                                          cpus=cpus or CPUS,
+                                                          memory=memory or MEM,
+                                                          )
+    with open(os.path.join(project_directory, SUBMIT_FILENAME), 'w') as f:
+        f.write(submit_scripts_content)
+    if 'rmg_job' in submit_scripts.keys():
+        # Write an aux submit script, e.g., as required for HTCondor.
+        verbose = verbose or ''
+        max_iterations = max_iterations or ''
+        aux_submit_scripts_content = submit_scripts['rmg_job'].format(cpus=cpus or CPUS,
+                                                                      verbose=verbose,
+                                                                      max_iterations=max_iterations,
+                                                                      )
+        with open(os.path.join(project_directory, 'job.sh'), 'w') as f:
+            f.write(aux_submit_scripts_content)
 
 
 def submit_job(name: str,
@@ -151,46 +173,46 @@ def get_names_by_sub_folders(pwd: str) -> List[str]:
     return sorted(names)
 
 
-def initialize_rmg_job(names: List[str],
-                       job_id_yml_path: str,
-                       logger: 'Logger'
-                       ) -> Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]:
-    """
-    Initialize the RMG job.
-
-    Args:
-        names (List[str]): The run names.
-        job_id_yml_path (str): The path to the job ID YAML file.
-        logger (Logger): the T3 Logger object instance.
-
-    Returns:
-        Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]: convergence, status, job_ids.
-    """
-    logger.info('\n\ninitializing RMG job...')
-    convergence, status, job_ids = dict(), dict(), dict()
-    if os.path.isfile(job_id_yml_path):
-        job_ids = read_yaml_file(job_id_yml_path)
-    server_job_ids = check_running_jobs_ids()
-    for name in names:
-        if name in job_ids.keys() and job_ids[name] in server_job_ids:
-            logger.info(f'Job {name} is already running (index {job_ids[name]}).')
-            convergence[name] = False
-            continue
-        logger.info(f'Initializing {name}')
-        if not os.path.isfile(os.path.join(name, SUBMIT_FILENAME)):
-            logger.info(f'Writing submit script for {name}')
-            write_submit_script(name)
-        if not rmg_job_converged(name):
-            job_status, job_id = submit_job(name=name, logger=logger)  # note: not writing restart file
-            convergence[name] = False
-        else:
-            logger.info(f'Job {name} already converged, not initializing it')
-            job_status, job_id = '', 0
-            convergence[name] = True
-        status[name] = job_status
-        job_ids[name] = job_id
-    save_yaml_file(job_id_yml_path, job_ids)
-    return convergence, status, job_ids
+# def initialize_rmg_job(names: List[str],   # rewrite for a single RMG job, wait for it to finish, trsh mem if needed
+#                        job_id_yml_path: str,
+#                        logger: 'Logger'
+#                        ) -> Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]:
+#     """
+#     Initialize the RMG job.
+#
+#     Args:
+#         names (List[str]): The run names.
+#         job_id_yml_path (str): The path to the job ID YAML file.
+#         logger (Logger): the T3 Logger object instance.
+#
+#     Returns:
+#         Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]: convergence, status, job_ids.
+#     """
+#     logger.info('\n\ninitializing RMG job...')
+#     convergence, status, job_ids = dict(), dict(), dict()
+#     if os.path.isfile(job_id_yml_path):
+#         job_ids = read_yaml_file(job_id_yml_path)
+#     server_job_ids = check_running_jobs_ids()
+#     for name in names:
+#         if name in job_ids.keys() and job_ids[name] in server_job_ids:
+#             logger.info(f'Job {name} is already running (index {job_ids[name]}).')
+#             convergence[name] = False
+#             continue
+#         logger.info(f'Initializing {name}')
+#         if not os.path.isfile(os.path.join(name, SUBMIT_FILENAME)):
+#             logger.info(f'Writing submit script for {name}')
+#             write_submit_script(name)
+#         if not rmg_job_converged(name):
+#             job_status, job_id = submit_job(name=name, logger=logger)  # note: not writing restart file
+#             convergence[name] = False
+#         else:
+#             logger.info(f'Job {name} already converged, not initializing it')
+#             job_status, job_id = '', 0
+#             convergence[name] = True
+#         status[name] = job_status
+#         job_ids[name] = job_id
+#     save_yaml_file(job_id_yml_path, job_ids)
+#     return convergence, status, job_ids
 
 
 def update_names_and_dicts(names: List[str],
@@ -229,8 +251,8 @@ def run_rmg_incore(rmg_input_file_path: str,
 
     Args:
         rmg_input_file_path (str): The path to the RMG input file.
-        max_iterations(int, optional): Max RMG iterations.
-        verbose(int, optional): Level of verbosity.
+        max_iterations (int, optional): Max RMG iterations.
+        verbose (int, optional): Level of verbosity.
 
     Returns:
         bool: Whether an exception was raised.
@@ -252,11 +274,41 @@ def run_rmg_incore(rmg_input_file_path: str,
     return False
 
 
-def run_rmg_in_local_queue():
+def run_rmg_in_local_queue(rmg_input_file_path: str,
+                           logger: 'Logger',
+                           verbose: Optional[int] = None,
+                           max_iterations: Optional[int] = None,
+                           ):
     """
     Run RMG on the queue of the local server (under the rmg_env).
+
+    Args:
+        rmg_input_file_path (str): The path to the RMG input file.
+        logger (Logger): The T3 Logger object instance.
+        max_iterations(int, optional): Max RMG iterations.
+        verbose(int, optional): Level of verbosity.
+
+    Returns:
+        Optional[str]: The job ID.
     """
-    raise NotImplementedError('Running RMG in queue is not yet implemented.')
+    project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
+    verbose = f' -v {verbose}' if verbose is not None else ''
+    max_iterations = f' -m {max_iterations}' if max_iterations is not None else ''
+
+    write_submit_script(project_directory=project_directory,
+                        cpus=settings['servers']['local']['cpus'],
+                        memory=10000,  # Guess 10 GB
+                        verbose=verbose,
+                        max_iterations=max_iterations,
+                        )
+
+    job_status, job_id = submit_job(path=project_directory,
+                                    cluster_soft=settings['servers']['local']['cluster_soft'],
+                                    submit_cmd=SUBMIT_COMMAND,
+                                    submit_filename=SUBMIT_FILENAME,
+                                    )
+    logger.info(f'Running RMG job on local server, job ID: {job_id}')
+    return job_id
 
 
 def rmg_runner(rmg_input_file_path: str,
@@ -286,7 +338,15 @@ def rmg_runner(rmg_input_file_path: str,
                                                    )
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':
-        run_rmg_in_local_queue()
+        job_id = run_rmg_in_local_queue(rmg_input_file_path=rmg_input_file_path,
+                                        verbose=verbose,
+                                        max_iterations=max_iterations,
+                                        logger=logger,
+                                        )
+        while job_id in check_running_jobs_ids():
+            time.sleep(120)
+
+
         # job_id_yml_path = os.path.join(local_t3_path, 'jobs.yml')
         # convergence, status, job_ids = initialize_rmg_job(names, job_id_yml_path, logger)
         #
