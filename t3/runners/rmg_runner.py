@@ -93,7 +93,7 @@ def submit_job(project_directory: str,
         logger.info(f'Got the following error when trying to submit job {project_directory}:\n{stderr}.')
         job_status = 'errored'
     else:
-        job_id = _determine_job_id(stdout=stdout, cluster_soft=cluster_soft)
+        job_id = _determine_job_id(stdout=stdout, cluster_soft=cluster_soft.lower())
     logger.info(f'Successfully submitted job {project_directory}, job ID = {job_id}.')
     return job_status, job_id
 
@@ -109,7 +109,7 @@ def check_running_jobs_ids(cluster_soft: str) -> List[str]:
         List(str): List of job IDs.
     """
     stdout = execute_command(CHECK_STATUS_COMMAND)[0]
-    running_job_ids = parse_running_jobs_ids(stdout, cluster_soft=cluster_soft)
+    running_job_ids = parse_running_jobs_ids(stdout, cluster_soft=cluster_soft.lower())
     return running_job_ids
 
 
