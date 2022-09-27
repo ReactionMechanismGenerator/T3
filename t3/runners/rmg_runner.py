@@ -23,12 +23,12 @@ SLEEP_TIME = 6  # hours
 rmg_execution_type = settings['execution_type']['rmg']
 
 if rmg_execution_type == 'local':
-    local_cluster_software = settings['servers']['local']['cluster_soft']
-    SUBMIT_COMMAND = settings['submit_command'][local_cluster_software]
-    CHECK_STATUS_COMMAND = settings['check_status_command'][local_cluster_software]
-    SUBMIT_FILENAME = settings['submit_filenames'][local_cluster_software]
+    LOCAL_CLUSTER_SOFTWARE = settings['servers']['local']['cluster_soft']
+    SUBMIT_COMMAND = settings['submit_command'][LOCAL_CLUSTER_SOFTWARE]
+    CHECK_STATUS_COMMAND = settings['check_status_command'][LOCAL_CLUSTER_SOFTWARE]
+    SUBMIT_FILENAME = settings['submit_filenames'][LOCAL_CLUSTER_SOFTWARE]
 else:
-    SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME = ''
+    SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME, LOCAL_CLUSTER_SOFTWARE = ''
 
 
 def write_submit_script(project_directory: str,
@@ -67,6 +67,7 @@ def write_submit_script(project_directory: str,
 
 def submit_job(project_directory: str,
                logger: 'Logger',
+               cluster_soft: str,
                ) -> Tuple[Optional[str], Optional[str]]:
     """
     Submit an RMG job.
@@ -74,6 +75,7 @@ def submit_job(project_directory: str,
     Args:
         project_directory (str): The job (folder) name.
         logger (Logger): The T3 Logger object instance.
+        cluster_soft (str): The server's cluster software.
 
     Returns:
         Tuple[Optional[str], Optional[str]]: job_status, job_id
@@ -91,20 +93,23 @@ def submit_job(project_directory: str,
         logger.info(f'Got the following error when trying to submit job {project_directory}:\n{stderr}.')
         job_status = 'errored'
     else:
-        job_id = _determine_job_id(stdout=stdout, cluster_soft='slurm')
+        job_id = _determine_job_id(stdout=stdout, cluster_soft=cluster_soft)
     logger.info(f'Successfully submitted job {project_directory}, job ID = {job_id}.')
     return job_status, job_id
 
 
-def check_running_jobs_ids() -> List[str]:
+def check_running_jobs_ids(cluster_soft: str) -> List[str]:
     """
     Check which jobs are still running on the server for this user.
+
+    Args:
+        cluster_soft (str): The server's cluster software.
 
     Returns:
         List(str): List of job IDs.
     """
     stdout = execute_command(CHECK_STATUS_COMMAND)[0]
-    running_job_ids = parse_running_jobs_ids(stdout, cluster_soft='slurm')
+    running_job_ids = parse_running_jobs_ids(stdout, cluster_soft=cluster_soft)
     return running_job_ids
 
 
@@ -302,6 +307,7 @@ def run_rmg_in_local_queue(project_directory: str,
 
     job_status, job_id = submit_job(project_directory=project_directory,
                                     logger=logger,
+                                    cluster_soft=LOCAL_CLUSTER_SOFTWARE,
                                     )
     return job_id
 
@@ -339,7 +345,7 @@ def rmg_runner(rmg_input_file_path: str,
                                         verbose=verbose,
                                         max_iterations=max_iterations,
                                         )
-        while job_id in check_running_jobs_ids():
+        while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
             time.sleep(120)
         converged = rmg_job_converged(project_directory=project_directory)
         return not converged
