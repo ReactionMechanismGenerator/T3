@@ -58,7 +58,6 @@ def write_submit_script(project_directory: str,
         verbose = verbose or ''
         max_iterations = max_iterations or ''
         aux_submit_scripts_content = submit_scripts['rmg_job'].format(cpus=cpus or CPUS,
-                                                                      verbose=verbose,
                                                                       max_iterations=max_iterations,
                                                                       )
         with open(os.path.join(project_directory, 'job.sh'), 'w') as f:
