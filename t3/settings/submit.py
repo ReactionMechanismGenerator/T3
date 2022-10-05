@@ -44,15 +44,15 @@ request_memory = {memory}MB
 queue
 
 """,
-    'rmg_job': """#!/bin/csh
+    'rmg_job': """#!/bin/bash -l
 
 touch initial_time
 
-export PYTHONPATH=$PYTHONPATH:~/Code/RMG-Py/
+source /srv01/technion/alongd/.bashrc
 
 conda activate rmg_env
 
-python-jl ~/Code/RMG-Py/rmg.py -n {cpus} input.py{verbose}{max_iterations}
+python-jl /Local/ce_dana/Code/RMG-Py/rmg.py -n 10 input.py -v 20
 
 touch final_time
 
