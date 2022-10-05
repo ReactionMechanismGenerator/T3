@@ -52,7 +52,7 @@ source /srv01/technion/alongd/.bashrc
 
 conda activate rmg_env
 
-python-jl /Local/ce_dana/Code/RMG-Py/rmg.py -n 10 input.py -v 20
+python-jl /Local/ce_dana/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
 
 touch final_time
 
