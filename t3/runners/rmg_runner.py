@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 CPUS = 16  # A recommended value for RMG when running on a server (not incore)
-MEM = 10000  # 10 GB
+MEM = 10000  # MB
 SLEEP_TIME = 6  # hours
 
 rmg_execution_type = settings['execution_type']['rmg']
@@ -47,6 +47,7 @@ def write_submit_script(project_directory: str,
         verbose (str, optional): Level of verbosity, e.g., ``-v 10``.
         max_iterations (str, optional): Max RMG iterations, e.g., ``-m 100``.
     """
+    global MEM
     submit_scripts_content = submit_scripts['rmg'].format(name='T3_RMG',
                                                           cpus=cpus or CPUS,
                                                           memory=memory or MEM,
@@ -280,6 +281,7 @@ def run_rmg_incore(rmg_input_file_path: str,
 
 def run_rmg_in_local_queue(project_directory: str,
                            logger: 'Logger',
+                           memory: Optional[int] = None,
                            verbose: Optional[int] = None,
                            max_iterations: Optional[int] = None,
                            ):
@@ -289,8 +291,9 @@ def run_rmg_in_local_queue(project_directory: str,
     Args:
         project_directory (str): The path to the RMG folder.
         logger (Logger): The T3 Logger object instance.
-        max_iterations(int, optional): Max RMG iterations.
-        verbose(int, optional): Level of verbosity.
+        memory (int, optional): The submit script memory in MB.
+        max_iterations (int, optional): Max RMG iterations.
+        verbose (int, optional): Level of verbosity.
 
     Returns:
         Optional[str]: The job ID.
@@ -300,7 +303,7 @@ def run_rmg_in_local_queue(project_directory: str,
 
     write_submit_script(project_directory=project_directory,
                         cpus=settings['servers']['local']['cpus'],
-                        memory=10000,  # Guess 10 GB
+                        memory=memory,
                         verbose=verbose,
                         max_iterations=max_iterations,
                         )
@@ -313,6 +316,7 @@ def run_rmg_in_local_queue(project_directory: str,
 
 
 def rmg_runner(rmg_input_file_path: str,
+               job_log_path: str,
                logger: 'Logger',
                verbose: Optional[int] = None,
                max_iterations: Optional[int] = None,
@@ -322,6 +326,7 @@ def rmg_runner(rmg_input_file_path: str,
 
     Args:
         rmg_input_file_path (str): The path to the RMG input file.
+        job_log_path (str): The path to the ``job.log`` file created on an HTCondor scheduler.
         logger (Logger): The T3 Logger object instance.
         max_iterations(int, optional): Max RMG iterations.
         verbose(int, optional): Level of verbosity.
@@ -331,6 +336,9 @@ def rmg_runner(rmg_input_file_path: str,
     """
     if not os.path.isdir(local_t3_path):
         os.makedirs(local_t3_path)
+    memory_handler = False
+    new_memory = None
+    converged = True
 
     if rmg_execution_type == 'incore':
         rmg_exception_encountered = run_rmg_incore(rmg_input_file_path=rmg_input_file_path,
@@ -339,15 +347,22 @@ def rmg_runner(rmg_input_file_path: str,
                                                    )
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':
-        project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
-        job_id = run_rmg_in_local_queue(project_directory=project_directory,
-                                        logger=logger,
-                                        verbose=verbose,
-                                        max_iterations=max_iterations,
-                                        )
-        while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
-            time.sleep(120)
-        converged = rmg_job_converged(project_directory=project_directory)
+        while not memory_handler:
+            project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
+            job_id = run_rmg_in_local_queue(project_directory=project_directory,
+                                            logger=logger,
+                                            memory=new_memory,
+                                            verbose=verbose,
+                                            max_iterations=max_iterations,
+                                            )
+            while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
+                time.sleep(120)
+            converged = rmg_job_converged(project_directory=project_directory)
+            if not converged:
+                new_memory = get_new_memory_for_an_rmg_run(job_log_path)
+                if new_memory is None:
+                    memory_handler = True
+
         return not converged
 
         # job_id_yml_path = os.path.join(local_t3_path, 'jobs.yml')
@@ -383,3 +398,32 @@ def rmg_runner(rmg_input_file_path: str,
         #     save_yaml_file(job_id_yml_path, job_ids)
         #     logger.info(f'Sleeping for {SLEEP_TIME} hours. ZZZ... ZZZ...')
         #     time.sleep(SLEEP_TIME * 60 * 60)
+
+
+def get_new_memory_for_an_rmg_run(job_log_path) -> Optional[int]:
+    """
+    If an RMG job crashed due to too few or too much memory, compute a new desired memory for the run.
+    Note that only on HTCondor there's a cap memory constraint rule that the job must consume at least 20%
+    of the allocated memory within the first 30 min of the run, otherwise it is terminated.
+
+    Args:
+        job_log_path (str): The path to the ``job.log`` file created on an HTCondor scheduler.
+
+    Returns:
+        Optional[int]: The recommended memory value in MB.
+    """
+    new_mem = None
+    if os.path.isfile(job_log_path):
+        with open(job_log_path, 'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            #	Job Is Wasting Memory using less than 20 percent of requested Memory
+            #	Code 26 Subcode 0
+            if 'using less than 20 percent of requested' in line or 'Code 26 Subcode 0' in line:
+                for line_ in lines:
+                    #	1852  -  MemoryUsage of job (MB)
+                    if 'MemoryUsage of job (MB)' in line_:
+                        new_mem = int(int(line_.split()[0]) * 4.5)
+                break
+    new_mem = min(new_mem, settings['servers']['local']['max mem'] * 1000) if new_mem is not None else None
+    return new_mem
