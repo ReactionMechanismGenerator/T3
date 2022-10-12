@@ -18,6 +18,7 @@ servers = {
     'local': {
         'cluster_soft': 'HTCondor',
         'cpus': 10,
+        'max mem': 40,  # GB
     },
 }
 
