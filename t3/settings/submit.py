@@ -48,7 +48,7 @@ queue
 
 touch initial_time
 
-source /srv01/technion/alongd/.bashrc
+source /srv01/technion/$USER/.bashrc
 
 conda activate rmg_env
 
