@@ -360,6 +360,7 @@ class T3(object):
             'RMG PDep': os.path.join(iteration_path, 'RMG', 'pdep'),
             'RMG input': os.path.join(iteration_path, 'RMG', 'input.py'),
             'RMG log': os.path.join(iteration_path, 'RMG', 'RMG.log'),
+            'RMG job log': os.path.join(iteration_path, 'RMG', 'job.log'),
             'RMG coll vio': os.path.join(iteration_path, 'RMG', 'collision_rate_violators.log'),
             'RMS': os.path.join(iteration_path, 'RMG', 'rms'),
             'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.cti'),
@@ -623,6 +624,7 @@ class T3(object):
 
         max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
         rmg_exception_encountered = rmg_runner(rmg_input_file_path=self.paths['RMG input'],
+                                               job_log_path=self.paths['RMG job log'],
                                                logger=self.logger,
                                                max_iterations=self.t3['options']['max_rmg_iterations'],
                                                verbose=self.verbose,
