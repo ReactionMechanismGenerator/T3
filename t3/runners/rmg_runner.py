@@ -282,8 +282,9 @@ def run_rmg_incore(rmg_input_file_path: str,
 def run_rmg_in_local_queue(project_directory: str,
                            logger: 'Logger',
                            memory: Optional[int] = None,
-                           verbose: Optional[int] = None,
                            max_iterations: Optional[int] = None,
+                           restart_rmg: bool = False,
+                           verbose: Optional[int] = None,
                            ):
     """
     Run RMG on the queue of the local server (under the rmg_env).
@@ -293,6 +294,7 @@ def run_rmg_in_local_queue(project_directory: str,
         logger (Logger): The T3 Logger object instance.
         memory (int, optional): The submit script memory in MB.
         max_iterations (int, optional): Max RMG iterations.
+        restart_rmg (bool, optional): Whether this RMG run should trigger a seed restart.
         verbose (int, optional): Level of verbosity.
 
     Returns:
@@ -300,14 +302,24 @@ def run_rmg_in_local_queue(project_directory: str,
     """
     verbose = f' -v {verbose}' if verbose is not None else ''
     max_iterations = f' -m {max_iterations}' if max_iterations is not None else ''
-
     write_submit_script(project_directory=project_directory,
                         cpus=settings['servers']['local']['cpus'],
                         memory=memory,
                         verbose=verbose,
                         max_iterations=max_iterations,
                         )
-
+    if restart_rmg:
+        if os.path.isfile(os.path.join(project_directory, 'restart_from_seed.py')):
+            if os.path.isfile(os.path.join(project_directory, 'input.py')):
+                os.rename(src=os.path.join(project_directory, 'input.py'),
+                          dst=os.path.join(project_directory, 'input.py.old'))
+            os.rename(src=os.path.join(project_directory, 'restart_from_seed.py'),
+                      dst=os.path.join(project_directory, 'input.py'))
+        elif os.path.isfile(os.path.join(project_directory, 'input.py')):
+            with open(os.path.join(project_directory, 'input.py'), 'r') as f:
+                content = f.read()
+            with open(os.path.join(project_directory, 'input.py'), 'w') as f:
+                f.write("restartFromSeed(path='seed')\n\n" + content)
     job_status, job_id = submit_job(project_directory=project_directory,
                                     logger=logger,
                                     cluster_soft=LOCAL_CLUSTER_SOFTWARE,
@@ -339,6 +351,7 @@ def rmg_runner(rmg_input_file_path: str,
     memory_handler = False
     new_memory = None
     converged = True
+    restart_rmg = False
 
     if rmg_execution_type == 'incore':
         rmg_exception_encountered = run_rmg_incore(rmg_input_file_path=rmg_input_file_path,
@@ -354,6 +367,7 @@ def rmg_runner(rmg_input_file_path: str,
                                             memory=new_memory,
                                             verbose=verbose,
                                             max_iterations=max_iterations,
+                                            restart_rmg=restart_rmg,
                                             )
             while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
                 time.sleep(120)
@@ -362,6 +376,7 @@ def rmg_runner(rmg_input_file_path: str,
                 new_memory = get_new_memory_for_an_rmg_run(job_log_path)
                 if new_memory is None:
                     memory_handler = True
+            restart_rmg = True
 
         return not converged
 
