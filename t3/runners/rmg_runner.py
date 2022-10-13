@@ -373,7 +373,9 @@ def rmg_runner(rmg_input_file_path: str,
                 time.sleep(120)
             converged = rmg_job_converged(project_directory=project_directory)
             if not converged:
-                new_memory = get_new_memory_for_an_rmg_run(job_log_path)
+                new_memory = get_new_memory_for_an_rmg_run(job_log_path,
+                                                           logger=logger,
+                                                           )
                 if new_memory is None:
                     memory_handler = True
             restart_rmg = True
@@ -415,7 +417,9 @@ def rmg_runner(rmg_input_file_path: str,
         #     time.sleep(SLEEP_TIME * 60 * 60)
 
 
-def get_new_memory_for_an_rmg_run(job_log_path) -> Optional[int]:
+def get_new_memory_for_an_rmg_run(job_log_path: str,
+                                  logger: 'Logger',
+                                  ) -> Optional[int]:
     """
     If an RMG job crashed due to too few or too much memory, compute a new desired memory for the run.
     Note that only on HTCondor there's a cap memory constraint rule that the job must consume at least 20%
@@ -423,6 +427,7 @@ def get_new_memory_for_an_rmg_run(job_log_path) -> Optional[int]:
 
     Args:
         job_log_path (str): The path to the ``job.log`` file created on an HTCondor scheduler.
+        logger (Logger): The T3 Logger object instance.
 
     Returns:
         Optional[int]: The recommended memory value in MB.
@@ -432,13 +437,26 @@ def get_new_memory_for_an_rmg_run(job_log_path) -> Optional[int]:
         with open(job_log_path, 'r') as f:
             lines = f.readlines()
         for line in lines:
-            #	Job Is Wasting Memory using less than 20 percent of requested Memory
-            #	Code 26 Subcode 0
-            if 'using less than 20 percent of requested' in line or 'Code 26 Subcode 0' in line:
+            # Job Is Wasting Memory using less than 20 percent of requested Memory
+            # Code 26 Subcode 0
+            if 'using less than 20 percent of requested' in line:
                 for line_ in lines:
-                    #	1852  -  MemoryUsage of job (MB)
+                    # 1852  -  MemoryUsage of job (MB)
                     if 'MemoryUsage of job (MB)' in line_:
-                        new_mem = int(int(line_.split()[0]) * 4.5)
+                        mem = int(line_.split()[0])
+                        logger.info(f'RMG job terminated due to 20% memory rule, was {mem} MB')
+                        new_mem = int(mem * 4.5)
+                break
+            # MEMORY EXCEEDED
+            # Code 26 Subcode 0
+            if 'memory exceeded' in line.lower():
+                for line_ in lines:
+                    # 14361  -  MemoryUsage of job (MB)
+                    if 'MemoryUsage of job (MB)' in line_:
+                        mem = int(line_.split()[0])
+                        logger.info(f'RMG job terminated since more memory is needed, was {mem} MB')
+                        new_mem = int(mem * 3)
                 break
     new_mem = min(new_mem, settings['servers']['local']['max mem'] * 1000) if new_mem is not None else None
+    logger.info(f'Setting new RMG job memory to {new_mem} MB')
     return new_mem
