@@ -113,6 +113,13 @@ class RMGConstantTP(SimulateAdapter):
         if not os.path.isfile(self.rmg_input_file):
             shutil.copyfile(src=self.paths['RMG input'], dst=self.rmg_input_file)
 
+        with open(self.rmg_input_file, 'r') as f:
+            lines = f.readlines()
+        restart_string = "restartFromSeed(path='seed')"
+        new_lines = [line for line in lines if restart_string not in line]
+        with open(self.rmg_input_file, 'w') as f:
+            f.writelines(new_lines)
+
         self.rmg_model = load_rmg_py_job(input_file=self.rmg_input_file,
                                          chemkin_file=self.paths['chem annotated'],
                                          species_dict=self.paths['species dict'],
