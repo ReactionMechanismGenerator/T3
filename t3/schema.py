@@ -40,9 +40,10 @@ class T3Options(BaseModel):
     max_RMG_exceptions_allowed: Optional[conint(ge=0)] = 10
     max_RMG_walltime: constr(regex=r'\d+:\d\d:\d\d:\d\d') = '00:00:00:00'
     max_T3_walltime: Optional[constr(regex=r'\d+:\d\d:\d\d:\d\d')] = None
-    library_name: constr(max_length=255) = 'T3'
     max_rmg_processes: Optional[conint(ge=1)] = None
     max_rmg_iterations: Optional[conint(ge=1)] = None
+    library_name: constr(max_length=255) = 'T3'
+    save_libraries_directly_in_rmgdb: bool = False
 
     class Config:
         extra = "forbid"
