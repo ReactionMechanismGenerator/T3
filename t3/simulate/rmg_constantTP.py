@@ -250,24 +250,25 @@ class RMGConstantTP(SimulateAdapter):
                 sa_type = None
                 if 'Time' in header:
                     sa_dict['time'] = df[header].values
-                elif 'dln[k' in header:
+                elif '/dln[k' in header:
                     sa_type = 'kinetics'
-                elif 'dG' in header:
+                elif '/dG[' in header:
                     sa_type = 'thermo'
                 if sa_type is not None:
                     observable_label = header.split('[')[1].split(']')[0]
                     observable = get_species_by_label(observable_label, self.rmg_model.reaction_model.core.species)
                     if observable is None:
-                        self.logger.error(f'Could not identify observable species {observable_label}!')
+                        self.logger.error(f'Could not identify observable species for label: {observable_label}')
                     observable_label = observable.to_chemkin()
-                    if observable_label not in sa_dict[sa_type]:
+                    if observable_label not in sa_dict[sa_type].keys():
                         sa_dict[sa_type][observable_label] = dict()
                     # parameter extraction examples:
                     # for species get 'C2H4(8)' from `dln[ethane(1)]/dG[C2H4(8)]`
                     # for reaction, get 8 from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)`
                     parameter = header.split('[')[2].split(']')[0]
                     if sa_type == 'kinetics':
-                        parameter = int(parameter[1:])
+                        parameter = parameter[1:]
+                        parameter = int(parameter) if all(c.isdigit() for c in parameter) else parameter
                     sa_dict[sa_type][observable_label][parameter] = df[header].values
         return sa_dict
 
