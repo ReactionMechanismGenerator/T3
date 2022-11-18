@@ -22,6 +22,7 @@ t3:
     max_RMG_walltime: '00:02:00:00'  # optional, default: ``None``
     max_T3_walltime: '01:00:00:00'  # optional, default: ``None``
     library_name: T3  # optional, default: 'T3'
+    save_libraries_directly_in_rmgdb: False  # optional, whether to save the RMG kinetics and thermo libraries directly in the RMG-database repository, default: ``False``
 
   # sensitivity analysis (optional block, T3 can ran w/o SA)
   sensitivity:
