@@ -44,6 +44,12 @@ class T3Options(BaseModel):
     max_rmg_iterations: Optional[conint(ge=1)] = None
     library_name: constr(max_length=255) = 'T3'
     save_libraries_directly_in_rmgdb: bool = False
+    num_sa_per_temperature_range: conint(ge=1) = 3
+    num_sa_per_pressure_range: conint(ge=1) = 3
+    num_sa_per_volume_range: conint(ge=1) = 3
+    num_sa_per_concentration_range: conint(ge=1) = 3
+    modify_concentration_ranges_together: bool = True
+    modify_concentration_ranges_in_reverse: bool = False
 
     class Config:
         extra = "forbid"
@@ -219,6 +225,7 @@ class RMGReactor(BaseModel):
     type: str
     T: Union[confloat(gt=0), List[confloat(gt=0)]]
     P: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
+    V: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
     termination_conversion: Optional[Dict[str, confloat(gt=0, lt=1)]] = None
     termination_time: Optional[List[Union[confloat(gt=0), TerminationTimeEnum]]] = None
     termination_rate_ratio: Optional[confloat(gt=0, lt=1)] = None
@@ -251,9 +258,21 @@ class RMGReactor(BaseModel):
             raise ValueError(f'When specifying the pressure as a list, only two values are allowed (P min, P max),\n'
                              f'got {len(value)} values: {value}.')
         if 'type' in values and 'gas' in values['type'] and value is None:
-            raise ValueError('The reactor pressure must be specified for a gas phase reactor.')
+            raise ValueError('The reactor pressure must be specified for a gas-phase reactor.')
         if 'type' in values and 'liquid' in values['type'] and value is not None:
-            raise ValueError('A reactor pressure cannot be specified for a liquid phase reactor.')
+            raise ValueError('A reactor pressure cannot be specified for a liquid-phase reactor.')
+        return value
+
+    @validator('V', always=True)
+    def check_v(cls, value, values):
+        """RMGReactor.V validator"""
+        if isinstance(value, list) and len(value) != 2:
+            raise ValueError(f'When specifying the volume as a list, only two values are allowed (V min, V max),\n'
+                             f'got {len(value)} values: {value}.')
+        if 'type' in values and 'liquid' in values['type'] and value is None:
+            raise ValueError('The reactor volume must be specified for a liquid-phase reactor.')
+        if 'type' in values and 'gas' in values['type'] and value is not None:
+            raise ValueError('A reactor volume cannot be specified for a gas-phase reactor.')
         return value
 
     @validator('termination_time')
