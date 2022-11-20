@@ -23,8 +23,14 @@ t3:
     max_T3_walltime: '01:00:00:00'  # optional, default: ``None``
     library_name: T3  # optional, default: 'T3'
     save_libraries_directly_in_rmgdb: False  # optional, whether to save the RMG kinetics and thermo libraries directly in the RMG-database repository, default: ``False``
+    num_sa_per_temperature_range: 3  # optional, if a range of temperatures is given this argument specifies how many equally distributed points to generate for local SA runs, default: 3
+    num_sa_per_pressure_range: 3  # optional, if a range of pressures is given this argument specifies how many equally distributed points to generate for local SA runs, default: 3
+    num_sa_per_volume_range: 3  # optional, if a range of volumes is given this argument specifies how many equally distributed points to generate for local SA runs, default: 3
+    num_sa_per_concentration_range: 3  # optional, if a species concentration is given as a range this argument specifies how many equally distributed points to generate for local SA runs, default: 3
+    modify_concentration_ranges_together: True  # optional, if species concentration is given as a range, whether to vary the concentration of different species together (``True``) or to create combination when running local SA (``False``) - warning setting this to ``False`` may result in many combinations, especially if num_sa_per_concentration_range is set to a high value, and will spawn many SA runs which could be very slow, default: ``True``
+    modify_concentration_ranges_in_reverse: False  # optional, if species concentration is given as a range for two species only (e.g., fuel and oxidizer), whether to vary the concentration of the species inversely (in this case, you should define the concentration of N2 in an air mixture as ``balance: true``, default: ``False``
 
-  # sensitivity analysis (optional block, T3 can ran w/o SA)
+  # sensitivity analysis (optional block, T3 can run w/o SA)
   sensitivity:
     adapter: RMGConstantTP  # *required* (this is how SA is requested), can use any implemented simulation adapter
     atol: 1e-6  # optional, default: 1e-6
