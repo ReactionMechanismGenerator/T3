@@ -105,3 +105,25 @@ def test_convert_termination_time_to_seconds():
 
     t_final = (1, 'days')
     assert common.convert_termination_time_to_seconds(t_final) == 3600*24
+
+
+def test_get_values_within_range():
+    """Test the get_values_within_range() function"""
+    assert common.get_values_within_range([0, 10], 1) == [5]
+    assert common.get_values_within_range([1, 10], 2) == [4, 7]
+    assert common.get_values_within_range([0, 10], 3) == [0, 5, 10]
+    assert common.get_values_within_range([1, 10], 4) == [1, 4, 7, 10]
+    assert common.get_values_within_range(7.2, 40) == [7.2]
+    assert common.get_values_within_range([7.2], 40) == [7.2]
+    assert common.get_values_within_range([1, 25], 3, use_log_scale=True) == [1, 10]
+    assert common.get_values_within_range([1, 500], 3, use_log_scale=True) == [1, 10, 100]
+    assert common.get_values_within_range([0.1, 1000], 5, use_log_scale=True) == [0.1, 1, 10, 100, 1000]
+
+
+def test_get_interval():
+    """Test thew get_interval() function"""
+    assert common.get_interval([0, 10], 1) == 5
+    assert common.get_interval([1, 10], 2) == 3
+    assert common.get_interval([0, 10], 3) == 5
+    assert common.get_interval([0, 9], 4) == 3
+    assert common.get_interval([500, 1200], 3) == 350
