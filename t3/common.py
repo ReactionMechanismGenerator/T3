@@ -5,7 +5,7 @@ t3 common module
 import datetime
 import os
 import string
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 from rmgpy.species import Species
 
@@ -210,3 +210,47 @@ def get_interval(value_range: Union[list, tuple],
     """
     num_of_intervals = num + 1 if num <= 2 else num - 1
     return (max(value_range) - min(value_range)) / num_of_intervals
+
+
+def get_chem_to_rmg_rxn_index_map(chem_annotated_path: str) -> Dict[int, int]:
+    """
+    Get a dictionary that maps "Chemkin" reaction indices to "RMG" reaction indices.
+    A Chemkin file counts duplicate reactions by design, while RMG treats duplicate reactions as a single reaction
+    with two rate coefficients (or more) that are summed up.
+    When T3 reads the reactions from an RMG run, it gets N reactions, N being the number of reactions by the RMG count.
+    However, when RMG performs SA, it gives the Chemkin reaction index to each rate coefficient it perturbs
+    (it actually perturbs each of the duplicate reaction rate coefficients).
+
+    An example Chemkin file that highlights the different indexing:
+
+        ! Reaction index: Chemkin #4; RMG #4
+        ! Library reaction: primaryH2O2
+        ! Flux pairs: O2(2), HO2(8); H2(5), HO2(8); O2(2), HO2(8);
+        O2(2)+O2(2)+H2(5)=HO2(8)+HO2(8)                     2.000000e+17 0.000     25.830
+
+        ! Reaction index: Chemkin #5; RMG #5
+        ! Library reaction: primaryH2O2
+        HO2(8)+HO2(8)=O2(2)+H2O2(9)                         1.030000e+14 0.000     11.040
+        DUPLICATE
+        ! Reaction index: Chemkin #6; RMG #5
+        ! Library reaction: primaryH2O2
+        HO2(8)+HO2(8)=O2(2)+H2O2(9)                         1.940000e+11 0.000     -1.409
+        DUPLICATE
+
+        ! Reaction index: Chemkin #7; RMG #6
+        ! Library reaction: primaryH2O2
+        ! Flux pairs: HO2(8), O2(2); OH(10), H2O(6);
+        OH(10)+HO2(8)=O2(2)+H2O(6)                          2.140000e+06 1.650     2.180
+
+    Returns:
+        Dict[int, int]: A map between Chemkin to RMG reaction indices.
+    """
+    rxn_map = dict()
+    if os.path.isfile(chem_annotated_path):
+        with open(chem_annotated_path, 'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            if 'Reaction index:' in line:
+                splits = line.split()
+                rxn_map[int(splits[4].split('#')[1].split(';')[0])] = int(splits[-1].split('#')[1])
+    return rxn_map
