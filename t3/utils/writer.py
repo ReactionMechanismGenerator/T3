@@ -139,12 +139,17 @@ liquidReactor(
         else:
             raise ValueError(f"The reactor temperature must be a float or a list,\n"
                              f"got {reactor['T']} which is a {type(reactor['T'])}.")
-        species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in species
-                        if isinstance(spc['concentration'], (list, tuple))
-                        or (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
-                        or spc['balance'] or not spc['reactive']]
-        species_list.sort(key=lambda spc: spc['concentration'][0] if isinstance(spc['concentration'], (tuple, list))
-                          else spc['concentration'], reverse=True)
+        if 'species_list' in reactor.keys():
+            # This is relevant when a simulate adapter breaks ranged reactors down to individual conditions.
+            species_list = reactor['species_list']
+        else:
+            # This is the base case when T3 generates an RMG input file for model generation.
+            species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in species
+                            if isinstance(spc['concentration'], (list, tuple))
+                            or (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
+                            or spc['balance'] or not spc['reactive']]
+            species_list.sort(key=lambda spc: spc['concentration'][0] if isinstance(spc['concentration'], (tuple, list))
+                              else spc['concentration'], reverse=True)
         termination = ''
         if reactor['termination_conversion'] is not None:
             termination += f"terminationConversion={reactor['termination_conversion']},"
