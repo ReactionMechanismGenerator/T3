@@ -3,6 +3,8 @@ RMG Simulator Adapter module
 Used to run mechanism analysis with RMG
 """
 
+import datetime
+import itertools
 import os
 import pandas as pd
 import shutil
@@ -16,10 +18,11 @@ from rmgpy.solver.simple import SimpleReactor
 from rmgpy.tools.loader import load_rmg_py_job
 from rmgpy.tools.plot import plot_sensitivity
 
-from t3.common import get_species_by_label
+from t3.common import get_chem_to_rmg_rxn_index_map, get_species_by_label, get_values_within_range, time_lapse
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
+from t3.utils.writer import write_rmg_input_file
 
 
 class RMGConstantTP(SimulateAdapter):
@@ -64,7 +67,7 @@ class RMGConstantTP(SimulateAdapter):
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None
+                 global_observables: Optional[List[str]] = None,
                  ):
 
         self.t3 = t3
@@ -110,8 +113,13 @@ class RMGConstantTP(SimulateAdapter):
         else:
             self.rmg_input_file = self.paths['RMG input']
 
-        if not os.path.isfile(self.rmg_input_file):
-            shutil.copyfile(src=self.paths['RMG input'], dst=self.rmg_input_file)
+        write_rmg_input_file(
+            rmg=self.generate_rmg_reactors_for_simulation(),
+            t3=self.t3,
+            iteration=1,  # Does not matter for simulating or computing SA.
+            path=self.rmg_input_file,
+            walltime=self.t3['options']['max_RMG_walltime'],
+        )
 
         with open(self.rmg_input_file, 'r') as f:
             lines = f.readlines()
@@ -131,37 +139,20 @@ class RMGConstantTP(SimulateAdapter):
             raise FileNotFoundError('The RMG adapter did not properly read the rmg input file.')
 
         if len(self.observable_list):
-            self.logger.info('Running a simulation with SA using RMGConstantTP...')
+            self.logger.info(f'Running a simulation with SA using RMGConstantTP for '
+                             f'{len(self.rmg_model.reaction_systems)} conditions...')
             self.observable_species = [species for species in self.rmg_model.reaction_model.core.species
                                        if species.label in self.observable_list]
             for i, reaction_system in enumerate(self.rmg_model.reaction_systems):
                 reaction_system.sensitive_species = self.observable_species
                 reaction_system.sensitivity_threshold = self.t3['sensitivity']['SA_threshold']
-                if hasattr(reaction_system, 'Trange') and reaction_system.Trange is not None:
-                    temperature = sum([t.value_si for t in reaction_system.Trange]) / len(reaction_system.Trange)
-                    self.logger.info(f'An average temperature of {temperature:.1f} K is taken for the SA'
-                                     f' for RMG reactor {i}')
-                else:
-                    temperature = reaction_system.T.value_si
-                reaction_system.sens_conditions['T'] = temperature
+                reaction_system.sens_conditions['T'] = reaction_system.T.value_si
                 if isinstance(reaction_system, SimpleReactor):
-                    if hasattr(reaction_system, 'Prange') and reaction_system.Prange is not None:
-                        pressure = sum([p.value_si for p in reaction_system.Prange]) / len(reaction_system.Prange)
-                        self.logger.info(f'An average pressure of {pressure * 1e-5:.2f} bar is taken for the SA'
-                                         f' for RMG reactor {i}')
-                    else:
-                        pressure = reaction_system.P.value_si
-                    reaction_system.sens_conditions['P'] = pressure
+                    reaction_system.sens_conditions['P'] = reaction_system.P.value_si
                 elif isinstance(reaction_system, LiquidReactor):
-                    if hasattr(reaction_system, 'Vrange') and reaction_system.Vrange is not None:
-                        volume = sum([v for v in reaction_system.Vrange]) / len(reaction_system.Vrange)
-                        self.logger.info(f'An average volume of {volume:.2f} m^3 is taken for the SA'
-                                         f' for RMG reactor {i}')
-                    else:
-                        volume = reaction_system.V
-                    reaction_system.sens_conditions['V'] = volume
+                    reaction_system.sens_conditions['V'] = reaction_system.V
                 else:
-                    raise NotImplementedError(f'RMG SA not implemented for Reactor type {type(reaction_system)}.')
+                    raise NotImplementedError(f'RMG SA is not implemented for Reactor type {type(reaction_system)}.')
         else:
             self.logger.info('Running a simulation using RMGConstantTP...')
 
@@ -175,6 +166,7 @@ class RMGConstantTP(SimulateAdapter):
         if not os.path.exists(solver_path):
             os.mkdir(solver_path)
 
+        tic = datetime.datetime.now()
         for index, reaction_system in enumerate(self.rmg_model.reaction_systems):
             if reaction_system.sensitive_species and reaction_system.sensitive_species == ['all']:
                 reaction_system.sensitive_species = self.rmg_model.reaction_model.core.species
@@ -228,6 +220,8 @@ class RMGConstantTP(SimulateAdapter):
             if self.rmg_model.uncertainty is not None:
                 self.rmg_model.run_uncertainty_analysis()
 
+        self.logger.info(f'Simulation via RMG completed, execution time: {time_lapse(tic)}')
+
     def get_sa_coefficients(self) -> Optional[dict]:
         """
         Obtain the SA coefficients.
@@ -235,6 +229,7 @@ class RMGConstantTP(SimulateAdapter):
         Returns:
              sa_dict (Optional[dict]): An SA dictionary, structure is given in the docstring for T3/t3/main.py
         """
+        chem_to_rmg_rxn_index_map = get_chem_to_rmg_rxn_index_map(chem_annotated_path=self.paths['chem annotated'])
         solver_path = os.path.join(self.paths['SA'], 'solver')
         if not os.path.exists(solver_path):
             self.logger.error("Could not find the path to RMG's SA solver output folder.")
@@ -268,15 +263,16 @@ class RMGConstantTP(SimulateAdapter):
                     parameter = header.split('[')[2].split(']')[0]
                     if sa_type == 'kinetics':
                         parameter = parameter[1:]
-                        parameter = int(parameter) if all(c.isdigit() for c in parameter) else parameter
+                        parameter = chem_to_rmg_rxn_index_map[int(parameter)] \
+                            if all(c.isdigit() for c in parameter) else parameter
                     sa_dict[sa_type][observable_label][parameter] = df[header].values
         return sa_dict
 
     def get_idt_by_T(self) -> dict:
         """
         Finds the ignition point by approximating dT/dt as a first order forward difference and then finds
-        the point of maximum slope. However, the RMG reactors only simulate at constant T, so this method
-        returns a dictionary whose values are empty lists
+        the point of maximum slope. However, the RMG reactors only simulate at constant T, so this implementation
+        only returns a dictionary whose values are empty lists.
 
         Returns:
             idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
@@ -286,6 +282,106 @@ class RMGConstantTP(SimulateAdapter):
                     'idt_index': list(),
                     }
         return idt_dict
+
+    def generate_rmg_reactors_for_simulation(self) -> dict:
+        """
+        Turn all RMG ranged reactors into individual reactors with specific species concentrations,
+        temperature, pressure (for gas phase simulations), and volume (for liquid phase simulations).
+
+        Returns:
+            dict: A modified dictionary representing the self.rmg dictionary with individual reactor representations.
+        """
+        ranged_species = any(isinstance(spc['concentration'], list) for spc in self.rmg['species'])
+        ranged_t = any(isinstance(reactor['T'], list) for reactor in self.rmg['reactors'])
+        ranged_p = any('P' in reactor.keys() and isinstance(reactor['P'], list) for reactor in self.rmg['reactors'])
+        ranged_v = any('V' in reactor.keys() and isinstance(reactor['V'], list) for reactor in self.rmg['reactors'])
+        if not any([ranged_species, ranged_t, ranged_p, ranged_v]):
+            return self.rmg
+
+        mod_rmg = self.rmg.copy()
+        mod_rmg['reactors'] = list()
+
+        species_lists = self.get_species_concentration_lists_from_ranged_params()
+        for reactor in self.rmg['reactors']:
+            t_vals = get_values_within_range(value_range=reactor['T'],
+                                             num=self.t3['options']['num_sa_per_temperature_range'])
+            p_vals = v_vals = None
+            if 'P' in reactor.keys():
+                p_vals = get_values_within_range(value_range=reactor['P'],
+                                                 num=self.t3['options']['num_sa_per_pressure_range'],
+                                                 use_log_scale=True)
+            elif 'V' in reactor.keys():
+                v_vals = get_values_within_range(value_range=reactor['V'],
+                                                 num=self.t3['options']['num_sa_per_volume_range'])
+            for t_val in t_vals:
+                for param in p_vals if ranged_p else v_vals:
+                    for species_list in species_lists:
+                        new_reactor = {k: v for k, v in reactor.items() if k not in ['T', 'P', 'V']}
+                        new_reactor['T'] = t_val
+                        new_reactor['P' if ranged_p else 'V'] = param
+                        new_reactor['species_list'] = species_list
+                        mod_rmg['reactors'].append(new_reactor)
+
+        return mod_rmg
+
+    def get_species_concentration_lists_from_ranged_params(self) -> List[List[dict]]:
+        """
+        Get a list of species concentrations with specific values from a range of concentrations.
+
+        Returns:
+            List[List[dict]]: Entries are lists of dictionaries describing an RMG species concentration by label.
+        """
+        species_lists = list()
+        spc_indices_w_ranges = [i for i, spc in enumerate(self.rmg['species'])
+                                if isinstance(spc['concentration'], (list, tuple))]
+        species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in self.rmg['species']
+                        if (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
+                        or spc['balance'] or not spc['reactive']]
+        species_vals = [get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[species_index]]['concentration'],
+                                                num=self.t3['options']['num_sa_per_concentration_range'])
+                        for species_index in spc_indices_w_ranges]
+
+        # 1. No ranged concentrations
+        if len(spc_indices_w_ranges) == 0:
+            return [[{'label': spc['label'], 'concentration': spc['concentration']} for spc in self.rmg['species']
+                     if spc['concentration'] > 0 or spc['balance'] or not spc['reactive']]]
+
+        # 2. Only two ranged concentrations and modify_concentration_ranges_in_reverse is True
+        if len(spc_indices_w_ranges) == 2 and self.t3['options']['modify_concentration_ranges_in_reverse']:
+            spc_0_vals = get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[0]]['concentration'],
+                                                 num=self.t3['options']['num_sa_per_concentration_range'])
+            spc_1_vals = get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[1]]['concentration'],
+                                                 num=self.t3['options']['num_sa_per_concentration_range'])
+            for val_0, val_1 in zip(spc_0_vals, spc_1_vals[::-1]):
+                new_species_list = species_list
+                new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[0]]['label'],
+                                         'concentration': val_0})
+                new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[1]]['label'],
+                                         'concentration': val_1})
+                species_lists.append(new_species_list)
+
+        # 3. No combinations, modify_concentration_ranges_together is True
+        elif self.t3['options']['modify_concentration_ranges_together']:
+            for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
+                new_species_list = species_list
+                for i, spc_index in enumerate(spc_indices_w_ranges):
+                    new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
+                                             'concentration': species_vals[i][point_number]})
+                species_lists.append(new_species_list)
+
+        # 4. Combinations (products)
+        else:
+            for vals in itertools.product(*species_vals):
+                new_species_list = species_list
+                for i, val in enumerate(vals):
+                    new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[i]]['label'],
+                                             'concentration': val})
+                species_lists.append(new_species_list)
+
+        for species_list in species_lists:
+            species_list.sort(key=lambda spc: spc['concentration'][0] if isinstance(spc['concentration'], (tuple, list))
+                              else spc['concentration'], reverse=True)
+        return species_lists
 
 
 register_simulate_adapter("RMGConstantTP", RMGConstantTP)
