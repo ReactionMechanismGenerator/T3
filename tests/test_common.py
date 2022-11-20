@@ -127,3 +127,15 @@ def test_get_interval():
     assert common.get_interval([0, 10], 3) == 5
     assert common.get_interval([0, 9], 4) == 3
     assert common.get_interval([500, 1200], 3) == 350
+
+
+def test_get_chem_to_rmg_rxn_index_map():
+    """Test the get_chem_to_rmg_rxn_index_map() function"""
+    chemkin_path = os.path.join(DATA_BASE_PATH, 'chem_annotated_1.inp')
+    rxn_map = common.get_chem_to_rmg_rxn_index_map(chem_annotated_path=chemkin_path)
+    assert rxn_map == {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9, 11: 9, 12: 10, 13: 11, 14: 12,
+                       15: 13, 16: 14, 17: 15, 18: 16, 19: 17, 20: 18, 21: 19, 22: 20, 23: 21, 24: 22, 25: 23, 26: 24,
+                       27: 25, 28: 26, 29: 27, 30: 28, 31: 29, 32: 30, 33: 30, 34: 31, 35: 32, 36: 33, 37: 34, 38: 35,
+                       39: 36, 40: 37, 41: 38, 42: 39, 43: 40, 44: 41, 45: 41, 46: 42, 47: 43, 48: 44, 49: 45, 50: 46,
+                       51: 47, 52: 48, 53: 49, 54: 50, 55: 51, 56: 52, 57: 53, 58: 54, 59: 55, 60: 56, 61: 57, 62: 58,
+                       63: 59, 64: 60, 65: 61}

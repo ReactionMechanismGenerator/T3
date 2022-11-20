@@ -1,0 +1,610 @@
+ELEMENTS
+	H
+	D /2.014/
+	T /3.016/
+	C
+	CI /13.003/
+	O
+	OI /17.999/
+	N
+	Ne
+	Ar
+	He
+	Si
+	S
+	F
+	Cl
+	Br
+	I
+	X /195.083/
+END
+
+SPECIES
+    N2                  ! N2
+    Ne                  ! Ne
+    COOH(1)             ! COOH(1)
+    O2(2)               ! O2(2)
+    CO2(3)              ! CO2(3)
+    CO(4)               ! CO(4)
+    H2(5)               ! H2(5)
+    H2O(6)              ! H2O(6)
+    C2H4O4(7)           ! O=COC(O)O(7)
+    HO2(8)              ! HO2(8)
+    H2O2(9)             ! H2O2(9)
+    OH(10)              ! OH(10)
+    H(11)               ! H(11)
+    HOCO(12)            ! HOCO(12)
+    CHO4(13)            ! [O]OC(=O)O(13)
+    CH2O4(14)           ! O=C(O)OO(14)
+    CHO3(15)            ! [O]C(=O)O(15)
+END
+
+
+
+THERM ALL
+   300.000  1000.000  5000.000
+
+! Thermo library: primaryThermoLibrary
+N2                      N   2               G   200.000  6000.000 1000.00      1
+ 2.95258000E+00 1.39690000E-03-4.92632000E-07 7.86010000E-11-4.60755000E-15    2
+-9.23949000E+02 5.87189000E+00 3.53101000E+00-1.23661000E-04-5.02999000E-07    3
+ 2.43531000E-09-1.40881000E-12-1.04698000E+03 2.96747000E+00                   4
+
+! Thermo library: primaryThermoLibrary
+Ne                      Ne  1               G   200.000  6000.000 1000.00      1
+ 2.50000000E+00 0.00000000E+00 0.00000000E+00 0.00000000E+00 0.00000000E+00    2
+-7.45375000E+02 3.35532000E+00 2.50000000E+00 0.00000000E+00 0.00000000E+00    3
+ 0.00000000E+00 0.00000000E+00-7.45375000E+02 3.35532000E+00                   4
+
+! Thermo library: thermo_DFT_CCSDTF12_BAC
+COOH(1)                 C   1H   2O   2     G   100.000  5000.000  993.73      1
+ 5.64500944E+00 7.55180879E-03-3.20850721E-06 6.58917337E-10-5.05053801E-14    2
+-4.79890051E+04-5.43108033E+00 3.76240359E+00-9.43830708E-04 3.38777780E-05    3
+-4.04982280E-08 1.43986042E-11-4.68212101E+04 7.63276817E+00                   4
+
+! Thermo library: primaryThermoLibrary
+O2(2)                   O   2               G   100.000  5000.000 1074.56      1
+ 3.15382774E+00 1.67803224E-03-7.69967755E-07 1.51273954E-10-1.08781177E-14    2
+-1.04082031E+03 6.16751905E+00 3.53732118E+00-1.21570202E-03 5.31615358E-06    3
+-4.89440364E-09 1.45843807E-12-1.03858843E+03 4.68368633E+00                   4
+
+! Thermo library: BurkeH2O2
+CO2(3)                  C   1O   2          G   100.000  5000.000  988.19      1
+ 4.55071527E+00 2.90727812E-03-1.14642827E-06 2.25797078E-10-1.69525713E-14    2
+-4.89860104E+04-1.45663511E+00 3.27790179E+00 2.75783306E-03 7.12784304E-06    3
+-1.07854210E-08 4.14226179E-12-4.84756031E+04 5.97856079E+00                   4
+
+! Thermo library: primaryThermoLibrary
+CO(4)                   C   1O   1          G   100.000  5000.000 1571.65      1
+ 2.91308532E+00 1.64655185E-03-6.88601689E-07 1.21034554E-10-7.83996529E-15    2
+-1.41808944E+04 6.71034902E+00 3.56837933E+00-8.52119359E-04 2.48916154E-06    3
+-1.56329526E-09 3.13590826E-13-1.42842549E+04 3.57912422E+00                   4
+
+! Thermo library: primaryThermoLibrary
+H2(5)                   H   2               G   100.000  5000.000 1959.07      1
+ 2.78817514E+00 5.87628848E-04 1.59016078E-07-5.52750390E-11 4.34319267E-15    2
+-5.96149762E+02 1.12677478E-01 3.43536403E+00 2.12711126E-04-2.78626796E-07    3
+ 3.40268542E-10-7.76035403E-14-1.03135984E+03-3.90841698E+00                   4
+
+! Thermo library: primaryThermoLibrary
+H2O(6)                  H   2O   1          G   100.000  5000.000 1130.24      1
+ 2.84325062E+00 2.75108520E-03-7.81031348E-07 1.07243608E-10-5.79391987E-15    2
+-2.99586128E+04 5.91041898E+00 4.05763582E+00-7.87935662E-04 2.90877429E-06    3
+-1.47518785E-09 2.12842652E-13-3.02815866E+04-3.11363998E-01                   4
+
+! Thermo group additivity estimation: group(O2s-Cs(Cds-O2d)) + group(O2s-CsH) + group(O2s-CsH) + group(Cs-OsOsOsH) + group(Cds-OdOsH)
+C2H4O4(7)               C   2H   4O   4     G   100.000  5000.000 2944.03      1
+ 3.13966299E+01-4.36875080E-03-9.95551680E-08 8.59876574E-11-4.83678150E-15    2
+-1.08321782E+05-1.50968054E+02 3.38722405E+00 3.04123625E-02-1.61522190E-05    3
+ 3.34323467E-09-2.49349927E-13-9.04105115E+04 1.68153604E+01                   4
+
+! Thermo library: BurkeH2O2
+HO2(8)                  H   1O   2          G   100.000  5000.000  923.90      1
+ 4.15130628E+00 1.91150596E-03-4.11301052E-07 6.35021282E-11-4.86438700E-15    2
+ 8.34314156E+01 3.09355428E+00 4.02956882E+00-2.63996144E-03 1.52234385E-05    3
+-1.71677092E-08 6.26764425E-12 3.22676900E+02 4.84424831E+00                   4
+
+! Thermo library: BurkeH2O2
+H2O2(9)                 H   2O   2          G   100.000  5000.000  923.27      1
+ 4.95151361E+00 3.54230547E-03-1.01041145E-06 1.61942965E-10-1.10210380E-14    2
+-1.81227923E+04-1.52909488E+00 3.72867176E+00 4.13375413E-03 5.67504918E-06    3
+-1.01866712E-08 4.28616900E-12-1.76963960E+04 5.35910987E+00                   4
+
+! Thermo library: primaryThermoLibrary
+OH(10)                  H   1O   1          G   100.000  5000.000 1145.75      1
+ 3.07193980E+00 6.04015701E-04-1.39782948E-08-2.13446092E-11 2.48065653E-15    2
+ 3.57938677E+03 4.57800011E+00 3.51456804E+00 2.92773617E-05-5.32163358E-07    3
+ 1.01949027E-09-3.85945173E-13 3.41425420E+03 2.10434883E+00                   4
+
+! Thermo library: primaryThermoLibrary
+H(11)                   H   1               G   100.000  5000.000 4996.86      1
+-4.86862231E+01 1.90728012E-02 8.49269033E-07-9.90485659E-10 9.34419177E-14    2
+ 1.03971294E+05 3.56208045E+02 2.50000000E+00 4.30732087E-14-5.28912510E-17    3
+ 2.10457488E-20-2.57139738E-24 2.54742178E+04-4.44972896E-01                   4
+
+! Thermo library: thermo_DFT_CCSDTF12_BAC
+HOCO(12)                C   1H   1O   2     G   100.000  5000.000  964.14      1
+ 6.82916897E+00 2.24152587E-03-7.19473564E-07 1.57568924E-10-1.36957002E-14    2
+-2.45226459E+04-1.00671477E+01 3.57769216E+00 4.99229411E-03 1.17081932E-05    3
+-1.99880487E-08 8.20550988E-12-2.33965406E+04 8.08906617E+00                   4
+
+! Thermo group additivity estimation: group(O2s-O2s(Cds-O2d)) + group(O2s-(Cds-O2d)H) + group(O2s-(Os-CdOd)H) + group(Cds-OdOsOs) + radical(C(=O)OOJ)
+CHO4(13)                C   1H   1O   4     G   100.000  5000.000 1359.93      1
+ 1.39626798E+01-3.36316792E-03 3.17660319E-06-7.09618999E-10 5.17709675E-14    2
+-4.50581246E+04-4.32690814E+01 1.78581576E+00 4.12567323E-02-5.57495450E-05    3
+ 3.29375093E-08-7.00877418E-12-4.25602776E+04 1.62276953E+01                   4
+
+! Thermo group additivity estimation: group(O2s-O2s(Cds-O2d)) + group(O2s-(Cds-O2d)H) + group(O2s-(Os-CdOd)H) + group(Cds-OdOsOs)
+CH2O4(14)               C   1H   2O   4     G   100.000  5000.000 1468.74      1
+ 1.60269133E+01-2.57073445E-03 2.70629393E-06-5.94914158E-10 4.22628933E-14    2
+-6.92221925E+04-5.59711869E+01 1.35126676E+00 4.67566793E-02-5.72295683E-05    3
+ 3.09488623E-08-6.06542456E-12-6.59207609E+04 1.70350676E+01                   4
+
+! Thermo group additivity estimation: group(O2s-(Cds-O2d)H) + group(O2s-(Cds-O2d)H) + group(Cds-OdOsOs) + radical(OC=OOJ)
+CHO3(15)                C   1H   1O   3     G   100.000  5000.000  968.19      1
+ 8.68695484E+00 3.22534562E-03-1.09070683E-06 2.46287817E-10-2.15813016E-14    2
+-4.76525416E+04-1.88457197E+01 3.28600284E+00 9.07592876E-03 1.53508614E-05    3
+-2.86373310E-08 1.19714156E-11-4.58350940E+04 1.10209960E+01                   4
+
+END
+
+
+
+REACTIONS    KCAL/MOLE   MOLES
+
+! Reaction index: Chemkin #1; RMG #1
+! Library reaction: CurranPentane
+! Flux pairs: COOH(1), H2(5); COOH(1), CO2(3); 
+COOH(1)=H2(5)+CO2(3)                                2.950000e+09 0.000     48.520   
+
+! Reaction index: Chemkin #2; RMG #2
+! Library reaction: CurranPentane
+! Flux pairs: COOH(1), H2O(6); COOH(1), CO(4); 
+COOH(1)=H2O(6)+CO(4)                                2.450000e+12 0.000     60.470   
+
+! Reaction index: Chemkin #3; RMG #3
+! Library reaction: restart
+! Flux pairs: C2H4O4(7), COOH(1); C2H4O4(7), COOH(1); 
+C2H4O4(7)(+M)=COOH(1)+COOH(1)(+M)                   1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ -2.291e+00   1.807e-01    -6.343e-02   6.864e-03   /
+    CHEB/ 1.042e+01    3.231e-01    -1.096e-01   9.394e-03   /
+    CHEB/ -3.252e-02   2.299e-01    -6.906e-02   3.808e-04   /
+    CHEB/ -5.811e-02   1.268e-01    -2.804e-02   -6.222e-03  /
+    CHEB/ -3.029e-02   4.965e-02    -2.260e-03   -7.157e-03  /
+    CHEB/ -7.754e-03   8.916e-03    6.575e-03    -4.245e-03  /
+
+! Reaction index: Chemkin #4; RMG #4
+! Library reaction: primaryH2O2
+! Flux pairs: O2(2), HO2(8); H2(5), HO2(8); O2(2), HO2(8); 
+O2(2)+O2(2)+H2(5)=HO2(8)+HO2(8)                     2.000000e+17 0.000     25.830   
+
+! Reaction index: Chemkin #5; RMG #5
+! Library reaction: primaryH2O2
+HO2(8)+HO2(8)=O2(2)+H2O2(9)                         1.030000e+14 0.000     11.040   
+DUPLICATE
+! Reaction index: Chemkin #6; RMG #5
+! Library reaction: primaryH2O2
+HO2(8)+HO2(8)=O2(2)+H2O2(9)                         1.940000e+11 0.000     -1.409   
+DUPLICATE
+
+
+! Reaction index: Chemkin #7; RMG #6
+! Library reaction: primaryH2O2
+! Flux pairs: HO2(8), O2(2); OH(10), H2O(6); 
+OH(10)+HO2(8)=O2(2)+H2O(6)                          2.140000e+06 1.650     2.180    
+
+! Reaction index: Chemkin #8; RMG #7
+! Library reaction: primaryH2O2
+! Flux pairs: H2O(6), HO2(8); OH(10), H2(5); 
+OH(10)+H2O(6)=HO2(8)+H2(5)                          7.900000e+09 0.430     71.700   
+
+! Reaction index: Chemkin #9; RMG #8
+! Library reaction: primaryH2O2
+! Flux pairs: H2O2(9), OH(10); H2O2(9), OH(10); 
+H2O2(9)(+M)=OH(10)+OH(10)(+M)                       2.000e+12 0.900     48.750   
+O2(2)/1.20/ H2(5)/3.70/ H2O2(9)/7.70/ CO(4)/2.80/ N2/1.50/ H2O(6)/7.50/ CO2(3)/1.60/ 
+    LOW/ 2.490e+24 -2.300    48.750   /
+    TROE/ 4.200e-01 1e+30     1e+30    /
+
+! Reaction index: Chemkin #10; RMG #9
+! Library reaction: primaryH2O2
+OH(10)+H2O2(9)=HO2(8)+H2O(6)                        1.740000e+12 0.000     0.318    
+DUPLICATE
+! Reaction index: Chemkin #11; RMG #9
+! Library reaction: primaryH2O2
+OH(10)+H2O2(9)=HO2(8)+H2O(6)                        7.590000e+13 0.000     7.269    
+DUPLICATE
+
+
+! Reaction index: Chemkin #12; RMG #10
+! Library reaction: primaryH2O2
+! Flux pairs: O2(2), OH(10); H2(5), OH(10); 
+O2(2)+H2(5)=OH(10)+OH(10)                           2.040000e+12 0.440     69.155   
+
+! Reaction index: Chemkin #13; RMG #11
+! Library reaction: CurranPentane
+! Flux pairs: CO(4), CO2(3); HO2(8), OH(10); 
+HO2(8)+CO(4)=OH(10)+CO2(3)                          1.570000e+05 2.180     17.940   
+
+! Reaction index: Chemkin #14; RMG #12
+! Library reaction: CurranPentane
+! Flux pairs: COOH(1), CO(4); OH(10), OH(10); OH(10), H2O(6); 
+OH(10)+COOH(1)=>OH(10)+H2O(6)+CO(4)                 1.850000e+07 1.510     -0.962   
+
+! Reaction index: Chemkin #15; RMG #13
+! Library reaction: CurranPentane
+! Flux pairs: COOH(1), CO(4); HO2(8), OH(10); HO2(8), H2O2(9); 
+HO2(8)+COOH(1)=>OH(10)+H2O2(9)+CO(4)                1.000000e+12 0.000     11.920   
+
+! Reaction index: Chemkin #16; RMG #14
+! Library reaction: primaryH2O2
+! Flux pairs: O2(2), O2(2); H(11), H2(5); H(11), H2(5); 
+O2(2)+H(11)+H(11)=O2(2)+H2(5)                       8.800000e+22 -1.835    0.800    
+
+! Reaction index: Chemkin #17; RMG #15
+! Library reaction: primaryH2O2
+! Flux pairs: O2(2), OH(10); H(11), OH(10); H(11), OH(10); 
+O2(2)+H(11)+H(11)=OH(10)+OH(10)                     4.000000e+22 -1.835    0.800    
+
+! Reaction index: Chemkin #18; RMG #16
+! Library reaction: primaryH2O2
+! Flux pairs: O2(2), O2(2); H(11), H2O(6); OH(10), H2O(6); 
+O2(2)+H(11)+OH(10)=O2(2)+H2O(6)                     2.560000e+22 -1.835    0.800    
+
+! Reaction index: Chemkin #19; RMG #17
+! Library reaction: primaryH2O2
+! Flux pairs: O2(2), HO2(8); H(11), HO2(8); 
+O2(2)+H(11)(+M)=HO2(8)(+M)                          4.660e+12 0.440     0.000    
+H2(5)/1.50/ CO2(3)/3.61/ H2O(6)/16.60/ 
+    LOW/ 1.225e+19 -1.200    0.000    /
+    TROE/ 0.000e+00 1.75e+03  1e-10     1e+30    /
+
+! Reaction index: Chemkin #20; RMG #18
+! Library reaction: primaryH2O2
+! Flux pairs: H(11), H2(5); H(11), H2(5); 
+H(11)+H(11)+M=H2(5)+M                               7.000e+17 -1.000    0.000    
+H(11)/0.00/ H2O(6)/14.30/ H2(5)/0.00/ N2/0.00/ 
+
+! Reaction index: Chemkin #21; RMG #19
+! Library reaction: primaryH2O2
+! Flux pairs: H2(5), H2(5); H(11), H2(5); H(11), H2(5); 
+H(11)+H(11)+H2(5)=H2(5)+H2(5)                       1.000000e+17 -0.600    0.000    
+
+! Reaction index: Chemkin #22; RMG #20
+! Library reaction: primaryH2O2
+! Flux pairs: N2, N2; H(11), H2(5); H(11), H2(5); 
+N2+H(11)+H(11)=N2+H2(5)                             5.400000e+18 -1.300    0.000    
+
+! Reaction index: Chemkin #23; RMG #21
+! Library reaction: primaryH2O2
+! Flux pairs: H(11), H2(5); H(11), H(11); H(11), H(11); 
+H(11)+H(11)+H(11)=H(11)+H2(5)                       3.200000e+15 0.000     0.000    
+
+! Reaction index: Chemkin #24; RMG #22
+! Library reaction: primaryH2O2
+! Flux pairs: H2O(6), H(11); H2O(6), OH(10); 
+H2O(6)+M=H(11)+OH(10)+M                             6.060e+27 -3.312    120.770  
+CO(4)/1.90/ CO2(3)/3.80/ H2(5)/3.00/ O2(2)/1.50/ N2/2.00/ H2O(6)/0.00/ 
+
+! Reaction index: Chemkin #25; RMG #23
+! Library reaction: primaryH2O2
+! Flux pairs: H2O(6), H2O(6); H2O(6), H(11); H2O(6), OH(10); 
+H2O(6)+H2O(6)=H(11)+OH(10)+H2O(6)                   1.000000e+26 -2.440    120.160  
+
+! Reaction index: Chemkin #26; RMG #24
+! Library reaction: primaryH2O2
+! Flux pairs: H2O2(9), HO2(8); H(11), H2(5); 
+H(11)+H2O2(9)=HO2(8)+H2(5)                          5.020000e+06 2.070     4.300    
+
+! Reaction index: Chemkin #27; RMG #25
+! Library reaction: primaryH2O2
+! Flux pairs: H2O2(9), H2O(6); H(11), OH(10); 
+H(11)+H2O2(9)=OH(10)+H2O(6)                         2.030000e+07 2.020     2.620    
+
+! Reaction index: Chemkin #28; RMG #26
+! Library reaction: primaryH2O2
+! Flux pairs: OH(10), H2O(6); H2(5), H(11); 
+OH(10)+H2(5)=H(11)+H2O(6)                           2.140000e+08 1.520     3.450    
+
+! Reaction index: Chemkin #29; RMG #27
+! Library reaction: primaryH2O2
+! Flux pairs: HO2(8), OH(10); H(11), OH(10); 
+H(11)+HO2(8)=OH(10)+OH(10)                          7.079000e+13 0.000     0.295    
+
+! Reaction index: Chemkin #30; RMG #28
+! Library reaction: primaryH2O2
+! Flux pairs: O2(2), HO2(8); H2(5), H(11); 
+O2(2)+H2(5)=H(11)+HO2(8)                            7.400000e+05 2.430     53.500   
+
+! Reaction index: Chemkin #31; RMG #29
+! Library reaction: primaryH2O2
+! Flux pairs: H(11), H2O2(9); HO2(8), H2O2(9); 
+H(11)+HO2(8)+M=H2O2(9)+M                            6.000e+14 1.250     -0.270   
+
+
+! Reaction index: Chemkin #32; RMG #30
+! Library reaction: CurranPentane
+OH(10)+CO(4)=H(11)+CO2(3)                           7.015000e+04 2.053     -0.356   
+DUPLICATE
+! Reaction index: Chemkin #33; RMG #30
+! Library reaction: CurranPentane
+OH(10)+CO(4)=H(11)+CO2(3)                           5.757000e+12 -0.664    0.332    
+DUPLICATE
+
+
+! Reaction index: Chemkin #34; RMG #31
+! Library reaction: CurranPentane
+! Flux pairs: COOH(1), CO2(3); OH(10), H(11); OH(10), H2O(6); 
+OH(10)+COOH(1)=>H(11)+H2O(6)+CO2(3)                 2.620000e+06 2.060     0.916    
+
+! Reaction index: Chemkin #35; RMG #32
+! Library reaction: CurranPentane
+! Flux pairs: COOH(1), CO2(3); H(11), H(11); H(11), H2(5); 
+H(11)+COOH(1)=>H(11)+H2(5)+CO2(3)                   4.240000e+06 2.100     4.868    
+
+! Reaction index: Chemkin #36; RMG #33
+! Library reaction: CurranPentane
+! Flux pairs: COOH(1), CO(4); H(11), H2(5); H(11), OH(10); 
+H(11)+COOH(1)=>OH(10)+H2(5)+CO(4)                   6.030000e+13 -0.350    2.988    
+
+! Reaction index: Chemkin #37; RMG #34
+! Library reaction: JetSurF2.0
+! Flux pairs: H2O(6), H2O(6); H(11), H2(5); H(11), H2(5); 
+H(11)+H(11)+H2O(6)=H2(5)+H2O(6)                     5.624000e+19 -1.250    0.000    
+
+! Reaction index: Chemkin #38; RMG #35
+! Library reaction: JetSurF2.0
+! Flux pairs: CO2(3), CO2(3); H(11), H2(5); H(11), H2(5); 
+H(11)+H(11)+CO2(3)=H2(5)+CO2(3)                     5.500000e+20 -2.000    0.000    
+
+! Reaction index: Chemkin #39; RMG #36
+! Library reaction: CurranPentane
+! Flux pairs: HOCO(12), OH(10); HOCO(12), CO(4); 
+HOCO(12)=OH(10)+CO(4)                               1.000e+00 0.000     0.000    
+    PLOG/ 0.001000  1.550e-08 2.930     8.768    /
+    PLOG/ 0.003000  1.770e+03 0.340     18.076   /
+    PLOG/ 0.029600  2.020e+13 -1.870    22.755   /
+    PLOG/ 0.098700  1.680e+18 -3.050    24.323   /
+    PLOG/ 0.296100  2.500e+24 -4.630    27.067   /
+    PLOG/ 0.986900  4.540e+26 -5.120    27.572   /
+    PLOG/ 2.960700  7.120e+28 -5.600    28.535   /
+    PLOG/ 9.869000  5.480e+29 -5.700    28.899   /
+    PLOG/ 29.607000 9.890e+31 -6.190    30.518   /
+    PLOG/ 98.690000 5.740e+33 -6.530    32.068   /
+    PLOG/ 296.070000 2.610e+33 -6.290    32.231   /
+    PLOG/ 986.900000 6.300e+32 -5.960    32.470   /
+
+! Reaction index: Chemkin #40; RMG #37
+! Library reaction: CurranPentane
+! Flux pairs: HOCO(12), H(11); HOCO(12), CO2(3); 
+HOCO(12)=H(11)+CO2(3)                               1.000e+00 0.000     0.000    
+    PLOG/ 0.001000  4.758e+18 -3.817    17.676   /
+    PLOG/ 0.003000  2.225e+20 -4.149    19.037   /
+    PLOG/ 0.009900  7.564e+21 -4.434    20.325   /
+    PLOG/ 0.029600  9.107e+24 -5.189    22.419   /
+    PLOG/ 0.098700  3.144e+29 -6.376    25.233   /
+    PLOG/ 0.296100  1.150e+32 -7.037    26.662   /
+    PLOG/ 0.986900  1.069e+36 -8.107    29.064   /
+    PLOG/ 2.960700  2.438e+36 -8.153    29.336   /
+    PLOG/ 9.869000  6.663e+35 -7.919    29.217   /
+    PLOG/ 29.607000 1.723e+38 -8.506    31.273   /
+    PLOG/ 98.690000 3.007e+41 -9.290    33.966   /
+    PLOG/ 296.070000 6.767e+36 -7.832    31.613   /
+    PLOG/ 986.900000 1.897e+38 -8.047    34.240   /
+
+! Reaction index: Chemkin #41; RMG #38
+! Library reaction: NOx2018
+! Flux pairs: CO(4), HOCO(12); H2O2(9), OH(10); 
+H2O2(9)+CO(4)=OH(10)+HOCO(12)                       3.600000e+04 2.500     28.660   
+
+! Reaction index: Chemkin #42; RMG #39
+! Library reaction: NOx2018
+! Flux pairs: HOCO(12), CO2(3); H(11), H2(5); 
+H(11)+HOCO(12)=H2(5)+CO2(3)                         3.100000e+17 -1.347    0.555    
+
+! Reaction index: Chemkin #43; RMG #40
+! Library reaction: NOx2018
+! Flux pairs: HOCO(12), CO(4); H(11), H2O(6); 
+H(11)+HOCO(12)=H2O(6)+CO(4)                         6.000000e+15 -0.525    2.125    
+
+! Reaction index: Chemkin #44; RMG #41
+! Library reaction: NOx2018
+OH(10)+HOCO(12)=H2O(6)+CO2(3)                       4.600000e+12 0.000     -0.089   
+DUPLICATE
+! Reaction index: Chemkin #45; RMG #41
+! Library reaction: NOx2018
+OH(10)+HOCO(12)=H2O(6)+CO2(3)                       9.500000e+06 2.000     -0.089   
+DUPLICATE
+
+
+! Reaction index: Chemkin #46; RMG #42
+! Library reaction: NOx2018
+! Flux pairs: HOCO(12), CO2(3); HO2(8), H2O2(9); 
+HO2(8)+HOCO(12)=H2O2(9)+CO2(3)                      4.000000e+13 0.000     0.000    
+
+! Reaction index: Chemkin #47; RMG #43
+! Library reaction: NOx2018
+! Flux pairs: HOCO(12), CO2(3); O2(2), HO2(8); 
+O2(2)+HOCO(12)=HO2(8)+CO2(3)                        4.000000e+09 1.000     0.000    
+
+! Reaction index: Chemkin #48; RMG #44
+! Library reaction: NOx2018
+! Flux pairs: COOH(1), HOCO(12); H(11), H2(5); 
+H(11)+COOH(1)=H2(5)+HOCO(12)                        2.300000e+02 3.272     4.858    
+
+! Reaction index: Chemkin #49; RMG #45
+! Library reaction: NOx2018
+! Flux pairs: COOH(1), HOCO(12); OH(10), H2O(6); 
+OH(10)+COOH(1)=H2O(6)+HOCO(12)                      7.800000e-06 5.570     -2.365   
+
+! Reaction index: Chemkin #50; RMG #46
+! Library reaction: NOx2018
+! Flux pairs: COOH(1), HOCO(12); HO2(8), H2O2(9); 
+HO2(8)+COOH(1)=H2O2(9)+HOCO(12)                     4.700000e-01 3.975     16.787   
+
+! Reaction index: Chemkin #51; RMG #47
+! Library reaction: NOx2018
+! Flux pairs: HOCO(12), COOH(1); HO2(8), O2(2); 
+HO2(8)+HOCO(12)=O2(2)+COOH(1)                       4.000000e+11 0.000     0.000    
+
+! Reaction index: Chemkin #52; RMG #48
+! Library reaction: restart
+! Flux pairs: COOH(1), H(11); COOH(1), HOCO(12); 
+COOH(1)(+M)=H(11)+HOCO(12)(+M)                      1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ -2.760e+01   1.110e-01    -1.198e-02   3.419e-03   /
+    CHEB/ 2.934e+01    1.602e-01    5.703e-03    -7.559e-03  /
+    CHEB/ -4.017e-01   1.037e-01    1.316e-02    -7.881e-03  /
+    CHEB/ -1.688e-01   5.456e-02    1.240e-02    -5.043e-03  /
+    CHEB/ -7.633e-02   2.378e-02    7.078e-03    -1.626e-03  /
+    CHEB/ -3.377e-02   8.035e-03    2.688e-03    1.222e-04   /
+
+! Reaction index: Chemkin #53; RMG #49
+! Library reaction: restart
+! Flux pairs: HOCO(12), COOH(1); HOCO(12), CO2(3); 
+! Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_2R!H->C_Ext-4CNOS-R_Sp-5R!H=4CCNNOOSS_N-5R!H->C
+HOCO(12)+HOCO(12)=CO2(3)+COOH(1)                    1.810000e+14 0.000     0.000    
+
+! Reaction index: Chemkin #54; RMG #50
+! Library reaction: restart
+! Flux pairs: CHO4(13), HO2(8); CHO4(13), CO2(3); 
+CHO4(13)(+M)=HO2(8)+CO2(3)(+M)                      1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ -7.395e-02   4.311e-01    -2.841e-02   4.594e-03   /
+    CHEB/ 8.238e+00    6.372e-01    -1.523e-03   -4.899e-03  /
+    CHEB/ -5.053e-01   2.849e-01    3.934e-02    -6.377e-03  /
+    CHEB/ -2.159e-01   7.455e-02    2.786e-02    -3.888e-04  /
+    CHEB/ -6.831e-02   7.263e-03    6.798e-03    1.081e-04   /
+    CHEB/ -1.329e-02   -4.846e-04   -1.575e-03   -1.727e-03  /
+
+! Reaction index: Chemkin #55; RMG #51
+! Library reaction: restart
+! Flux pairs: O2(2), CHO4(13); HOCO(12), CHO4(13); 
+O2(2)+HOCO(12)(+M)=CHO4(13)(+M)                     1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ 1.197e+01    1.024e+00    -2.050e-01   1.769e-02   /
+    CHEB/ -1.075e+00   7.881e-01    4.498e-02    -4.537e-02  /
+    CHEB/ -4.251e-01   1.666e-01    7.010e-02    3.714e-04   /
+    CHEB/ -1.303e-01   1.647e-03    1.919e-02    8.668e-03   /
+    CHEB/ -2.218e-02   -1.750e-02   -1.638e-03   2.556e-03   /
+    CHEB/ 7.130e-03    -9.254e-03   -3.548e-03   -4.376e-04  /
+
+! Reaction index: Chemkin #56; RMG #52
+! Template reaction: H_Abstraction
+! Flux pairs: CH2O4(14), CHO4(13); HOCO(12), COOH(1); 
+! Estimated using an average for rate rule [O/H/NonDeO;CO_rad/NonDe]
+! Euclidian distance = 0
+! family: H_Abstraction
+HOCO(12)+CH2O4(14)=CHO4(13)+COOH(1)                 1.582730e-04 4.663     41.320   
+
+! Reaction index: Chemkin #57; RMG #53
+! Template reaction: H_Abstraction
+! Flux pairs: CH2O4(14), CHO4(13); H(11), H2(5); 
+! From training reaction 203 used for O/H/NonDeO;H_rad
+! Exact match found for rate rule [O/H/NonDeO;H_rad]
+! Euclidian distance = 0
+! family: H_Abstraction
+H(11)+CH2O4(14)=H2(5)+CHO4(13)                      5.400000e+10 0.000     1.860    
+
+! Reaction index: Chemkin #58; RMG #54
+! Template reaction: H_Abstraction
+! Flux pairs: CH2O4(14), CHO4(13); OH(10), H2O(6); 
+! From training reaction 206 used for O/H/NonDeO;O_pri_rad
+! Exact match found for rate rule [O/H/NonDeO;O_pri_rad]
+! Euclidian distance = 0
+! family: H_Abstraction
+! Ea raised from -1.8 to -1.8 kJ/mol.
+OH(10)+CH2O4(14)=H2O(6)+CHO4(13)                    1.100000e+12 0.000     -0.437   
+
+! Reaction index: Chemkin #59; RMG #55
+! Template reaction: H_Abstraction
+! Flux pairs: CH2O4(14), CHO4(13); HO2(8), H2O2(9); 
+! From training reaction 208 used for O/H/NonDeO;O_rad/NonDeO
+! Exact match found for rate rule [O/H/NonDeO;O_rad/NonDeO]
+! Euclidian distance = 0
+! family: H_Abstraction
+HO2(8)+CH2O4(14)=H2O2(9)+CHO4(13)                   4.100000e+04 2.500     10.697   
+
+! Reaction index: Chemkin #60; RMG #56
+! Template reaction: H_Abstraction
+! Flux pairs: CHO4(13), CH2O4(14); HO2(8), O2(2); 
+! From training reaction 244 used for Orad_O_H;OOC
+! Exact match found for rate rule [Orad_O_H;OOC]
+! Euclidian distance = 0
+! family: H_Abstraction
+! Ea raised from -8.2 to -8.2 kJ/mol.
+HO2(8)+CHO4(13)=O2(2)+CH2O4(14)                     1.200000e+11 0.000     -1.950   
+
+! Reaction index: Chemkin #61; RMG #57
+! Library reaction: restart
+! Flux pairs: CHO4(13), CH2O4(14); HOCO(12), CO2(3); 
+! Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_2R!H->C_Ext-4CNOS-R_N-Sp-5R!H=4CCNNOOSS_Ext-5R!H-R
+HOCO(12)+CHO4(13)=CO2(3)+CH2O4(14)                  1.810000e+13 0.000     0.000    
+
+! Reaction index: Chemkin #62; RMG #58
+! Library reaction: restart
+! Flux pairs: CH2O4(14), HO2(8); CH2O4(14), HOCO(12); 
+CH2O4(14)(+M)=HO2(8)+HOCO(12)(+M)                   1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ -2.322e+01   2.149e+00    -1.187e-03   -6.955e-04  /
+    CHEB/ 2.589e+01    -2.166e-04   -1.546e-04   -8.994e-05  /
+    CHEB/ -3.573e-01   2.762e-04    1.978e-04    1.160e-04   /
+    CHEB/ -1.082e-01   1.253e-04    8.967e-05    5.249e-05   /
+    CHEB/ -1.989e-02   -8.181e-06   -5.832e-06   -3.388e-06  /
+    CHEB/ 5.476e-03    -5.292e-05   -3.782e-05   -2.208e-05  /
+
+! Reaction index: Chemkin #63; RMG #59
+! Library reaction: restart
+! Flux pairs: CH2O4(14), H(11); CH2O4(14), CHO4(13); 
+CH2O4(14)(+M)=H(11)+CHO4(13)(+M)                    1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ -3.131e+01   2.150e+00    -2.441e-04   -1.433e-04  /
+    CHEB/ 3.063e+01    -3.776e-06   -2.696e-06   -1.571e-06  /
+    CHEB/ -4.939e-02   6.443e-05    4.617e-05    2.709e-05   /
+    CHEB/ -2.842e-02   2.063e-05    1.479e-05    8.675e-06   /
+    CHEB/ 2.553e-03    -5.166e-06   -3.701e-06   -2.171e-06  /
+    CHEB/ 1.322e-02    -1.129e-05   -8.090e-06   -4.746e-06  /
+
+! Reaction index: Chemkin #64; RMG #60
+! Library reaction: restart
+! Flux pairs: CHO3(15), OH(10); CHO3(15), CO2(3); 
+CHO3(15)(+M)=OH(10)+CO2(3)(+M)                      1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ 9.516e+00    2.011e+00    -7.149e-02   -2.114e-02  /
+    CHEB/ 3.776e-01    1.521e-01    7.438e-02    1.849e-02   /
+    CHEB/ -1.721e-01   -6.995e-03   -1.097e-03   2.184e-03   /
+    CHEB/ -7.878e-02   -4.551e-03   -1.816e-03   2.460e-05   /
+    CHEB/ -2.961e-03   -4.485e-03   -2.207e-03   -6.701e-04  /
+    CHEB/ 1.759e-02    -2.015e-03   -1.249e-03   -6.037e-04  /
+
+! Reaction index: Chemkin #65; RMG #61
+! Library reaction: restart
+! Flux pairs: CH2O4(14), OH(10); CH2O4(14), CHO3(15); 
+CH2O4(14)(+M)=OH(10)+CHO3(15)(+M)                   1.000e+00 0.000     0.000    
+    TCHEB/ 300.000   2000.000 /
+    PCHEB/ 0.010     197.385  /
+    CHEB/ 6 4/
+    CHEB/ -4.025e+00   7.981e-01    -1.353e-01   8.340e-03   /
+    CHEB/ 1.306e+01    7.293e-01    4.475e-03    -2.358e-02  /
+    CHEB/ -6.844e-01   2.248e-01    3.550e-02    -1.478e-03  /
+    CHEB/ -2.433e-01   4.440e-02    1.443e-02    3.157e-03   /
+    CHEB/ -7.703e-02   1.154e-03    2.150e-03    1.197e-03   /
+    CHEB/ -1.741e-02   -4.540e-03   -6.288e-04   1.676e-05   /
+
+END
+
