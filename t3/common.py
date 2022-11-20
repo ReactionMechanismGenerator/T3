@@ -5,7 +5,7 @@ t3 common module
 import datetime
 import os
 import string
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from rmgpy.species import Species
 
@@ -157,3 +157,56 @@ def convert_termination_time_to_seconds(termination_time: Tuple[float, str]):
     t_final, units = termination_time
     t_final = t_final * unit_conversion[units]
     return t_final
+
+
+def get_values_within_range(value_range: Union[int, float, list, tuple],
+                            num: int,
+                            use_log_scale: bool = False,
+                            ) -> list:
+    """
+    Get evenly dispersed values within a given range.
+    If ``value_range`` is a number, the function returns it as a single-entry list.
+
+    Args:
+         value_range (Union[list, tuple]): A range of values, represented by two numbers (min, max).
+         num (int): The number of desired repetitions within the value range.
+         use_log_scale (bool, optional): Whether to disperse the points logarithmically (e.g., 0.1, 1, 10, 100).
+                                         If not, points are dispersed linearly (e.g., 0, 5, 10).
+
+    Returns:
+        List[Union[int, float]]: The dispersed values.
+    """
+    if isinstance(value_range, (int, float)) or len(value_range) == 1:
+        return [value_range] if isinstance(value_range, (int, float)) else value_range
+    if num <= 0:
+        raise ValueError(f'num must be a positive value, got: {num}')
+    min_val = min(value_range)
+    if use_log_scale:
+        max_val = max(value_range)
+        return [min_val * 10 ** i for i in range(num) if min_val * 10 ** i <= max_val]
+    interval = get_interval(value_range=value_range, num=num)
+    if num <= 2:
+        return [min_val + (i + 1) * interval for i in range(num)]
+    return [min_val + i * interval for i in range(num)]
+
+
+def get_interval(value_range: Union[list, tuple],
+                 num: int,
+                 ) -> int:
+    """
+    Get an interval within a range of values that can be repeated ``num`` times.
+    In case ``num` equals 1 or 2 we do not place points at the ends of the interval. E.g.:
+    1:  [     *     ]
+    2:  [   *   *   ]
+    3:  [*    *    *]
+    4:  [*  *  *  *]
+
+    Args:
+         value_range (Union[list, tuple]): A range of values, represented by two numbers (min, max).
+         num (int): The number of desired repetitions within the value range.
+
+    Returns:
+        int: The interval.
+    """
+    num_of_intervals = num + 1 if num <= 2 else num - 1
+    return (max(value_range) - min(value_range)) / num_of_intervals
