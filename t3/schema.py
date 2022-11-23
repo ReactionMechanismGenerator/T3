@@ -42,7 +42,7 @@ class T3Options(BaseModel):
     max_T3_walltime: Optional[constr(regex=r'\d+:\d\d:\d\d:\d\d')] = None
     max_rmg_processes: Optional[conint(ge=1)] = None
     max_rmg_iterations: Optional[conint(ge=1)] = None
-    library_name: constr(max_length=255) = 'T3'
+    library_name: constr(max_length=255) = 'T3lib'
     save_libraries_directly_in_rmgdb: bool = False
     num_sa_per_temperature_range: conint(ge=1) = 3
     num_sa_per_pressure_range: conint(ge=1) = 3
@@ -524,6 +524,8 @@ class RMG(BaseModel):
     """
     A class for validating input.RMG arguments
     """
+    rmg_execution_type: Optional[str] = None
+    memory: Optional[conint(ge=0)] = None
     database: RMGDatabase
     reactors: List[RMGReactor]
     species: List[RMGSpecies]
