@@ -18,7 +18,7 @@ from t3.utils.dependencies import check_dependencies
 def test_no_t3_no_qm():
     """Test proper execution of T3 without specifying neither of the t3 nor qm args"""
     rmg_args = {'database': {'thermo_libraries': ['primaryThermoLibrary', 'BurkeH2O2'],
-                             'kinetics_libraries': ['BurkeH2O2inN2']},
+                             'kinetics_libraries': ['PrimaryH2O2']},
                 'species': [{'label': 'H2',
                              'smiles': '[H][H]',
                              'concentration': 0.67},
@@ -30,7 +30,9 @@ def test_no_t3_no_qm():
                               'P': 1,
                               'termination_conversion': {'H2': 0.1},
                               'termination_time': [1, 'ms']}],
-                'model': {'core_tolerance': 0.01}}
+                'model': {'core_tolerance': 0.01},
+                'rmg_execution_type': 'incore',
+                }
 
     t3_object = T3(project='T3_functional_test_1',
                    rmg=rmg_args,

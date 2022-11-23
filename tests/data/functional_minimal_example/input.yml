@@ -9,6 +9,7 @@ t3:
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
 
 rmg:
+  rmg_execution_type: incore
   database:
     thermo_libraries: ['primaryThermoLibrary', 'BurkeH2O2']
     kinetics_libraries: []
