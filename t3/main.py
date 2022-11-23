@@ -631,6 +631,7 @@ class T3(object):
                                                max_iterations=self.t3['options']['max_rmg_iterations'],
                                                verbose=self.verbose,
                                                t3_project_name=self.project,
+                                               rmg_execution_type=self.rmg['rmg_execution_type'],
                                                )
         if rmg_exception_encountered:
             self.rmg_exceptions_counter += 1

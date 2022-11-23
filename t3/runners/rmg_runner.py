@@ -20,9 +20,9 @@ CPUS = 16  # A recommended value for RMG when running on a server (not incore)
 MEM = settings['rmg_initial_memory'] * 1000  # MB
 SLEEP_TIME = 6  # hours
 
-rmg_execution_type = settings['execution_type']['rmg']
+RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
 
-if rmg_execution_type == 'local':
+if RMG_EXECUTION_TYPE == 'local':
     LOCAL_CLUSTER_SOFTWARE = settings['servers']['local']['cluster_soft']
     SUBMIT_COMMAND = settings['submit_command'][LOCAL_CLUSTER_SOFTWARE]
     CHECK_STATUS_COMMAND = settings['check_status_command'][LOCAL_CLUSTER_SOFTWARE]
@@ -238,6 +238,7 @@ def rmg_runner(rmg_input_file_path: str,
                verbose: Optional[int] = None,
                max_iterations: Optional[int] = None,
                t3_project_name: Optional[str] = None,
+               rmg_execution_type: Optional[str] = None,
                ) -> bool:
     """
     Run an RMG job as a subprocess under the rmg_env.
@@ -248,7 +249,8 @@ def rmg_runner(rmg_input_file_path: str,
         logger (Logger): The T3 Logger object instance.
         max_iterations (int, optional): Max RMG iterations.
         verbose (int, optional): Level of verbosity.
-        t3_project_name (str, optional): THe T3 project name, used for setting a job name on the server for the RMG run.
+        t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
+        rmg_execution_type (str, optional): THe RMG execution type (incore or local). Also set via settings.py.
 
     Returns:
         bool: Whether an exception was raised.
@@ -257,6 +259,7 @@ def rmg_runner(rmg_input_file_path: str,
         os.makedirs(local_t3_path)
     new_memory = None
 
+    rmg_execution_type = rmg_execution_type or RMG_EXECUTION_TYPE
     if rmg_execution_type == 'incore':
         rmg_exception_encountered = run_rmg_incore(rmg_input_file_path=rmg_input_file_path,
                                                    verbose=verbose,
