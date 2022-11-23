@@ -235,6 +235,7 @@ def run_rmg_in_local_queue(project_directory: str,
 def rmg_runner(rmg_input_file_path: str,
                job_log_path: str,
                logger: 'Logger',
+               memory: Optional[int] = None,
                verbose: Optional[int] = None,
                max_iterations: Optional[int] = None,
                t3_project_name: Optional[str] = None,
@@ -247,6 +248,7 @@ def rmg_runner(rmg_input_file_path: str,
         rmg_input_file_path (str): The path to the RMG input file.
         job_log_path (str): The path to the ``job.log`` file created on an HTCondor scheduler.
         logger (Logger): The T3 Logger object instance.
+        memory (int, optional): The submit script memory in MB.
         max_iterations (int, optional): Max RMG iterations.
         verbose (int, optional): Level of verbosity.
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
@@ -257,7 +259,7 @@ def rmg_runner(rmg_input_file_path: str,
     """
     if not os.path.isdir(local_t3_path):
         os.makedirs(local_t3_path)
-    new_memory = None
+    new_memory = memory
 
     rmg_execution_type = rmg_execution_type or RMG_EXECUTION_TYPE
     if rmg_execution_type == 'incore':

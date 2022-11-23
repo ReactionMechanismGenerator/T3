@@ -628,6 +628,7 @@ class T3(object):
         rmg_exception_encountered = rmg_runner(rmg_input_file_path=self.paths['RMG input'],
                                                job_log_path=self.paths['RMG job log'],
                                                logger=self.logger,
+                                               memory=self.rmg['memory'] * 1000 if self.rmg['memory'] is not None else None,
                                                max_iterations=self.t3['options']['max_rmg_iterations'],
                                                verbose=self.verbose,
                                                t3_project_name=self.project,
