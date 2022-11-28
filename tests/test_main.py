@@ -231,8 +231,6 @@ def test_args_and_attributes():
 
     assert t3.rmg_exceptions_counter == 0
     assert t3.iteration == 0
-    assert t3.thermo_lib_base_path == os.path.join(rmg_settings['database.directory'], 'thermo', 'libraries')
-    assert t3.kinetics_lib_base_path == os.path.join(rmg_settings['database.directory'], 'kinetics', 'libraries')
     assert t3.executed_networks == list()
     assert t3.t3 == t3_minimal
     assert t3.rmg == rmg_minimal_defaults
@@ -429,9 +427,9 @@ def test_run_arc():
     t3.run_arc(arc_kwargs=t3.qm)
     with open(t3.paths['ARC log'], 'r') as f:
         lines = f.readlines()
-    for line in ['Starting project T3\n',
+    for line in ['Starting project T3_minimal_example\n',
                  'Geometry optimization: b3lyp/6-31g(d,p), software: gaussian (dft)\n',
-                 'All jobs terminated. Summary for project T3:\n',
+                 'All jobs terminated. Summary for project T3_minimal_example:\n',
                  'Total execution time: 00:00:00\n',
                  ]:
         assert line in lines
@@ -464,16 +462,15 @@ def test_process_arc_run():
     t3.process_arc_run()
     assert t3.species[0]['converged'] is True
     assert t3.species[1]['converged'] is False
-    thermo_lib_path = os.path.join(t3.thermo_lib_base_path, 'T3.py')
-    assert os.path.isfile(thermo_lib_path)
-    with open(thermo_lib_path, 'r') as f:
+    assert os.path.isfile(t3.paths['RMG T3 thermo lib'])
+    with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
         lines = f.readlines()
     for line in ['name = "T3"\n',
                  "Species imipramine_ol_2_ket_4 (run time: 1 day, 8:24:38)\n",
                  '    label = "imipramine_ol_2_ket_4",\n',
                  "        E0 = (-171.078,'kJ/mol'),\n"]:
         assert line in lines
-    os.remove(thermo_lib_path)
+    os.remove(t3.paths['RMG T3 thermo lib'])
 
 
 def test_get_current_rmg_tol():
