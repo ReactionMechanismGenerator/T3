@@ -1,7 +1,6 @@
 name: t3_env
 channels:
   - defaults
-  - rmg
   - anaconda
   - omnia
   - conda-forge

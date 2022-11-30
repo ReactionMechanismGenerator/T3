@@ -1,5 +1,169 @@
-Dummy ARC log file
+ARC execution initiated on Wed Nov 30 16:48:10 2022
 
+###############################################################
+#                                                             #
+#                 Automatic Rate Calculator                   #
+#                            ARC                              #
+#                                                             #
+#   Version: 1.1.0                                            #
+#                                                             #
+###############################################################
+
+The current git HEAD for ARC is:
+    b1aef5a5b816acc7f74847e486744dea7282dcf5
+    Fri Nov 25 21:12:12 2022 +0200
+
+
+The current git HEAD for RMG-Py is:
+    9c39950e97f68fe46b27f4325c95c8c34c41f0aa
+    Wed Nov 16 15:30:27 2022 +0200
+    (running on the VSCode_Debug_Option branch)
+
+The current git HEAD for RMG-database is:
+    74bc6bbedf1103ee90d010267e7dfb1f7a094785
+    Mon Nov 7 12:13:28 2022 -0600
+
+
+Starting project T3_ARC_restart_test
+
+
+
+Not searching for ESS locally ('local' wasn't specified in the servers dictionary)
+
+
+
+Mapping servers...
+
+
+
+
+
+Using the following levels of theory:
+
+Conformers: (default) gfn2, software: xtb (force_field)
+Geometry optimization: (default) gfn2, software: xtb (force_field)
+Frequencies: (user-defined opt) gfn2, software: xtb (force_field)
+Energy: (default) gfn2, software: xtb (force_field)
+Rotor scans: (user-defined opt) gfn2, software: xtb (force_field)
+IRC: (default) gfn2, software: xtb (force_field)
+Could not determine the harmonic frequencies scaling factor for None from Arkane.
+Calculating it using Truhlar's method.
+Warning: This proceedure normally spawns QM jobs for various small species not directly asked for by the user.
+
+
+
+
+
+
+FREQ: A PROGRAM FOR OPTIMIZING SCALE FACTORS (Version 1)
+                 written by                 
+Haoyu S. Yu, Lucas J. Fiedler, I.M. Alecu, and Donald G. Truhlar
+Department of Chemistry and Supercomputing Institute
+University of Minnesota, Minnesota 55455-0431
+CITATIONS:
+1. I.M., Alecu, J. Zheng, Y. Zhao, D.G. Truhlar, J. Chem. Theory Comput. 2010, 6, 9, 2872-2887,
+   DOI: 10.1021/ct100326h
+2. H.S. Yu, L.J. Fiedler, I.M. Alecu,, D.G. Truhlar, Computer Physics Communications 2017, 210, 132-138,
+   DOI: 10.1016/j.cpc.2016.09.004
+
+
+
+
+starting ARC...
+
+
+Considering the following job types: ['conformers', 'fine', 'freq', 'irc', 'opt', 'rotors', 'sp']
+
+
+Computing scaling factors at the gfn2, software: xtb (force_field) level of theory...
+
+
+
+Using the following ESS settings:
+{}
+
+Running incore job opt_a2762 using xtb for C2H2
+Running incore job opt_a2763 using xtb for CH4
+Running incore job opt_a2764 using xtb for CO2
+Running incore job opt_a2765 using xtb for CO
+Running incore job opt_a2766 using xtb for F2
+Running incore job opt_a2767 using xtb for CH2O
+Running incore job opt_a2768 using xtb for H2O
+Running incore job opt_a2769 using xtb for H2
+Running incore job opt_a2770 using xtb for HCN
+Running incore job opt_a2771 using xtb for HF
+Running incore job opt_a2772 using xtb for N2O
+Running incore job opt_a2773 using xtb for N2
+Running incore job opt_a2774 using xtb for NH3
+Running incore job opt_a2775 using xtb for OH
+Running incore job opt_a2776 using xtb for Cl2
+  Ending job opt_a2762 for C2H2 (run time: 0:00:00)
+Running incore job opt_a2777 using xtb for C2H2 (fine opt)
+  Ending job opt_a2763 for CH4 (run time: 0:00:00)
+Running incore job opt_a2778 using xtb for CH4 (fine opt)
+  Ending job opt_a2764 for CO2 (run time: 0:00:00)
+Running incore job opt_a2779 using xtb for CO2 (fine opt)
+  Ending job opt_a2765 for CO (run time: 0:00:30)
+Running incore job opt_a2780 using xtb for CO (fine opt)
+  Ending job opt_a2766 for F2 (run time: 0:00:00)
+Running incore job opt_a2781 using xtb for F2 (fine opt)
+  Ending job opt_a2767 for CH2O (run time: 0:00:00)
+Running incore job opt_a2782 using xtb for CH2O (fine opt)
+  Ending job opt_a2768 for H2O (run time: 0:00:00)
+Running incore job opt_a2783 using xtb for H2O (fine opt)
+  Ending job opt_a2769 for H2 (run time: 0:00:00)
+Running incore job opt_a2784 using xtb for H2 (fine opt)
+  Ending job opt_a2770 for HCN (run time: 0:00:00)
+Running incore job opt_a2785 using xtb for HCN (fine opt)
+  Ending job opt_a2771 for HF (run time: 0:00:00)
+Running incore job opt_a2786 using xtb for HF (fine opt)
+  Ending job opt_a2772 for N2O (run time: 0:00:02)
+Running incore job opt_a2787 using xtb for N2O (fine opt)
+  Ending job opt_a2773 for N2 (run time: 0:00:00)
+Running incore job opt_a2788 using xtb for N2 (fine opt)
+  Ending job opt_a2774 for NH3 (run time: 0:00:00)
+Running incore job opt_a2789 using xtb for NH3 (fine opt)
+  Ending job opt_a2775 for OH (run time: 0:00:00)
+Running incore job opt_a2790 using xtb for OH (fine opt)
+  Ending job opt_a2776 for Cl2 (run time: 0:00:01)
+Running incore job opt_a2791 using xtb for Cl2 (fine opt)
+  Ending job opt_a2777 for C2H2 (run time: 0:00:01)
+
+Optimized geometry for C2H2 at gfn2:
+C       0.00000000    0.00000000    0.00470000
+C       0.00000000    0.00000000    1.19840000
+H       0.00000000    0.00000000    2.24810000
+H       0.00000000    0.00000000   -1.04500000
+
+Running incore job freq_a2792 using xtb for C2H2
+  Ending job opt_a2778 for CH4 (run time: 0:00:01)
+
+Optimized geometry for CH4 at gfn2:
+C       0.00000000    0.00000000    0.00000000
+H       0.00000000    0.00000000    1.08210000
+H       1.02030000    0.00000000   -0.36070000
+H      -0.51010000    0.88360000   -0.36070000
+H      -0.51010000   -0.88360000   -0.36070000
+
+Running incore job freq_a2793 using xtb for CH4
+  Ending job opt_a2779 for CO2 (run time: 0:00:00)
+
+Optimized geometry for CO2 at gfn2:
+O       0.00000000   -0.00000000    0.03150000
+C      -0.00000000    0.00000000    1.16010000
+O      -0.00000000    0.00000000   -1.19160000
+
+Error: The Cartesian coordinates of species CO2 are not isomorphic with the 2D structure O=C=O when considering bond orders.
+Error: The Cartesian coordinates of species CO2 with charge 0 and multiplicity 1 are not isomorphic with the 2D structure O=C=O even without considering bond orders.
+Error: The Cartesian coordinates of species CO2 are not compliant with the 2D structure O=C=O even without considering bond orders.
+Warning: Allowing nonisomorphic 2D
+Running incore job freq_a2794 using xtb for CO2
+  Ending job opt_a2780 for CO (run time: 0:00:00)
+
+Optimized geometry for CO at gfn2:
+
+
+Error: The Cartesian coordinates of species CO with charge 0 and multiplicity 1 are not isomorphic with the 2D structure [C-]#[O+] even without considering bond orders.
 
 Considering the following job types: ['conformers', 'freq', 'opt', 'sp', 'irc']
 

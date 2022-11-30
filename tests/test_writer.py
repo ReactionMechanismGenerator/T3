@@ -231,6 +231,7 @@ def test_write_rmg_input_file_liquid():
                         'reactive': False}],
            'reactors': [{'type': 'liquid batch constant T V',
                          'T': [293, 393],
+                         'V': [1, 10],
                          'termination_time': [72, 'hrs']}],
            'model': {'core_tolerance': [0.001]},
            'options': {'save_edge': True, 'save_html': True},
