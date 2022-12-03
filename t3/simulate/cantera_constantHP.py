@@ -365,7 +365,7 @@ class CanteraConstantHP(SimulateAdapter):
             for index, species in enumerate(self.sensitive_species):
                 for j in range(self.num_ct_reactions):
                     reaction_sensitivity_generic_data = GenericData(
-                        label='dln[{0}]/dln[k{1}]: {2}'.format(species, j + 1, self.model.reactions()[j]),
+                        label=r'$\frac{\partial ln[{0}]}{\partial ln[k{1}]}$: {2}'.format(species, j + 1, self.model.reactions()[j]),
                         species=species,
                         reaction=self.model.reactions()[j],
                         data=kinetic_sensitivity_data[:, self.num_ct_reactions * index + j],
@@ -378,7 +378,7 @@ class CanteraConstantHP(SimulateAdapter):
             for index, species in enumerate(self.sensitive_species):
                 for j in range(self.num_ct_species):
                     thermo_sensitivity_generic_data = GenericData(
-                        label='dln[{0}]/dH[{1}]'.format(species, self.model.species()[j].name),
+                        label=r'$\frac{\partial ln[{0}]}{\partial H[{1}]}$'.format(species, self.model.species()[j].name),
                         species=species,
                         data=thermo_sensitivity_data[:, self.num_ct_species * index + j],
                         index=j + 1,
