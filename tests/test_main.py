@@ -402,7 +402,11 @@ def test_restart():
 
     # restore r6 log file
     with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log'), 'w') as f:
-        f.writelines("""Dummy ARC log file\n\n""")
+        f.writelines("""Dummy ARC log file\n
+Starting project T3_ARC_restart_test\n
+All jobs terminated. Summary for project T3_ARC_restart_test:\n
+Total execution time: 00:00:00\n
+ARC execution terminated on Sun Dec  4 11:50:29 2022""")
 
 
 def test_check_arc_args():
