@@ -54,7 +54,7 @@ def test_no_t3_no_qm():
 def test_computing_thermo():
     """Tests computing thermo for two species and running RMG with the updated data"""
     functional_test_directory = os.path.join(DATA_BASE_PATH, 'functional_2_thermo')
-    delete_selective_content_from_test_dirs(test_dir=functional_test_directory)
+    #delete_selective_content_from_test_dirs(test_dir=functional_test_directory)
     input_file = os.path.join(functional_test_directory, 'input.yml')
     input_dict = read_yaml_file(path=input_file)
     input_dict['verbose'] = 20
@@ -100,25 +100,25 @@ def test_computing_thermo():
         assert expected_line_dict['exists'] is True
 
 
-def delete_selective_content_from_test_dirs(test_dir: str):
-    """remove directories created by the test_minimal_example functional test"""
-    for (_, dirs, files) in os.walk(test_dir):
-        for file_ in files:
-            if file_ != 'input.yml' and os.path.isfile(os.path.join(test_dir, file_)):
-                os.remove(os.path.join(test_dir, file_))
-        for dir_ in dirs:
-            if os.path.isdir(os.path.join(test_dir, dir_)):
-                shutil.rmtree(os.path.join(test_dir, dir_), ignore_errors=True)
-        break
+# def delete_selective_content_from_test_dirs(test_dir: str):
+#     """remove directories created by the test_minimal_example functional test"""
+#     for (_, dirs, files) in os.walk(test_dir):
+#         for file_ in files:
+#             if file_ != 'input.yml' and os.path.isfile(os.path.join(test_dir, file_)):
+#                 os.remove(os.path.join(test_dir, file_))
+#         for dir_ in dirs:
+#             if os.path.isdir(os.path.join(test_dir, dir_)):
+#                 shutil.rmtree(os.path.join(test_dir, dir_), ignore_errors=True)
+#         break
 
 
-def teardown_module():
-    """teardown any state that was previously setup with a setup_module method."""
-    test_dirs_to_selectively_delete = [os.path.join(DATA_BASE_PATH, 'functional_2_thermo'),
-                                       ]
-    for test_dir in test_dirs_to_selectively_delete:
-        delete_selective_content_from_test_dirs(test_dir)
-    test_dirs = [os.path.join(DATA_BASE_PATH, 'T3_functional_test_1'),
-                 ]
-    for test_dir in test_dirs:
-        shutil.rmtree(test_dir, ignore_errors=True)
+# def teardown_module():
+#     """teardown any state that was previously setup with a setup_module method."""
+#     test_dirs_to_selectively_delete = [os.path.join(DATA_BASE_PATH, 'functional_2_thermo'),
+#                                        ]
+#     for test_dir in test_dirs_to_selectively_delete:
+#         delete_selective_content_from_test_dirs(test_dir)
+#     test_dirs = [os.path.join(DATA_BASE_PATH, 'T3_functional_test_1'),
+#                  ]
+#     for test_dir in test_dirs:
+#         shutil.rmtree(test_dir, ignore_errors=True)

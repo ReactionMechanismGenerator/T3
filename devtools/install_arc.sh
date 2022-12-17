@@ -23,6 +23,14 @@ git clone https://github.com/ReactionMechanismGenerator/ARC
 cd ARC
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+if { conda env list | grep 'arc_env'; } >/dev/null 2>&1; then
+    mamba env update -n arc_env -f environment.yml
+else
+    mamba env create -f environment.yml
+fi;
+mamba activate arc_env
+make install-all
+conda deactivate
 
 # Restore original directory
 popd || exit
