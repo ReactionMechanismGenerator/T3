@@ -29,7 +29,14 @@ else
     mamba env create -f environment.yml
 fi;
 mamba activate arc_env
-make install-all
+#make install-all
+###Temp###
+mamba create -n xtb_env python=3.7 -y
+conda activate xtb_env
+mamba install -c conda-forge xtb -y
+mamba install -c anaconda pyyaml -y
+##########
+
 conda deactivate
 
 # Restore original directory
