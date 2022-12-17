@@ -1,1 +1,50 @@
 project: T3_ARC_restart_test
+output:
+  Imipramine_1_peroxy:
+    conformers: 'single conformer passed isomorphism check; '
+    convergence: true
+    errors: ''
+    info: 'T1 = 0.0119504; '
+    isomorphism: 'opt passed isomorphism check; '
+    job_types:
+      bde: true
+      composite: false
+      conformers: true
+      fine: true
+      freq: true
+      irc: false
+      onedmin: false
+      opt: true
+      orbitals: false
+      rotors: true
+      sp: true
+    paths:
+      composite: ''
+      freq: freq_a48877/output.out
+      geo: freq_a48877/output.out
+      sp: sp_a48927/output.out
+    restart: ''
+    warnings: ''
+    
+species:
+- arkane_file: null
+  charge: 0
+  compute_thermo: true
+  conf_is_isomorphic: true
+  e_elect: -408908.67724884645
+  final_xyz: |-
+    C      -1.57004500   -0.31383400   -0.10934600
+    C      -0.39847700    0.62165100    0.01284400
+    C      -0.10155000    1.55284600   -0.85131600
+    C       0.18880300    2.48204900   -1.72036000
+    H      -1.23329100   -1.35203000   -0.13586600
+    H      -2.23679500   -0.21086000    0.74902300
+    H      -2.13910300   -0.11221700   -1.01469400
+    H       0.24072600    0.50845700    0.88370600
+    H      -0.21315300    3.48367400   -1.62847700
+    H       0.84327100    2.28232300   -2.56003000
+  is_ts: false
+  label: Imipramine_1_peroxy
+  multiplicity: 1
+  run_time: 8805.0
+  t1: 0.0119504

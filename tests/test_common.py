@@ -88,20 +88,54 @@ H  0.0000000 -0.9470590 -1.1411940"""
 
 def test_convert_termination_time_to_seconds():
     """Test converting the termination_time from an RMG reactor to seconds"""
-    t_final = [1, 'micro-s']
+    t_final = (1, 'micro-s')
     assert common.convert_termination_time_to_seconds(t_final) == 1e-6
 
-    t_final = [1, 'ms']
+    t_final = (1, 'ms')
     assert common.convert_termination_time_to_seconds(t_final) == 1e-3
 
-    t_final = [1, 's']
+    t_final = (1, 's')
     assert common.convert_termination_time_to_seconds(t_final) == 1
 
-    t_final = [1, 'hours']
+    t_final = (1, 'hours')
     assert common.convert_termination_time_to_seconds(t_final) == 3600
 
-    t_final = [1, 'hrs']
+    t_final = (1, 'hrs')
     assert common.convert_termination_time_to_seconds(t_final) == 3600
 
-    t_final = [1, 'days']
+    t_final = (1, 'days')
     assert common.convert_termination_time_to_seconds(t_final) == 3600*24
+
+
+def test_get_values_within_range():
+    """Test the get_values_within_range() function"""
+    assert common.get_values_within_range([0, 10], 1) == [5]
+    assert common.get_values_within_range([1, 10], 2) == [4, 7]
+    assert common.get_values_within_range([0, 10], 3) == [0, 5, 10]
+    assert common.get_values_within_range([1, 10], 4) == [1, 4, 7, 10]
+    assert common.get_values_within_range(7.2, 40) == [7.2]
+    assert common.get_values_within_range([7.2], 40) == [7.2]
+    assert common.get_values_within_range([1, 25], 3, use_log_scale=True) == [1, 10]
+    assert common.get_values_within_range([1, 500], 3, use_log_scale=True) == [1, 10, 100]
+    assert common.get_values_within_range([0.1, 1000], 5, use_log_scale=True) == [0.1, 1, 10, 100, 1000]
+
+
+def test_get_interval():
+    """Test thew get_interval() function"""
+    assert common.get_interval([0, 10], 1) == 5
+    assert common.get_interval([1, 10], 2) == 3
+    assert common.get_interval([0, 10], 3) == 5
+    assert common.get_interval([0, 9], 4) == 3
+    assert common.get_interval([500, 1200], 3) == 350
+
+
+def test_get_chem_to_rmg_rxn_index_map():
+    """Test the get_chem_to_rmg_rxn_index_map() function"""
+    chemkin_path = os.path.join(DATA_BASE_PATH, 'chem_annotated_1.inp')
+    rxn_map = common.get_chem_to_rmg_rxn_index_map(chem_annotated_path=chemkin_path)
+    assert rxn_map == {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9, 11: 9, 12: 10, 13: 11, 14: 12,
+                       15: 13, 16: 14, 17: 15, 18: 16, 19: 17, 20: 18, 21: 19, 22: 20, 23: 21, 24: 22, 25: 23, 26: 24,
+                       27: 25, 28: 26, 29: 27, 30: 28, 31: 29, 32: 30, 33: 30, 34: 31, 35: 32, 36: 33, 37: 34, 38: 35,
+                       39: 36, 40: 37, 41: 38, 42: 39, 43: 40, 44: 41, 45: 41, 46: 42, 47: 43, 48: 44, 49: 45, 50: 46,
+                       51: 47, 52: 48, 53: 49, 54: 50, 55: 51, 56: 52, 57: 53, 58: 54, 59: 55, 60: 56, 61: 57, 62: 58,
+                       63: 59, 64: 60, 65: 61}

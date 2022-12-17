@@ -94,7 +94,7 @@ species(
 
     # reactors
     reactors = rmg['reactors']
-    gas_batch_constant_t_p_template_template = """
+    gas_batch_constant_t_p_template = """
 simpleReactor(
     temperature=${temperature},
     pressure=${pressure},
@@ -104,7 +104,12 @@ simpleReactor(
 )
 <%def name="concentrations()">
 % for spc in species_list:
+    % if isinstance(spc["concentration"], (int, float)):
         '${spc["label"]}': ${spc["concentration"]},
+    % endif
+    % if isinstance(spc["concentration"], (tuple, list)):
+        '${spc["label"]}': [${spc["concentration"][0]}, ${spc["concentration"][1]}],
+    % endif
 % endfor
 </%def>
 """
@@ -117,7 +122,12 @@ liquidReactor(
 )
 <%def name="concentrations()">
 % for spc in species_list:
+    % if isinstance(spc["concentration"], (int, float)):
         '${spc["label"]}': (${spc["concentration"]}, 'mol/cm^3'),
+    % endif
+    % if isinstance(spc["concentration"], (tuple, list)):
+        '${spc["label"]}': [(${spc["concentration"][0]}, 'mol/cm^3'), (${spc["concentration"][1]}, 'mol/cm^3')],
+    % endif
 % endfor
 </%def>
 """
@@ -129,8 +139,17 @@ liquidReactor(
         else:
             raise ValueError(f"The reactor temperature must be a float or a list,\n"
                              f"got {reactor['T']} which is a {type(reactor['T'])}.")
-        species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in species]
-        species_list.sort(key=lambda spc: spc['concentration'], reverse=True)
+        if 'species_list' in reactor.keys():
+            # This is relevant when a simulate adapter breaks ranged reactors down to individual conditions.
+            species_list = reactor['species_list']
+        else:
+            # This is the base case when T3 generates an RMG input file for model generation.
+            species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in species
+                            if isinstance(spc['concentration'], (list, tuple))
+                            or (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
+                            or spc['balance'] or not spc['reactive']]
+            species_list.sort(key=lambda spc: spc['concentration'][0] if isinstance(spc['concentration'], (tuple, list))
+                              else spc['concentration'], reverse=True)
         termination = ''
         if reactor['termination_conversion'] is not None:
             termination += f"terminationConversion={reactor['termination_conversion']},"
@@ -152,7 +171,7 @@ liquidReactor(
             if isinstance(reactor['P'], float):
                 pressure = f"({reactor['P']}, 'bar')"
             elif isinstance(reactor['P'], list):
-                pressure = [(p, 'K') for p in reactor['P']]
+                pressure = [(p, 'bar') for p in reactor['P']]
             else:
                 raise ValueError(f"The reactor pressure must be a float or a list,\n"
                                  f"got {reactor['P']} which is a {type(reactor['P'])}.")
@@ -161,7 +180,7 @@ liquidReactor(
                 if spc['balance']:
                     balance = f"\n    balanceSpecies='{spc['label']}',"
                     break
-            rmg_input += Template(gas_batch_constant_t_p_template_template).render(
+            rmg_input += Template(gas_batch_constant_t_p_template).render(
                 temperature=temperature,
                 pressure=pressure,
                 species_list=species_list,
@@ -353,16 +372,16 @@ def write_pdep_network_file(network_name: str,
                 parse_isomers = (False, False)
             if parse_tp:
                 if 'Tmin' in line:
-                    #     Tmin = (300,'K'),
+                    #     Tmin = (300, 'K'),
                     t_min = line.split('(')[1].split(',')[0]
                 elif 'Tmax' in line:
-                    #     Tmax = (2200,'K'),
+                    #     Tmax = (2200, 'K'),
                     t_max = line.split('(')[1].split(',')[0]
                 elif 'Pmin' in line:
-                    #     Pmin = (0.01,'bar'),
+                    #     Pmin = (0.01, 'bar'),
                     p_min = line.split('(')[1].split(',')[0]
                 elif 'Pmax' in line:
-                    #     Pmax = (100,'bar'),
+                    #     Pmax = (100, 'bar'),
                     p_max = line.split('(')[1].split(',')[0]
             if all(parse_isomers) and "'," in line:
                 #         'C=O(26)',

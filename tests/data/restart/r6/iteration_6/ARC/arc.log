@@ -1,5 +1,9 @@
 Dummy ARC log file
 
+Starting project T3_ARC_restart_test
 
-Considering the following job types: ['conformers', 'freq', 'opt', 'sp', 'irc']
+All jobs terminated. Summary for project T3_ARC_restart_test:
 
+Total execution time: 00:00:00
+
+ARC execution terminated on Sun Dec  4 11:50:29 2022

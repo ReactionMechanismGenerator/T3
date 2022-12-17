@@ -43,7 +43,8 @@ def test_write_rmg_input_file():
                          t3=schema['t3'],
                          iteration=2,
                          path=minimal_input_file_path,
-                         walltime='01:00:00:00')
+                         walltime='01:00:00:00',
+                         )
 
     # minimal input file
     with open(minimal_input_file_path, 'r') as f:
@@ -88,8 +89,6 @@ simpleReactor(
     initialMoleFractions={
         'H2': 0.67,
         'O2': 0.33,
-        'H': 0,
-        'OH': 0,
     },
     terminationConversion={'H2': 0.9},
     terminationTime=(5.0, 's'),
@@ -99,7 +98,7 @@ simpleReactor(
 model(
     toleranceMoveToCore=0.001,
     toleranceInterruptSimulation=0.001,
-    filterReactions=False,
+    filterReactions=True,
     filterThreshold=100000000.0,
     maxNumObjsPerIter=1,
     terminateAtMaxObjects=False,
@@ -213,7 +212,7 @@ def test_write_rmg_input_file_liquid():
                         'concentration': 0.0124},
                        {'label': 'water',
                         'smiles': 'O',
-                        'concentration': 0.0278,
+                        'concentration': [0.0278, 0.0502],
                         'solvent': True},
                        {'label': 'O2',
                         'smiles': '[O][O]',
@@ -232,6 +231,7 @@ def test_write_rmg_input_file_liquid():
                         'reactive': False}],
            'reactors': [{'type': 'liquid batch constant T V',
                          'T': [293, 393],
+                         'V': [1, 10],
                          'termination_time': [72, 'hrs']}],
            'model': {'core_tolerance': [0.001]},
            'options': {'save_edge': True, 'save_html': True},
@@ -267,10 +267,9 @@ def test_write_rmg_input_file_liquid():
                  "liquidReactor(\n",
                  "    temperature=[(293.0, 'K'), (393.0, 'K')],\n",
                  "    initialConcentrations={\n",
-                 "        'water': (0.0278, 'mol/cm^3'),\n",
+                 "        'water': [(0.0278, 'mol/cm^3'), (0.0502, 'mol/cm^3')],\n",
                  "        'AIBN': (4.9e-06, 'mol/cm^3'),\n",
                  "        'O2': (2.73e-07, 'mol/cm^3'),\n",
-                 "        'cyanoisopropylOO': (0, 'mol/cm^3'),\n",
                  "    terminationTime=(72.0, 'hours'),\n",
                  "    nSims=12,\n",
                  "    constantSpecies=['O2', 'N2', ],\n",
@@ -297,7 +296,7 @@ def test_write_rmg_input_file_seed_all_radicals():
                         'seed_all_rads': ['radical', 'alkoxyl', 'peroxyl']},
                        {'label': 'O2',
                         'smiles': '[O][O]',
-                        'concentration': 2},
+                        'concentration': [2, 2.5]},
                        {'label': 'N2',
                         'smiles': 'N#N',
                         'constant': True,
@@ -327,7 +326,8 @@ def test_write_rmg_input_file_seed_all_radicals():
 
     with open(file_path, 'r') as f:
         lines = f.readlines()
-    for line in ["    thermoLibraries=['BurkeH2O2'],\n",
+    for line in ["        'O2': [2.0, 2.5],\n",
+                 "    thermoLibraries=['BurkeH2O2'],\n",
                  "    label='methylethylester',\n",
                  "    label='methylethylester_radical_0',\n",
                  "    label='methylethylester_alkoxyl_0',\n",

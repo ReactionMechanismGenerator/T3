@@ -1,0 +1,56 @@
+project: functional_1_thermo_1_rate
+
+t3:
+  options:
+    max_T3_iterations: 1
+    max_RMG_walltime: '00:00:05:00'
+  sensitivity:
+    adapter: RMGConstantTP
+    top_SA_species: 1
+    top_SA_reactions: 1
+
+rmg:
+  rmg_execution_type: incore
+  database:
+    thermo_libraries: ['primaryThermoLibrary', 'BurkeH2O2', 'FFCM1(-)']
+    kinetics_libraries: ['primaryH2O2', 'FFCM1(-)']
+  species:
+    - label: propane
+      smiles: 'CCC'
+      concentration: 0.5
+    - label: 1-propyl
+      smiles: '[CH2]CC'
+      concentration: 0.25
+    - label: 2-propyl
+      smiles: 'C[CH]C'
+      concentration: 0.25
+      SA_observable: true
+  reactors:
+    - type: gas batch constant T P
+      T: 1000
+      P: 1
+      termination_time: [1e-6, 's']
+      termination_rate_ratio: 0.1
+  model:
+    core_tolerance: 0.1
+  species_constraints:
+    allowed: ['input species', 'seed mechanisms', 'reaction libraries']
+    max_C_atoms: 3
+    max_O_atoms: 0
+    max_N_atoms: 0
+    max_Si_atoms: 0
+    max_S_atoms: 0
+    max_heavy_atoms: 3
+    max_radical_electrons: 1
+    max_singlet_carbenes: 0
+
+qm:
+  adapter: ARC
+  level_of_theory: gfn2
+  conformer_level: gfn2
+  arkane_level_of_theory: CBS-QB3
+  freq_scale_factor: 1.0
+  job_types:
+    rotors: false
+    fine: false
+
