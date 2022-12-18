@@ -16,13 +16,7 @@ echo installing PyCall...
 julia devtools/install_pycall.jl
 
 echo installing pyrms, RMS, and all required Julia packages...
-python -c "import pyrms; pyrms.install()"
-
-# the above line installs RMS v0.2.1
-# v0.3.2 is needed to use the latest SA features
-# once there is a functional package for v0.3.2, 
-# the line below can be deleted since pyrms.install() will pull the latest version
-echo installing RMS v0.3.2...
-julia devtools/install_RMS_v032.jl
-
+python -c "import pyrms; pyrms.install(); import julia; julia.install(); import diffeqpy; diffeqpy.install()"
+echo installing and building packages for Julia
+julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); Pkg.build("ReactionMechanismSimulator")'
 conda deactivate
