@@ -8,12 +8,12 @@ t3 tests test_rmg_runner module
 import os
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH
 from t3.runners.rmg_runner import write_submit_script
-
+import pytest
 
 
 class TestWriteSubmitScript(object):
 
-    #Need to think of multiple cases...
+
 
     def test_minimial_write_submit_script(self):
         """Test the write_submit_script() function with minimal input.
@@ -52,6 +52,11 @@ touch final_time
         os.remove(os.path.join(project_directory_path,"job.sh"))
 
     def test_minimal_project_name_included(self):
+        """
+        This test has been constructed to ensure that when the user provides a t3 project name, it will be displayed in the submit name whilst also
+        not affecting the job file.
+        """
+        
         project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
         t3_proj_name = "T3_test_name"
         actual = write_submit_script(project_directory_path,
@@ -110,6 +115,9 @@ queue
 
 
     def test_minimal_parameters_set(self):
+        """
+        This test has been built to ensure that chosen parameters by the user are being correctly written into the job and submit file
+        """
         project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
         
         ####To be edited by user if required####
@@ -171,3 +179,28 @@ queue
 
         os.remove(os.path.join(project_directory_path,"job.sh"))
         os.remove(os.path.join(project_directory_path,"submit.sub"))
+        
+    def test_minimal_incorrect_mem(self):
+        """
+        This test has been constructed to raise an assertion error due to the user specifiying the incorrent memory.
+        Memory selection for assertion error can either be less than 8000 or higher than 32000 (Subject to change) OR/AND
+        the selection of Memory may not be divisable by 1000 (Subject to change)
+        """
+        project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
+        
+        ####To be edited by user if required####
+        t3_proj_name = "T3_test_name"
+        cpus = 8
+        max_iter = "-m 100"
+        mem = 16230 #in MB - This is to be incorrect
+        #########################################
+
+        with pytest.raises(AssertionError) as assertion_error:
+                    actual = write_submit_script(project_directory_path,
+                                    cpus=cpus,
+                                    memory=mem, #in MB
+                                    verbose="-v 20",
+                                    max_iterations=max_iter,
+                                    t3_project_name= t3_proj_name)
+        
+        assert 'Memory is in MB and must be between 8000 and 32000' or "Memory is in MB and must be divisable by 1000" in str(assertion_error.value)
