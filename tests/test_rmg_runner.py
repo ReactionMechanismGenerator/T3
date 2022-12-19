@@ -206,8 +206,7 @@ queue
         
         assert "Memory is in MB and it is strongly recommended to set the memory above 1000" in str(value_error.value)
         
-        os.remove(os.path.join(project_directory_path,"job.sh"))
-        os.remove(os.path.join(project_directory_path,"submit.sub"))
+
         
     def test_run_rmg_into_write_submit_script(self):
         
