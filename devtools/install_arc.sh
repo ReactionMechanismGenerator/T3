@@ -59,7 +59,7 @@ else
 fi;
 conda activate arc_env
 #make install-all
-###Temp### To be used until ARC repo install is properly updayed
+###Temp### To be used until ARC repo install is properly updated
 $COMMAND_PKG create -n xtb_env python=3.7 -y
 conda activate xtb_env
 $COMMAND_PKG install -c conda-forge xtb -y
