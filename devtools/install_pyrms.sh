@@ -18,5 +18,5 @@ julia devtools/install_pycall.jl
 echo installing pyrms, RMS, and all required Julia packages...
 python -c "import pyrms; pyrms.install(); import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 echo installing and building packages for Julia
-julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); Pkg.build("ReactionMechanismSimulator")'
+julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanism Simulator; Pkg.build("ReactionMechanismSimulator")'
 conda deactivate
