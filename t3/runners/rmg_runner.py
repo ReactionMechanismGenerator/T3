@@ -49,6 +49,9 @@ def write_submit_script(project_directory: str,
         max_iterations (str, optional): Max RMG iterations, e.g., ``-m 100``.
         t3_project_name (str, optional): THe T3 project name, used for setting a job name on the server for the RMG run.
     """
+    if memory is not None and memory <= 1000:
+        raise ValueError("Memory is in MB and it is strongly recommended to set the memory above 1000")
+
     global MEM
     submit_scripts_content = submit_scripts['rmg'].format(name=f'{t3_project_name}_RMG' or 'T3_RMG',
                                                           cpus=cpus or CPUS,
