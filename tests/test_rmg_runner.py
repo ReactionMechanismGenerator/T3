@@ -12,9 +12,7 @@ from t3.runners.rmg_runner import write_submit_script
 
 class TestWriteSubmitScript(object):
 
-    #Need to think of multiple cases...
-
-    def test_minimial_write_submit_script(self):
+    def test_minimal_write_submit_script(self):
         """Test the write_submit_script() function with minimal input.
             write_submit_script params are set as their default values
             This test will create a job.sh file in the project directory path and the assertion will check if the file exists
@@ -27,28 +25,33 @@ class TestWriteSubmitScript(object):
                             verbose=None,
                             max_iterations=None,
                             t3_project_name=None)
-        
 
-        expected = """#!/bin/bash -l
+        expected = f"""#!/bin/bash -l
 
-touch initial_time
+#PBS -N None_RMG
+#PBS -q zeus_long_q
+#PBS -l walltime=168:00:00
+#PBS -l select=1:ncpus=16
+#PBS -o out.txt
+#PBS -e err.txt
 
-source /srv01/technion/$USER/.bashrc
+PBS_O_WORKDIR={project_directory_path}
+cd $PBS_O_WORKDIR
 
 conda activate rmg_env
 
-python-jl /Local/ce_dana/Code/RMG-Py/rmg.py -n 16 input.py
+touch initial_time
+
+python-jl ~/Code/RMG-Py/rmg.py -n 16 input.pyNone
 
 touch final_time
 
 """
 
-        assert os.path.isfile(os.path.join(project_directory_path, "job.sh")) == True
-        with open(os.path.join(project_directory_path, "job.sh"), "r") as bash_file:
-            content = bash_file.read()
+        assert os.path.isfile(os.path.join(project_directory_path, "submit.sh"))
+        with open(os.path.join(project_directory_path, "submit.sh"), "r") as f:
+            content = f.read()
         assert content == expected
-
-        os.remove(os.path.join(project_directory_path, "job.sh"))
 
     def test_minimal_project_name_included(self):
         project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
@@ -59,52 +62,32 @@ touch final_time
                             verbose=None,
                             max_iterations=None,
                             t3_project_name=t3_proj_name)
-        expected_bash = """#!/bin/bash -l
+        expected_submit = f"""#!/bin/bash -l
 
-touch initial_time
+#PBS -N {t3_proj_name}_RMG
+#PBS -q zeus_long_q
+#PBS -l walltime=168:00:00
+#PBS -l select=1:ncpus=16
+#PBS -o out.txt
+#PBS -e err.txt
 
-source /srv01/technion/$USER/.bashrc
+PBS_O_WORKDIR={project_directory_path}
+cd $PBS_O_WORKDIR
 
 conda activate rmg_env
 
-python-jl /Local/ce_dana/Code/RMG-Py/rmg.py -n 16 input.py
+touch initial_time
+
+python-jl ~/Code/RMG-Py/rmg.py -n 16 input.pyNone
 
 touch final_time
 
 """
-        expected_submit = """Universe      = vanilla
 
-+JobName      = "{t3_project_name}"
-
-log           = job.log
-output        = out.txt
-error         = err.txt
-
-getenv        = True
-
-should_transfer_files = no
-
-executable = job.sh
-
-request_cpus  = 16
-request_memory = 25000MB
-
-queue
-
-""".format(t3_project_name=t3_proj_name + "_RMG")
-
-        assert os.path.isfile(os.path.join(project_directory_path, "job.sh")) == True
-        assert os.path.isfile(os.path.join(project_directory_path, "submit.sub")) == True
-
-        with open(os.path.join(project_directory_path, "job.sh"), "r") as bash_file:
-            content_bash = bash_file.read()
-        assert content_bash == expected_bash
-        with open(os.path.join(project_directory_path, "submit.sub"), "r") as submit_file:
-            content_submit = submit_file.read()
+        assert os.path.isfile(os.path.join(project_directory_path, "submit.sh"))
+        with open(os.path.join(project_directory_path, "submit.sh"), "r") as f:
+            content_submit = f.read()
         assert content_submit == expected_submit
-
-        os.remove(os.path.join(project_directory_path, "job.sh"))
-        os.remove(os.path.join(project_directory_path, "submit.sub"))
 
     def test_minimal_parameters_set(self):
         project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
@@ -113,7 +96,7 @@ queue
         t3_proj_name = "T3_test_name"
         cpus = 8
         max_iter = "-m 100"
-        mem = 16000  #in MB
+        mem = 16000  # in MB
         #########################################
         write_submit_script(project_directory_path,
                             cpus=cpus,
@@ -121,50 +104,35 @@ queue
                             verbose="-v 20",
                             max_iterations=max_iter,
                             t3_project_name=t3_proj_name)
+        
+        expected_submit = f"""#!/bin/bash -l
 
-        expected_bash = """#!/bin/bash -l
+#PBS -N T3_test_name_RMG
+#PBS -q zeus_long_q
+#PBS -l walltime=168:00:00
+#PBS -l select=1:ncpus=8
+#PBS -o out.txt
+#PBS -e err.txt
 
-touch initial_time
-
-source /srv01/technion/$USER/.bashrc
+PBS_O_WORKDIR={project_directory_path}
+cd $PBS_O_WORKDIR
 
 conda activate rmg_env
 
-python-jl /Local/ce_dana/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iter}
+touch initial_time
+
+python-jl ~/Code/RMG-Py/rmg.py -n 8 input.py-m 100
 
 touch final_time
 
-""".format(cpus=cpus, max_iter=max_iter)
-        
-        expected_submit = """Universe      = vanilla
+"""
+        assert os.path.isfile(os.path.join(project_directory_path, "submit.sh"))
 
-+JobName      = "{t3_project_name}"
-
-log           = job.log
-output        = out.txt
-error         = err.txt
-
-getenv        = True
-
-should_transfer_files = no
-
-executable = job.sh
-
-request_cpus  = {cpus}
-request_memory = {mem}MB
-
-queue
-
-""".format(t3_project_name=t3_proj_name + "_RMG", cpus=cpus, mem=mem)
-        assert os.path.isfile(os.path.join(project_directory_path, "job.sh")) == True
-        assert os.path.isfile(os.path.join(project_directory_path, "submit.sub")) == True
-        with open(os.path.join(project_directory_path, "job.sh"), "r") as bash_file:
-            content_bash = bash_file.read()
-        assert content_bash == expected_bash
-
-        with open(os.path.join(project_directory_path, "submit.sub"), "r") as submit_file:
+        with open(os.path.join(project_directory_path, "submit.sh"), "r") as submit_file:
             content_submit = submit_file.read()
         assert content_submit == expected_submit
 
-        os.remove(os.path.join(project_directory_path, "job.sh"))
-        os.remove(os.path.join(project_directory_path, "submit.sub"))
+
+def teardown_module():
+    """teardown any state that was previously setup with a setup_module method."""
+    os.remove(os.path.join(EXAMPLES_BASE_PATH, "minimal", "submit.sh"))
