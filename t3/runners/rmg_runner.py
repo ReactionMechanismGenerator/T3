@@ -53,6 +53,8 @@ def write_submit_script(project_directory: str,
     submit_scripts_content = submit_scripts['rmg'].format(name=f'{t3_project_name}_RMG' or 'T3_RMG',
                                                           cpus=cpus or CPUS,
                                                           memory=memory or MEM,
+                                                          workdir=project_directory,
+                                                          max_iterations=max_iterations,
                                                           )
     with open(os.path.join(project_directory, SUBMIT_FILENAME), 'w') as f:
         f.write(submit_scripts_content)
