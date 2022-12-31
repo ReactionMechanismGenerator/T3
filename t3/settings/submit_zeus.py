@@ -53,7 +53,7 @@ source /home/$USER/.bashrc
 #CONDA_BASE = $(conda info --base)
 
 #source $CONDA_BASE/etc/profile.d/conda.sh
-source /home/$USER/mambaforge/etc/profile.d/conda.sh
+#source /home/$USER/mambaforge/etc/profile.d/conda.sh
 
 conda activate rmg_env
 
