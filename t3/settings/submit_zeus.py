@@ -57,9 +57,8 @@ source /home/$USER/.bashrc
 
 conda activate rmg_env
 
-cd $rmgpy_path
 
-python-jl rmg.py -n {cpus} input.py{max_iterations}
+python-jl $rmgpy_path/rmg.py -n {cpus} input.py{max_iterations}
 
 touch final_time
 
