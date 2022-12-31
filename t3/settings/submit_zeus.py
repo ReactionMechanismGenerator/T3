@@ -50,11 +50,15 @@ touch initial_time
 
 source /home/$USER/.bashrc
 
-source /home/$USER/mambaforge/etc/profile.d/conda.sh
+CONDA_BASE = $(conda info --base)
+
+source $CONDA_BASE/etc/profile.d/conda.sh
 
 conda activate rmg_env
 
-python-jl /$USER/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
+$rmgpy_path
+
+python-jl rmg.py -n {cpus} input.py{max_iterations}
 
 touch final_time
 
