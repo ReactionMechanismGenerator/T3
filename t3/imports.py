@@ -7,13 +7,13 @@ import sys
 import socket
 
 import t3.settings.settings as t3_settings
+
 if socket.gethostname() == 'zeus.technion.ac.il':
     from t3.settings.submit_zeus import submit_scripts
 elif socket.gethostname() == 'tech-ui02.hep.technion.ac.il':
     from t3.settings.submit_atlas import submit_scripts
 else:
     pass
-
 
 # Common imports where the user can optionally put a modified copy of settings.py or t3_submit.py file under ~/.t3
 home = os.getenv("HOME") or os.path.expanduser("~")
