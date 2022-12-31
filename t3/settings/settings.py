@@ -16,8 +16,8 @@ execution_type = {
 
 servers = {
     'local': {
-        'cluster_soft': 'HTCondor',
-        'cpus': 10,
+        'cluster_soft': 'PBS',
+        'cpus': 16,
         'max mem': 40,  # GB
     },
 }
