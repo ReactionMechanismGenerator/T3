@@ -30,7 +30,7 @@ check_status_command = {'OGE': 'export SGE_ROOT=/opt/sge; /opt/sge/bin/lx24-amd6
 
 submit_command = {'OGE': 'export SGE_ROOT=/opt/sge; /opt/sge/bin/lx24-amd64/qsub',
                   'Slurm': '/usr/bin/sbatch',
-                  'PBS': '/opt/pbs/bin/qstat',
+                  'PBS': '/opt/pbs/bin/qsub',
                   'HTCondor': 'condor_submit',
                   }
 
