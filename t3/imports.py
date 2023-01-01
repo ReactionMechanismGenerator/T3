@@ -6,11 +6,13 @@ import os
 import sys
 import socket
 
-import t3.settings.settings as t3_settings
+
 
 if socket.gethostname() == 'zeus.technion.ac.il':
     from t3.settings.submit_zeus import submit_scripts
+    import t3.settings.settings_zeus as t3_settings
 elif socket.gethostname() == 'tech-ui02.hep.technion.ac.il':
+    import t3.settings.settings_atlas as t3_settings
     from t3.settings.submit_atlas import submit_scripts
 else:
     pass
