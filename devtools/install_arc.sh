@@ -2,19 +2,16 @@
 CONDA_BASE=$(conda info --base)
 source $CONDA_BASE/etc/profile.d/conda.sh
 ###Check if Mamba is installed####
-echo "Determining whether Mamba is installed..."
-if [ $(which mamba) ] >/dev/null 2>&1; then
-    echo "Mamba found!"
-    COMMAND_PKG=mamba
+#Check if mamba/conda is installed
+if [ -x "$(command -v mamba)" ]; then
+	echo "mamba is installed."
+	COMMAND_PKG=mamba
+elif [ -x "$(command -v conda)" ]; then
+	echo "conda is installed."
+	COMMAND_PKG=conda
 else
-    echo "Reverting to Conda..."
-    COMMAND_PKG=conda
+    echo "mamba and conda are not installed. Please download and install mamba or conda - we strongly recommend mamba"
 fi
-
-
-
-
-
 # Temporarily change directory to $HOME to install software
 pushd .
 
@@ -44,7 +41,7 @@ $COMMAND_PKG env update -n rmg_env -f environment.yml
 conda activate rmg_env
 make
 python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
-julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); Pkg.build("ReactionMechanismSimulator");'
+julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanismSimulator;'
 conda deactivate
 
 cd ..
