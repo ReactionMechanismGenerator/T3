@@ -15,7 +15,7 @@ elif socket.gethostname() == 'tech-ui02.hep.technion.ac.il':
     import t3.settings.settings_atlas as t3_settings
     from t3.settings.submit_atlas import submit_scripts
 else:
-    from t3.settings.settings as t3_settings
+    import t3.settings.settings as t3_settings
     from t3.settings.t3_submit import submit_scripts
 
 
