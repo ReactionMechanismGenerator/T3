@@ -18,5 +18,5 @@ ln -sfn $(which python-jl) $(which python)
 echo installing pyrms, RMS, and all required Julia packages...
 python -c "import pyrms; pyrms.install(); import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 echo installing and building packages for Julia
-julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanism Simulator'
+julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanismSimulator'
 conda deactivate

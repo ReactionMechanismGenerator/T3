@@ -40,6 +40,8 @@ echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
 $COMMAND_PKG env update -n rmg_env -f environment.yml
 conda activate rmg_env
 make
+mamba install jill
+jill install --confirm
 python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanismSimulator;'
 conda deactivate
