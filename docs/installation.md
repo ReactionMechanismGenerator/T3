@@ -8,12 +8,21 @@
     as well as on your local desktop / laptop, submitting jobs to the server/s.
 
 
-## Clone and setup path
+## Package Manager and Cloning from Github
 
-- Download and install the 
-  <a href="https://www.anaconda.com/distribution" target="_blank">
-  Anaconda Python Platform</a> for Python 3.7 or higher
-  if you haven't already.
+### Unix-like platforms
+
+- Download the installer using curl or wget or your favorite program download files and run the script.
+ 
+For eg:
+
+    curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+    bash Mambaforge-$(uname)-$(uname -m).sh
+
+or
+
+    wget "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+    bash Mambaforge-$(uname)-$(uname -m).sh
 - Get git if you don't have it already by typing
   <code>sudo apt-get install git</code> in a terminal.
 - Clone T3's repository by typing the following command in the
@@ -24,10 +33,21 @@ $ git clone https://github.com/ReactionMechanismGenerator/T3.git
 
 ---> 100%
 ```
-			  
-- Add T3 to your local path in .bashrc (make sure to change "~/Path/to/T3/" accordingly):
 
-    ``export PYTHONPATH=$PYTHONPATH:~/Path/to/T3/``
+## Setting up Path
+
+- To set up T3 to your local path in .bashrc, you have two options:
+
+	- Option 1 - Terminal Command (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):
+
+		```echo 'PYTHONPATH=$PYTHONPATH:~/Path/to/T3/' >> ~/.bashrc ```
+
+	- Option 2 - Editing .bashrc directly (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):
+
+		- In terminal, enter the command:
+			``` gedit ~/.bashrc ```
+		- Then in the opened file, on a new line, enter the following:
+			``` export PYTHONPATH=$PYTHONPATH:~/Path/to/T3/ ```
 
 
 ## Install dependencies
@@ -49,7 +69,7 @@ $ git clone https://github.com/ReactionMechanismGenerator/T3.git
 <div class="termy">
 
 ```console
-$ conda env create -f environment.yml
+$ mamba env create -f environment.yml
 
 INFO:     Collecting package metadata (repodata.json): done
 INFO:     Solving environment: done
