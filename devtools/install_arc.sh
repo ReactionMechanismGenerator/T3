@@ -37,7 +37,7 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
 
 
-$COMMAND_PKG env update -n rmg_env -f environment.yml
+$COMMAND_PKG env create -f environment.yml
 conda activate rmg_env
 make
 mamba install jill
