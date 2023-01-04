@@ -35,13 +35,24 @@ fi;
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
+export PATH=$PATH:$(pwd)
+echo "export PATH=$PATH:$(pwd)" >> ~/.bashrc 
 
 
-$COMMAND_PKG env create -f environment.yml
+if { conda env list | grep 'rmg_env'; } >/dev/null 2>&1; then
+    $COMMAND_PKG env update -n rmg_env -f environment.yml
+else
+    $COMMAND_PKG env create -f environment.yml
+fi;
+
 conda activate rmg_env
 make
+
+### Install Julia through the Python Package 'Jill' - This provides an up-to-date version of Julia as well as creating symlinks
+### Julia installation version can be chosen with 'jill-{verison} install --confirm'
 mamba install jill
 jill install --confirm
+### Install python + julia connection
 python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanismSimulator;'
 conda deactivate
