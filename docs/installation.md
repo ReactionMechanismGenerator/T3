@@ -11,6 +11,25 @@
 ## Package Manager and Cloning from Github
 
 ### Unix-like platforms
+- Install `curl` or `wget`
+
+	```
+	sudo apt install curl
+	```
+	or
+	```
+	sudo apt install wget
+	```
+
+- Install compiler
+	Ubuntu or Debian
+	```
+	sudo apt install git gcc g++ make
+	```
+	Fedora or Red Hat
+	```
+	sudo dnf install git gcc gcc-c++ make
+	```
 
 - Download the installer using curl or wget or your favorite program download files and run the script.
  
