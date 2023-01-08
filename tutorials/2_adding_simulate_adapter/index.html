@@ -14,8 +14,10 @@
       
         <link rel="canonical" href="https://reactionmechanismgenerator.github.io/T3/tutorials/2_adding_simulate_adapter/">
       
+      
+      
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.4.2, mkdocs-material-8.5.10">
+      <meta name="generator" content="mkdocs-1.4.2, mkdocs-material-9.0.2">
     
     
       
@@ -23,15 +25,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.975780f9.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.f56500e0.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.2505c338.min.css">
-        
-          
-          
-          <meta name="theme-color" content="#4051b5">
-        
       
       
 
@@ -441,10 +438,9 @@
                 
                   
 
-  <a href="https://github.com/ReactionMechanismGenerator/t3/edit/master/docs/tutorials/2_adding_simulate_adapter.md" title="Edit this page" class="md-content__button md-icon">
-    
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
-  </a>
+  
+  
+
 
 
 <h1 id="2-adding-a-simulate-adapter">2. Adding a Simulate Adapter<a class="headerlink" href="#2-adding-a-simulate-adapter" title="Permanent link">&para;</a></h1>
@@ -459,7 +455,7 @@ a minimum, these are required.</p>
 </span><span class="hll"><span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
 </span><span class="hll">
 </span><span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
 
 <span class="sd">    Args:</span>
@@ -508,21 +504,21 @@ a minimum, these are required.</p>
 
 
     <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
 
 
     <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
 
 
     <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Obtain the sensitivity analysis coefficients.</span>
 
 <span class="sd">        Returns:</span>
@@ -532,7 +528,7 @@ a minimum, these are required.</p>
 
 
     <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
 <span class="sd">        and then finds the point of maximum slope.</span>
 
@@ -555,7 +551,7 @@ and the <code>__init__</code> method will be constant for all adapters.</p>
 <span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
 
 <span class="hll"><span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
-</span><span class="hll">    <span class="sd">&quot;&quot;&quot;</span>
+</span><span class="hll"><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span class="hll"><span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
 </span><span class="hll">
 </span><span class="hll"><span class="sd">    Args:</span>
@@ -604,21 +600,21 @@ and the <code>__init__</code> method will be constant for all adapters.</p>
 </span><span class="hll">
 </span><span class="hll">
 </span>    <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
 
 
     <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
 
 
     <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Obtain the sensitivity analysis coefficients.</span>
 
 <span class="sd">        Returns:</span>
@@ -628,7 +624,7 @@ and the <code>__init__</code> method will be constant for all adapters.</p>
 
 
     <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
 <span class="sd">        and then finds the point of maximum slope.</span>
 
@@ -651,7 +647,7 @@ and the <code>__init__</code> method will be constant for all adapters.</p>
 <span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
 
 <span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
 
 <span class="sd">    Args:</span>
@@ -700,21 +696,21 @@ and the <code>__init__</code> method will be constant for all adapters.</p>
 
 
 <span class="hll">    <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll">        <span class="sd">&quot;&quot;&quot;</span>
+</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span class="hll"><span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
 </span><span class="hll"><span class="sd">        &quot;&quot;&quot;</span>
 </span><span class="hll">        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
 </span><span class="hll">
 </span><span class="hll">
 </span><span class="hll">    <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll">        <span class="sd">&quot;&quot;&quot;</span>
+</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span class="hll"><span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
 </span><span class="hll"><span class="sd">        &quot;&quot;&quot;</span>
 </span><span class="hll">        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
 </span><span class="hll">
 </span><span class="hll">
 </span><span class="hll">    <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll">        <span class="sd">&quot;&quot;&quot;</span>
+</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span class="hll"><span class="sd">        Obtain the sensitivity analysis coefficients.</span>
 </span><span class="hll">
 </span><span class="hll"><span class="sd">        Returns:</span>
@@ -724,7 +720,7 @@ and the <code>__init__</code> method will be constant for all adapters.</p>
 </span><span class="hll">
 </span><span class="hll">
 </span><span class="hll">    <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll">        <span class="sd">&quot;&quot;&quot;</span>
+</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span class="hll"><span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
 </span><span class="hll"><span class="sd">        and then finds the point of maximum slope.</span>
 </span><span class="hll">
@@ -746,7 +742,7 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
 <span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
 
 <span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
 
 <span class="sd">    Args:</span>
@@ -795,21 +791,21 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
 
 
     <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
 
 
     <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
 
 
     <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Obtain the sensitivity analysis coefficients.</span>
 
 <span class="sd">        Returns:</span>
@@ -819,7 +815,7 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
 
 
     <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
 <span class="sd">        and then finds the point of maximum slope.</span>
 
@@ -892,10 +888,10 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["instant"], "search": "../../assets/javascripts/workers/search.16e2a7d4.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["instant"], "search": "../../assets/javascripts/workers/search.12658920.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.5a2dcb6a.min.js"></script>
+      <script src="../../assets/javascripts/bundle.5cf534bf.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js"></script>
       
@@ -903,7 +899,6 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
       
         <script src="https://reactionmechanismgenerator.github.io/T3/js/custom.js"></script>
       
-    
     
   </body>
 </html>
