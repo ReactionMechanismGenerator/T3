@@ -1,8 +1,7 @@
 #   Makefile for T3
 
 install:
-	bash devtools/install_arc.sh
-	bash devtools/install_pyrms.sh
+	bash devtools/install_all.sh
 
 install-arc:
 	bash devtools/install_arc.sh
