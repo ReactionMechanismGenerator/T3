@@ -69,7 +69,7 @@ as well as on your local desktop / laptop, submitting jobs to the server/s.
 
 
 ## Install dependencies
-T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order install the necessary dependencies, you can follow either option below.<br>
+T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order to install the necessary dependencies, you can follow either option below.<br>
 ### Option 1:
 - Navigate to the T3 folder, depending on where you cloned it to. 
 - Open a terminal in the T3 folder, and type the following:
@@ -84,7 +84,7 @@ T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order install 
   T3 is installed. Follow the instructions on
   <a href="http://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/anacondaDeveloper.html">
   RMG's documentation</a>. Make sure to install RMG's **developer version**
-  which includes important recent features. 
+  which includes important recent features. Note that the installation instructions suggest Anaconda, but Mambaforge can be used in it's place.
   Be sure to add RMG-Py to your PATH and PYTHONPATH as explained in the instructions.
 - Install the latest version of ARC on the same machine where T3 is installed.
   Follow the instructions on
@@ -92,7 +92,7 @@ T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order install 
   ARC's documentation</a>.
   Make sure to add ARC to your PATH and PYTHONPATH, as well as to define your servers as 
   explained in ARC's documentation.
-- Create the Anaconda environment for T3 by executing the following command in the T3 folder:
+- Create the Anaconda/Mambaforge environment for T3 by executing the following command in the T3 folder:
 
 <div class="termy">
 
