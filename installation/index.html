@@ -269,8 +269,35 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#clone-and-setup-path" class="md-nav__link">
-    Clone and setup path
+  <a href="#note" class="md-nav__link">
+    Note:
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-manager-and-cloning-from-github" class="md-nav__link">
+    Package Manager and Cloning from Github
+  </a>
+  
+    <nav class="md-nav" aria-label="Package Manager and Cloning from Github">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#unix-like-platforms" class="md-nav__link">
+    Unix-like platforms
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setting-up-path" class="md-nav__link">
+    Setting up Path
   </a>
   
 </li>
@@ -279,6 +306,26 @@
   <a href="#install-dependencies" class="md-nav__link">
     Install dependencies
   </a>
+  
+    <nav class="md-nav" aria-label="Install dependencies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1" class="md-nav__link">
+    Option 1:
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2" class="md-nav__link">
+    Option 2:
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -500,8 +547,35 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#clone-and-setup-path" class="md-nav__link">
-    Clone and setup path
+  <a href="#note" class="md-nav__link">
+    Note:
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-manager-and-cloning-from-github" class="md-nav__link">
+    Package Manager and Cloning from Github
+  </a>
+  
+    <nav class="md-nav" aria-label="Package Manager and Cloning from Github">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#unix-like-platforms" class="md-nav__link">
+    Unix-like platforms
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setting-up-path" class="md-nav__link">
+    Setting up Path
   </a>
   
 </li>
@@ -510,6 +584,26 @@
   <a href="#install-dependencies" class="md-nav__link">
     Install dependencies
   </a>
+  
+    <nav class="md-nav" aria-label="Install dependencies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-1" class="md-nav__link">
+    Option 1:
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-2" class="md-nav__link">
+    Option 2:
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -547,42 +641,87 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>T3 was only tested on Linux (Ubuntu_ 18.04.1 LTS) and Mac machines.
+<h3 id="note">Note:<a class="headerlink" href="#note" title="Permanent link">&para;</a></h3>
+<p><br>
+T3 was only tested on Linux (Ubuntu_ 22.04.1 LTS) and Mac machines.
 We don't expect it to work on Windows.</p>
 <p>It can be installed on a server,
 as well as on your local desktop / laptop, submitting jobs to the server/s.</p>
-</div>
-<h2 id="clone-and-setup-path">Clone and setup path<a class="headerlink" href="#clone-and-setup-path" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Download and install the 
-  <a href="https://www.anaconda.com/distribution" target="_blank">
-  Anaconda Python Platform</a> for Python 3.7 or higher
-  if you haven't already.</li>
-<li>Get git if you don't have it already by typing
-  <code>sudo apt-get install git</code> in a terminal.</li>
-<li>Clone T3's repository by typing the following command in the
-  desired folder (e.g., under ~/Code/):</li>
-</ul>
-<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/ReactionMechanismGenerator/T3.git
-
-<span class="go">---&gt; 100%</span>
-</code></pre></div>
-
+<p></br></p>
+<h2 id="package-manager-and-cloning-from-github">Package Manager and Cloning from Github<a class="headerlink" href="#package-manager-and-cloning-from-github" title="Permanent link">&para;</a></h2>
+<h3 id="unix-like-platforms">Unix-like platforms<a class="headerlink" href="#unix-like-platforms" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
-<p>Add T3 to your local path in .bashrc (make sure to change "~/Path/to/T3/" accordingly):</p>
-<p><code>export PYTHONPATH=$PYTHONPATH:~/Path/to/T3/</code></p>
+<p>Install <code>curl</code> or <code>wget</code></p>
+<p><code>sudo apt install curl</code>
+or
+<code>sudo apt install wget</code></p>
+</li>
+<li>
+<p>Install compiler<br>
+    Ubuntu or Debian
+    <code>sudo apt install git gcc g++ make</code>
+    Fedora or Red Hat
+    <code>sudo dnf install git gcc gcc-c++ make</code></p>
+</li>
+<li>
+<p>Download the installer using curl or wget or your favorite program download files and run the script.</p>
+<p>For eg:</p>
+<div class="codehilite"><pre><span></span><code>curl -L -O &quot;https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh&quot;
+bash Mambaforge-$(uname)-$(uname -m).sh
+</code></pre></div>
+
+<p>or</p>
+<div class="codehilite"><pre><span></span><code>wget &quot;https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh&quot;
+bash Mambaforge-$(uname)-$(uname -m).sh
+</code></pre></div>
+
+</li>
+<li>
+<p>Clone T3's repository by typing the following command in the
+  desired folder (e.g., under ~/Code/):</p>
+<p><code>git clone https://github.com/ReactionMechanismGenerator/T3.git</code></p>
+</li>
+</ul>
+<h2 id="setting-up-path">Setting up Path<a class="headerlink" href="#setting-up-path" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p>To set up T3 to your local path in .bashrc, you have two options:</p>
+<ul>
+<li>
+<p>Option 1 - Terminal Command (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):</p>
+<p><code>echo 'PYTHONPATH=$PYTHONPATH:~/Path/to/T3/' &gt;&gt; ~/.bashrc</code></p>
+</li>
+<li>
+<p>Option 2 - Editing .bashrc directly (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):</p>
+<ul>
+<li>In terminal, enter the command:
+    <code>gedit ~/.bashrc</code></li>
+<li>Then in the opened file, on a new line, enter the following:
+    <code>export PYTHONPATH=$PYTHONPATH:~/Path/to/T3/</code></li>
+</ul>
+</li>
+</ul>
 </li>
 </ul>
 <h2 id="install-dependencies">Install dependencies<a class="headerlink" href="#install-dependencies" title="Permanent link">&para;</a></h2>
+<p>T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order to install the necessary dependencies, you can follow either option below.<br></p>
+<h3 id="option-1">Option 1:<a class="headerlink" href="#option-1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Navigate to the T3 folder, depending on where you cloned it to. </li>
+<li>Open a terminal in the T3 folder, and type the following:
+    <code>make install</code>
+    Note: This can take some time to finish.</li>
+<li>You have now installed all the required dependencies.
+</br></li>
+</ul>
+<h3 id="option-2">Option 2:<a class="headerlink" href="#option-2" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Install the latest versions of RMG-Py and the RMG-database on the same machine where 
   T3 is installed. Follow the instructions on
   <a href="http://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/anacondaDeveloper.html">
   RMG's documentation</a>. Make sure to install RMG's <strong>developer version</strong>
-  which includes important recent features. 
+  which includes important recent features. Note that the installation instructions suggest Anaconda, but Mambaforge can be used in it's place.
   Be sure to add RMG-Py to your PATH and PYTHONPATH as explained in the instructions.</li>
 <li>Install the latest version of ARC on the same machine where T3 is installed.
   Follow the instructions on
@@ -590,12 +729,12 @@ as well as on your local desktop / laptop, submitting jobs to the server/s.</p>
   ARC's documentation</a>.
   Make sure to add ARC to your PATH and PYTHONPATH, as well as to define your servers as 
   explained in ARC's documentation.</li>
-<li>Create the Anaconda environment for T3 by executing the following command in the T3 folder:</li>
+<li>Create the Anaconda/Mambaforge environment for T3 by executing the following command in the T3 folder:</li>
 </ul>
 <div class="termy">
 
 
-<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+<div class="codehilite"><pre><span></span><code><span class="gp">$ </span>mamba<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
 
 <span class="go">INFO:     Collecting package metadata (repodata.json): done</span>
 <span class="go">INFO:     Solving environment: done</span>
@@ -628,7 +767,7 @@ as well as on your local desktop / laptop, submitting jobs to the server/s.</p>
 <h2 id="add-t3-aliases-to-your-bashrc">Add T3 aliases to your .bashrc<a class="headerlink" href="#add-t3-aliases-to-your-bashrc" title="Permanent link">&para;</a></h2>
 <p>Some optional yet convenient aliases are listed below
 (make sure to change "/Path/to/T3/" accordingly).
-Add these to your <code>.bashrc</code> file, which can be edited by typing, e.g., <code>nano ~./bashrc</code>:</p>
+Add these to your <code>.bashrc</code> file, which can be edited by typing, e.g., <code>nano ~/.bashrc</code>:</p>
 <div class="codehilite"><pre><span></span><code>export t3_path=$HOME`/Path/to/T3&#39;
 alias t3e=&#39;source activate t3_env&#39;
 alias t3=&#39;python $t3_path/T3.py input.yml&#39;
