@@ -1,100 +1,121 @@
 # Installation
 
-### Note:
-<br>
-T3 was only tested on Linux (Ubuntu_ 22.04.1 LTS) and Mac machines.
+T3 was only tested on *Linux (Ubuntu_ 22.04.1 LTS)* and *MacOS*.
 We don't expect it to work on Windows.
 
-It can be installed on a server,
-as well as on your local desktop / laptop, submitting jobs to the server/s.
-
-</br>
+It can be installed on a server, as well as on your local desktop / laptop, in order to submit jobs to the server/s.
 
 ## Package Manager and Cloning from Github
 
 ### Unix-like platforms
+
 - Install `curl` or `wget`
 
-	```
-	sudo apt install curl
-	```
-	or
-	```
-	sudo apt install wget
-	```
+  ```console
+   sudo apt install curl
+  ```
 
-- Install compiler<br>
-	Ubuntu or Debian
-	```
-	sudo apt install git gcc g++ make
-	```
-	Fedora or Red Hat
-	```
-	sudo dnf install git gcc gcc-c++ make
-	```
+  or
 
-- Download the installer using curl or wget or your favorite program download files and run the script.
-	
-	For eg:
+  ```console
+  sudo apt install wget
+  ```
 
-		curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
-		bash Mambaforge-$(uname)-$(uname -m).sh
+- Install compiler:
+  - Ubuntu or Debian
 
-	or
+    ```console
+    sudo apt install git gcc g++ make
+    ```
 
-		wget "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
-		bash Mambaforge-$(uname)-$(uname -m).sh
+  - Fedora or Red Hat
+
+    ```console
+    sudo dnf install git gcc gcc-c++ make
+    ```
+
+- Download the installer using `curl` or `wget` or your favourite download program and run the script.
+
+  For eg:
+
+  ```console
+  curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+  bash Mambaforge-$(uname)-$(uname -m).sh
+  ```
+
+  or
+
+  ```console
+  wget "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+  bash Mambaforge-$(uname)-$(uname -m).sh
+  ```
 
 - Clone T3's repository by typing the following command in the
   desired folder (e.g., under ~/Code/):
 
-	```
-	git clone https://github.com/ReactionMechanismGenerator/T3.git
-	```
+  ```console
+  git clone https://github.com/ReactionMechanismGenerator/T3.git
+  ```
 
 ## Setting up Path
 
 - To set up T3 to your local path in .bashrc, you have two options:
 
-	- Option 1 - Terminal Command (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):
+### Option 1
 
-		```echo 'PYTHONPATH=$PYTHONPATH:~/Path/to/T3/' >> ~/.bashrc ```
+Terminal Command (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):
 
-	- Option 2 - Editing .bashrc directly (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):
+  ```console
+  echo 'PYTHONPATH=$PYTHONPATH:~/Path/to/T3/' >> ~/.bashrc
+  ```
 
-		- In terminal, enter the command:
-			``` gedit ~/.bashrc ```
-		- Then in the opened file, on a new line, enter the following:
-			``` export PYTHONPATH=$PYTHONPATH:~/Path/to/T3/ ```
+### Option 2
 
+Editing .bashrc directly (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):
+
+- In terminal, enter the command:
+
+  ```console
+  gedit ~/.bashrc
+  ```
+
+- Then in the opened file, on a new line, enter the following:
+
+  ```text
+  export PYTHONPATH=$PYTHONPATH:~/Path/to/T3/
+  ```
 
 ## Install dependencies
-T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order to install the necessary dependencies, you can follow either option below.<br>
-### Option 1:
-- Navigate to the T3 folder, depending on where you cloned it to. 
-- Open a terminal in the T3 folder, and type the following:
-	```
-	make install
-	```
-	Note: This can take some time to finish.
-- You have now installed all the required dependencies.
-</br>
-### Option 2:
-- Install the latest versions of RMG-Py and the RMG-database on the same machine where 
-  T3 is installed. Follow the instructions on
-  <a href="http://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/anacondaDeveloper.html">
-  RMG's documentation</a>. Make sure to install RMG's **developer version**
-  which includes important recent features. Note that the installation instructions suggest Anaconda, but Mambaforge can be used in it's place.
-  Be sure to add RMG-Py to your PATH and PYTHONPATH as explained in the instructions.
-- Install the latest version of ARC on the same machine where T3 is installed.
-  Follow the instructions on
-  <a href="https://reactionmechanismgenerator.github.io/ARC/installation.html">
-  ARC's documentation</a>.
-  Make sure to add ARC to your PATH and PYTHONPATH, as well as to define your servers as 
-  explained in ARC's documentation.
-- Create the Anaconda/Mambaforge environment for T3 by executing the following command in the T3 folder:
 
-<div class="termy">
+T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order to install the necessary dependencies, you can follow either option below.
+
+### Option 1
+
+- Navigate to the T3 folder, depending on where you cloned it to.
+
+- Open a terminal in the T3 folder, and type the following:
+
+  ```console
+  make install
+  ```
+
+  Note: This can take some time to finish.
+
+- You have now installed all the required dependencies.
+
+### Option 2:
+
+- Install the latest versions of RMG-Py and the RMG-database on the same machine where T3 is installed. Follow the instructions on [RMG's Documentation](http://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/anacondaDeveloper.html).
+  - Make sure to install RMG's **developer version** which includes important recent features. Note that the installation instructions suggest Anaconda, but Mambaforge can be used in it's place.
+
+  - Be sure to add RMG-Py to your PATH and PYTHONPATH as explained in the instructions.
+
+- Install the latest version of ARC on the same machine where T3 is installed.
+  Follow the instructions on [ARC's documentation](https://reactionmechanismgenerator.github.io/ARC/installation.html)
+
+  - Make sure to add ARC to your PATH and PYTHONPATH, as well as to define your servers as explained in ARC's documentation.
+  
+- Create the Anaconda/Mambaforge environment for T3 by executing the following command in the T3 folder:
 
 ```console
 $ mamba env create -f environment.yml
@@ -117,23 +138,24 @@ INFO:     #
 INFO:     #     $ conda deactivate
 ```
 
-</div>
-
 - Activate the T3 environment every time before running T3:
 
-    ``conda activate t3_env``
-
+    ``` console
+    conda activate t3_env
+    ```
 
 ## Add T3 aliases to your .bashrc
 
 Some optional yet convenient aliases are listed below
 (make sure to change "/Path/to/T3/" accordingly).
 Add these to your ``.bashrc`` file, which can be edited by typing, e.g., ``nano ~/.bashrc``:
-	
-	export t3_path=$HOME`/Path/to/T3'
-	alias t3e='source activate t3_env'
-	alias t3='python $t3_path/T3.py input.yml'
-	alias t3code='cd $t3_path'
+
+```console
+export t3_path=$HOME`/Path/to/T3'
+alias t3e='source activate t3_env'
+alias t3='python $t3_path/T3.py input.yml'
+alias t3code='cd $t3_path'
+```
 
 Then, after sourcing ``.bashrc`` or restarting the terminal,
 simply typing ``t3e`` will activate the environment,
@@ -147,10 +169,12 @@ a valid T3 input file will execute T3 in that folder.
 The T3 repository is being updated frequently.
 Make sure to update your instance of T3 to enjoy new features
 and get recent bug fixes. To get the most recent developer version,
-execute the following commands (make sure to change ```~/Path/to/T3/``` accordingly):
+execute the following commands (make sure to change ```~/Path/to/T3/``` accordingly:
 
-	cd ~/Path/to/T3/
-	git fetch origin
-	git pull origin main
+```console
+cd ~/Path/to/T3/
+git fetch origin
+git pull origin main
+```
 
 The above will update your **main** branch of T3.
