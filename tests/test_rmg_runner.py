@@ -7,7 +7,7 @@ t3 tests test_rmg_runner module
 
 import os
 from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH
-from t3.runners.rmg_runner import write_submit_script
+from t3.runners.rmg_runner import rmg_job_converged, write_submit_script
 
 
 class TestWriteSubmitScript(object):
@@ -135,6 +135,18 @@ touch final_time
         with open(os.path.join(project_directory_path, "submit.sh"), "r") as submit_file:
             content_submit = submit_file.read()
         assert content_submit == expected_submit
+
+    def test_rmg_job_converged(self):
+        """Test correctly identifying whether an RMG job converged ot not, and if not which error was received."""
+        rmg_folder_1 = os.path.join(DATA_BASE_PATH, 'rmg_convergence', '1_frag_error')
+        converged, error = rmg_job_converged(project_directory=rmg_folder_1)
+        assert not converged
+        assert error == "AttributeError: 'Fragment' object has no attribute 'count_internal_rotors'"
+
+        rmg_folder_2 = os.path.join(DATA_BASE_PATH, 'rmg_convergence', '2_converged')
+        converged, error = rmg_job_converged(project_directory=rmg_folder_2)
+        assert converged
+        assert error is None
 
 
 def teardown_module():

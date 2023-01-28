@@ -1,0 +1,36 @@
+:root:Removing old /home/alon/runs/T3/xsc2101/iteration_2/RMG/RMG_backup.log
+:root:Moving /home/alon/runs/T3/xsc2101/iteration_2/RMG/RMG.log to /home/alon/runs/T3/xsc2101/iteration_2/RMG/RMG_backup.log
+
+/home/alon/anaconda3/envs/rmg_env/lib/python3.7/site-packages/scipy/optimize/optimize.py:1978: LinAlgWarning: Ill-conditioned matrix (rcond=9.79183e-18): result may not be accurate.
+  fu = func(x, *args)
+Traceback (most recent call last):
+  File "/home/alon/anaconda3/envs/rmg_env/lib/python3.7/site-packages/julia/pseudo_python_cli.py", line 308, in main
+    python(**vars(ns))
+  File "/home/alon/anaconda3/envs/rmg_env/lib/python3.7/site-packages/julia/pseudo_python_cli.py", line 59, in python
+    scope = runpy.run_path(script, run_name="__main__")
+  File "/home/alon/anaconda3/envs/rmg_env/lib/python3.7/runpy.py", line 263, in run_path
+    pkg_name=pkg_name, script_name=fname)
+  File "/home/alon/anaconda3/envs/rmg_env/lib/python3.7/runpy.py", line 96, in _run_module_code
+    mod_name, mod_spec, pkg_name, script_name)
+  File "/home/alon/anaconda3/envs/rmg_env/lib/python3.7/runpy.py", line 85, in _run_code
+    exec(code, run_globals)
+  File "/home/alon/Code/RMG-Py/rmg.py", line 118, in <module>
+    main()
+  File "/home/alon/Code/RMG-Py/rmg.py", line 112, in main
+    rmg.execute(**kwargs)
+  File "/home/alon/Code/RMG-Py/rmgpy/rmg/main.py", line 1026, in execute
+    trimolecular_react=self.trimolecular_react)
+  File "/home/alon/Code/RMG-Py/rmgpy/rmg/model.py", line 709, in enlarge
+    self.update_unimolecular_reaction_networks()
+  File "/home/alon/Code/RMG-Py/rmgpy/rmg/model.py", line 1918, in update_unimolecular_reaction_networks
+    network.update(self, self.pressure_dependence)
+  File "/home/alon/Code/RMG-Py/rmgpy/rmg/pdep.py", line 808, in update
+    spec.generate_statmech()
+  File "rmgpy/species.py", line 821, in rmgpy.species.Species.generate_statmech
+  File "/home/alon/Code/RMG-Py/rmgpy/data/statmech.py", line 679, in get_statmech_data
+    statmech_model = self.get_statmech_data_from_groups(molecule, thermo_model)
+  File "/home/alon/Code/RMG-Py/rmgpy/data/statmech.py", line 713, in get_statmech_data_from_groups
+    return self.groups['groups'].get_statmech_data(molecule, thermo_model)
+  File "/home/alon/Code/RMG-Py/rmgpy/data/statmech.py", line 384, in get_statmech_data
+    num_rotors = molecule.count_internal_rotors()
+AttributeError: 'Fragment' object has no attribute 'count_internal_rotors'
