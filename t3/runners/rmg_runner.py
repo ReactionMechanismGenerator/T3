@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 CPUS = 16  # A recommended value for RMG when running on a server (not incore)
 MEM = settings['rmg_initial_memory'] * 1000  # MB
 SLEEP_TIME = 6  # hours
+MAX_RMG_RUNS_PER_ITERATION = 5
 
 RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
 
@@ -281,8 +282,11 @@ def rmg_runner(rmg_input_file_path: str,
                                                    )
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':
+        runner_counter = 0
+        rmg_errors = list()
         converged, restart_rmg, run_rmg = False, False, True
         while run_rmg:
+            runner_counter += 1
             project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
             job_id = run_rmg_in_local_queue(project_directory=project_directory,
                                             logger=logger,
@@ -295,11 +299,17 @@ def rmg_runner(rmg_input_file_path: str,
             while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
                 time.sleep(120)
             converged, error = rmg_job_converged(project_directory=project_directory)
+            rmg_errors.append(error)
             if not converged:
+                if error is not None:
+                    logger.info(f'RMG crashed with the following error:\n{error}')
                 new_memory = get_new_memory_for_an_rmg_run(job_log_path,
                                                            logger=logger,
                                                            )
-            run_rmg = not converged and new_memory is not None
+            run_rmg = not converged \
+                      and new_memory is not None \
+                      and runner_counter < MAX_RMG_RUNS_PER_ITERATION \
+                      and not(len(rmg_errors) >= 2 and error is not None and error == rmg_errors[-2])
             restart_rmg = True
         return not converged
     else:
