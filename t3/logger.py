@@ -51,8 +51,8 @@ class Logger(object):
         if os.path.isfile(self.log_file):
             if not os.path.isdir(os.path.join(os.path.dirname(self.log_file), 'log_archive')):
                 os.mkdir(os.path.join(os.path.dirname(self.log_file), 'log_archive'))
-            local_time = datetime.datetime.now().strftime("%H%M%S_%b%d_%Y")
-            log_backup_name = f't3.{local_time}].log'
+            local_time = datetime.datetime.now().strftime("%b%d_%Y_%H:%M:%S")
+            log_backup_name = f't3.{local_time}.log'
             shutil.copy(self.log_file, os.path.join(os.path.dirname(self.log_file), 'log_archive', log_backup_name))
             os.remove(self.log_file)
 
