@@ -5,6 +5,7 @@ Should be executed locally on the head node using the t3 environment.
 
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
+import datetime
 import os
 import time
 
@@ -300,6 +301,10 @@ def rmg_runner(rmg_input_file_path: str,
             while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
                 time.sleep(120)
             converged, error = rmg_job_converged(project_directory=project_directory)
+            err_path = os.path.join(project_directory, 'err.txt')
+            if os.path.isfile(err_path):
+                os.rename(err_path, os.path.join(project_directory,
+                                                 f'err_{datetime.datetime.now().strftime("%b%d_%Y_%H:%M:%S")}.txt'))
             rmg_errors.append(error)
             if not converged:
                 if error is not None:
