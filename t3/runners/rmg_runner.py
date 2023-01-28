@@ -225,7 +225,8 @@ def run_rmg_in_local_queue(project_directory: str,
     rmg_input_path = os.path.join(project_directory, 'input.py')
     with open(rmg_input_path, 'r') as f:
         content = f.read()
-    if restart_rmg and restart_string not in content and os.path.isdir(os.path.join(project_directory, 'seed')):
+    seed_path = os.path.join(project_directory, 'seed')
+    if restart_rmg and restart_string not in content and os.path.isdir(seed_path) and os.listdir(seed_path):
         if os.path.isfile(os.path.join(project_directory, 'restart_from_seed.py')):
             if os.path.isfile(os.path.join(project_directory, 'input.py')):
                 os.rename(src=os.path.join(project_directory, 'input.py'),
@@ -310,7 +311,8 @@ def rmg_runner(rmg_input_file_path: str,
                       and new_memory is not None \
                       and runner_counter < MAX_RMG_RUNS_PER_ITERATION \
                       and not(len(rmg_errors) >= 2 and error is not None and error == rmg_errors[-2])
-            restart_rmg = True
+            restart_rmg = False if error is not None and 'Could not find one or more of the required files/directories ' \
+                                                         'for restarting from a seed mechanism' in error else True
         return not converged
     else:
         logger.warning(f'Expected wither "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'
