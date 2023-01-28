@@ -1,0 +1,248 @@
+Global RMG Settings:
+   database.directory   = /home/alon/Code/RMG-database/input (Default, relative to RMG-Py source code)
+   test_data.directory  = /home/alon/Code/RMG-Py/rmgpy/test_data (Default, relative to RMG-Py source code)
+RMG execution initiated at Sat Jan 28 05:02:15 2023
+
+#########################################################
+# RMG-Py - Reaction Mechanism Generator in Python       #
+# Version: 3.1.0                                        #
+# Authors: RMG Developers (rmg_dev@mit.edu)             #
+# P.I.s:   William H. Green (whgreen@mit.edu)           #
+#          Richard H. West (r.west@neu.edu)             #
+# Website: http://reactionmechanismgenerator.github.io/ #
+#########################################################
+
+The current git HEAD for RMG-Py is:
+	b'2cdc2ea7cd53e6a09648c6c50bc936812207fc81'
+	b'Tue Dec 13 18:22:41 2022 -0800'
+
+The current git HEAD for RMG-database is:
+	b'c817bf8fd3620a208f3a650ca84626b9dcd6d6cf'
+	b'Mon Jan 2 15:35:01 2023 +0200'
+
+Reading input file "/home/alon/runs/T3/xsc2101/iteration_2/RMG/input.py"...
+restartFromSeed(path='seed')
+
+database(
+    thermoLibraries=['/home/alon/runs/T3/xsc2101/Libraries/dodecane.py', 'primaryThermoLibrary', 'BurkeH2O2', 'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'Spiekermann_refining_elementary_reactions', 'CurranPentane', 'C3', 'CBS_QB3_1dHR', 'FFCM1(-)', 'JetSurF2.0', 's3_5_7_ane', 'naphthalene_H', 'USC-Mech-ii', 'heavy_oil_ccsdtf12_1dHR', 'bio_oil', 'vinylCPD_H', 'Klippenstein_Glarborg2016', 'Fulvene_H', 'Chernov', 'C10H11', 'CH'],
+    reactionLibraries=['primaryH2O2', 'C2H2_init', 'C2H4+O_Klipp2017', 'CurranPentane', 'FFCM1(-)', 'NOx2018', 'JetSurF2.0', 'Klippenstein_Glarborg2016', 'C10H11', 'C12H11_pdep', 'Lai_Hexylbenzene', '1989_Stewart_2CH3_to_C2H5_H', '2001_Tokmakov_H_Toluene_to_CH3_Benzene', '2003_Miller_Propargyl_Recomb_High_P', '2005_Senosiain_OH_C2H2', 'kislovB', 'c-C5H5_CH3_Sharma', 'fascella', '2006_Joshi_OH_CO', '2009_Sharma_C5H5_CH3_highP', '2015_Buras_C2H3_C4H6_highP', 'C3', 'Methylformate', 'C6H5_C4H4_Mebel', 'vinylCPD_H', 'Mebel_Naphthyl', 'Mebel_C6H5_C2H2', 'Fulvene_H'],
+    transportLibraries=['OneDMinN2', 'PrimaryTransportLibrary', 'NOx2018', 'GRI-Mech'],
+    seedMechanisms=[],
+    kineticsDepositories='default',
+    kineticsFamilies='default',
+    kineticsEstimator='rate rules',
+)
+
+species(
+    label='fuel',
+    reactive=True,
+    structure=SMILES('CCCCCCCCCCCC'),
+)
+
+species(
+    label='N2',
+    reactive=False,
+    structure=SMILES('N#N'),
+)
+
+simpleReactor(
+    temperature=[(823.0, 'K'), (1173.0, 'K')],
+    pressure=[(1.0, 'bar'), (50.0, 'bar')],
+    initialMoleFractions={
+        'N2': 0.95,
+        'fuel': 0.05,
+    },
+    terminationRateRatio=0.05,
+    nSims=12,
+)
+
+model(
+    toleranceMoveToCore=0.1,
+    toleranceInterruptSimulation=0.1,
+    filterReactions=True,
+    filterThreshold=100000000.0,
+    maxNumObjsPerIter=1,
+    terminateAtMaxObjects=False,
+)
+
+simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)
+
+pressureDependence(
+    method='modified strong collision',
+    maximumGrainSize=(2.0, 'kJ/mol'),
+    minimumNumberOfGrains=250,
+    temperatures=(300, 2000, 'K', 10),
+    pressures=(0.01, 100, 'bar', 10),
+    interpolation=('Chebyshev', 6, 4),
+    maximumAtoms=16,
+)
+
+options(
+    name='Seed',
+    generateSeedEachIteration=True,
+    saveSeedToDatabase=False,
+    units='si',
+    generateOutputHTML=True,
+    generatePlots=False,
+    saveSimulationProfiles=False,
+    verboseComments=False,
+    saveEdgeSpecies=False,
+    keepIrreversible=False,
+    trimolecularProductReversible=True,
+    wallTime='00:00:00:00',
+    saveSeedModulus=-1,
+)
+
+generatedSpeciesConstraints(
+    allowed=['input species', 'seed mechanisms', 'reaction libraries'],
+    maximumCarbonAtoms=13,
+    maximumOxygenAtoms=0,
+    maximumNitrogenAtoms=0,
+    maximumSiliconAtoms=0,
+    maximumSulfurAtoms=0,
+    maximumHeavyAtoms=13,
+    maximumRadicalElectrons=2,
+    maximumSingletCarbenes=1,
+    maximumCarbeneRadicals=0,
+    allowSingletO2=True,
+)
+
+    CCCCC=C[CH]CCCCC(21847) + S5XC12H25(25) <=> CCCCCC=CCCCCC(1568) + CCCCCC=CCCCCC(1568)
+    [CH2]CCCCC=CCCCCC(12923) + S5XC12H25(25) <=> CCCCCC=CCCCCC(1568) + CCCCCC=CCCCCC(1568)
+    CCCCC[C]=CCCCCC(23984) + S5XC12H25(25) <=> CCCCCC=CCCCCC(1568) + CCCCCC=CCCCCC(1568)
+
+After model enlargement:
+    The model core has 189 species and 2312 reactions
+    The model edge has 23797 species and 180809 reactions
+
+
+Saving current model core to Chemkin file...
+Chemkin file contains 2319 reactions.
+Saving annotated version of Chemkin file...
+Chemkin file contains 2319 reactions.
+Saving current model core to HTML file...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:01:27:31
+    Memory used: 5496.09 MB
+
+Conducting simulation of reaction system 1...
+At time 1.6326e-03 s, species [CH2]C=[C]C=CC(17166) at 0.10017972478195425 exceeded the minimum rate for simulation interruption of 0.1
+At time 1.6326e-03 s, species [CH2]C=[C]C=CC(17166) at rate ratio 0.10017972478195425 exceeded the minimum rate for moving to model core of 0.1
+terminating simulation due to interrupt...
+conditions choosen for reactor 0 were: T = 879.4628188641341 K, P = 1.5511445401910993 bar, 
+
+
+Adding species [CH2]C=[C]C=CC(17166) to model core
+Updating 0 modified unimolecular reaction networks (out of 30)...
+
+
+Summary of Model Enlargement
+---------------------------------
+Added 1 new core species
+    [CH2]C=[C]C=CC(17166)
+Created 0 new edge species
+Moved 6 reactions from edge to core
+    C3H3(122) + C3H5-A(42) => [CH2]C=[C]C=CC(17166)
+    [CH2]C=CC=C[CH2](170) => [CH2]C=[C]C=CC(17166)
+    cC6H8-13(171) => [CH2]C=[C]C=CC(17166)
+    C=CC1C=CC1(172) => [CH2]C=[C]C=CC(17166)
+    C6H8(173) => [CH2]C=[C]C=CC(17166)
+    C=C=CC=CC(174) => [CH2]C=[C]C=CC(17166)
+Added 0 new core reactions
+Created 0 new edge reactions
+
+After model enlargement:
+    The model core has 190 species and 2318 reactions
+    The model edge has 23796 species and 180803 reactions
+
+
+At time 3.8270e+01 s, PDepNetwork #30 at 0.10052845086997901 exceeded the minimum rate for simulation interruption of 0.1
+Reached max number of objects...preparing to terminate
+At time 3.8270e+01 s, PDepNetwork #30 at 0.10052845086997901 exceeded the minimum rate for exploring of 0.1
+terminating simulation due to interrupt...
+
+For reaction generation 16 processes are used.
+For reaction CH2(S)(216) + [CH2]C=[C]C=C(5758) <=> [CH2]C=[C]C=CC(17166) Ea raised from -3.9 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) <=> CC1C=C=CC1(23986), Ea raised from 62.6 to 65.1 kJ/mol to match endothermicity of reaction.
+For reaction H(20) + C=C[C]=CC=C(17169) <=> [CH2]C=[C]C=CC(17166) Ea raised from -2.0 to 0 kJ/mol.
+For reaction CH2(200) + [CH]=C=C[CH]C(23991) <=> [CH2]C=[C]C=CC(17166) Ea raised from -1.5 to 0 kJ/mol.
+For reaction [CH]C(1366) + [CH]=C=C[CH2](23994) <=> [CH2]C=[C]C=CC(17166) Ea raised from -1.5 to 0 kJ/mol.
+For reaction NC3H7(3) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)CCC(24003) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C2H5(12) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)CC(24012) Ea raised from -1.5 to 0 kJ/mol.
+For reaction CH3(13) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C)C=CC(24015) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C3H6(14) + [CH2]C=[C]C=CC(17166) <=> C3H5-S(274) + [CH2]C=CC=CC(20380), Ea raised from 59.5 to 59.8 kJ/mol to match endothermicity of reaction.
+For reaction H2(21) + [CH2]C=[C]C=CC(17166) <=> H(20) + C=C[C]=CCC(24001), Ea raised from 114.4 to 115.8 kJ/mol to match endothermicity of reaction.
+For reaction C3H5-A(42) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)CC=C(24190) Ea raised from -1.5 to 0 kJ/mol.
+For reaction IC3H7(60) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)C(C)C(24399) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C4H71-3(64) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)C(C)C=C(24427) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C4H71-3(64) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)CC=CC(24430) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C1=CCC1(69) + [CH2]C=[C]C=CC(17166) <=> [C]1=CCC1(3222) + [CH2]C=CC=CC(20380), Ea raised from 53.1 to 53.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + SAXC6H11(74) <=> [CH2]C=C(C=CC)C(C=C)CCC(24588) Ea raised from -1.5 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + SAXC6H11(74) <=> [CH2]C=C(C=CC)CC=CCCC(24591) Ea raised from -1.5 to 0 kJ/mol.
+For reaction CC1C=CC1(88) + [CH2]C=[C]C=CC(17166) <=> CC1[C]=CC1(5422) + [CH2]C=CC=CC(20380), Ea raised from 53.1 to 53.5 kJ/mol to match endothermicity of reaction.
+For reaction CC1C=CC1(88) + [CH2]C=[C]C=CC(17166) <=> CC1C=[C]C1(5423) + [CH2]C=CC=CC(20380), Ea raised from 53.1 to 53.5 kJ/mol to match endothermicity of reaction.
+For reaction CdCCdCCJ(92) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)CC=CC=C(24722) Ea raised from -1.5 to 0 kJ/mol.
+For reaction CdCCdCCJ(92) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)C(C=C)C=C(24725) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C5H7(93) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)C1C=CCC1(24728) Ea raised from -1.5 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + C=CCC1C=CCC1(97) <=> [CH2]C=CC=CC(20380) + C=CCC1[C]=CCC1(7278), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CCC1C=CCC1(97) <=> [CH2]C=CC=CC(20380) + C=CCC1C=[C]CC1(7279), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction C5H5(102) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)C1C=CC=C1(24798) Ea raised from -1.5 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + C=CCC1C=CC=C1(104) <=> [CH2]C=CC=CC(20380) + C=CCC1[C]=CC=C1(8382), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CCC1=CC=CC1(105) <=> [CH2]C=CC=CC(20380) + C=CCC1=CC=[C]C1(8729), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CCC1=CCC=C1(106) <=> [CH2]C=CC=CC(20380) + C=CCC1=[C]CC=C1(9216), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CCC1=CCC=C1(106) <=> [CH2]C=CC=CC(20380) + C=CCC1=CC[C]=C1(9217), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CC=C2)C=C1(108) <=> [CH2]C=CC=CC(20380) + [C]1=CC=CC1C1C=CC=C1(9730), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2C=CC=C2)=C1(110) <=> [CH2]C=CC=CC(20380) + [C]1=CC=CC1C1=CC=CC1(9782), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2C=CC=C2)=C1(110) <=> [CH2]C=CC=CC(20380) + [C]1=CC=C(C2C=CC=C2)C1(9783), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2=CC=CC2)=C1(112) <=> [CH2]C=CC=CC(20380) + [C]1=CC=C(C2=CC=CC2)C1(10457), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2=CCC=C2)=C1(113) <=> [CH2]C=CC=CC(20380) + [C]1=C(C2=CC=CC2)C=CC1(10541), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2=CCC=C2)=C1(113) <=> [CH2]C=CC=CC(20380) + [C]1=CC=C(C2=CCC=C2)C1(10542), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2=CCC=C2)=C1(113) <=> [CH2]C=CC=CC(20380) + [C]1=CC(C2=CC=CC2)=CC1(10543), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2=CCC=C2)=CC1(114) <=> [CH2]C=CC=CC(20380) + [C]1=C(C2=CCC=C2)C=CC1(10849), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2=CCC=C2)=CC1(114) <=> [CH2]C=CC=CC(20380) + [C]1=CC(C2=CCC=C2)=CC1(10850), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2=CCC=C2)C=C1(116) <=> [CH2]C=CC=CC(20380) + [C]1=C(C2C=CC=C2)C=CC1(10920), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2=CCC=C2)C=C1(116) <=> [CH2]C=CC=CC(20380) + [C]1=CC=CC1C1=CCC=C1(10921), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2=CCC=C2)C=C1(116) <=> [CH2]C=CC=CC(20380) + [C]1=CC(C2C=CC=C2)=CC1(10922), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=CC=CC(20380) + [CH]1C=CC(C2=CCC=C2)=C1(10540) <=> [CH2]C=[C]C=CC(17166) + C1=CC(=C2C=CCC2)C=C1(117), Ea raised from 102.6 to 102.7 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(=C2C=CCC2)C=C1(117) <=> [CH2]C=CC=CC(20380) + [C]1=CC(=C2C=CC=C2)CC1(11029), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(=C2CC=CC2)C=C1(119) <=> [CH2]C=CC=CC(20380) + [C]1=CCC(=C2C=CC=C2)C1(11163), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction C3H3(122) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=C=C)C=CC(24839) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C3H3(122) + [CH2]C=[C]C=CC(17166) <=> C#CCC(C=CC)=C[CH2](24842) Ea raised from -1.5 to 0 kJ/mol.
+For reaction C=C1CCC1=C(127) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)C[C]1CCC1=C(24884) Ea raised from -3.2 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC=CCC1C=CC=C1(130) <=> [CH2]C=CC=CC(20380) + C=CC=CCC1[C]=CC=C1(12673), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC=CCC1=CC=CC1(131) <=> [CH2]C=CC=CC(20380) + C=CC=CCC1=CC=[C]C1(12834), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC=CCC1=CCC=C1(134) <=> [CH2]C=CC=CC(20380) + C=CC=CCC1=[C]CC=C1(13124), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC=CCC1=CCC=C1(134) <=> [CH2]C=CC=CC(20380) + C=CC=CCC1=CC[C]=C1(13126), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC(C)C1C=CC=C1(136) <=> [CH2]C=CC=CC(20380) + C=CC(C)C1[C]=CC=C1(13304), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC(C)C1=CC=CC1(137) <=> [CH2]C=CC=CC(20380) + C=CC(C)C1=CC=[C]C1(13454), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC(C)C1=CC=CC1(137) <=> C=C[C]=CCC(24001) + C=CC(C)[C]1C=CC=C1(13303), Ea raised from 31.8 to 32.3 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC(C)C1=CCC=C1(138) <=> [CH2]C=CC=CC(20380) + C=CC(C)C1=[C]CC=C1(13669), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC(C)C1=CCC=C1(138) <=> [CH2]C=CC=CC(20380) + C=CC(C)C1=CC[C]=C1(13671), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=CC(C)C1=CCC=C1(138) <=> C=C[C]=CCC(24001) + C=CC(C)[C]1C=CC=C1(13303), Ea raised from 30.4 to 30.8 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + CC=CCC1C=CC=C1(143) <=> [CH2]C=CC=CC(20380) + CC=CCC1[C]=CC=C1(14887), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + CC=CCC1=CC=CC1(144) <=> [CH2]C=CC=CC(20380) + CC=CCC1=CC=[C]C1(15115), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + CC=CCC1=CCC=C1(145) <=> [CH2]C=CC=CC(20380) + CC=CCC1=[C]CC=C1(15351), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + CC=CCC1=CCC=C1(145) <=> [CH2]C=CC=CC(20380) + CC=CCC1=CC[C]=C1(15353), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)C=C1(151) <=> [CH2]C=CC=CC(20380) + [C]1=CCCC1C1C=CC=C1(16991), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)C=C1(151) <=> [CH2]C=CC=CC(20380) + [C]1=CC=CC1C1C=CCC1(16992), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)C=C1(151) <=> [CH2]C=CC=CC(20380) + [C]1=CC(C2C=CC=C2)CC1(16993), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2C=CCC2)=C1(153) <=> [CH2]C=CC=CC(20380) + [C]1=CCCC1C1=CC=CC1(17101), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2C=CCC2)=C1(153) <=> [CH2]C=CC=CC(20380) + [C]1=CC(C2=CC=CC2)CC1(17102), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2C=CCC2)=C1(153) <=> [CH2]C=CC=CC(20380) + [C]1=CC=C(C2C=CCC2)C1(17103), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CCC(C2C=CCC2)=C1(153) <=> C=C[C]=CCC(24001) + C1=C[C](C2C=CCC2)C=C1(11043), Ea raised from 31.8 to 32.3 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)=CC1(154) <=> [CH2]C=CC=CC(20380) + [C]1=CCCC1C1=CCC=C1(17147), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)=CC1(154) <=> [CH2]C=CC=CC(20380) + [C]1=C(C2C=CCC2)C=CC1(17148), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)=CC1(154) <=> [CH2]C=CC=CC(20380) + [C]1=CC(C2=CCC=C2)CC1(17149), Ea raised from 58.2 to 58.5 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)=CC1(154) <=> [CH2]C=CC=CC(20380) + [C]1=CC(C2C=CCC2)=CC1(17150), Ea raised from 71.5 to 71.9 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C1=CC(C2C=CCC2)=CC1(154) <=> C=C[C]=CCC(24001) + C1=C[C](C2C=CCC2)C=C1(11043), Ea raised from 30.4 to 30.8 kJ/mol to match endothermicity of reaction.
+For reaction [CH2]C=[C]C=CC(17166) + C=C1CCC1=CC(166) <=> [CH2]C=C(C=CC)C[C]1CCC1=CC(25088) Ea raised from -3.2 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + C=C1CC(C)C1=C(19712) <=> [CH2]C=C(C=CC)C[C]1C(=C)CC1C(25238) Ea raised from -3.2 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + C=C1CC(C)C1=C(19712) <=> [CH2]C=C(C=CC)C[C]1CC(C)C1=C(25240) Ea raised from -3.2 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)CC=[C]C=CC(25274) Ea raised from -1.5 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C(C=CC)C(C=CC)=C[CH2](25275) Ea raised from -1.5 to 0 kJ/mol.
+For reaction [CH2]C=[C]C=CC(17166) + [CH2]C=[C]C=CC(17166) <=> [CH2]C=C=CC(C)C(C=CC)=C[CH2](25277) Ea raised from -1.5 to 0 kJ/mol.
+Generating thermo for new species...
+Updating 1 modified unimolecular reaction networks (out of 31)...
+Updating PDepNetwork #31
+Warning: Statmech node 'C_R0' and all its parents have data = None
+Warning: Statmech node 'C_R2' and all its parents have data = None

@@ -5,6 +5,7 @@ Should be executed locally on the head node using the t3 environment.
 
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
+import datetime
 import os
 import time
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 CPUS = 16  # A recommended value for RMG when running on a server (not incore)
 MEM = settings['rmg_initial_memory'] * 1000  # MB
 SLEEP_TIME = 6  # hours
+MAX_RMG_RUNS_PER_ITERATION = 5
 
 RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
 
@@ -122,7 +124,7 @@ def check_running_jobs_ids(cluster_soft: str) -> List[str]:
     return running_job_ids
 
 
-def rmg_job_converged(project_directory: str) -> bool:
+def rmg_job_converged(project_directory: str) -> Tuple[bool, Optional[str]]:
     """
     Determine whether an RMG job has converged.
 
@@ -130,10 +132,13 @@ def rmg_job_converged(project_directory: str) -> bool:
         project_directory (str): The job (folder) name.
 
     Returns:
-        bool: Whether this RMG run has converged.
+        Tuple[bool, Optional[str]]:
+            - bool: Whether this RMG run has converged.
+            - Optional[str]: The error due to which this RMG run crashed.
     """
-    rmg_converged = False
+    rmg_converged, error = False, None
     rmg_log_path = os.path.join(project_directory, 'RMG.log')
+    rmg_err_path = os.path.join(project_directory, 'err.txt')
     if os.path.isfile(rmg_log_path):
         with open(rmg_log_path, 'r') as f:
             lines = f.readlines()
@@ -142,7 +147,14 @@ def rmg_job_converged(project_directory: str) -> bool:
                 if 'MODEL GENERATION COMPLETED' in lines[len_lines - 1 - i]:
                     rmg_converged = True
                     break
-    return rmg_converged
+    if not rmg_converged and os.path.isfile(rmg_err_path):
+        with open(rmg_err_path, 'r') as f:
+            lines = f.readlines()
+        for line in lines[::-1]:
+            if 'Error' in line:
+                error = line.strip()
+                break
+    return rmg_converged, error
 
 
 def run_rmg_incore(rmg_input_file_path: str,
@@ -214,7 +226,8 @@ def run_rmg_in_local_queue(project_directory: str,
     rmg_input_path = os.path.join(project_directory, 'input.py')
     with open(rmg_input_path, 'r') as f:
         content = f.read()
-    if restart_rmg and restart_string not in content and os.path.isdir(os.path.join(project_directory, 'seed')):
+    seed_path = os.path.join(project_directory, 'seed')
+    if restart_rmg and restart_string not in content and os.path.isdir(seed_path) and os.listdir(seed_path):
         if os.path.isfile(os.path.join(project_directory, 'restart_from_seed.py')):
             if os.path.isfile(os.path.join(project_directory, 'input.py')):
                 os.rename(src=os.path.join(project_directory, 'input.py'),
@@ -271,8 +284,11 @@ def rmg_runner(rmg_input_file_path: str,
                                                    )
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':
+        runner_counter = 0
+        rmg_errors = list()
         converged, restart_rmg, run_rmg = False, False, True
         while run_rmg:
+            runner_counter += 1
             project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
             job_id = run_rmg_in_local_queue(project_directory=project_directory,
                                             logger=logger,
@@ -284,13 +300,24 @@ def rmg_runner(rmg_input_file_path: str,
                                             )
             while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
                 time.sleep(120)
-            converged = rmg_job_converged(project_directory=project_directory)
+            converged, error = rmg_job_converged(project_directory=project_directory)
+            err_path = os.path.join(project_directory, 'err.txt')
+            if os.path.isfile(err_path):
+                os.rename(err_path, os.path.join(project_directory,
+                                                 f'err_{datetime.datetime.now().strftime("%b%d_%Y_%H:%M:%S")}.txt'))
+            rmg_errors.append(error)
             if not converged:
+                if error is not None:
+                    logger.info(f'RMG crashed with the following error:\n{error}')
                 new_memory = get_new_memory_for_an_rmg_run(job_log_path,
                                                            logger=logger,
                                                            )
-            run_rmg = not converged and new_memory is not None
-            restart_rmg = True
+            run_rmg = not converged \
+                      and new_memory is not None \
+                      and runner_counter < MAX_RMG_RUNS_PER_ITERATION \
+                      and not(len(rmg_errors) >= 2 and error is not None and error == rmg_errors[-2])
+            restart_rmg = False if error is not None and 'Could not find one or more of the required files/directories ' \
+                                                         'for restarting from a seed mechanism' in error else True
         return not converged
     else:
         logger.warning(f'Expected wither "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'

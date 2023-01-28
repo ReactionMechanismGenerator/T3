@@ -1,0 +1,6 @@
+/home/alon/anaconda3/envs/rmg_env/lib/python3.7/site-packages/scipy/optimize/optimize.py:1978: LinAlgWarning: Ill-conditioned matrix (rcond=9.79183e-18): result may not be accurate.
+  fu = func(x, *args)
+/home/alon/Code/RMG-Py/rmgpy/rmg/main.py:907: RuntimeWarning: invalid value encountered in true_divide
+  conditions=self.rmg_memories[index].get_cond()
+/home/alon/Code/RMG-Py/rmgpy/rmg/main.py:907: RuntimeWarning: divide by zero encountered in true_divide
+  conditions=self.rmg_memories[index].get_cond()

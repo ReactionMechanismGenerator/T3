@@ -1,0 +1,230 @@
+Global RMG Settings:
+   database.directory   = /home/alon/Code/RMG-database/input (Default, relative to RMG-Py source code)
+   test_data.directory  = /home/alon/Code/RMG-Py/rmgpy/test_data (Default, relative to RMG-Py source code)
+RMG execution initiated at Sat Jan 21 16:14:10 2023
+
+#########################################################
+# RMG-Py - Reaction Mechanism Generator in Python       #
+# Version: 3.1.0                                        #
+# Authors: RMG Developers (rmg_dev@mit.edu)             #
+# P.I.s:   William H. Green (whgreen@mit.edu)           #
+#          Richard H. West (r.west@neu.edu)             #
+# Website: http://reactionmechanismgenerator.github.io/ #
+#########################################################
+
+The current git HEAD for RMG-Py is:
+	b'2cdc2ea7cd53e6a09648c6c50bc936812207fc81'
+	b'Tue Dec 13 18:22:41 2022 -0800'
+
+The current git HEAD for RMG-database is:
+	b'c817bf8fd3620a208f3a650ca84626b9dcd6d6cf'
+	b'Mon Jan 2 15:35:01 2023 +0200'
+
+Reading input file "/home/alon/runs/T3/xsc2101/iteration_1/RMG/input.py"...
+database(
+    thermoLibraries=['primaryThermoLibrary', 'BurkeH2O2', 'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'Spiekermann_refining_elementary_reactions', 'CurranPentane', 'C3', 'CBS_QB3_1dHR', 'FFCM1(-)', 'JetSurF2.0', 's3_5_7_ane', 'naphthalene_H', 'USC-Mech-ii', 'heavy_oil_ccsdtf12_1dHR', 'bio_oil', 'vinylCPD_H', 'Klippenstein_Glarborg2016', 'Fulvene_H', 'Chernov', 'C10H11', 'CH'],
+    reactionLibraries=['primaryH2O2', 'C2H2_init', 'C2H4+O_Klipp2017', 'CurranPentane', 'FFCM1(-)', 'NOx2018', 'JetSurF2.0', 'Klippenstein_Glarborg2016', 'C10H11', 'C12H11_pdep', 'Lai_Hexylbenzene', '1989_Stewart_2CH3_to_C2H5_H', '2001_Tokmakov_H_Toluene_to_CH3_Benzene', '2003_Miller_Propargyl_Recomb_High_P', '2005_Senosiain_OH_C2H2', 'kislovB', 'c-C5H5_CH3_Sharma', 'fascella', '2006_Joshi_OH_CO', '2009_Sharma_C5H5_CH3_highP', '2015_Buras_C2H3_C4H6_highP', 'C3', 'Methylformate', 'C6H5_C4H4_Mebel', 'vinylCPD_H', 'Mebel_Naphthyl', 'Mebel_C6H5_C2H2', 'Fulvene_H'],
+    transportLibraries=['OneDMinN2', 'PrimaryTransportLibrary', 'NOx2018', 'GRI-Mech'],
+    seedMechanisms=[],
+    kineticsDepositories='default',
+    kineticsFamilies='default',
+    kineticsEstimator='rate rules',
+)
+
+species(
+    label='fuel',
+    reactive=True,
+    structure=SMILES('CCCCCCCCCCCC'),
+)
+
+species(
+    label='N2',
+    reactive=False,
+    structure=SMILES('N#N'),
+)
+
+simpleReactor(
+    temperature=[(823.0, 'K'), (1173.0, 'K')],
+    pressure=[(1.0, 'bar'), (50.0, 'bar')],
+    initialMoleFractions={
+        'N2': 0.95,
+        'fuel': 0.05,
+    },
+    terminationRateRatio=0.05,
+    nSims=12,
+)
+
+model(
+    toleranceMoveToCore=0.25,
+    toleranceInterruptSimulation=0.25,
+    filterReactions=True,
+    filterThreshold=100000000.0,
+    maxNumObjsPerIter=1,
+    terminateAtMaxObjects=False,
+)
+
+simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)
+
+pressureDependence(
+    method='modified strong collision',
+    maximumGrainSize=(2.0, 'kJ/mol'),
+    minimumNumberOfGrains=250,
+    temperatures=(300, 2000, 'K', 10),
+    pressures=(0.01, 100, 'bar', 10),
+    interpolation=('Chebyshev', 6, 4),
+    maximumAtoms=16,
+)
+
+options(
+    name='Seed',
+    generateSeedEachIteration=True,
+    saveSeedToDatabase=False,
+    units='si',
+    generateOutputHTML=True,
+    generatePlots=False,
+    saveSimulationProfiles=False,
+    verboseComments=False,
+    saveEdgeSpecies=False,
+    keepIrreversible=False,
+    trimolecularProductReversible=True,
+    wallTime='00:00:00:00',
+    saveSeedModulus=-1,
+)
+
+generatedSpeciesConstraints(
+    allowed=['input species', 'seed mechanisms', 'reaction libraries'],
+    maximumCarbonAtoms=13,
+    maximumOxygenAtoms=0,
+    maximumNitrogenAtoms=0,
+    maximumSiliconAtoms=0,
+    maximumSulfurAtoms=0,
+    maximumHeavyAtoms=13,
+    maximumRadicalElectrons=2,
+    maximumSingletCarbenes=1,
+    maximumCarbeneRadicals=0,
+    allowSingletO2=True,
+)
+
+
+
+
+Saving current model core to Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving annotated version of Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving current model core to HTML file...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:22:00:32
+    Memory used: 4092.21 MB
+
+Conducting simulation of reaction system 1...
+At time 9.8554e-02 s, reached target termination RateRatio: 0.049496999715614186
+conditions choosen for reactor 0 were: T = 880.0242327924144 K, P = 1.2625426732636178 bar, 
+
+
+At time 4.7498e+01 s, reached target termination RateRatio: 0.049883702700754144
+
+For reaction generation 16 processes are used.
+Updating 0 modified unimolecular reaction networks (out of 235)...
+
+
+Summary of Secondary Model Edge Enlargement
+---------------------------------
+Added 0 new core species
+Created 0 new edge species
+Added 0 new core reactions
+Created 0 new edge reactions
+
+After model enlargement:
+    The model core has 168 species and 2642 reactions
+    The model edge has 13055 species and 61477 reactions
+
+
+Saving current model core to Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving annotated version of Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving current model core to HTML file...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:22:01:35
+    Memory used: 4092.21 MB
+
+Conducting simulation of reaction system 1...
+At time 4.7498e+01 s, reached target termination RateRatio: 0.049883702700754144
+conditions choosen for reactor 0 were: T = 993.7763717377686 K, P = 12.321103375267773 bar, 
+
+
+At time 3.5882e-01 s, reached target termination RateRatio: 0.04963580171103388
+
+For reaction generation 16 processes are used.
+Updating 0 modified unimolecular reaction networks (out of 235)...
+
+
+Summary of Secondary Model Edge Enlargement
+---------------------------------
+Added 0 new core species
+Created 0 new edge species
+Added 0 new core reactions
+Created 0 new edge reactions
+
+After model enlargement:
+    The model core has 168 species and 2642 reactions
+    The model edge has 13055 species and 61477 reactions
+
+
+Saving current model core to Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving annotated version of Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving current model core to HTML file...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:22:02:40
+    Memory used: 4092.21 MB
+
+Conducting simulation of reaction system 1...
+At time 3.5882e-01 s, reached target termination RateRatio: 0.04963580171103388
+conditions choosen for reactor 0 were: T = 1028.070290299898 K, P = 41.612284634945645 bar, 
+
+
+At time 8.8833e-02 s, reached target termination RateRatio: 0.04900900959716824
+
+For reaction generation 16 processes are used.
+Updating 0 modified unimolecular reaction networks (out of 235)...
+
+
+Summary of Secondary Model Edge Enlargement
+---------------------------------
+Added 0 new core species
+Created 0 new edge species
+Added 0 new core reactions
+Created 0 new edge reactions
+
+After model enlargement:
+    The model core has 168 species and 2642 reactions
+    The model edge has 13055 species and 61477 reactions
+
+
+Saving current model core to Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving annotated version of Chemkin file...
+Chemkin file contains 2649 reactions.
+Saving current model core to HTML file...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:22:03:41
+    Memory used: 4092.21 MB
+
+Making seed mechanism...
+Performing final model checks...
+
+
+Warning: 38 CORE reactions violate the collision rate limit!
+See the 'collision_rate_violators.log' for details.
+
+
+
+MODEL GENERATION COMPLETED
+
+The final model core has 168 species and 2642 reactions
+The final model edge has 13055 species and 61477 reactions
+
+RMG execution terminated at Sun Jan 22 14:20:15 2023
