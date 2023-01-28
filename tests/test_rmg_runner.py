@@ -151,4 +151,7 @@ touch final_time
 
 def teardown_module():
     """teardown any state that was previously setup with a setup_module method."""
-    os.remove(os.path.join(EXAMPLES_BASE_PATH, "minimal", "submit.sh"))
+    file_paths = [os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'submit.sh')]
+    for file_path in file_paths:
+        if os.path.isfile(file_path):
+            os.remove(file_path)
