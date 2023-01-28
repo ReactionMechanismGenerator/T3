@@ -122,7 +122,7 @@ def check_running_jobs_ids(cluster_soft: str) -> List[str]:
     return running_job_ids
 
 
-def rmg_job_converged(project_directory: str) -> bool:
+def rmg_job_converged(project_directory: str) -> Tuple[bool, Optional[str]]:
     """
     Determine whether an RMG job has converged.
 
@@ -130,10 +130,13 @@ def rmg_job_converged(project_directory: str) -> bool:
         project_directory (str): The job (folder) name.
 
     Returns:
-        bool: Whether this RMG run has converged.
+        Tuple[bool, Optional[str]]:
+            - bool: Whether this RMG run has converged.
+            - Optional[str]: The error due to which this RMG run crashed.
     """
-    rmg_converged = False
+    rmg_converged, error = False, None
     rmg_log_path = os.path.join(project_directory, 'RMG.log')
+    rmg_err_path = os.path.join(project_directory, 'err.txt')
     if os.path.isfile(rmg_log_path):
         with open(rmg_log_path, 'r') as f:
             lines = f.readlines()
@@ -142,7 +145,14 @@ def rmg_job_converged(project_directory: str) -> bool:
                 if 'MODEL GENERATION COMPLETED' in lines[len_lines - 1 - i]:
                     rmg_converged = True
                     break
-    return rmg_converged
+    if not rmg_converged and os.path.isfile(rmg_err_path):
+        with open(rmg_err_path, 'r') as f:
+            lines = f.readlines()
+        for line in lines[::-1]:
+            if 'Error' in line:
+                error = line.strip()
+                break
+    return rmg_converged, error
 
 
 def run_rmg_incore(rmg_input_file_path: str,
@@ -284,7 +294,7 @@ def rmg_runner(rmg_input_file_path: str,
                                             )
             while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
                 time.sleep(120)
-            converged = rmg_job_converged(project_directory=project_directory)
+            converged, error = rmg_job_converged(project_directory=project_directory)
             if not converged:
                 new_memory = get_new_memory_for_an_rmg_run(job_log_path,
                                                            logger=logger,
