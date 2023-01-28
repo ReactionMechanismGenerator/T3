@@ -13,10 +13,12 @@ from t3.runners.rmg_runner import write_submit_script
 class TestWriteSubmitScript(object):
 
     def test_minimal_write_submit_script(self):
-        """Test the write_submit_script() function with minimal input.
-            write_submit_script params are set as their default values
-            This test will create a job.sh file in the project directory path and the assertion will check if the file exists
-            and matches the expected file"""
+        """
+        Test the write_submit_script() function with minimal input.
+        write_submit_script params are set as their default values
+        This test will create a job.sh file in the project directory path and the assertion will check if the file exists
+        and matches the expected file
+        """
         project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
 
         write_submit_script(project_directory_path,
@@ -54,6 +56,7 @@ touch final_time
         assert content == expected
 
     def test_minimal_project_name_included(self):
+        """Test that thew minimal project name is included in the PBS submit script."""
         project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
         t3_proj_name = "T3_test_name"
         write_submit_script(project_directory_path,
@@ -90,9 +93,10 @@ touch final_time
         assert content_submit == expected_submit
 
     def test_minimal_parameters_set(self):
+        """Test creating a submit script for the minimal example."""
         project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
         
-        ####To be edited by user if required####
+        # To be edited by user if required:
         t3_proj_name = "T3_test_name"
         cpus = 8
         max_iter = "-m 100"
