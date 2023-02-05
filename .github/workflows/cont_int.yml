@@ -54,5 +54,11 @@ jobs:
         make test
         codecov --token=788d104c-5bc4-4986-8cfd-0d79930d97e1
 
+    - name: Generate coverage report
+      run: |
+        pip install pytest
+        pip install pytest-cov
+        pytest --cov=./ --cov-report=xml
+        
     - name: Code coverage
       run: codecov
