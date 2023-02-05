@@ -52,4 +52,7 @@ jobs:
         echo $PYTHONPATH
         conda activate t3_env
         make test
-        codecov
+        codecov --token=788d104c-5bc4-4986-8cfd-0d79930d97e1
+
+    - name: Code coverage
+      run: codecov
