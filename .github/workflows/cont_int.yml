@@ -56,9 +56,9 @@ jobs:
 
     - name: Generate coverage report
       run: |
-        pip install pytest
-        pip install pytest-cov
+        mamba install -y pytest
+        mamba install -y pytest-cov
         pytest --cov=./ --cov-report=xml
-        
+
     - name: Code coverage
       run: codecov
