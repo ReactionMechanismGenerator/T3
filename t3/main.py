@@ -38,7 +38,12 @@ from rmgpy.rmg.pdep import PDepReaction
 from rmgpy.species import Species
 from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 
-from arc.common import get_ordinal_indicator, key_by_val, read_yaml_file, save_yaml_file
+from arc.common import (get_number_with_ordinal_indicator,
+                        get_ordinal_indicator,
+                        key_by_val,
+                        read_yaml_file,
+                        save_yaml_file,
+                        )
 from arc.exceptions import ConverterError
 from arc.main import ARC
 from arc.species.species import ARCSpecies, check_label
@@ -637,13 +642,14 @@ class T3(object):
         if rmg_exception_encountered:
             self.rmg_exceptions_counter += 1
             if self.rmg_exceptions_counter > max_rmg_exceptions_allowed:
-                self.logger.error(f'This is the {self.rmg_exceptions_counter} exception raised by RMG.\n'
-                                  f'Cannot allow more than {max_rmg_exceptions_allowed} RMG exceptions during a T3 run.\n'
-                                  f'Not allowing additional exceptions, terminating.')
+                self.logger.error(f'This is the {get_number_with_ordinal_indicator(self.rmg_exceptions_counter)} '
+                                  f'exception raised by RMG.\nCannot allow more than {max_rmg_exceptions_allowed} '
+                                  f'RMG exceptions during a T3 run.\nNot allowing additional exceptions, terminating.')
                 raise ValueError('Terminating due to RMG exceptions.')
             else:
                 self.logger.warning(f'RMG did not converge. '
-                                    f'This is the {self.rmg_exceptions_counter} exception raised by RMG.\n'
+                                    f'This is the {get_number_with_ordinal_indicator(self.rmg_exceptions_counter)} '
+                                    f'exception raised by RMG.\n'
                                     f'The maximum number of exceptions allowed is {max_rmg_exceptions_allowed}.')
 
         elapsed_time = time_lapse(tic)
