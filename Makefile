@@ -10,7 +10,7 @@ install-pyrms:
 	bash devtools/install_pyrms.sh
 
 test:
-	pytest --cov -ra -vv
+	pytest tests/ --cov -ra -vv
 
 test-main:
 	pytest tests/test_main.py -ra -vv
