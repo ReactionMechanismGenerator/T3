@@ -198,21 +198,24 @@ class RMGConstantTP(SimulateAdapter):
             if reaction_system.const_spc_names is not None:
                 reaction_system.get_const_spc_indices(self.rmg_model.reaction_model.core.species)
 
-            reaction_system.simulate(
-                core_species=self.rmg_model.reaction_model.core.species,
-                core_reactions=self.rmg_model.reaction_model.core.reactions,
-                edge_species=self.rmg_model.reaction_model.edge.species,
-                edge_reactions=self.rmg_model.reaction_model.edge.reactions,
-                surface_species=[],
-                surface_reactions=[],
-                pdep_networks=pdep_networks,
-                sensitivity=True if reaction_system.sensitive_species else False,
-                sens_worksheet=sens_worksheet,
-                model_settings=model_settings,
-                simulator_settings=simulator_settings,
-                conditions={'T': reaction_system.sens_conditions['T'], 'P': reaction_system.sens_conditions['P']},
-                prune=False,
-            )
+            try:
+                reaction_system.simulate(
+                    core_species=self.rmg_model.reaction_model.core.species,
+                    core_reactions=self.rmg_model.reaction_model.core.reactions,
+                    edge_species=self.rmg_model.reaction_model.edge.species,
+                    edge_reactions=self.rmg_model.reaction_model.edge.reactions,
+                    surface_species=[],
+                    surface_reactions=[],
+                    pdep_networks=pdep_networks,
+                    sensitivity=True if reaction_system.sensitive_species else False,
+                    sens_worksheet=sens_worksheet,
+                    model_settings=model_settings,
+                    simulator_settings=simulator_settings,
+                    conditions={'T': reaction_system.sens_conditions['T'], 'P': reaction_system.sens_conditions['P']},
+                    prune=False,
+                )
+            except ZeroDivisionError as e:
+                self.logger.warning(f'Cannot simulate reaction system, got:\n{e}')
 
             if reaction_system.sensitive_species:
                 plot_sensitivity(self.rmg_model.output_directory, index, reaction_system.sensitive_species)
