@@ -26,21 +26,18 @@
 
 ---
 
-**Documentation**: <a href="https://reactionmechanismgenerator.github.io/T3/" target="_blank">
-https://reactionmechanismgenerator.github.io/T3/</a>
+**Documentation**: [T3 Documentation](https://reactionmechanismgenerator.github.io/T3/)
 
-**Source Code**: <a href="https://github.com/ReactionMechanismGenerator/T3" target="_blank">
-https://github.com/ReactionMechanismGenerator/T3/</a>
+
+**Source Code**: [T3 Source](https://github.com/ReactionMechanismGenerator/T3)
 
 ---
 
-
-!!! Note
+> **Note:**
     T3 is currently under intense development.
     Features described in these documentation pages
     which are still not implemented in the code will
     be marked with an asterisk (*).
-
 
 ## General
 
@@ -57,8 +54,7 @@ The key features are:
 * **Easy**: Designed to be easy to use and learn.
 * **Robust**: Captures lower-level exceptions, attempts to troubleshoot.
 * **Restartable**: Has a convenient restart feature that's being triggered
-  by identifying existing iteration outputs. 
-
+  by identifying existing iteration outputs.
 
 ## Principal workflow
 
@@ -79,7 +75,6 @@ be uploaded to the community cloud,
 <a href="https://tckdb.github.io/TCKDB/", target="_blank">TCKDB</a>*.
 T3 also queries TCKDB before instructing the automated QM tool to perform calculations.
 
-
 ## Intended audience
 
 T3 is intended to be used by individuals with prior knowledge in chemical kinetic modeling,
@@ -87,7 +82,6 @@ and some experience in electronic structure (quantum chemical) calculations.
 This documentation does not intend to provide advice for which levels of theory
 should be used for particular systems although examples with specific levels of theory
 are given.
-
 
 ## Requirements
 
@@ -98,7 +92,6 @@ T3 stands on the shoulders of giants:
 * <a href="https://rmg.mit.edu/" class="external-link" target="_blank">RMG</a> for model generation.
 * <a href="https://reactionmechanismgenerator.github.io/ARC/" class="external-link" target="_blank">ARC</a>
 for automating electronic structure calculations.
-
 
 ## License
 
