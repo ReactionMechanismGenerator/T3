@@ -18,13 +18,13 @@ fi
 
 # Set up Conda/Micromamba environment
 if [ "$COMMAND_PKG" == "micromamba" ]; then
-    MICROMAMBA_BASE=$(micromamba info --base)
+    BASE=$(micromamba info --base)
     # shellcheck source=/dev/null
-    source "$MICROMAMBA_BASE/etc/profile.d/micromamba.sh"
+    source "$BASE/etc/profile.d/micromamba.sh"
 else
-    CONDA_BASE=$(conda info --base)
+    BASE=$(conda info --base)
     # shellcheck source=/dev/null
-    source "$CONDA_BASE/etc/profile.d/conda.sh"
+    source "$BASE/etc/profile.d/conda.sh"
 fi
 
 # Temporarily change directory to $HOME to install software
@@ -66,10 +66,10 @@ fi;
 #Prior to activation of the environment, the LD_LIBRARY_PATH needs to be set as an environmnet variable when rmg_env is activated.
 #This exporting and unsetting will solve the RMS installation during the Julia compile and also when the environment is deactivated
 #the original LD_LIBRARY_PATH is set.
-echo "export OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$CONDA_BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh"
-echo "export LD_LIBRARY_PATH=$CONDA_BASE/envs/rmg_env/lib:$LD_LIBRARY_PATH" >> "$CONDA_BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh"
-echo "export LD_LIBRARY_PATH=${OLD_LD_LIBRARY_PATH}" >> "$CONDA_BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh"
-echo "unset OLD_LD_LIBRARY_PATH" >> "$CONDA_BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh"
+echo "export OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh"
+echo "export LD_LIBRARY_PATH=$BASE/envs/rmg_env/lib:$LD_LIBRARY_PATH" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh"
+echo "export LD_LIBRARY_PATH=${OLD_LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh"
+echo "unset OLD_LD_LIBRARY_PATH" >> "$BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh"
 
 #Active rmg_env environment
 if [ "$COMMAND_PKG" == "micromamba" ]; then
