@@ -207,12 +207,11 @@ class Logger(object):
                                    reaction_dict: Dict[int, dict]):
         """
         Report reaction rate coefficients to be calculated in the next iteration.
-        The reaction 'QM label' is used for reporting,.
+        The reaction 'QM label' is used for reporting.
+
         Args:
             reaction_keys (List[int]): Entries are T3 reaction indices.
             reaction_dict (dict): The T3 reaction dictionary.
-        Todo:
-            Log the reasons one by one with line breaks and enumerate
         """
         if len(reaction_keys):
             self.info('\n\nReactions to calculate high-pressure limit rate coefficients for:')
