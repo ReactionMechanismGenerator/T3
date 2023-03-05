@@ -218,7 +218,10 @@ class RMGConstantTP(SimulateAdapter):
                 self.logger.warning(f'Cannot simulate reaction system, got:\n{e}')
 
             if reaction_system.sensitive_species:
-                plot_sensitivity(self.rmg_model.output_directory, index, reaction_system.sensitive_species)
+                try:
+                    plot_sensitivity(self.rmg_model.output_directory, index, reaction_system.sensitive_species)
+                except FileNotFoundError as e:
+                    self.logger.warning(f'Cannot plot sensitivity, got:\n{e}')
 
             if self.rmg_model.uncertainty is not None:
                 self.rmg_model.run_uncertainty_analysis()
