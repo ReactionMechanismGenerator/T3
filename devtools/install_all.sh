@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 
 # Check if Micromamba is installed
 if [ -x "$(command -v micromamba)" ]; then
@@ -14,11 +14,14 @@ elif [ -x "$(command -v conda)" ]; then
     COMMAND_PKG=conda
 else
     echo "Micromamba, Mamba, and Conda are not installed. Please download and install one of them - we strongly recommend Micromamba or Mamba."
+    exit 1
 fi
 
 # Set up Conda/Micromamba environment
 if [ "$COMMAND_PKG" == "micromamba" ]; then
-    BASE=$(micromamba info --base)
+    eval "$(micromamba shell hook --shell=bash)"
+    micromamba activate base
+    BASE=$MAMBA_ROOT_PREFIX
     # shellcheck source=/dev/null
     source "$BASE/etc/profile.d/micromamba.sh"
 else
@@ -81,7 +84,7 @@ fi
 #Compile RMG-Py
 make
 #Update pyjulia to the latest version
-$COMMAND_PKG update pyjulia -y
+$COMMAND_PKG update pyjulia -c conda_forge -y
 
 #Ensure that added paths etc. are set and then reactivate rmg_env
 . ~/.bashrc
