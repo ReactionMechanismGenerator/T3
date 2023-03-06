@@ -207,12 +207,11 @@ class Logger(object):
                                    reaction_dict: Dict[int, dict]):
         """
         Report reaction rate coefficients to be calculated in the next iteration.
-        The reaction 'QM label' is used for reporting,.
+        The reaction 'QM label' is used for reporting.
+
         Args:
             reaction_keys (List[int]): Entries are T3 reaction indices.
             reaction_dict (dict): The T3 reaction dictionary.
-        Todo:
-            Log the reasons one by one with line breaks and enumerate
         """
         if len(reaction_keys):
             self.info('\n\nReactions to calculate high-pressure limit rate coefficients for:')
@@ -229,6 +228,8 @@ class Logger(object):
                 space1 = ' ' * (max_label_length - len(rxn_dict['QM label']) + 1)
                 self.info(f"\n{rxn_dict['QM label']}{space1} {rxn_dict['reasons']}")
                 self.info(f"{rxn_dict['SMILES label']}\n")
+                if hasattr(rxn_dict['object'], 'family') and rxn_dict['object'].family is not None:
+                    self.info(f"RMG family: {rxn_dict['object'].family.label}\n")
 
     def log_species_summary(self, species_dict: Dict[int, dict]):
         """
