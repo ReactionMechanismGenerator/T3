@@ -1278,6 +1278,7 @@ class T3(object):
                             qm_species = ARCSpecies(label=qm_species.label,
                                                     rmg_species=qm_species,
                                                     xyz=xyzs,
+                                                    include_in_thermo_lib=self.species_requires_refinement(qm_species),
                                                     )
                         else:
                             raise NotImplementedError(f"Passing XYZ information to {self.qm['adapter']} "
