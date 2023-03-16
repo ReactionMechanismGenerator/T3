@@ -1234,9 +1234,7 @@ class T3(object):
                     ) -> Optional[int]:
         """
         Add a species to self.species and to self.qm['species'].
-        If the species already exists in self.species, only the reasons
-        will be updated (extended), and the species will not be considered
-        in self.qm['species'].
+        If the species already exists in self.species, only the reasons to compute will be appended.
 
         Args:
             species (Species): The species to consider.
@@ -1298,10 +1296,8 @@ class T3(object):
                      reasons: Union[List[str], str],
                      ) -> Optional[int]:
         """
-        Add a species to self.species and to self.qm['species'].
-        If the species already exists in self.species, only the reasons
-        will be updated (extended), and the species will not be considered
-        in self.qm['species'].
+        Add a reaction to self.reactions and to self.qm['reactions'].
+        If the reaction already exists in self.reactions, only the reasons to compute will be appended.
 
         Args:
             reaction (Reaction): The reaction to consider.
