@@ -49,7 +49,7 @@ def write_submit_script(project_directory: str,
         memory (int, optional): The memory in MB for an RMG run, defaults to ``MEM``.
         verbose (str, optional): Level of verbosity, e.g., ``-v 10``.
         max_iterations (str, optional): Max RMG iterations, e.g., ``-m 100``.
-        t3_project_name (str, optional): THe T3 project name, used for setting a job name on the server for the RMG run.
+        t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
     """
     global MEM
     submit_scripts_content = submit_scripts['rmg'].format(name=f'{t3_project_name}_RMG' or 'T3_RMG',
@@ -207,7 +207,7 @@ def run_rmg_in_local_queue(project_directory: str,
         max_iterations (int, optional): Max RMG iterations.
         restart_rmg (bool, optional): Whether this RMG run should trigger a seed restart.
         verbose (int, optional): Level of verbosity.
-        t3_project_name (str, optional): THe T3 project name, used for setting a job name on the server for the RMG run.
+        t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
 
     Returns:
         Optional[str]: The job ID.
@@ -267,7 +267,7 @@ def rmg_runner(rmg_input_file_path: str,
         max_iterations (int, optional): Max RMG iterations.
         verbose (int, optional): Level of verbosity.
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
-        rmg_execution_type (str, optional): THe RMG execution type (incore or local). Also set via settings.py.
+        rmg_execution_type (str, optional): The RMG execution type (incore or local). Also set via settings.py.
 
     Returns:
         bool: Whether an exception was raised.
