@@ -255,6 +255,7 @@ def rmg_runner(rmg_input_file_path: str,
                max_iterations: Optional[int] = None,
                t3_project_name: Optional[str] = None,
                rmg_execution_type: Optional[str] = None,
+               restart_rmg: bool = False,
                ) -> bool:
     """
     Run an RMG job as a subprocess under the rmg_env.
@@ -268,6 +269,7 @@ def rmg_runner(rmg_input_file_path: str,
         verbose (int, optional): Level of verbosity.
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
         rmg_execution_type (str, optional): The RMG execution type (incore or local). Also set via settings.py.
+        restart_rmg (bool, optional): Whether to restart RMG from seed.
 
     Returns:
         bool: Whether an exception was raised.
@@ -286,7 +288,7 @@ def rmg_runner(rmg_input_file_path: str,
     elif rmg_execution_type == 'local':
         runner_counter = 0
         rmg_errors = list()
-        converged, restart_rmg, run_rmg = False, False, True
+        converged, restart_rmg, run_rmg = False, restart_rmg, True
         while run_rmg:
             runner_counter += 1
             project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
