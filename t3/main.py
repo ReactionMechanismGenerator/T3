@@ -285,7 +285,7 @@ class T3(object):
 
             # RMG
             if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
-                self.run_rmg()
+                self.run_rmg(restart_rmg=run_rmg_at_start)
 
             # SA
             if self.t3['sensitivity'] is not None:
@@ -335,7 +335,7 @@ class T3(object):
             self.logger.info(f'\n\n\nT3 iteration {self.iteration} (just generating a model using RMG):\n'
                              f'------------------------------------------------------\n')
             self.set_paths()
-            self.run_rmg()
+            self.run_rmg(restart_rmg=run_rmg_at_start)
 
         self.logger.log_species_summary(species_dict=self.species)
         self.logger.log_reactions_summary(reactions_dict=self.reactions)
@@ -589,7 +589,7 @@ class T3(object):
             if len(self.rmg['model']['core_tolerance']) >= self.iteration \
             else self.rmg['model']['core_tolerance'][-1]
 
-    def run_rmg(self):
+    def run_rmg(self, restart_rmg: bool = False):
         """
         Run RMG.
 
@@ -638,6 +638,7 @@ class T3(object):
                                                verbose=self.verbose,
                                                t3_project_name=self.project,
                                                rmg_execution_type=self.rmg['rmg_execution_type'],
+                                               restart_rmg=restart_rmg,
                                                )
         if rmg_exception_encountered:
             self.rmg_exceptions_counter += 1
