@@ -54,7 +54,7 @@ to explicitly represent their primary properties. The supported RMG reactors are
 
 !!! Note
     The RMG reactors are only used for model generation.
-    THe simulation is done using the reactor specified in the corresponding
+    The simulation is done using the reactor specified in the corresponding
     [simulation adapter](how_to.md#writing-simulation-adapters) which may
     be different if the simulation adapter is not `RMG`.
 

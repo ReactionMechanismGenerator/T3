@@ -229,7 +229,9 @@ class Logger(object):
                 self.info(f"\n{rxn_dict['QM label']}{space1} {rxn_dict['reasons']}")
                 self.info(f"{rxn_dict['SMILES label']}\n")
                 if hasattr(rxn_dict['object'], 'family') and rxn_dict['object'].family is not None:
-                    self.info(f"RMG family: {rxn_dict['object'].family.label}\n")
+                    label = rxn_dict['object'].family if isinstance(rxn_dict['object'].family, str) \
+                        else rxn_dict['object'].family.label
+                    self.info(f'RMG family: {label}\n')
 
     def log_species_summary(self, species_dict: Dict[int, dict]):
         """
