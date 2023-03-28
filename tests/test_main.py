@@ -9,7 +9,6 @@ import datetime
 import os
 import shutil
 
-from rmgpy import settings as rmg_settings
 from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.reaction import Reaction
 from rmgpy.rmg.pdep import PDepNetwork, PDepReaction
@@ -811,6 +810,8 @@ def test_add_species():
     spc_1 = Species(label='OH', smiles='[OH]')
     spc_2 = Species(label='hydrazine', smiles='NN')
     spc_3 = Species(label='H2', smiles='[H][H]')
+    for spc in [spc_1, spc_2, spc_3]:
+        spc.thermo = ThermoData()
 
     assert t3.get_species_key(species=spc_1) == 0
     assert t3.species[0]['RMG label'] == 'OH'
