@@ -891,8 +891,8 @@ class T3(object):
                 arkane = Arkane(input_file=os.path.join(self.paths['PDep SA'], network_name, method, 'input.py'),
                                 output_directory=os.path.join(self.paths['PDep SA'], network_name, method))
                 arkane.plot = True
-                self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method '
-                                 f'(iteration {self.iteration})...')
+                self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method\n'
+                                 f'to examine reaction {reaction} (iteration {self.iteration})...')
                 try:
                     arkane.execute()
                 except (AttributeError,
