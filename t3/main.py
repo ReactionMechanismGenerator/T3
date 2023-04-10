@@ -142,6 +142,7 @@ class T3(object):
         rmg_reactions (List[Reaction]): Entries are RMG reaction objects in the model core for a certain T3 iteration.
         sa_observables (list): Entries are RMG species labels for the SA observables.
         sa_dict (dict): Dictionary with keys of `kinetics`, `thermo`, and `time`.
+        _run_it_0 (bool): Whether iteration 0 should bne run.
     """
 
     def __init__(self,
@@ -157,6 +158,7 @@ class T3(object):
         self.sa_dict = None
         self.sa_observables = list()
         self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
+        self._run_it_0 = None
 
         project_directory = project_directory or os.path.join(PROJECTS_BASE_PATH, project)
 
@@ -211,6 +213,24 @@ class T3(object):
                for i in range(len(self.rmg['model']['core_tolerance']) - 1)):
             self.logger.warning(f'The RMG tolerances are not in descending order.')
             self.logger.info(f'Got: {self.rmg["model"]["core_tolerance"]}')
+
+    @property
+    def run_it_0(self) -> bool:
+        """
+        Determine whether iteration 0 needs to be run.
+
+        Returns:
+            bool: whether to run iteration 0.
+        """
+        if self._run_it_0 is None:
+            self._run_it_0 = self.qm and self.qm['adapter'] == 'ARC' \
+                             and (len(self.qm['species']) or len(self.qm['reactions']))
+        return self._run_it_0
+
+    @run_it_0.setter
+    def run_it_0(self, value):
+        """Allow setting the _run_it_0 attribute"""
+        self._run_it_0 = value
 
     def as_dict(self) -> dict:
         """
