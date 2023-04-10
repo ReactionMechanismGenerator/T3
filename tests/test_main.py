@@ -214,6 +214,15 @@ def setup_module():
         shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
 
 
+def test_run_it_0():
+    """Test the run_it_0 property"""
+    t3 = run_minimal()
+    assert t3.run_it_0 is False
+    t3.run_it_0 = None
+    t3.qm = {'adapter': 'ARC', 'species': [{'label': 'H2O', 'smiles': 'O'}]}
+    assert t3.run_it_0 is True
+
+
 def test_args_and_attributes():
     """Test passing args and assigning attributes in T3"""
     run_minimal()
