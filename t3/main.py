@@ -10,8 +10,6 @@ Todo:
     - scan pdep networks and the core, mark non-physical species
     - utilize the uncertainty analysis script
     - SA dict: dump and load for restart, inc. pdep SA
-    - Need to instruct ARC which species to save in a thermo library. E.g., when computing a rate coefficient of
-      A + OH <=> C + D, we shouldn't store thermo for OH, it's already well-known and our numbers will be inferior.
 """
 
 import datetime
@@ -278,43 +276,33 @@ class T3(object):
         """
         Execute T3.
         """
-        iteration_start, run_rmg_at_start = self.restart()
+        iteration_restart, restart_rmg, restart_sa, restart_qm = self.restart()
 
-        if iteration_start == 0 \
-                and self.qm \
-                and self.qm['adapter'] == 'ARC' \
-                and (len(self.qm['species']) or len(self.qm['reactions'])):
-            self.set_paths(iteration=iteration_start)
+        if iteration_restart == 0 and self.run_it_0:
+            self.set_paths(iteration=iteration_restart)
             self.run_arc(arc_kwargs=self.qm)
             self.process_arc_run()
-            # don't request these species and reactions again
-            iteration_start += 1
+            iteration_restart += 1
         # ARC species and reactions will be loaded again if restarting and they were already sent to ARC, set to list()
         self.qm['species'], self.qm['reactions'] = list(), list()
 
         additional_calcs_required = False
-        iteration_start = iteration_start or 1
+        iteration_start = iteration_restart or 1
 
-        # main T3 loop
         max_t3_iterations = self.t3['options']['max_T3_iterations']
         for self.iteration in range(iteration_start, max_t3_iterations + 1):
-
-            self.logger.info(f'\n\n\nT3 iteration {self.iteration}:\n'
-                             f'---------------\n')
+            self.logger.info(f'\n\n\nT3 iteration {self.iteration}:\n---------------\n')
             self.set_paths()
+            if self.iteration > iteration_start:
+                restart_rmg, restart_sa, restart_qm = None, None, None
 
             # RMG
-            if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
-                self.run_rmg(restart_rmg=run_rmg_at_start)
+            if self.iteration > iteration_start or restart_rmg is not None:
+                self.run_rmg(restart_rmg=restart_rmg == 'restart')
 
             # SA
-            if self.t3['sensitivity'] is not None:
-                # Determine observables to run SA for.
-                if not self.sa_observables:
-                    for species in self.rmg['species']:
-                        if species['observable'] or species['SA_observable']:
-                            self.sa_observables.append(species['label'])
-
+            if (self.iteration > iteration_start or restart_sa is not None) and self.t3['sensitivity'] is not None:
+                self.get_sa_observables()
                 simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
                                                     t3=self.t3,
                                                     rmg=self.rmg,
@@ -329,19 +317,24 @@ class T3(object):
                                                     )
                 simulate_adapter.simulate()
                 self.sa_dict = simulate_adapter.get_sa_coefficients()
+                self.save_sa_dict()
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
-            # ARC
+            # QM
             if additional_calcs_required:
                 if self.qm is None:
-                    self.logger.error('Could not refine the model without any QM arguments.')
+                    self.logger.error('Could not refine the model without QM arguments.')
                     additional_calcs_required = None
                 else:
-                    self.run_arc(arc_kwargs=self.qm)
+                    if restart_qm == 'restart':
+                        self.run_arc(input_file_path=self.paths['ARC restart'])
+                    else:
+                        self.run_arc(arc_kwargs=self.qm)
                     self.process_arc_run()
+
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
-                # T3 iterated through all of the user requested tolerances, and there are no more calculations required
+                # T3 iterated through all user requested tolerances, and there are no more calculations required
                 break
 
             if self.check_overtime():
@@ -355,7 +348,7 @@ class T3(object):
             self.logger.info(f'\n\n\nT3 iteration {self.iteration} (just generating a model using RMG):\n'
                              f'------------------------------------------------------\n')
             self.set_paths()
-            self.run_rmg(restart_rmg=run_rmg_at_start)
+            self.run_rmg()
 
         self.logger.log_species_summary(species_dict=self.species)
         self.logger.log_reactions_summary(reactions_dict=self.reactions)
@@ -389,6 +382,7 @@ class T3(object):
             'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.cti'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
+            'SA_dict': os.path.join(project_directory, 'SA.yml'),
             'SA': os.path.join(iteration_path, 'SA'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
@@ -410,62 +404,63 @@ class T3(object):
                 else os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}"),
         }
 
-    def restart(self) -> Tuple[int, bool]:
+    def restart(self) -> Tuple[int, Optional[str], Optional[str], Optional[str]]:
         """
         Restart T3 by looking for existing iteration folders.
-        Restarts ARC if it ran and did not terminate.
 
         Returns:
-            Tuple[int, bool]:
+            Tuple[int, Optional[str], Optional[str], Optional[str]]:
                 - The current iteration number.
-                - Whether to run RMG for this iteration.
+                - Whether to run or restart RMG for this iteration.
+                - Whether to run SA for this iteration.
+                - Whether to run or restart QM for this iteration.
         """
-        # set default values
         i_max = 0
-        run_rmg_i, restart_arc_i = True, False
-
-        folders = tuple(os.walk(self.project_directory))[0][1]  # returns a 3-tuple: (dirpath, dirnames, filenames)
+        run_rmg, run_sa, run_qm = 'run', 'run', 'run'
+        folders = tuple(os.walk(self.project_directory))[0][1]
         iteration_folders = [folder for folder in folders if 'iteration_' in folder]
-
         if len(iteration_folders):
             self.load_species_and_reactions()
             i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])  # get the latest iteration number
             self.set_paths(iteration=i_max)
-            if i_max != 0 and os.path.isfile(self.paths['RMG log']):
-                # iteration 0 is reserved for ARC only if needed
+            if i_max and os.path.isfile(self.paths['RMG log']):
+                run_rmg = 'restart'
                 with open(self.paths['RMG log'], 'r') as f:
                     lines = f.readlines()
-                    for line in lines[::-1]:
+                    for line_i, line in enumerate(lines[::-1]):
                         if 'MODEL GENERATION COMPLETED' in line:
-                            # RMG terminated, no need to regenerate the model
-                            run_rmg_i = False
+                            run_rmg = None
                             break
-            if os.path.isfile(self.paths['ARC log']) and (not run_rmg_i or i_max == 0):
-                # The ARC log file exists, and no need to run RMG (converged) or this is iteration 0
+                        if line_i > 100:
+                            break
+            if os.path.isfile(self.paths['SA_dict']):
+                sa_dict = read_yaml_file(self.paths['SA_dict'])
+                if i_max in sa_dict.keys():
+                    self.sa_dict = sa_dict[i_max]
+                    run_sa = None
+            if os.path.isfile(self.paths['ARC log']):
+                if os.path.isfile(self.paths['ARC restart']):
+                    run_qm = 'restart'
                 with open(self.paths['ARC log'], 'r') as f:
                     lines = f.readlines()
-                    for line in lines[::-1]:
+                    for line_i, line in enumerate(lines[::-1]):
                         if 'ARC execution terminated on' in line:
-                            # ARC terminated as well, continue to the next iteration
                             i_max += 1
-                            run_rmg_i = True
+                            run_qm, run_rmg = None, 'run'
                             break
-                    else:
-                        # ARC did not terminate, see if the restart file was generated
-                        if os.path.isfile(self.paths['ARC restart']):
-                            restart_arc_i = True
-            if i_max or not run_rmg_i or restart_arc_i:
-                rmg_text = ', using the completed RMG run from this iteration' if not run_rmg_i \
-                    else ', re-running RMG for this iteration'
-                arc_text = ', restarting the previous ARC run in this iteration' if restart_arc_i else ''
-                self.logger.log(f'\nRestarting T3 from iteration {i_max}{rmg_text}{arc_text}.\n')
-            if restart_arc_i:
-                self.run_arc(input_file_path=self.paths['ARC restart'])
-                self.process_arc_run()
-                i_max += 1
-                run_rmg_i = True
+                        if line_i > 100:
+                            break
 
-        return i_max, run_rmg_i
+            if i_max or run_qm == 'restart':
+                self.logger.log(f'\nRestarting T3 from iteration {i_max}:')
+                rmg_txt = 'Completed' if run_rmg is None else 'Restarting' if run_rmg == 'restart' else '-'
+                sa_txt = 'Completed' if run_sa is None else '-'
+                qm_txt = 'Completed' if run_qm is None else 'Restarting' if run_qm == 'restart' else '-'
+                self.logger.log(f'RMG status: {rmg_txt}')
+                self.logger.log(f'SA status:  {sa_txt}')
+                self.logger.log(f'QM status:  {qm_txt}')
+
+        return i_max, run_rmg, run_sa, run_qm
 
     def check_arc_args(self):
         """
@@ -613,6 +608,9 @@ class T3(object):
         """
         Run RMG.
 
+        Args:
+            restart_rmg (bool, optional): Whether to restart an RMG run.
+
         Raises:
             Various RMG Exceptions: if RMG crushed too many times.
         """
@@ -675,6 +673,15 @@ class T3(object):
 
         elapsed_time = time_lapse(tic)
         self.logger.info(f'RMG terminated, execution time: {elapsed_time}')
+
+    def get_sa_observables(self):
+        """
+        Set the `sa_observables` attribute if needed.
+        """
+        if not self.sa_observables and self.rmg:
+            for species in self.rmg['species']:
+                if species['observable'] or species['SA_observable']:
+                    self.sa_observables.append(species['label'])
 
     def determine_species_and_reactions_to_calculate(self) -> bool:
         """
@@ -1062,6 +1069,14 @@ class T3(object):
                         reaction_keys.append(key)
 
         return species_keys, reaction_keys
+
+    def save_sa_dict(self):
+        """
+        Save the ``sa_dict`` attribute for restart purposes.
+        """
+        sa_dict = read_yaml_file(self.paths['SA_dict']) if os.path.isfile(self.paths['SA_dict']) else dict()
+        sa_dict[self.iteration] = self.sa_dict
+        save_yaml_file(path=self.paths['SA_dict'], content=sa_dict)
 
     def trsh_rmg_tol(self, factor: float = 0.5):
         """
