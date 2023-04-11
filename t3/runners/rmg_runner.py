@@ -96,6 +96,23 @@ def submit_job(project_directory: str,
     if not len(stdout):
         time.sleep(10)
         stdout, stderr = execute_command(cmd)
+    if stderr:
+        if cluster_soft.lower() == 'slurm' and any('AssocMaxSubmitJobLimit' in err_line for err_line in stderr):
+            logger.warning('Max number of submitted jobs was reached, sleeping...')
+            time.sleep(5 * 60)
+            submit_job(project_directory=project_directory,
+                       logger=logger,
+                       cluster_soft=cluster_soft,
+                       memory=memory
+                       )
+        if cluster_soft.lower() == 'pbs' and  any('qsub: would exceed' in err_line for err_line in stderr):
+            logger.warning('Max number of submitted jobs was reached, sleeping...')
+            time.sleep(5 * 60)
+            submit_job(project_directory=project_directory,
+                       logger=logger,
+                       cluster_soft=cluster_soft,
+                       memory=memory
+                       )
     if not len(stdout):
         return None, None
     if len(stderr) > 0 or len(stdout) == 0:

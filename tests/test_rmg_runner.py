@@ -148,7 +148,6 @@ touch final_time
         assert converged
         assert error is None
 
-
 def teardown_module():
     """teardown any state that was previously setup with a setup_module method."""
     file_paths = [os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'submit.sh')]
