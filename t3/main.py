@@ -450,16 +450,14 @@ class T3(object):
                             break
                         if line_i > 100:
                             break
-
             if i_max or run_qm == 'restart':
-                self.logger.log(f'\nRestarting T3 from iteration {i_max}:')
+                self.logger.log(f'\n\nRestarting T3 from iteration {i_max}')
                 rmg_txt = 'Completed' if run_rmg is None else 'Restarting' if run_rmg == 'restart' else '-'
                 sa_txt = 'Completed' if run_sa is None else '-'
                 qm_txt = 'Completed' if run_qm is None else 'Restarting' if run_qm == 'restart' else '-'
                 self.logger.log(f'RMG status: {rmg_txt}')
                 self.logger.log(f'SA status:  {sa_txt}')
-                self.logger.log(f'QM status:  {qm_txt}')
-
+                self.logger.log(f'QM status:  {qm_txt}\n')
         return i_max, run_rmg, run_sa, run_qm
 
     def check_arc_args(self):
