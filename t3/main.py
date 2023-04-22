@@ -907,6 +907,16 @@ class T3(object):
             sa_coefficients_path, arkane = None, None
             errors = list()
             for method in self.t3['sensitivity']['ME_methods']:
+                if os.path.isfile(os.path.join(self.paths['PDep SA'], network_name, method, 'arkane.log')) \
+                        and os.path.isfile(os.path.join(self.paths['PDep SA'], network_name, method, 'output.py')):
+                    with open(os.path.join(self.paths['PDep SA'], network_name, method, 'output.py'), 'r') as f:
+                        output_lines = f.readlines()
+                        if not len(output_lines):
+                            self.logger.warning(f'Not executing SA for PDep network {network_name} using {method}.\n'
+                                                f'This network seems to have run already using this method '
+                                                f'in a previous T3 instance but did not converge'
+                                                f'(perhaps due to memory limitations).')
+                            continue
                 isomer_labels = write_pdep_network_file(
                     network_name=network_name,
                     method=method,
