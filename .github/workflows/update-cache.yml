@@ -1,19 +1,13 @@
-name: CI
+name: Update cache
 
-on: 
-    pull_request:
-        branches:
-            - main
-        types: [opened, synchronize, reopened, ready_for_review, review_requested]
+on:
+  schedule:
+    - cron: "0 0 */7 * *"
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        defaults:
-            run:
-                shell: bash -el {0}
-        
-        steps:
+  update_cache:
+    runs-on: ubuntu-latest
+    steps:
         - name: Checkout T3
           uses: actions/checkout@v3
         
@@ -25,11 +19,8 @@ jobs:
             key: ${{ runner.os }}-rmg-main
             restore-keys: |
               ${{ runner.os }}-rmg-
-        - name: Debug RMG Cache
-          run: |  
-            echo "cache hit: ${{ steps.cache-rmg.outputs.cache-hit }}"
         - name: Checkout RMG
-          if: steps.cache-rmg.outputs.cache-hit != 'true'
+
           uses: actions/checkout@v3
           with:
             repository: ReactionMechanismGenerator/RMG-Py
@@ -46,7 +37,7 @@ jobs:
               restore-keys: |
                 ${{ runner.os }}-rmgdb-
         - name: Checkout RMG-database
-          if: steps.cache-rmg-db.outputs.cache-hit != 'true'
+
           uses: actions/checkout@v3
           with:
             repository: ReactionMechanismGenerator/RMG-database
@@ -63,22 +54,12 @@ jobs:
               restore-keys: |
                 ${{ runner.os }}-arc-
         - name: Checkout ARC
-          if: steps.cache-arc.outputs.cache-hit != 'true'
           uses: actions/checkout@v3
           with:
             repository: ReactionMechanismGenerator/ARC
             path: ARC
             ref: main
             fetch-depth: 1
-        - name: Cache Conda Packages
-          uses: actions/cache@v2
-          env:
-            CACHE_NUMBER: 0
-          with:
-            path: ~/conda_pkgs_dir
-            key:
-                ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}-t3
-
 
         - name: Setup RMG-Py Env
           uses: conda-incubator/setup-miniconda@v2
@@ -104,7 +85,7 @@ jobs:
           id: cache
         - name: Update environment
           run: mamba env update -n rmg_env -f RMG-Py/environment.yml
-          if: steps.cache.outputs.cache-hit != 'true'
+
 
         - name: Cythonize RMG-Py
           run: |
@@ -117,31 +98,6 @@ jobs:
             echo "PYTHONPATH=$(pwd):$PYTHONPATH" >> ~/.bashrc
             echo "PATH=$(pwd):$PATH" >> ~/.bashrc
             echo "export rmgpy_path=$(pwd)" >> ~/.bashrc
-        
-        - name: Install PyCall RMG_ENV
-          run: python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
-        
-        - name: Cache RMS
-          id: cache-rms
-          uses: actions/cache@v2
-          env:
-            CACHE_NUMBER: 0
-          with:
-            path: | 
-                /usr/share/miniconda3/envs/rmg_env/share/julia/artifacts/
-                /usr/share/miniconda3/envs/rmg_env/share/julia/packages/
-                /usr/share/miniconda3/envs/rmg_env/share/julia/registries/
-                /usr/share/miniconda3/envs/rmg_env/share/julia/compiled/
-            key:
-                ${{ runner.os }}-julia-${{ env.CACHE_NUMBER }}-rms
-
-        - name: Install RMS Julia
-          run: julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main"));using ReactionMechanismSimulator'
-
-        - name: Link Python-JL
-          run: |
-            ln -sfn $(which python-jl) $(which python)
-            cd .. 
 
         - name: Install ARC
           run: |
@@ -161,31 +117,15 @@ jobs:
             conda activate xtb_env
             mamba install -c conda-forge xtb -y
             mamba install -c anaconda pyyaml -y
+        - name: Cache Conda Packages
+          uses: actions/cache@v2
+          env:
+            CACHE_NUMBER: 0
+          with:
+            path: ~/conda_pkgs_dir
+            key:
+                ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}-t3
 
         - name: Install T3
           run: |
             mamba env create -f environment.yml
-
-        - name: Install CodeCov
-          run: |
-            conda activate t3_env
-            mamba install -c conda-forge codecov
-            mamba install -c conda-forge pytest-cov
-
-        - name: Run T3 Tests
-          shell: bash -el {0} 
-          run: |
-            source ~/.bashrc
-            conda activate t3_env
-            make test
-            codecov --token=${{ secrets.CODECOV_TOKEN }}
-        
-        - name: Code Coverage
-          uses: codecov/codecov-action@v3
-          with:
-            token: ${{ secrets.CODECOV_TOKEN }}
-            file: ./coverage.xml
-            flags: unittests
-            name: codecov-umbrella
-            verbose: true
-            fail_ci_if_error: true

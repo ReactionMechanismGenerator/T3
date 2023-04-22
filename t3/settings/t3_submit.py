@@ -73,7 +73,7 @@ conda activate rmg_env
 
 touch initial_time
 
-python-jl ~/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
+python-jl $rmgpy_path/rmg.py -n {cpus} input.py{max_iterations}
 
 touch final_time
 
