@@ -5,6 +5,7 @@
 functional test that runs T3's minimal example
 """
 
+
 import os
 import shutil
 
@@ -52,7 +53,10 @@ def test_no_t3_no_qm():
 
 
 def test_computing_thermo():
-    """Tests computing thermo for two species and running RMG with the updated data"""
+    """
+    Tests computing thermo for two species and running RMG with the updated data
+    Need xtb installed
+    """
     functional_test_directory = os.path.join(DATA_BASE_PATH, 'functional_2_thermo')
     #delete_selective_content_from_test_dirs(test_dir=functional_test_directory)
     input_file = os.path.join(functional_test_directory, 'input.yml')
