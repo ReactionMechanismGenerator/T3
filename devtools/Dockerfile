@@ -41,19 +41,8 @@ WORKDIR /home/mambauser/Code/RMG-Py
 
 # Install RMG-Py
 RUN micromamba create -y -f environment.yml && \
-    micromamba clean --all -f -y 
-    # rm -rf /home/mambauser/.cache/yarn && \
-    # rm -rf /home/mambauser/.cache/pip && \ 
-    # # find -name '*.a' -delete && \
-    # # find -name '*.pyc' -delete && \
-    # # rm -rf /opt/conda/envs/rmg_env/conda-meta && \
-    # # rm -rf /opt/conda/envs/rmg_env/include && \
-    # # find -name '__pycache__' -type d -exec rm -rf '{}' '+' && \
-    # && find /opt/conda/envs/rmg_env/lib/python3.7/site-packages/scipy -name 'tests' -type d -exec rm -rf '{}' '+' && \
-    # find /opt/conda/envs/rmg_env/lib/python3.7/site-packages/numpy -name 'tests' -type d -exec rm -rf '{}' '+' && \
-    # find /opt/conda/envs/rmg_env/lib/python3.7/site-packages/pandas -name 'tests' -type d -exec rm -rf '{}' '+' 
-    # # #find /opt/conda/envs/rmg_env/lib/python3.7/site-packages -name '*.pyx' -delete && \
-    # # #rm -rf /opt/conda/envs/rmg_env/lib/python3.7/site-packages/uvloop/loop.c
+    micromamba install -n rmg_env -c conda-forge ncurses && \
+    micromamba clean --all -f -y
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 ENV ENV_NAME=rmg_env
@@ -66,7 +55,6 @@ ENV LD_LIBRARY_PATH /opt/conda/envs/rmg_env/lib
 ENV PYTHON=/opt/conda/envs/rmg_env/bin/python
 ENV PYCALL_JL_RUNTIME_PYTHON=/opt/conda/envs/rmg_env/bin/python
 
-#:/opt/conda/envs/rmg_env/share/julia/site/julia-1.8.5/lib/julia
 
 RUN echo "export OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh" \
     && echo "export LD_LIBRARY_PATH=/opt/conda/envs/rmg_env/lib" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh" \
@@ -74,8 +62,8 @@ RUN echo "export OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/
     && echo "unset OLD_LD_LIBRARY_PATH" >> "$BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh" \
     && echo "export PYTHONPATH=/home/mambauser/Code/RMG-Py" >> ~/.bashrc \
     && echo "export PATH=/home/mambauser/Code/RMG-Py:$PATH" >> ~/.bashrc \
-    && make
-    #&& ln -sf /opt/conda/envs/rmg_env/bin/python /opt/conda/envs/rmg_env/bin/python-jl \
+    && make \
+    && ln -sf /opt/conda/envs/rmg_env/bin/python /opt/conda/envs/rmg_env/bin/python-jl 
 RUN  /opt/conda/envs/rmg_env/share/julia/site/julia-1.8.5/bin/julia -e 'using Pkg; \
               ENV["PYCALL_JL_RUNTIME_PYTHON"] = "/opt/conda/envs/rmg_env/bin/python"; \
               ENV["PYTHON"]="/opt/conda/envs/rmg_env/bin/python"; \
@@ -123,6 +111,7 @@ WORKDIR /home/mambauser/Code/ARC
 ENV PYTHONPATH="${PYTHONPATH}:/home/mambauser/Code/ARC"
 ENV PYTHONPATH="${PYTHONPATH}:/home/mambauser/Code/AutoTST"
 ENV PYTHONPATH="${PYTHONPATH}:/home/mambauser/Code/TS-GCN"
+ENV PATH /home/mambauser/Code/ARC:$PATH
 
 RUN micromamba create -y -f environment.yml && \
     micromamba clean --all -f -y && \
