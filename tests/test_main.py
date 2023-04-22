@@ -312,45 +312,71 @@ def test_restart():
         if not os.path.isdir(empty_dir):
             os.makedirs(empty_dir)
 
-    # empty project directory
-    # results in iteration=0, run_rmg=True
+    # Test an empty project directory
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r0'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (0, True)
+    assert t3.restart() == (0, 'run', None, None)
 
-    # empty 'iteration_1' folder in project directory
-    # results in iteration=1, run_rmg=True
+    # Test an empty project directory with a requested iteration_0 run
+    qm = qm_minimal.copy()
+    qm['species'] = [{'label': 'H2O', 'smiles': 'O'}]
+    t3 = T3(project='test_restart',
+            project_directory=os.path.join(restart_base_path, 'r0'),
+            t3=t3_minimal,
+            rmg=rmg_minimal,
+            qm=qm,
+            )
+    assert t3.restart() == (0, None, None, 'run')
+
+    # Test a requested iteration_0 run that requires a QM restart
+    os.makedirs(os.path.join(restart_base_path, 'r0', 'iteration_0'))
+    arc_log_path = os.path.join(restart_base_path, 'r0', 'iteration_0', 'ARC', 'ARC.log')
+    with open(arc_log_path, 'w') as f:
+        f.write('ARC\n\nlog\n\nunfinished\n')
+    t3 = T3(project='test_restart',
+            project_directory=os.path.join(restart_base_path, 'r0'),
+            t3=t3_minimal,
+            rmg=rmg_minimal,
+            qm=qm,
+            )
+    assert t3.restart() == (0, None, None, 'restart')
+    os.remove(arc_log_path)
+
+    # Test an empty 'iteration_1' folder in project directory
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r1'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (1, True)
+    assert t3.restart() == (1, 'run', None, None)
 
-    # 'iteration_2' folder with an 'RMG.log' indicating a non-converged job
-    # results in iteration=2, run_rmg=True
+    # Test a non-converged RMG run that requires a restart
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r2'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (2, True)
+    assert t3.restart() == (2, 'restart', None, None)
 
-    # 'iteration_3' folder with an 'RMG.log' indicating a converged job
-    # results in iteration=3, run_rmg=False
+    # Test a converged RMG job that does not require a restart
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r3'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (3, False)
+    assert t3.restart() == (3, None, 'run', None, None)
+
+
+
+# test SA
+
 
     # 'iteration_4' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a non-converged job
     # results in iteration=4, run_rmg=False
