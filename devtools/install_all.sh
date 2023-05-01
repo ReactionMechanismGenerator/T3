@@ -84,7 +84,7 @@ fi
 #Compile RMG-Py
 make
 #Update pyjulia to the latest version
-$COMMAND_PKG update pyjulia -c conda_forge -y
+$COMMAND_PKG update pyjulia -c conda-forge -y
 
 #Ensure that added paths etc. are set and then reactivate rmg_env
 . ~/.bashrc
