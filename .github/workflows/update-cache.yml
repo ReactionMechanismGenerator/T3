@@ -3,10 +3,16 @@ name: Update cache
 on:
   schedule:
     - cron: "0 0 */7 * *"
+  push:
+    branches:
+      - main
 
 jobs:
   update_cache:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+          shell: bash -el {0}
     steps:
         - name: Checkout T3
           uses: actions/checkout@v3
@@ -111,12 +117,14 @@ jobs:
             echo "PATH=$(pwd):$PATH" >> ~/.bashrc
             echo "export arc_path=$(pwd)" >> ~/.bashrc
             cd ..
+            
         - name: Install xtb
           run: |
             mamba create -n xtb_env python=3.7  -c conda-forge -y
             conda activate xtb_env
             mamba install -c conda-forge xtb -y
             mamba install -c anaconda pyyaml -y
+
         - name: Cache Conda Packages
           uses: actions/cache@v2
           env:
