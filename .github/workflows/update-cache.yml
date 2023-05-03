@@ -23,10 +23,8 @@ jobs:
           with:
             path: RMG-Py
             key: ${{ runner.os }}-rmg-main
-            restore-keys: |
-              ${{ runner.os }}-rmg-
-        - name: Checkout RMG
 
+        - name: Checkout RMG
           uses: actions/checkout@v3
           with:
             repository: ReactionMechanismGenerator/RMG-Py
@@ -40,10 +38,8 @@ jobs:
           with:
               path: RMG-database
               key: ${{ runner.os }}-rmgdb-main
-              restore-keys: |
-                ${{ runner.os }}-rmgdb-
-        - name: Checkout RMG-database
 
+        - name: Checkout RMG-database
           uses: actions/checkout@v3
           with:
             repository: ReactionMechanismGenerator/RMG-database
@@ -57,8 +53,7 @@ jobs:
           with:
               path: ARC
               key: ${{ runner.os }}-arc-main
-              restore-keys: |
-                ${{ runner.os }}-arc-
+
         - name: Checkout ARC
           uses: actions/checkout@v3
           with:
@@ -104,6 +99,31 @@ jobs:
             echo "PYTHONPATH=$(pwd):$PYTHONPATH" >> ~/.bashrc
             echo "PATH=$(pwd):$PATH" >> ~/.bashrc
             echo "export rmgpy_path=$(pwd)" >> ~/.bashrc
+
+        - name: Install PyCall RMG_ENV
+          run: python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
+        
+        - name: Cache RMS
+          id: cache-rms
+          uses: actions/cache@v2
+          env:
+            CACHE_NUMBER: 0
+          with:
+            path: | 
+                /usr/share/miniconda3/envs/rmg_env/share/julia/artifacts/
+                /usr/share/miniconda3/envs/rmg_env/share/julia/packages/
+                /usr/share/miniconda3/envs/rmg_env/share/julia/registries/
+                /usr/share/miniconda3/envs/rmg_env/share/julia/compiled/
+            key:
+                ${{ runner.os }}-julia-${{ env.CACHE_NUMBER }}-rms
+
+        - name: Install RMS Julia
+          run: julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main"));using ReactionMechanismSimulator'
+
+        - name: Link Python-JL
+          run: |
+            ln -sfn $(which python-jl) $(which python)
+            cd .. 
 
         - name: Install ARC
           run: |
