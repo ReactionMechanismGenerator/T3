@@ -70,6 +70,7 @@ jobs:
             path: ARC
             ref: main
             fetch-depth: 1
+
         - name: Cache Conda Packages
           uses: actions/cache@v2
           env:
@@ -87,17 +88,13 @@ jobs:
               miniforge-version: latest
               activate-environment: rmg_env
               use-mamba: true
-        - name: Get Date
-          id: get-date
-          run: echo "today=$(/bin/date -u '+%Y%m%d')" >> $GITHUB_OUTPUT
-          shell: bash
 
         - name: Cache RMG-Py env
           uses: actions/cache@v2
           with:
             path: ${{ env.CONDA }}/envs/rmg_env
             key:
-              conda-${{ runner.os }}--${{ runner.arch }}--${{ steps.get-date.outputs.today }}-${{ hashFiles('RMG-Py/environment.yml') }}-${{ env.CACHE_NUMBER}}
+              conda-${{ runner.os }}--${{ runner.arch }}--${{ hashFiles('RMG-Py/environment.yml') }}-${{ env.CACHE_NUMBER}}
           env:
             # Increase this value to reset cache if etc/example-environment.yml has not changed
             CACHE_NUMBER: 0
