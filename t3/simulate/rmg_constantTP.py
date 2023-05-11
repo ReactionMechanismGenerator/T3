@@ -343,7 +343,7 @@ class RMGConstantTP(SimulateAdapter):
         species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in self.rmg['species']
                         if (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
                         or spc['balance'] or not spc['reactive']]
-        species_vals = [get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[species_index]]['concentration'],
+        species_vals = [get_values_within_range(value_range=self.rmg['species'][species_index]['concentration'],
                                                 num=self.t3['options']['num_sa_per_concentration_range'])
                         for species_index in spc_indices_w_ranges]
 
