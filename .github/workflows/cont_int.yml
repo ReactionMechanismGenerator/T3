@@ -156,7 +156,7 @@ jobs:
           run: |
             mamba create -n xtb_env python=3.7  -c conda-forge -y
             conda activate xtb_env
-            mamba install -c conda-forge xtb -y
+            mamba install -c conda-forge xtb=6.3.3 -y
             mamba install -c anaconda pyyaml -y
 
         - name: Install T3
