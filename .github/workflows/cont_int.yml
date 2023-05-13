@@ -94,14 +94,14 @@ jobs:
           with:
             path: ${{ env.CONDA }}/envs/rmg_env
             key:
-              conda-${{ runner.os }}--${{ runner.arch }}--${{ hashFiles('RMG-Py/environment.yml') }}-${{ env.CACHE_NUMBER}}
+              conda-${{ runner.os }}--${{ runner.arch }}-rmgpyenv-${{ env.CACHE_NUMBER}}
           env:
             # Increase this value to reset cache if etc/example-environment.yml has not changed
             CACHE_NUMBER: 0
-          id: cache
+          id: cache-rmgpy-env
         - name: Update environment
           run: mamba env update -n rmg_env -f RMG-Py/environment.yml
-          if: steps.cache.outputs.cache-hit != 'true'
+          if: steps.cache-rmgpy-env.outputs.cache-hit != 'true'
 
         - name: Cythonize RMG-Py
           run: |
@@ -140,7 +140,7 @@ jobs:
             ln -sfn $(which python-jl) $(which python)
             cd .. 
 
-        - name: Install ARC
+        - name: Install ARC ENV
           run: |
             cd ARC
             mamba env create -f environment.yml
@@ -152,6 +152,7 @@ jobs:
             echo "PATH=$(pwd):$PATH" >> ~/.bashrc
             echo "export arc_path=$(pwd)" >> ~/.bashrc
             cd ..
+
         - name: Install xtb
           run: |
             mamba create -n xtb_env python=3.7  -c conda-forge -y
