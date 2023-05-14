@@ -100,19 +100,19 @@ fi
 python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main"));using ReactionMechanismSimulator'
 
-if [ "$COMMAND_PKG" == "micromamba" ]; then
-    micromamba activate t3_env
-else
-    conda activate t3_env
-fi
-
-# check that Python and Julia are being accessed from the t3_env
+# check that Python and Julia are being accessed from the rmg_env
 echo checking which python...
 which python
 echo checking which julia...
 which julia
 echo linking python-jl to python...
 ln -sfn $(which python-jl) $(which python)
+
+if [ "$COMMAND_PKG" == "micromamba" ]; then
+    micromamba activate t3_env
+else
+    conda activate t3_env
+fi
 
 cd ..
 if [ -d "./ARC" ]; then
