@@ -49,7 +49,7 @@ ENV ENV_NAME=rmg_env
 
 # Activate the environment
 ENV PATH /opt/conda/envs/rmg_env/bin:$PATH
-ENV PYTHONPATH /home/mambauser/Code/RMG-Py
+ENV PYTHONPATH /home/mambauser/Code/RMG-Py:$PYTHONPATH
 ENV PATH /home/mambauser/Code/RMG-Py:$PATH
 ENV LD_LIBRARY_PATH /opt/conda/envs/rmg_env/lib
 ENV PYTHON=/opt/conda/envs/rmg_env/bin/python
@@ -117,7 +117,7 @@ RUN micromamba create -y -f environment.yml && \
     find /opt/conda/envs/arc_env/lib/python3.7/site-packages -name '*.pyx' -delete && \
     make clean
 
-RUN echo "export PYTHONPATH=/home/mambauser/Code/ARC" >> ~/.bashrc \
+RUN echo "export PYTHONPATH=/home/mambauser/Code/ARC:$PYTHONPATH" >> ~/.bashrc \
     && echo "export PATH=/home/mambauser/Code/ARC:$PATH" >> ~/.bashrc 
 
 # Install T3
