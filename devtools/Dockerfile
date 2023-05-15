@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 mambaorg/micromamba:1.3.1-jammy
+FROM --platform=linux/amd64 mambaorg/micromamba:jammy
 
 
 #Docker is built on layers - Each Run is a Layer
@@ -54,7 +54,6 @@ ENV PATH /home/mambauser/Code/RMG-Py:$PATH
 ENV LD_LIBRARY_PATH /opt/conda/envs/rmg_env/lib
 ENV PYTHON=/opt/conda/envs/rmg_env/bin/python
 ENV PYCALL_JL_RUNTIME_PYTHON=/opt/conda/envs/rmg_env/bin/python
-
 
 RUN echo "export OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh" \
     && echo "export LD_LIBRARY_PATH=/opt/conda/envs/rmg_env/lib" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh" \
@@ -140,5 +139,4 @@ RUN micromamba create -y -f environment.yml && \
     && find /opt/conda/ -follow -type f -name '*.pyc' -delete \
     && find /opt/conda/ -follow -type f -name '*.js.map' -delete 
 
-
-SHELL ["/bin/bash", "-c"]
+SHELL [ "/bin/bash", "--login", "-c" ]
