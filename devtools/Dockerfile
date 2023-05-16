@@ -33,15 +33,15 @@ WORKDIR /home/mambauser/Code
 
 # Pull in the latest version of the code
 # Layer RMG-Py
-RUN git clone https://github.com/ReactionMechanismGenerator/RMG-Py.git
+RUN git clone --depth 1  https://github.com/ReactionMechanismGenerator/RMG-Py.git
 # Layer RMG-database
-RUN git clone https://github.com/ReactionMechanismGenerator/RMG-database.git
+RUN git clone --depth 1 https://github.com/ReactionMechanismGenerator/RMG-database.git
 
+# cd into RMG-Py
 WORKDIR /home/mambauser/Code/RMG-Py
 
-# Install RMG-Py
+# Install RMG-Py and then clean
 RUN micromamba create -y -f environment.yml && \
-    micromamba install -n rmg_env -c conda-forge ncurses && \
     micromamba clean --all -f -y
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
@@ -55,29 +55,25 @@ ENV LD_LIBRARY_PATH /opt/conda/envs/rmg_env/lib
 ENV PYTHON=/opt/conda/envs/rmg_env/bin/python
 ENV PYCALL_JL_RUNTIME_PYTHON=/opt/conda/envs/rmg_env/bin/python
 
-RUN echo "export OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh" \
-    && echo "export LD_LIBRARY_PATH=/opt/conda/envs/rmg_env/lib" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh" \
-    && echo "export LD_LIBRARY_PATH=${OLD_LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh" \
-    && echo "unset OLD_LD_LIBRARY_PATH" >> "$BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh" \
-    && echo "export PYTHONPATH=/home/mambauser/Code/RMG-Py" >> ~/.bashrc \
-    && echo "export PATH=/home/mambauser/Code/RMG-Py:$PATH" >> ~/.bashrc \
-    && make \
-    && ln -sf /opt/conda/envs/rmg_env/bin/python /opt/conda/envs/rmg_env/bin/python-jl 
+RUN make \
+    && ln -sf /opt/conda/envs/rmg_env/bin/python-jl opt/conda/envs/rmg_env/bin/python
 RUN  /opt/conda/envs/rmg_env/share/julia/site/julia-1.8.5/bin/julia -e 'using Pkg; \
               Pkg.add(PackageSpec(name="ReactionMechanismSimulator", rev="main")); \
               using ReactionMechanismSimulator'\
     && /opt/conda/envs/rmg_env/bin/python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 
+# Compile RMS
+RUN python -c "from pyrms import rms"
 
 # # Add alias to bashrc - rmge to activate the environment
 RUN echo "alias rmge='micromamba activate rmg_env'" >> ~/.bashrc \
     && echo "alias rmg='python-jl /home/mambauser/Code/RMG/rmg.py input.py'" >> ~/.bashrc \
     && echo "alias t3e='micromamba activate t3_env'" >> ~/.bashrc \
-    && echo "alias t3='python /home/mambauser/Code/T3/t3.py input.yml'" >> ~/.bashrc \
-    && echo "alias arc='python /home/mambauser/Code/ARC/arc.py input.yml'" >> ~/.bashrc \
+    && echo "alias t3='python /home/mambauser/Code/T3/T3.py input.yml'" >> ~/.bashrc \
+    && echo "alias arc='python /home/mambauser/Code/ARC/Arc.py input.yml'" >> ~/.bashrc \
     && echo "alias arce='micromamba activate arc_env'" >> ~/.bashrc \
     && echo "alias deact='micromamba deactivate'" >> ~/.bashrc \
-    && echo "alias jupyter='jupyter notebook'" >> ~/.bashrc \
+    && echo "alias jpnb='jupyter notebook'" >> ~/.bashrc \
     && echo "export rmgpy_path='/home/mambauser/Code/RMG-Py/'" >> ~/.bashrc \
     && echo "export rmgdb_path='/home/mambauser/Code/RMG-database/'" >> ~/.bashrc \
     && echo "export arc_path='/home/mambauser/Code/ARC/'" >> ~/.bashrc \
@@ -93,7 +89,7 @@ RUN echo "alias rmge='micromamba activate rmg_env'" >> ~/.bashrc \
 
 WORKDIR /home/mambauser/Code
 
-RUN git clone https://github.com/ReactionMechanismGenerator/ARC.git
+RUN git --depth 1 clone https://github.com/ReactionMechanismGenerator/ARC.git
 
 WORKDIR /home/mambauser/Code/ARC
 
@@ -138,5 +134,7 @@ RUN micromamba create -y -f environment.yml && \
     && find /opt/conda/ -follow -type f -name '*.a' -delete \
     && find /opt/conda/ -follow -type f -name '*.pyc' -delete \
     && find /opt/conda/ -follow -type f -name '*.js.map' -delete 
+
+ENV ENV_NAME=t3_env
 
 SHELL [ "/bin/bash", "--login", "-c" ]
