@@ -5,7 +5,7 @@ This module contains functionality to import user settings and fill in default v
 import os
 import sys
 
-import t3.settings.settings as t3_settings
+import t3.settings.t3_settings as t3_settings
 from t3.settings.t3_submit import submit_scripts
 
 
@@ -13,16 +13,16 @@ from t3.settings.t3_submit import submit_scripts
 home = os.getenv("HOME") or os.path.expanduser("~")
 local_t3_path = os.path.join(home, '.t3')
 
-local_t3_settings_path = os.path.join(local_t3_path, 'settings.py')
+local_t3_settings_path = os.path.join(local_t3_path, 't3_settings.py')
 settings = {key: val for key, val in vars(t3_settings).items() if '__' not in key}
 if os.path.isfile(local_t3_settings_path):
     local_settings = dict()
     if local_t3_path not in sys.path:
-        sys.path.insert(1, local_t3_path)
+        sys.path.insert(0, local_t3_path)
     try:
-        import settings as local_settings
+        import t3_settings as local_settings
     except ImportError:
-        print('No local .t3/settings.py file found')
+        print('No local .t3/t3_settings.py file found')
     if local_settings:
         local_settings_dict = {key: val for key, val in vars(local_settings).items() if '__' not in key}
         settings.update(local_settings_dict)
