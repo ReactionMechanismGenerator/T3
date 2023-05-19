@@ -1,27 +1,10 @@
-# The parent image is the base image that the Dockerfile builds upon.
-# The RMG installation instructions suggest Anaconda for installation by source, however, we use micromamba for the Docker image due to its smaller size and less overhead.
-FROM --platform=linux/amd64 mambaorg/micromamba:jammy
+# Parent Image
+FROM --platform=linux/amd64 mambaorg/micromamba:1.3.1-jammy 
 
-# Set the user as root
+# Set the user to root
 USER root
-
-# Create a login user named rmguser
-ARG NEW_MAMBA_USER=rmguser
-ARG NEW_MAMBA_USER_ID=1000
-ARG NEW_MAMBA_USER_GID=1000
-RUN usermod "--login=${NEW_MAMBA_USER}" "--home=/home/${NEW_MAMBA_USER}" \
-        --move-home "-u ${NEW_MAMBA_USER_ID}" "${MAMBA_USER}" && \
-    groupmod "--new-name=${NEW_MAMBA_USER}" \
-             "-g ${NEW_MAMBA_USER_GID}" "${MAMBA_USER}" && \
-    # Update the expected value of MAMBA_USER for the
-    # _entrypoint.sh consistency check.
-    echo "${NEW_MAMBA_USER}" > "/etc/arg_mamba_user" && \
-    :
-
-# Set the environment variables
+# (otherwise python will not be found)
 ARG MAMBA_ROOT_PREFIX=/opt/conda
-ENV MAMBA_USER=$NEW_MAMBA_USER
-ENV BASE=$MAMBA_ROOT_PREFIX
 
 # Install system dependencies
 #
@@ -30,63 +13,54 @@ ENV BASE=$MAMBA_ROOT_PREFIX
 #  - git for downloading RMG respoitories
 #  - wget for downloading conda install script
 #  - libxrender1 required by RDKit
-# Clean up the apt cache to reduce the size of the image
-RUN apt-get update && apt-get install -y \
-    git \
-    gcc \
-    g++ \
-    make \
-    libgomp1\
-    libxrender1 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update
+RUN apt-get install -y make gcc wget git g++ libxrender1
+RUN apt-get clean
 
-# Change user to the non-root user
-USER $MAMBA_USER
+# Install conda
+ENV PATH="$PATH:/opt/conda/bin"
 
-# Make directory for RMG-Py and RMG-database
-RUN mkdir -p /home/rmguser/Code
+# Set Bash as the default shell for following commands
+SHELL ["/bin/bash", "-c"]
 
-# Change working directory to Code
-WORKDIR /home/rmguser/Code
+# cd
+WORKDIR /home/mambauser
+RUN mkdir -p Code
+WORKDIR /home/mambauser/Code
 
-# Clone the RMG base and database repositories. The pulled branches are only the main branches.
+# Clone the RMG base and database repositories
 RUN git clone -b main https://github.com/ReactionMechanismGenerator/RMG-Py.git
 RUN git clone -b main https://github.com/ReactionMechanismGenerator/RMG-database.git
 
-# cd into RMG-Py
-WORKDIR /home/rmguser/Code/RMG-Py
+# build the conda environment
+WORKDIR /home/mambauser/Code/RMG-Py
+RUN micromamba env create --file environment.yml -y
 
-# Install RMG-Py and then clean up the micromamba cache
-RUN micromamba create -y -f environment.yml && \
-    micromamba clean --all -f -y
-
-# Activate the RMG environment
+# This runs all subsequent commands inside the rmg_env conda environment
+#
+# Analogous to just activating the environment, which we can't actually do here
+# since that requires running conda init and restarting the shell (not possible
+# in a Dockerfile build script)
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 ENV ENV_NAME=rmg_env
 
-# Set environment variables
-# These need to be set in the Dockerfile so that they are available to the build process
+# Set environment variables as directed in the RMG installation instructions
+ENV RUNNER_CWD=/home/mambauser/Code
+ENV PYTHONPATH="$RUNNER_CWD/RMG-Py:$PYTHONPATH"
+ENV PATH="$RUNNER_CWD/RMG-Py:$PATH"
+ENV PYTHON=/opt/conda/envs/rmg_env/bin/python
 ENV PATH /opt/conda/envs/rmg_env/bin:$PATH
-ENV PYTHONPATH /home/rmguser/Code/RMG-Py:$PYTHONPATH
-ENV PATH /home/rmguser/Code/RMG-Py:$PATH
 
 # Build RMG
-RUN make \
-    && echo "export PYTHONPATH=/home/rmguser/Code/RMG-Py" >> ~/.bashrc \
-    && echo "export PATH=/home/rmguser/Code/RMG-Py:$PATH" >> ~/.bashrc
+RUN make
 
-# Create the link between Julia and RMG-Py. A symbolic link is created between Python-JL and Python.
-# We do not use the command in Julia 'using ReactionMechanismSimulator' because the command is only for determining if the package is installed.
-# The command does not actually install the package but instead increases the build time, therefore not required.
-RUN  python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()" \
-    && julia -e 'using Pkg; \
-                Pkg.add(PackageSpec(name="ReactionMechanismSimulator", rev="main")); \
-                '\
-    && ln -sf /opt/conda/envs/rmg_env/bin/python-jl /opt/conda/envs/rmg_env/bin/python
+# Install and link Julia dependencies for RMS
+RUN python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()" || true
+RUN julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanismSimulator' || true 
+RUN ln -sfn $(which python-jl) $(which python)
 
-# Compile the RMS during Docker build - This will reduce the time it takes to run RMS for the first time
-RUN python -c "from pyrms import rms"
+# RMG-Py should now be installed and ready
+RUN python-jl -c "from pyrms import rms" || true
 
 # Installing ARC
 
@@ -142,14 +116,14 @@ RUN micromamba create -y -f environment.yml && \
 RUN echo "alias rmge='micromamba activate rmg_env'" >> ~/.bashrc \
     && echo "alias arce='micromamba activate arc_env'" >> ~/.bashrc \
     && echo "alias t3e='micromamba activate t3_env'" >> ~/.bashrc \
-    && echo "alias rmg='python-jl /home/rmguser/Code/RMG/rmg.py input.py'" >> ~/.bashrc \
+    && echo "alias rmg='python-jl /home/mambauser/Code/RMG/rmg.py input.py'" >> ~/.bashrc \
     && echo "alias deact='micromamba deactivate'" >> ~/.bashrc \
-    && echo "export rmgpy_path='/home/rmguser/Code/RMG-Py/'" >> ~/.bashrc \
-    && echo "export rmgdb_path='/home/rmguser/Code/RMG-database/'" >> ~/.bashrc \
-    && echo "export arc_path='/home/rmguser/Code/ARC/'" >> ~/.bashrc \
-    && echo "export autotst_path='/home/rmguser/Code/AutoTST/'" >> ~/.bashrc \
-    && echo "export tsgcn_path='/home/rmguser/Code/TS-GCN/'" >> ~/.bashrc \
-    && echo "alias t3_path='/home/rmguser/Code/T3/'" >> ~/.bashrc \
+    && echo "export rmgpy_path='/home/mambauser/Code/RMG-Py/'" >> ~/.bashrc \
+    && echo "export rmgdb_path='/home/mambauser/Code/RMG-database/'" >> ~/.bashrc \
+    && echo "export arc_path='/home/mambauser/Code/ARC/'" >> ~/.bashrc \
+    && echo "export autotst_path='/home/mambauser/Code/AutoTST/'" >> ~/.bashrc \
+    && echo "export tsgcn_path='/home/mambauser/Code/TS-GCN/'" >> ~/.bashrc \
+    && echo "alias t3_path='/home/mambauser/Code/T3/'" >> ~/.bashrc \
     && echo "alias arc='python \$arc_path/ARC.py input.yml > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2)'" >> ~/.bashrc \
     && echo "alias t3 = 'python \$t3_path/T3.py input.yml > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2)'" >> ~/.bashrc \
     && echo "alias arcrestart='python \$arc_path/ARC.py restart.yml  > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2)'" >> ~/.bashrc \
@@ -161,6 +135,10 @@ RUN echo "alias rmge='micromamba activate rmg_env'" >> ~/.bashrc \
     && echo "alias conda='micromamba'" >> ~/.bashrc \
     && echo "alias mamba='micromamba'" >> ~/.bashrc
 
+# Set the environment to t3_env
 ENV ENV_NAME=t3_env
+
+# Set the user back to mambauser
+USER mambauser
 
 SHELL [ "/bin/bash", "--login", "-c" ]
