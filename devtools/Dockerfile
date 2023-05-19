@@ -64,17 +64,22 @@ RUN python-jl -c "from pyrms import rms" || true
 
 # Installing ARC
 
+# Change back to Code directory
 WORKDIR /home/mambauser/Code
 
+#Git clone ARC at a depth of 1
 RUN git clone --depth 1  https://github.com/ReactionMechanismGenerator/ARC.git
 
+# cd into ARC
 WORKDIR /home/mambauser/Code/ARC
 
+# Set environment variables for other environments incase the user later installs them
 ENV PYTHONPATH="${PYTHONPATH}:/home/mambauser/Code/ARC"
 ENV PYTHONPATH="${PYTHONPATH}:/home/mambauser/Code/AutoTST"
 ENV PYTHONPATH="${PYTHONPATH}:/home/mambauser/Code/TS-GCN"
 ENV PATH /home/mambauser/Code/ARC:$PATH
 
+# Install ARC and clean up
 RUN micromamba create -y -f environment.yml && \
     rm -rf /home/mambauser/.cache/yarn \
     rm -rf /home/mambauser/.cache/pip &&\
@@ -92,12 +97,16 @@ RUN echo "export PYTHONPATH=/home/mambauser/Code/ARC:$PYTHONPATH" >> ~/.bashrc \
     && echo "export PATH=/home/mambauser/Code/ARC:$PATH" >> ~/.bashrc 
 
 # Install T3
+# Return to Code directory
 WORKDIR /home/mambauser/Code
 
-RUN git clone https://github.com/ReactionMechanismGenerator/T3.git
+# Git clone T3 at a depth of 1
+RUN git clone --depth 1 https://github.com/ReactionMechanismGenerator/T3.git
 
+# cd into T3
 WORKDIR /home/mambauser/Code/T3
 
+# Install T3 and clean up
 RUN micromamba create -y -f environment.yml && \
     micromamba clean --all -f -y && \
     rm -rf /home/mambauser/.cache/yarn \
