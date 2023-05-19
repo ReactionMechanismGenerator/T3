@@ -343,7 +343,7 @@ class RMGConstantTP(SimulateAdapter):
         species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in self.rmg['species']
                         if (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
                         or spc['balance'] or not spc['reactive']]
-        species_vals = [get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[species_index]]['concentration'],
+        species_vals = [get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges.index(species_index)]['concentration'],
                                                 num=self.t3['options']['num_sa_per_concentration_range'])
                         for species_index in spc_indices_w_ranges]
 
@@ -368,11 +368,11 @@ class RMGConstantTP(SimulateAdapter):
 
         # 3. No combinations, modify_concentration_ranges_together is True
         elif self.t3['options']['modify_concentration_ranges_together']:
-            for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
-                new_species_list = species_list
-                for i, spc_index in enumerate(spc_indices_w_ranges):
-                    new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
-                                             'concentration': species_vals[i][point_number]})
+                for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
+                    new_species_list = species_list
+                    for i, spc_index in enumerate(spc_indices_w_ranges):
+                        new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
+                                                'concentration': species_vals[i][point_number]})
                 species_lists.append(new_species_list)
 
         # 4. Combinations (products)
