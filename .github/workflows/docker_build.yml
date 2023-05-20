@@ -5,7 +5,7 @@
       branches:
         - main
       path:
-        - /Dockerfile
+        - T3/devtools/Dockerfile
 
   jobs:
     build:
