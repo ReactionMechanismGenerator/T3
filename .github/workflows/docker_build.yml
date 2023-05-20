@@ -4,6 +4,7 @@
     push:
       branches:
         - main
+    pull_request:
       paths:
         - /devtools/Dockerfile
 
