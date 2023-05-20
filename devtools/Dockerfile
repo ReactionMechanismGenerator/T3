@@ -5,6 +5,8 @@ FROM --platform=linux/amd64 mambaorg/micromamba:jammy
 # Set the user as root
 USER root
 
+# Test that the CI runs when this commit is added
+
 # Create a login user named rmguser
 ARG NEW_MAMBA_USER=rmguser
 ARG NEW_MAMBA_USER_ID=1000
