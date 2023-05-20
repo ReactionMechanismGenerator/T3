@@ -5,6 +5,8 @@
       branches:
         - main
     pull_request:
+      branches:
+        - main
       paths:
         - /devtools/Dockerfile
 
