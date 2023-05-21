@@ -30,7 +30,8 @@ if RMG_EXECUTION_TYPE == 'local':
     CHECK_STATUS_COMMAND = settings['check_status_command'][LOCAL_CLUSTER_SOFTWARE]
     SUBMIT_FILENAME = settings['submit_filenames'][LOCAL_CLUSTER_SOFTWARE]
 else:
-    SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME, LOCAL_CLUSTER_SOFTWARE = ''
+    SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME = LOCAL_CLUSTER_SOFTWARE = ''
+
 
 
 def write_submit_script(project_directory: str,

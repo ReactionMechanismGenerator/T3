@@ -145,3 +145,7 @@ dmypy.json
 # Unit test files
 testing/*
 htmlcov/*
+
+#VSCode files
+.vscode/*
+.vscode/launch.json
