@@ -1,16 +1,23 @@
-FROM --platform=linux/amd64 mambaorg/micromamba:1.3.1-jammy
-
+#T3 Dockerfile
+# https://hub.docker.com/layers/mambaorg/micromamba/1.4.3-jammy/images/sha256-0c7c97be938c5522dcb9e1737bfa4499c53f6cf9e32e53897607a57ba8b148d5?context=explore
+# We are using the sha256 hash to ensure that the image is not updated without our knowledge. It considered best practice to use the sha256 hash
+FROM --platform=linux/amd64 mambaorg/micromamba@sha256:0c7c97be938c5522dcb9e1737bfa4499c53f6cf9e32e53897607a57ba8b148d5
 
 #Docker is built on layers - Each Run is a Layer
 
 # Install dependencies
 
+# Set User to root to install dependencies
 USER root
-  # (otherwise python will not be found)
+# (otherwise python will not be found)
 ARG MAMBA_ROOT_PREFIX=/opt/conda
 ENV PYTHONDONTWRITEBYTECODE=true
 ENV BASE=$MAMBA_ROOT_PREFIX
 
+# Install dependencies and clean up - removing apt lists for space
+# git, gcc, g++, make, libxrender1, libtinfo6 are required by RMG-Py
+# libgomp1 is required by ARC
+# openssh-server is required for copying files from the host to the container
 RUN apt-get update && apt-get install -y \
     git \
     gcc \
@@ -19,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     libgomp1\
     libxrender1 \
     libtinfo6 \
+    openssh-server \
     # Clean up
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -59,27 +67,24 @@ ENV PYCALL_JL_RUNTIME_PYTHON=/opt/conda/envs/rmg_env/bin/python
 # Compile RMG-Py
 RUN make 
 
+# Create the link between Julia and RMG-Py. A symbolic link is created between Python-JL and Python.
+# We do not use the command in Julia 'using ReactionMechanismSimulator' because the command is only for determining if the package is installed.
+# The command does not actually install the package but instead increases the build time, therefore not required.
 # Install RMS
 # The extra arguments are required to install PyCall and RMS in this Dockerfile. Will not work without them.
-RUN  /opt/conda/envs/rmg_env/bin/julia -e 'using Pkg; \
-            ENV["CONDA_JL_HOME"]="/opt/conda/envs/rmg_env/bin"; \
-            ENV["CONDA_JL_CONDA_EXE"]="/usr/bin/micromamba"; \
-            Pkg.add("PyCall"); \
-              Pkg.build("PyCall"); \
-              using PyCall; \
-              Pkg.add(PackageSpec(name="ReactionMechanismSimulator", rev="main")); \
-              using ReactionMechanismSimulator'\
-    && /opt/conda/envs/rmg_env/bin/python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()" 
+RUN touch /opt/conda/envs/rmg_env/condarc-julia.yml
+RUN CONDA_JL_CONDA_EXE=/bin/micromamba julia -e 'using Pkg;Pkg.add(PackageSpec(name="PyCall", rev="master")); Pkg.build("PyCall"); Pkg.add(PackageSpec(name="ReactionMechanismSimulator", rev="main"))'
+RUN python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 
-# Compile RMS
+# Compile the RMS during Docker build - This will reduce the time it takes to run RMS for the first time
 RUN python-jl -c "from pyrms import rms"
 
 # Add aliases to bashrc
 RUN echo "alias rmge='micromamba activate rmg_env'" >> ~/.bashrc \
     && echo "alias rmg='python-jl /home/mambauser/Code/RMG/rmg.py input.py'" >> ~/.bashrc \
     && echo "alias t3e='micromamba activate t3_env'" >> ~/.bashrc \
-    && echo "alias t3='python /home/mambauser/Code/T3/t3.py input.yml'" >> ~/.bashrc \
-    && echo "alias arc='python /home/mambauser/Code/ARC/arc.py input.yml'" >> ~/.bashrc \
+    && echo "alias t3='python /home/mambauser/Code/T3/T3.py input.yml'" >> ~/.bashrc \
+    && echo "alias arc='python /home/mambauser/Code/ARC/ARC.py input.yml'" >> ~/.bashrc \
     && echo "alias arce='micromamba activate arc_env'" >> ~/.bashrc \
     && echo "alias deact='micromamba deactivate'" >> ~/.bashrc \
     && echo "alias jupyter='jupyter notebook'" >> ~/.bashrc \
@@ -111,20 +116,13 @@ ENV PATH /home/mambauser/Code/ARC:$PATH
 
 # Install ARC Environment
 RUN micromamba create -y -f environment.yml && \
-    micromamba clean --all -f -y && \
-    rm -rf /home/mambauser/.cache/yarn \
-    rm -rf /home/mambauser/.cache/pip &&\
-    rm -rf /home/mambauser/.cache/pip && \
     find -name '*.a' -delete && \
     find -name '*.pyc' -delete && \
-    rm -rf /opt/conda/envs/arc_env/conda-meta && \
-    rm -rf /opt/conda/envs/arc_env/include && \
     find -name '__pycache__' -type d -exec rm -rf '{}' '+' && \
     find /opt/conda/envs/arc_env/lib/python3.7/site-packages/scipy -name 'tests' -type d -exec rm -rf '{}' '+' && \
     find /opt/conda/envs/arc_env/lib/python3.7/site-packages/numpy -name 'tests' -type d -exec rm -rf '{}' '+' && \
     find /opt/conda/envs/arc_env/lib/python3.7/site-packages/pandas -name 'tests' -type d -exec rm -rf '{}' '+' && \
     find /opt/conda/envs/arc_env/lib/python3.7/site-packages -name '*.pyx' -delete && \
-    rm -rf /opt/conda/envs/arc_env/lib/python3.7/site-packages/uvloop/loop.c &&\
     make clean
 
 # Install T3
