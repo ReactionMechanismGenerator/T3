@@ -16,9 +16,14 @@ theme:
     primary: indigo
     accent: amber
   icon:
+    logo: docs/T3_logo_small.png
     repo: fontawesome/brands/github-alt
   features:
-    - instant
+    - navigation.tabs
+    - navigation.instant
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
 
 # Navigation
 nav:
