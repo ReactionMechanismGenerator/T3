@@ -17,7 +17,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       # Add steps for CI checks of the Dockerfile
-      - name: Build and push
+      - name: Build RMG-Py
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./devtools/Dockerfile_rmgpy
+          push: false
+      - name: Build T3
         uses: docker/build-push-action@v2
         with:
           context: .
@@ -37,7 +43,14 @@ jobs:
         password: ${{ secrets.DOCKERHUB_TOKEN }}
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
-    - name: Build and push
+    - name: Build and push RMG-Py
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./devtools/Dockerfile_rmgpy
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/rmgpy:latest
+    - name: Build and push T3
       uses: docker/build-push-action@v2
       with:
         context: .
