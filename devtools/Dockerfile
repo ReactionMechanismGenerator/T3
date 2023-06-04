@@ -27,8 +27,6 @@ RUN micromamba create -y -f environment.yml && \
     rm -rf /home/rmguser/.cache/pip && \
     find -name '*.a' -delete && \
     find -name '*.pyc' -delete && \
-    rm -rf /opt/conda/envs/arc_env/conda-meta && \
-    rm -rf /opt/conda/envs/arc_env/include && \
     find -name '__pycache__' -type d -exec rm -rf '{}' '+' && \
     find /opt/conda/envs/arc_env/lib/python3.7/site-packages/scipy -name 'tests' -type d -exec rm -rf '{}' '+' && \
     find /opt/conda/envs/arc_env/lib/python3.7/site-packages/numpy -name 'tests' -type d -exec rm -rf '{}' '+' && \
@@ -59,5 +57,17 @@ RUN micromamba create -y -f environment.yml && \
     && find /opt/conda/ -follow -type f -name '*.a' -delete \
     && find /opt/conda/ -follow -type f -name '*.pyc' -delete \
     && find /opt/conda/ -follow -type f -name '*.js.map' -delete 
+
+# Add alias to bashrc - rmge to activate the environment
+# These commands are not necessary for the Docker image to run, but they are useful for the user
+RUN echo "alias arce='micromamba activate arc_env'" >> ~/.bashrc \
+    && echo "alias arc='python /home/rmguser/Code/ARC/ARC.py input.yml'" >> ~/.bashrc \
+    && echo "alias deact='micromamba deactivate'" >> ~/.bashrc \
+    && echo "export arc_path='/home/rmguser/Code/ARC/'" >> ~/.bashrc \
+    && echo "export t3_path='/home/rmguser/Code/T3/'" >> ~/.bashrc \
+    && echo "alias arccode='cd \$arc_path'" >> ~/.bashrc \
+    && echo "alias t3code='cd \$t3_path'" >> ~/.bashrc \
+    && echo "alias t3e='micromamba activate t3_env'" >> ~/.bashrc \
+    && echo "alias t3='python /home/rmguser/Code/T3/T3.py input.yml'" >> ~/.bashrc 
 
 SHELL ["/bin/bash", "-c"]
