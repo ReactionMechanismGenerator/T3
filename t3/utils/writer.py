@@ -21,6 +21,7 @@ def write_rmg_input_file(rmg: dict,
                          iteration: int,
                          path: str,
                          walltime: str = '00:00:00:00',
+                         sa: bool = False,
                          ):
     """
     Write an RMG input file to the given file path.

@@ -894,7 +894,7 @@ class T3(object):
                 self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method\n'
                                  f'to examine reaction {reaction} (iteration {self.iteration})...')
                 try:
-                    arkane.execute()
+                    arkane.execute()  # todo: later make input file and submit if asked rmg_ececution mode
                 except (AttributeError,
                         ChemicallySignificantEigenvaluesError,
                         ModifiedStrongCollisionError,

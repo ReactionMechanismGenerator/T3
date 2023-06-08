@@ -113,13 +113,15 @@ class RMGConstantTP(SimulateAdapter):
         else:
             self.rmg_input_file = self.paths['RMG input']
 
-        write_rmg_input_file(
-            rmg=self.generate_rmg_reactors_for_simulation(),
-            t3=self.t3,
-            iteration=1,  # Does not matter for simulating or computing SA.
-            path=self.rmg_input_file,
-            walltime=self.t3['options']['max_RMG_walltime'],
-        )
+        for rmg_condition in self.generate_rmg_reactors_for_simulation():
+            write_rmg_input_file(
+                rmg=rmg_condition,
+                t3=self.t3,
+                iteration=1,  # Does not matter for simulating or computing SA.
+                path=self.rmg_input_file,  # todo: change path per condition
+                walltime=self.t3['options']['max_RMG_walltime'],
+                sa=bool(len(self.observable_list)),  # add
+            )
 
         with open(self.rmg_input_file, 'r') as f:
             lines = f.readlines()
@@ -289,7 +291,7 @@ class RMGConstantTP(SimulateAdapter):
                     }
         return idt_dict
 
-    def generate_rmg_reactors_for_simulation(self) -> dict:
+    def generate_rmg_reactors_for_simulation(self) -> List[dict]:
         """
         Turn all RMG ranged reactors into individual reactors with specific species concentrations,
         temperature, pressure (for gas phase simulations), and volume (for liquid phase simulations).
@@ -302,7 +304,9 @@ class RMGConstantTP(SimulateAdapter):
         ranged_p = any('P' in reactor.keys() and isinstance(reactor['P'], list) for reactor in self.rmg['reactors'])
         ranged_v = any('V' in reactor.keys() and isinstance(reactor['V'], list) for reactor in self.rmg['reactors'])
         if not any([ranged_species, ranged_t, ranged_p, ranged_v]):
-            return self.rmg
+            return [self.rmg]
+
+        mod_rmgs = list()
 
         mod_rmg = self.rmg.copy()
         mod_rmg['reactors'] = list()
@@ -319,16 +323,20 @@ class RMGConstantTP(SimulateAdapter):
             elif 'V' in reactor.keys():
                 v_vals = get_values_within_range(value_range=reactor['V'],
                                                  num=self.t3['options']['num_sa_per_volume_range'])
+            # if rmg_execution_type is incore, comtinue to do the same thing, if "local", then split!
             for t_val in t_vals:
                 for param in p_vals if ranged_p else v_vals:
                     for species_list in species_lists:
+                        mod_rmg = self.rmg.copy()
+                        mod_rmg['reactors'] = list()
                         new_reactor = {k: v for k, v in reactor.items() if k not in ['T', 'P', 'V']}
                         new_reactor['T'] = t_val
                         new_reactor['P' if ranged_p else 'V'] = param
                         new_reactor['species_list'] = species_list
                         mod_rmg['reactors'].append(new_reactor)
+                        mod_rmgs.append(mod_rmg)
 
-        return mod_rmg
+        return mod_rmgs
 
     def get_species_concentration_lists_from_ranged_params(self) -> List[List[dict]]:
         """
