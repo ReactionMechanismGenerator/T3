@@ -168,7 +168,7 @@ class RMGConstantTP(SimulateAdapter):
 
         tic = datetime.datetime.now()
         for index, reaction_system in enumerate(self.rmg_model.reaction_systems):
-            if reaction_system.sensitive_species and reaction_system.sensitive_species == ['all']:
+            if reaction_system.sensitive_species == ['all']:
                 reaction_system.sensitive_species = self.rmg_model.reaction_model.core.species
             reaction_system.attach(SimulationProfileWriter(output_directory=self.rmg_model.output_directory,
                                                            reaction_sys_index=index,
@@ -181,7 +181,7 @@ class RMGConstantTP(SimulateAdapter):
             for spc in reaction_system.sensitive_species:
                 csv_path = os.path.join(self.rmg_model.output_directory, 'solver', f'sensitivity_{index + 1}_SPC_{spc.index}.csv')
                 sens_worksheet.append(csv_path)
-            for source, networks in self.rmg_model.reaction_model.network_dict.items():
+            for networks in self.rmg_model.reaction_model.network_dict.values():
                 pdep_networks.extend(networks)
 
             model_settings = ModelSettings(tol_keep_in_edge=0, tol_move_to_core=1, tol_interrupt_simulation=1)
