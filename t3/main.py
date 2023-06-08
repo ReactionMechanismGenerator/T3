@@ -52,6 +52,7 @@ from arc.species.converter import check_xyz_dict
 from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
 from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
+from t3.runners.rmg_adapter import RMGAdapter
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
@@ -617,6 +618,32 @@ class T3(object):
         elif t3_kinetics_lib in self.rmg['database']['kinetics_libraries'] \
                 and not os.path.isdir(self.paths['RMG T3 kinetics lib']):
             self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(t3_kinetics_lib))
+
+
+    # Creating the RMG Adapter class - allow for SSH
+        # We will need self.rmg
+        rmg_adapter = RMGAdapter(
+                                rmg=self.rmg,
+                                t3=self.t3,
+                                iteration=self.iteration,
+                                path=self.paths,
+                                walltime=self.t3['options']['max_RMG_walltime'],
+                                )
+        rmg_adapter.write_rmg_input_file()
+        if not os.path.isfile(self.paths['RMG input']):
+            raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be written.")
+        tic = datetime.datetime.now()
+        
+        max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
+
+        if self.
+
+
+
+
+        
+        
+    #
 
         write_rmg_input_file(
             rmg=self.rmg,
