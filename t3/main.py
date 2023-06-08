@@ -626,17 +626,18 @@ class T3(object):
                                 rmg=self.rmg,
                                 t3=self.t3,
                                 iteration=self.iteration,
-                                path=self.paths,
+                                paths=self.paths,
                                 walltime=self.t3['options']['max_RMG_walltime'],
+                                max_iterations=self.t3['options']['max_rmg_iterations'],
+                                verbose=self.verbose,
+                                t3_project_name=self.project
                                 )
-        rmg_adapter.write_rmg_input_file()
+        rmg_adapter.run_rmg()
         if not os.path.isfile(self.paths['RMG input']):
             raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be written.")
         tic = datetime.datetime.now()
         
         max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
-
-        if self.
 
 
 

@@ -14,10 +14,10 @@ METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
               'MSC': 'modified strong collision',
               }
 
-rmg_execution_type = settings['execution_type']['rmg']
+RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
 submit_filenames = settings['submit_filenames']
 rmg_memory = settings['rmg_initial_memory']
-if rmg_execution_type == 'queue':
+if RMG_EXECUTION_TYPE == 'queue':
     server = list(settings['servers'].keys())[0]
 
 
@@ -36,6 +36,7 @@ class RMGAdapter(object):
                  t3_project_name: str=None,
                  rmg_execution_type: str='incore',
                  restart_rmg: bool=False,
+                 server: str=None,
                  
                  ):
         self.rmg = rmg
@@ -45,8 +46,9 @@ class RMGAdapter(object):
         self.walltime = walltime
         self.rmg_input_file_path = self.paths['RMG input']
         self.memory = memory
-        
-        self.rmg_execution_type = rmg_execution_type
+        self.t3_project_name = t3_project_name
+        self.max_iterations = max_iterations
+        self.rmg_execution_type = RMG_EXECUTION_TYPE or rmg_execution_type
         
         
         
@@ -60,6 +62,9 @@ class RMGAdapter(object):
         """
         Run RMG
         """
+        self.set_file_paths()
+        self.set_files()
+
         if self.rmg_execution_type == 'incore':
             self.execute_incore()
         elif self.rmg_execution_type == 'queue':
@@ -74,7 +79,7 @@ class RMGAdapter(object):
         """
         rmg= self.rmg.copy()
         rmg_input = ''
-        self.iteration -= 1 # iteration is 1-indexed, convert to 0-indexed for list indexing
+        iteration = self.iteration - 1 # iteration is 1-indexed, convert to 0-indexed for list indexing
         
         # Database
         database = rmg['database']
@@ -258,10 +263,10 @@ liquidReactor(
 )
 """
         model = dict()
-        model['tol_move_to_core'] = model_input['core_tolerance'][self.iteration]\
-            if len(model_input['core_tolerance']) >= self.iteration + 1 else model_input['core_tolerance'][-1]
-        model['tolerance_interrupt_simulation'] = model_input['tolerance_interrupt_simulation'][self.iteration] \
-            if len(model_input['tolerance_interrupt_simulation']) >= self.iteration + 1 \
+        model['tol_move_to_core'] = model_input['core_tolerance'][iteration]\
+            if len(model_input['core_tolerance']) >= iteration + 1 else model_input['core_tolerance'][-1]
+        model['tolerance_interrupt_simulation'] = model_input['tolerance_interrupt_simulation'][iteration] \
+            if len(model_input['tolerance_interrupt_simulation']) >= iteration + 1 \
             else model_input['tolerance_interrupt_simulation'][-1]
         model_keys_to_skip = ['core_tolerance', 'tolerance_interrupt_simulation', 'atol', 'rtol', 'sens_atol', 'sens_rtol']
         args = ''
@@ -428,7 +433,7 @@ generatedSpeciesConstraints(
         """
         Write the submit script.
         """
-        if self.server is None:
+        if server is None:
             return
         if self.max_job_time < self.walltime:
             self.walltime = self.max_job_time
@@ -458,10 +463,10 @@ generatedSpeciesConstraints(
         self.local_rmg_path = self.paths['RMG']
         
         
-        if self.server is not None:
+        if server != 'incore':
             path = settings['servers'][server].get('path','').lower()
             path = os.path.join(path, settings['servers'][server]['un']) if path else ''
-            self.remote_path = os.path.join(path, 'runs', 'T3_Projects', self.project, self.iteration, 'RMG')
+            self.remote_path = os.path.join(path, 'runs', 'T3_Projects', self.t3_project_name, f"iteration_{self.iteration}", 'RMG')
         
         # Get additional file paths - but I think we copy the whole folder of RMG from Remote to Local
         self.set_additional_file_paths()
