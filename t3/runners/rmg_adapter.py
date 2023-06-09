@@ -1,12 +1,14 @@
 
 import os
+import math
 
 from mako.template import Template
 from t3.utils.writer import to_camel_case
 from t3.common import get_rmg_species_from_a_species_dict
 from t3.utils.generator import generate_radicals
-from t3.imports import local_t3_path, settings
+from t3.imports import local_t3_path, settings, submit_scripts
 from t3.utils.ssh import SSHClient
+from t3.logger import Logger
 
 
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
@@ -18,7 +20,16 @@ RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
 submit_filenames = settings['submit_filenames']
 rmg_memory = settings['rmg_initial_memory']
 if RMG_EXECUTION_TYPE == 'queue':
-    server = list(settings['servers'].keys())[0]
+    SERVER = list(settings['servers'].keys())[0]
+    CPUS = settings['servers'][SERVER]['cpus']
+    MEMORY = settings['servers'][SERVER]['memory']
+    CLUSTER_SOFT = settings['servers'][SERVER]['cluster_soft']
+elif RMG_EXECUTION_TYPE == 'local':
+    SERVER = 'local'
+elif RMG_EXECUTION_TYPE == 'incore':
+    SERVER = 'incore'
+else:
+    raise ValueError(f'RMG execution type {RMG_EXECUTION_TYPE} is not supported.')
 
 
 
@@ -30,25 +41,30 @@ class RMGAdapter(object):
                  iteration: int,
                  paths: dict,
                  walltime: str="00:00:00",
+                 cpus: int=1,
                  memory: str="8G", # TODO: make this a parameter
                  max_iterations: int=1,
                  verbose: bool=False,
                  t3_project_name: str=None,
                  rmg_execution_type: str='incore',
                  restart_rmg: bool=False,
-                 server: str=None,
-                 
+                 server: str=None,                 
                  ):
         self.rmg = rmg
         self.t3 = t3
         self.iteration = iteration
         self.paths = paths
         self.walltime = walltime
+        self.rmg_path = self.paths['RMG']
         self.rmg_input_file_path = self.paths['RMG input']
-        self.memory = memory
+        self.max_cpus = CPUS if CPUS else cpus
+        self.max_memory = MEMORY if MEMORY else memory
         self.t3_project_name = t3_project_name
         self.max_iterations = max_iterations
         self.rmg_execution_type = RMG_EXECUTION_TYPE or rmg_execution_type
+        if self.rmg_execution_type == 'queue':
+            self.max_job_time = settings['servers'][SERVER]['max_job_time']
+        
         
         
         
@@ -62,6 +78,7 @@ class RMGAdapter(object):
         """
         Run RMG
         """
+        self.set_cpu_and_mem()
         self.set_file_paths()
         self.set_files()
 
@@ -365,6 +382,31 @@ generatedSpeciesConstraints(
         with open(self.rmg_input_file_path, 'w') as f:
             f.writelines(rmg_input)
 
+    def set_cpu_and_mem(self):
+        """
+        Set cpu and memory based on ESS and cluster software.
+        This is not an abstract method and should not be overwritten.
+        """
+        if self.max_memory < rmg_memory:
+            Logger.warning(f'The maximum memory of the server is {self.max_memory} GB, which is less than the defined '
+                           f'RMG memory {rmg_memory} GB set by the user. The RMG memory will be set to {self.max_memory}')
+            total_submit_script_memory = self.max_memory
+        else:
+            total_submit_script_memory = rmg_memory
+        # Determine amount of memory in submit script based on cluster job scheduling system.
+        cluster_software = CLUSTER_SOFT.lower() if SERVER is not None else None
+        if cluster_software in ['oge', 'sge', 'htcondor']:
+            # In SGE, "-l h_vmem=5000M" specifies the memory for all cores to be 5000 MB.
+            self.submit_script_memory = math.ceil(total_submit_script_memory)  # in MB
+        if cluster_software in ['pbs']:
+            # In PBS, "#PBS -l select=1:ncpus=8:mem=12000000" specifies the memory for all cores to be 12 MB.
+            self.submit_script_memory = math.ceil(total_submit_script_memory) * 1E6  # in Bytes
+        elif cluster_software in ['slurm']:
+            # In Slurm, "#SBATCH --mem-per-cpu=2000" specifies the memory **per cpu/thread** to be 2000 MB.
+            self.submit_script_memory = math.ceil(total_submit_script_memory / self.max_cpus)  # in MB
+        self.set_input_file_memory()
+
+
     def set_files(self) -> None:
         """
         Set files to be uploaded and downloaded. Writes the files if needed.
@@ -418,40 +460,39 @@ generatedSpeciesConstraints(
         """
         Execute the job in the queue.
         """
-        if self.server != 'local':
-            with SSHClient(self.server) as ssh:
+        if SERVER != 'local':
+            with SSHClient(SERVER) as ssh:
                 self.job_status, self.job_id = ssh.submit_job(remote_path=self.remote_path)
     
     def execute_local(self) -> None:
         """
         Execute the job.
         """
-        if self.server == 'local':
+        if SERVER == 'local':
             self.job_status, self.job_id = self.submit_job()
 
     def write_submit_script(self) -> None:
         """
         Write the submit script.
         """
-        if server is None:
+        if SERVER is None:
             return
         if self.max_job_time < self.walltime:
             self.walltime = self.max_job_time
         architecture = ''
         
         try:
-            submit_script = submit_script.format(
-                                            job_name=self.job_name,
+            submit_script = submit_scripts['rmg'][settings['servers'][SERVER]['cluster_soft']].format(
+                                            name=f'{self.t3_project_name}_RMG_{self.iteration}',
                                             max_job_time=self.max_job_time,
-                                            cpus=self.cpus,
+                                            cpus=self.max_cpus,
                                             memory=self.submit_script_memory,
-                                            project_directory=self.project_directory,
                                             max_iterations=self.max_iterations,
                                             )
         except KeyError as e:
             raise KeyError(f'Invalid key in submit script: {e}')
     
-        with open(os.path.join(self.rmg_input_file_path, 'submit.sh'), 'w') as f:
+        with open(os.path.join(self.rmg_path, 'submit.sh'), 'w') as f:
             f.write(submit_script)
             
     def set_file_paths(self) -> None:
@@ -463,9 +504,9 @@ generatedSpeciesConstraints(
         self.local_rmg_path = self.paths['RMG']
         
         
-        if server != 'incore':
-            path = settings['servers'][server].get('path','').lower()
-            path = os.path.join(path, settings['servers'][server]['un']) if path else ''
+        if SERVER != 'incore':
+            path = settings['servers'][SERVER].get('path','').lower()
+            path = os.path.join(path, settings['servers'][SERVER]['un']) if path else ''
             self.remote_path = os.path.join(path, 'runs', 'T3_Projects', self.t3_project_name, f"iteration_{self.iteration}", 'RMG')
         
         # Get additional file paths - but I think we copy the whole folder of RMG from Remote to Local
@@ -502,3 +543,4 @@ generatedSpeciesConstraints(
                'remote': remote,
                'source': source,
                'make_x': make_x}
+    
