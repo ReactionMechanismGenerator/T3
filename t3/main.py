@@ -627,6 +627,7 @@ class T3(object):
                                 t3=self.t3,
                                 iteration=self.iteration,
                                 paths=self.paths,
+                                logger=self.logger,
                                 walltime=self.t3['options']['max_RMG_walltime'],
                                 max_iterations=self.t3['options']['max_rmg_iterations'],
                                 verbose=self.verbose,

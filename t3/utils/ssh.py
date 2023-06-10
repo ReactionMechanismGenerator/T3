@@ -16,7 +16,7 @@ import paramiko
 
 from arc.common import get_logger
 from arc.exceptions import InputError, ServerError
-from arc.imports import settings
+from t3.imports import settings
 
 
 logger = get_logger()
@@ -196,6 +196,46 @@ class SSHClient(object):
         except IOError:
             logger.warning(f'Got an IOError when trying to download file '
                            f'{remote_file_path} from {self.server}')
+
+    def download_folder(self,
+                      remote_folder_path: str,
+                      local_folder_path: str,
+                      ) -> None:
+        """
+        Download a file from the server.
+
+        Args:
+            remote_file_path (str): The remote path to be downloaded from.
+            local_file_path (str): The local path to be downloaded to.
+
+        Raises:
+            ServerError: If the file cannot be downloaded with maximum times to try
+        """
+        if not self._check_dir_exists(remote_folder_path):
+            # Check if a file exists
+            # This doesn't have a real impact now to avoid screwing up ESS trsh
+            # but introduce an opportunity for better troubleshooting.
+            # The current behavior is that if the remote path does not exist
+            # an empty file will be created at the local path
+            logger.debug(f'{remote_folder_path} does not exist on {self.server}.')
+        try:
+            self._sftp.chdir(remote_folder_path)
+            for item in self._sftp.listdir_attr():
+                # Get the remote item's name and full path
+                filename = item.filename
+                remote_filepath = remote_folder_path + '/' + filename
+                local_filepath = os.path.join(local_folder_path, filename)
+
+                 # Download files
+                if item.isfile():
+                    self._sftp.get(remote_filepath, local_filepath)
+
+                # Recursively download folders
+                elif item.isdir():
+                    self.download_folder(remote_filepath, local_filepath)
+        except IOError:
+            logger.warning(f'Got an IOError when trying to download file '
+                           f'{item} from {self.server}')
 
     @check_connections
     def read_remote_file(self, remote_file_path: str) -> list:

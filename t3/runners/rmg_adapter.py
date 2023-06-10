@@ -1,6 +1,8 @@
 
 import os
 import math
+import shutil
+import datetime
 
 from mako.template import Template
 from t3.utils.writer import to_camel_case
@@ -8,7 +10,6 @@ from t3.common import get_rmg_species_from_a_species_dict
 from t3.utils.generator import generate_radicals
 from t3.imports import local_t3_path, settings, submit_scripts
 from t3.utils.ssh import SSHClient
-from t3.logger import Logger
 
 
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
@@ -40,6 +41,7 @@ class RMGAdapter(object):
                  t3: dict,
                  iteration: int,
                  paths: dict,
+                 logger: 'Logger',
                  walltime: str="00:00:00",
                  cpus: int=1,
                  memory: str="8G", # TODO: make this a parameter
@@ -48,7 +50,8 @@ class RMGAdapter(object):
                  t3_project_name: str=None,
                  rmg_execution_type: str='incore',
                  restart_rmg: bool=False,
-                 server: str=None,                 
+                 server: str=None,
+                 testing: bool=False,
                  ):
         self.rmg = rmg
         self.t3 = t3
@@ -64,8 +67,9 @@ class RMGAdapter(object):
         self.rmg_execution_type = RMG_EXECUTION_TYPE or rmg_execution_type
         if self.rmg_execution_type == 'queue':
             self.max_job_time = settings['servers'][SERVER]['max_job_time']
-        
-        
+        self.server = server or SERVER
+        self.testing = testing
+        self.logger = logger
         
         
         if not os.path.isdir(local_t3_path):
@@ -388,11 +392,17 @@ generatedSpeciesConstraints(
         This is not an abstract method and should not be overwritten.
         """
         if self.max_memory < rmg_memory:
-            Logger.warning(f'The maximum memory of the server is {self.max_memory} GB, which is less than the defined '
+            self.self.logger.warning(f'The maximum memory of the server is {self.max_memory} GB, which is less than the defined '
                            f'RMG memory {rmg_memory} GB set by the user. The RMG memory will be set to {self.max_memory}')
             total_submit_script_memory = self.max_memory
         else:
             total_submit_script_memory = rmg_memory
+
+        # Need to determine if the user provide GB or MB
+        if self.max_memory > 1E3:
+            self.max_memory /= 1E3
+        # Convert total_submit_script_memory to MB
+        total_submit_script_memory *= 1E3
         # Determine amount of memory in submit script based on cluster job scheduling system.
         cluster_software = CLUSTER_SOFT.lower() if SERVER is not None else None
         if cluster_software in ['oge', 'sge', 'htcondor']:
@@ -402,8 +412,8 @@ generatedSpeciesConstraints(
             # In PBS, "#PBS -l select=1:ncpus=8:mem=12000000" specifies the memory for all cores to be 12 MB.
             self.submit_script_memory = math.ceil(total_submit_script_memory) * 1E6  # in Bytes
         elif cluster_software in ['slurm']:
-            # In Slurm, "#SBATCH --mem-per-cpu=2000" specifies the memory **per cpu/thread** to be 2000 MB.
-            self.submit_script_memory = math.ceil(total_submit_script_memory / self.max_cpus)  # in MB
+            # In Slurm, "#SBATCH --mem=2000" specifies the memory to be 2000 MB.
+            self.submit_script_memory = math.ceil(total_submit_script_memory)  # in MB
         self.set_input_file_memory()
 
 
@@ -427,7 +437,7 @@ generatedSpeciesConstraints(
             # We need a submit script (submitted local or SSH)
             self.write_submit_script()
             self.files_to_upload.append(self.get_file_property_dictionary(
-                file_name='submit.sh'))
+                file_name=submit_filenames[CLUSTER_SOFT]))
         # 1.2. RMG input file
         self.write_rmg_input_file()
         self.files_to_upload.append(self.get_file_property_dictionary(file_name='input.py'))
@@ -460,9 +470,10 @@ generatedSpeciesConstraints(
         """
         Execute the job in the queue.
         """
-        if SERVER != 'local':
-            with SSHClient(SERVER) as ssh:
-                self.job_status, self.job_id = ssh.submit_job(remote_path=self.remote_path)
+        self.upload_files()
+        with SSHClient(SERVER) as ssh:
+            self.job_status, self.job_id = ssh.submit_job(remote_path=self.remote_path)
+            self.logger.info(f'Submitted job {self.job_id} to {SERVER}')
     
     def execute_local(self) -> None:
         """
@@ -487,12 +498,12 @@ generatedSpeciesConstraints(
                                             max_job_time=self.max_job_time,
                                             cpus=self.max_cpus,
                                             memory=self.submit_script_memory,
-                                            max_iterations=self.max_iterations,
+                                            max_iterations=f" -i {self.ax_iterations}" if self.max_iterations else "",
                                             )
         except KeyError as e:
             raise KeyError(f'Invalid key in submit script: {e}')
     
-        with open(os.path.join(self.rmg_path, 'submit.sh'), 'w') as f:
+        with open(os.path.join(self.rmg_path, submit_filenames[CLUSTER_SOFT]), 'w') as f:
             f.write(submit_script)
             
     def set_file_paths(self) -> None:
@@ -544,3 +555,30 @@ generatedSpeciesConstraints(
                'source': source,
                'make_x': make_x}
     
+    def upload_files(self) -> None:
+        if not self.testing:
+            if self.rmg_execution_type != 'incore' and self.server != 'local':
+                # If the job execution type is incore, then no need to upload any files.
+                # Also, even if the job is submitted to the que, no need to upload files if the server is local.
+                with SSHClient(self.server) as ssh:
+                    for up_file in self.files_to_upload:
+                        self.logger.debug(f"Uploading {up_file['file_name']} source {up_file['source']} to {self.server}")
+                        if up_file['source'] == 'path':
+                            ssh.upload_file(remote_file_path=up_file['remote'], local_file_path=up_file['local'])
+                        elif up_file['source'] == 'input_files':
+                            ssh.upload_file(remote_file_path=up_file['remote'], file_string=up_file['local'])
+                        else:
+                            raise ValueError(f"Unclear file source for {up_file['file_name']}. Should either be 'path' or "
+                                             f"'input_files', got: {up_file['source']}")
+                        if up_file['make_x']:
+                            ssh.change_mode(mode='+x', file_name=up_file['file_name'], remote_path=self.remote_path)
+            else:
+                # running locally, just copy the check file, if exists, to the job folder
+                for up_file in self.files_to_upload:
+                    if up_file['file_name'] == 'check.chk':
+                        try:
+                            shutil.copyfile(src=up_file['local'], dst=os.path.join(self.local_path, 'check.chk'))
+                        except shutil.SameFileError:
+                            pass
+            self.initial_time = datetime.datetime.now()
+        

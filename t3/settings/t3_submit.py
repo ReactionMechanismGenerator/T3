@@ -69,14 +69,22 @@ submit_scripts = {
 #SBATCH -o out.txt
 #SBATCH -e err.txt
 
-# Se up folder?
+# Source 
+source /home/azureuser/.bashrc
+source /etc/profile.d/00-aliases.sh
 
+# Export
+export PATH=$PATH:/home/azureuser/Code/RMG-Py
+export PYTHONPATH=$PYTHONPATH:/home/azureuser/Code/RMG-Py
+
+# It appears this is needed to keep the julia files writable...
+sudo chmod 0777 -R /opt/mambaforge
 
 conda activate rmg_env
 
 touch initial_time
 
-python-jl ~/Code/RMG-Py/rmg.py -n {cpus} input.py {max_iterations}
+python-jl /home/azureuser/Code/RMG-Py/rmg.py {max_iterations} -n {cpus} input.py 
 
 touch final_time
 
