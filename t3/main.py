@@ -639,7 +639,7 @@ class T3(object):
         tic = datetime.datetime.now()
         
         max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
-
+    
 
 
 

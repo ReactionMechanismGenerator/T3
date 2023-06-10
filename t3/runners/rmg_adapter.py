@@ -90,6 +90,14 @@ class RMGAdapter(object):
             self.execute_incore()
         elif self.rmg_execution_type == 'queue':
             self.execute_queue()
+            # While the job is running, periodically check the status of the job
+            while self.job_status == 'running':
+                self.determine_rmg_job_status()
+            # Once the job is done, download the results
+            if self.job_status == 'done':
+                self.download_files()
+
+
         else:
             raise ValueError(f'RMG execution type {self.rmg_execution_type} is not supported.')
         
@@ -581,4 +589,22 @@ generatedSpeciesConstraints(
                         except shutil.SameFileError:
                             pass
             self.initial_time = datetime.datetime.now()
-        
+    def determine_rmg_job_status(self) -> None:
+        """
+        Determine the RMG job status.
+        """
+        if self.rmg_execution_type == 'incore':
+            self.job_status = 'running'
+        else:
+            with SSHClient(self.server) as ssh:
+                self.job_status = ssh.check_job_status(job_id=self.job_id)
+    
+    def download_files(self) -> None:
+        """
+        Download the relevant files.
+        """
+        if self.rmg_execution_type != 'incore' and self.server != 'local':
+        # If the job execution type is incore, then no need to download any files.
+           # Also, even if the job is submitted to the queue, no need to download files if the server is local.
+            with SSHClient(self.server) as ssh:
+                ssh.download_folder(remote_folder_path=self.remote_path, local_folder_path=self.local_rmg_path)
