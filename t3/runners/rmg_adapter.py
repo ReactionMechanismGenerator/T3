@@ -83,6 +83,7 @@ class RMGAdapter(object):
         self.folder_to_download = None
         self.rmg_errors = list()
         self.rmg_run_count = 0
+        self.cont_run_rmg = True
 
     def run_rmg(self):
         """
@@ -122,6 +123,7 @@ class RMGAdapter(object):
 
                 # Need to check for convergence or errors
                 self.check_convergance()
+                self.convergance()
                 # Get local err file path
                 err_path = os.path.join(self.local_rmg_path, 'err.txt')
                 if os.path.isfile(err_path):
@@ -560,9 +562,15 @@ generatedSpeciesConstraints(
                                             )
         except KeyError as e:
             raise KeyError(f'Invalid key in submit script: {e}')
-    
+        
+        # Make sure folder exists
+        os.makedirs(self.rmg_path,exist_ok=True)
+        # Write submit script to file
         with open(os.path.join(self.rmg_path, submit_filenames[CLUSTER_SOFT]), 'w') as f:
             f.write(submit_script)
+
+
+
             
     def set_file_paths(self) -> None:
         """
@@ -681,7 +689,7 @@ generatedSpeciesConstraints(
                     break
         return self.rmg_converged, self.error
 
-    def convergance_failure(self) -> None:
+    def convergance(self) -> None:
 
         if not self.rmg_converged:
             if self.error is not None:
