@@ -3,6 +3,7 @@ import os
 import math
 import shutil
 import datetime
+import time
 
 from mako.template import Template
 from t3.utils.writer import to_camel_case
@@ -18,6 +19,7 @@ METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
               }
 
 RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
+MAX_RMG_RUNS_PER_ITERATION = 5 # TODO: Why is this hard-coded?
 submit_filenames = settings['submit_filenames']
 rmg_memory = settings['rmg_initial_memory']
 if RMG_EXECUTION_TYPE == 'queue':
@@ -70,36 +72,67 @@ class RMGAdapter(object):
         self.server = server or SERVER
         self.testing = testing
         self.logger = logger
-        
+        self.previous_job_status = None
+        self.time_running = 0
+        self.restart_rmg = restart_rmg
         
         if not os.path.isdir(local_t3_path):
             os.makedirs(local_t3_path)
         
         self.files_to_upload = list()
         self.folder_to_download = None
-        
+        self.rmg_errors = list()
+        self.rmg_run_count = 0
+
     def run_rmg(self):
         """
         Run RMG
         """
-        self.set_cpu_and_mem()
-        self.set_file_paths()
-        self.set_files()
-
         if self.rmg_execution_type == 'incore':
             self.execute_incore()
-        elif self.rmg_execution_type == 'queue':
-            self.execute_queue()
-            # While the job is running, periodically check the status of the job
-            while self.job_status == 'running':
-                self.determine_rmg_job_status()
-            # Once the job is done, download the results
-            if self.job_status == 'done':
-                self.download_files()
+        elif self.rmg_execution_type == 'local' or self.rmg_execution_type == 'queue':
+            while self.cont_run_rmg:
+                self.set_cpu_and_mem()
+                self.set_file_paths()
+                self.set_files()
 
 
+                if self.rmg_execution_type == 'queue':
+                    self.rmg_run_count += 1
+                    self.execute_queue()
+                    # While the job is running, periodically check the status of the job
+                    while self.job_status == 'running':
+                        # Wait for 5 minutes before checking again
+                        time.sleep(300)
+                        self.time_running += 300
+                        self.determine_rmg_job_status()
+                        # Log the status of the job
+                        # If we do it every 5 mins, the log file will be flooded with the same message
+                        # So only log if the status has changed or if 30 mins have passed
+
+                        if self.job_status != self.previous_job_status or self.time_running % 1800 == 0:
+                            self.logger.info(f'RMG-{self.iteration}_iteration job status: {self.job_status}')
+                            self.previous_job_status = self.job_status
+
+                    # Once the job is done, download the results
+                    if self.job_status == 'done':
+                        # Log that the job is done and will download the results
+                        self.logger.info(f'RMG-{self.iteration}_iteration job status: {self.job_status}, downloading results...')
+                        self.download_files()
+
+                # Need to check for convergence or errors
+                self.check_convergance()
+                # Get local err file path
+                err_path = os.path.join(self.local_rmg_path, 'err.txt')
+                if os.path.isfile(err_path):
+                    os.rename(err_path, os.path.join(self.local_rmg_path, f'err_{datetime.datetime.now().strftime("%b%d_%Y_%H:%M:%S")}.txt'))
+                self.rmg_errors.append(self.error)
         else:
             raise ValueError(f'RMG execution type {self.rmg_execution_type} is not supported.')
+        
+        # set self.rmg_exceptions the opposite of self.rmg_converged
+        self.rmg_exception_encountered = not self.rmg_converged
+        
         
     def write_rmg_input_file(self):
         """
@@ -424,7 +457,6 @@ generatedSpeciesConstraints(
             self.submit_script_memory = math.ceil(total_submit_script_memory)  # in MB
         self.set_input_file_memory()
 
-
     def set_files(self) -> None:
         """
         Set files to be uploaded and downloaded. Writes the files if needed.
@@ -444,17 +476,35 @@ generatedSpeciesConstraints(
         if self.rmg_execution_type != 'incore':
             # We need a submit script (submitted local or SSH)
             self.write_submit_script()
+
             self.files_to_upload.append(self.get_file_property_dictionary(
                 file_name=submit_filenames[CLUSTER_SOFT]))
         # 1.2. RMG input file
         self.write_rmg_input_file()
+        # If this a restart, we need to upload the restart file
+        if self.restart_rmg:
+            restart_string = "restartFromSeed(path='seed')"
+            with open(self.rmg_input_file_path, 'r') as f:
+                content = f.read()
+            seed_path = os.path.join(self.local_rmg_path, 'seed')
+            if restart_string not in content and os.path.isdir(seed_path) and os.listdir(seed_path):
+                if os.path.isfile(os.path.join(self.local_rmg_path, 'restart_from_seed.py')):
+                    os.rename(src=os.path.join(self.local_rmg_path, 'input.py'),
+                                dst=os.path.join(self.local_rmg_path, 'input.py.old'))
+                    os.rename(src=os.path.join(self.local_rmg_path, 'restart_from_seed.py'),
+                            dst=os.path.join(self.local_rmg_path, 'input.py'))
+                elif os.path.isfile(os.path.join(self.local_rmg_path, 'input.py')):
+                    with open(os.path.join(self.local_rmg_path, 'input.py'), 'r') as f:
+                        content = f.read()
+                    with open(os.path.join(self.local_rmg_path, 'input.py'), 'w') as f:
+                        f.write(restart_string + '\n\n' + content)
+        
         self.files_to_upload.append(self.get_file_property_dictionary(file_name='input.py'))
         
         # 2. ** Download **
         # 2.1. RMG output folder
         self.folder_to_download = self.remote_path
         
-    
     def set_additional_file_paths(self) -> None:
         """
         Set additional file paths to be uploaded and downloaded.
@@ -589,6 +639,7 @@ generatedSpeciesConstraints(
                         except shutil.SameFileError:
                             pass
             self.initial_time = datetime.datetime.now()
+    
     def determine_rmg_job_status(self) -> None:
         """
         Determine the RMG job status.
@@ -608,3 +659,45 @@ generatedSpeciesConstraints(
            # Also, even if the job is submitted to the queue, no need to download files if the server is local.
             with SSHClient(self.server) as ssh:
                 ssh.download_folder(remote_folder_path=self.remote_path, local_folder_path=self.local_rmg_path)
+
+    def check_convergance(self) -> None:
+        self.rmg_converged, self.error = False, None
+        rmg_log_path = os.path.join(self.local_rmg_path, 'RMG.log')
+        rmg_err_path = os.path.join(self.local_rmg_path, 'err.txt')
+        if os.path.isfile(rmg_log_path):
+            with open(rmg_log_path, 'r') as f:
+                # Read the lines of the log file in reverse order
+                lines = f.readlines()[::-1]
+                for line in lines:
+                    if 'MODEL GENERATION COMPLETED' in line:
+                        self.rmg_converged = True
+                        break
+        if not self.rmg_converged and os.path.isfile(rmg_err_path):
+            with open(rmg_err_path, 'r') as f:
+                lines = f.readlines()[::-1]
+            for line in lines:
+                if 'Error' in line:
+                    self.error = line.strip()
+                    break
+        return self.rmg_converged, self.error
+
+    def convergance_failure(self) -> None:
+
+        if not self.rmg_converged:
+            if self.error is not None:
+                self.logger.error(f'RMG job {self.job_id} failed with error: {self.error}')
+            # Check if memory was the failure - TODO: this is not working
+            #new_memory = self.get_new_memory_rmg_run()
+
+        self.cont_run_rmg = not self.rmg_converged \
+                          and self.rmg_run_count < MAX_RMG_RUNS_PER_ITERATION \
+                          and not(len(self.rmg_errors)) >=2 and self.error is not None \
+                          and self.error == self.rmg_errors[-2]
+        self.restart_rmg = False if self.error is not None and 'Could not find one or more of the required files/directories ' \
+                                                         'for restarting from a seed mechanism' in self.error else True
+    
+    def get_new_memory_rmg_run(self) -> None:
+        """
+        Get a new memory for the RMG job.
+        """
+        pass

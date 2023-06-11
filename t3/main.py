@@ -631,7 +631,8 @@ class T3(object):
                                 walltime=self.t3['options']['max_RMG_walltime'],
                                 max_iterations=self.t3['options']['max_rmg_iterations'],
                                 verbose=self.verbose,
-                                t3_project_name=self.project
+                                t3_project_name=self.project,
+                                restart_rmg=restart_rmg,
                                 )
         rmg_adapter.run_rmg()
         if not os.path.isfile(self.paths['RMG input']):
@@ -639,37 +640,8 @@ class T3(object):
         tic = datetime.datetime.now()
         
         max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
-    
 
-
-
-        
-        
-    #
-
-        write_rmg_input_file(
-            rmg=self.rmg,
-            t3=self.t3,
-            iteration=self.iteration,
-            path=self.paths['RMG input'],
-            walltime=self.t3['options']['max_RMG_walltime'],
-        )
-        if not os.path.isfile(self.paths['RMG input']):
-            raise ValueError(f"The RMG input file {self.paths['RMG input']} could not be written.")
-        tic = datetime.datetime.now()
-
-        max_rmg_exceptions_allowed = self.t3['options']['max_RMG_exceptions_allowed']
-        rmg_exception_encountered = rmg_runner(rmg_input_file_path=self.paths['RMG input'],
-                                               job_log_path=self.paths['RMG job log'],
-                                               logger=self.logger,
-                                               memory=self.rmg['memory'] * 1000 if self.rmg['memory'] is not None else None,
-                                               max_iterations=self.t3['options']['max_rmg_iterations'],
-                                               verbose=self.verbose,
-                                               t3_project_name=self.project,
-                                               rmg_execution_type=self.rmg['rmg_execution_type'],
-                                               restart_rmg=restart_rmg,
-                                               )
-        if rmg_exception_encountered:
+        if rmg_adapter.rmg_exception_encountered:
             self.rmg_exceptions_counter += 1
             if self.rmg_exceptions_counter > max_rmg_exceptions_allowed:
                 self.logger.error(f'This is the {get_number_with_ordinal_indicator(self.rmg_exceptions_counter)} '
@@ -681,10 +653,14 @@ class T3(object):
                                     f'This is the {get_number_with_ordinal_indicator(self.rmg_exceptions_counter)} '
                                     f'exception raised by RMG.\n'
                                     f'The maximum number of exceptions allowed is {max_rmg_exceptions_allowed}.')
-
         elapsed_time = time_lapse(tic)
         self.logger.info(f'RMG terminated, execution time: {elapsed_time}')
 
+
+
+        
+        
+    #
     def determine_species_and_reactions_to_calculate(self) -> bool:
         """
         Determine which species and reactions in the executed RMG job should be calculated.

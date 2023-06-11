@@ -11,6 +11,7 @@ import logging
 import os
 import time
 from typing import Any, Callable, List, Optional, Tuple, Union
+import stat
 
 import paramiko
 
@@ -226,12 +227,18 @@ class SSHClient(object):
                 remote_filepath = remote_folder_path + '/' + filename
                 local_filepath = os.path.join(local_folder_path, filename)
 
+
+
                  # Download files
-                if item.isfile():
+                 # stat.S_ISREG(item.st_mode) is True if item is a file (not a folder)
+                if stat.S_ISREG(item.st_mode):
                     self._sftp.get(remote_filepath, local_filepath)
 
                 # Recursively download folders
-                elif item.isdir():
+                # stat.S_ISDIR(item.st_mode) is True if item is a folder
+                elif stat.S_ISDIR(item.st_mode):
+                    # create the folder in the local path
+                    os.makedirs(local_filepath, exist_ok=True)
                     self.download_folder(remote_filepath, local_filepath)
         except IOError:
             logger.warning(f'Got an IOError when trying to download file '
