@@ -368,18 +368,18 @@ pressureDependence(
     maximumAtoms=${max_atoms},
 )
 """
-        pdep['method'] = METHOD_MAP[pdep['method']] if pdep['method'] not in METHOD_MAP.values() else pdep['method']
-        pdep['T_min'], pdep['T_max'], pdep['T_count'] = pdep['T']
-        pdep['P_min'], pdep['P_max'], pdep['P_count'] = pdep['P']
-        del pdep['T']
-        del pdep['P']
-        if pdep['interpolation'] == 'PDepArrhenius':
-            pdep['interpolation'] = ('PDepArrhenius',)
-        else:
-            pdep['interpolation'] = ('Chebyshev', pdep['T_basis_set'], pdep['P_basis_set'])
-        del pdep['T_basis_set']
-        del pdep['P_basis_set']
-        rmg_input += Template(pdep_template).render(**pdep)
+            pdep['method'] = METHOD_MAP[pdep['method']] if pdep['method'] not in METHOD_MAP.values() else pdep['method']
+            pdep['T_min'], pdep['T_max'], pdep['T_count'] = pdep['T']
+            pdep['P_min'], pdep['P_max'], pdep['P_count'] = pdep['P']
+            del pdep['T']
+            del pdep['P']
+            if pdep['interpolation'] == 'PDepArrhenius':
+                pdep['interpolation'] = ('PDepArrhenius',)
+            else:
+                pdep['interpolation'] = ('Chebyshev', pdep['T_basis_set'], pdep['P_basis_set'])
+            del pdep['T_basis_set']
+            del pdep['P_basis_set']
+            rmg_input += Template(pdep_template).render(**pdep)
 
         # options
         options = rmg['options']
@@ -550,7 +550,6 @@ generatedSpeciesConstraints(
             return
         if self.max_job_time < self.walltime:
             self.walltime = self.max_job_time
-        architecture = ''
         
         try:
             submit_script = submit_scripts['rmg'][settings['servers'][SERVER]['cluster_soft']].format(
