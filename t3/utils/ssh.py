@@ -221,7 +221,13 @@ class SSHClient(object):
             logger.debug(f'{remote_folder_path} does not exist on {self.server}.')
         try:
             self._sftp.chdir(remote_folder_path)
-            for item in self._sftp.listdir_attr():
+            items = self._sftp.listdir_attr()
+
+            # Count the number of files to download for progress logging
+            total_files = sum(1 for item in items if stat.S_ISREG(item.st_mode))
+            downloaded_files = 0
+
+            for item in items:
                 # Get the remote item's name and full path
                 filename = item.filename
                 remote_filepath = remote_folder_path + '/' + filename
@@ -233,12 +239,19 @@ class SSHClient(object):
                  # stat.S_ISREG(item.st_mode) is True if item is a file (not a folder)
                 if stat.S_ISREG(item.st_mode):
                     self._sftp.get(remote_filepath, local_filepath)
+                    downloaded_files += 1
+
+                    # Log progress every 10%
+                    progress = downloaded_files / total_files * 100
+                    if progress % 10 == 0:
+                        logger.info(f'Downloaded {progress}% of files from {remote_folder_path}')
 
                 # Recursively download folders
                 # stat.S_ISDIR(item.st_mode) is True if item is a folder
                 elif stat.S_ISDIR(item.st_mode):
                     # create the folder in the local path
                     os.makedirs(local_filepath, exist_ok=True)
+                    # recursively download the folder items
                     self.download_folder(remote_filepath, local_filepath)
         except IOError:
             logger.warning(f'Got an IOError when trying to download file '
@@ -423,7 +436,7 @@ class SSHClient(object):
             # 15 seconds (default in paramiko) due to network congestion, faulty switches,
             # etc..., common solution is enlarging the timeout variable.
             ssh.connect(hostname=self.address, username=self.un, banner_timeout=200, key_filename=self.key)
-        except:
+        except paramiko.ssh_exception.SSHException:
             # This sometimes gives "SSHException: Error reading SSH protocol banner[Error 104] Connection reset by peer"
             # Try again:
             ssh.connect(hostname=self.address, username=self.un, banner_timeout=200, key_filename=self.key)
@@ -564,6 +577,8 @@ class SSHClient(object):
         stdout, _ = self._send_command_to_server(command, remote_path='')
         if len(stdout):
             return True
+        else:
+            return False
 
     def _check_dir_exists(self,
                           remote_dir_path: str,
@@ -581,6 +596,8 @@ class SSHClient(object):
         stdout, _ = self._send_command_to_server(command)
         if len(stdout):
             return True
+        else:
+            return False
 
     def _create_dir(self, remote_path: str) -> None:
         """
