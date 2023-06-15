@@ -151,11 +151,15 @@ class SSHClient(object):
         if not local_file_path and not file_string:
             raise InputError('Cannot upload file to server. Either `file_string` or `local_file_path`'
                              ' must be specified')
-        if local_file_path and not os.path.isfile(local_file_path):
+        if local_file_path and not os.path.isfile(local_file_path) and not os.path.isdir(local_file_path):            
             raise InputError(f'Cannot upload a non-existing file. '
                              f'Check why file in path {local_file_path} is missing.')
+        
         # If the directory does not exist, _upload_file cannot create a file based on the given path
-        remote_dir_path = os.path.dirname(remote_file_path)
+        if os.path.isdir(local_file_path):
+            remote_dir_path = remote_file_path
+        else:
+            remote_dir_path = os.path.dirname(remote_file_path)
         if not self._check_dir_exists(remote_dir_path):
             self._create_dir(remote_dir_path)
 
@@ -163,6 +167,14 @@ class SSHClient(object):
             if file_string:
                 with self._sftp.open(remote_file_path, 'w') as f_remote:
                     f_remote.write(file_string)
+            
+            elif os.path.isdir(local_file_path):
+                for root, dirs, files in os.walk(local_file_path):
+                    for file in files:
+                        local_file_path = os.path.join(root, file)
+                        remote_file_path = os.path.join(remote_dir_path, file)
+                        self._sftp.put(localpath=local_file_path,
+                                       remotepath=remote_file_path)
             else:
                 self._sftp.put(localpath=local_file_path,
                                remotepath=remote_file_path)

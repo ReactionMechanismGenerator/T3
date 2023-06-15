@@ -55,8 +55,8 @@ class RMGAdapter(object):
                  server: str=None,
                  testing: bool=False,
                  ):
-        self.rmg = rmg
-        self.t3 = t3
+        self.rmg = rmg.copy()
+        self.t3 = t3.copy()
         self.iteration = iteration
         self.paths = paths
         self.walltime = walltime
@@ -84,6 +84,26 @@ class RMGAdapter(object):
         self.rmg_errors = list()
         self.rmg_run_count = 0
         self.cont_run_rmg = True
+        self.dict_of_custom_libraries = dict()
+        if self.rmg_execution_type == 'queue':
+            self.set_file_paths()
+            # We need to check if the strings in the rmg database kintetic library are path to the files
+            for library_key, library_value in self.rmg['database'].items():
+                if isinstance(library_value, list):
+                    for library_item in range(len(library_value)):
+                        if os.path.isdir(self.rmg['database'][library_key][library_item]):
+                            
+                            # Make the library item name the key, and then inside that key there are two keys: local and remote
+                            # The local key will be the path to the library item on the local machine
+                            # The remote key will be the path to the library item on the remote machine
+                            if os.path.basename(self.rmg['database'][library_key][library_item]) not in self.dict_of_custom_libraries:
+                                self.dict_of_custom_libraries[os.path.basename(self.rmg['database'][library_key][library_item])] = dict()
+                                self.dict_of_custom_libraries[os.path.basename(self.rmg['database'][library_key][library_item])]['local'] = self.rmg['database'][library_key][library_item]
+                                self.dict_of_custom_libraries[os.path.basename(self.rmg['database'][library_key][library_item])]['remote'] = os.path.join(self.remote_path, os.path.basename(self.rmg['database'][library_key][library_item]))
+                            # Add the library item to the dict of custom libraries
+                            # We now need to change it's path to the path on the server
+                            self.rmg['database'][library_key][library_item] = os.path.join(self.remote_path, os.path.basename(self.rmg['database'][library_key][library_item]))
+                        
 
     def run_rmg(self):
         """
@@ -483,6 +503,16 @@ generatedSpeciesConstraints(
                 file_name=submit_filenames[CLUSTER_SOFT]))
         # 1.2. RMG input file
         self.write_rmg_input_file()
+        # 1.3 Custom Libraries
+        # Need to upload the custom libraries if they exist and are not already uploaded
+        if self.dict_of_custom_libraries:
+            for lib_name, lib_paths in self.dict_of_custom_libraries.items():
+                if lib_paths['local'] not in self.files_to_upload:
+                    self.files_to_upload.append(self.get_file_property_dictionary(
+                        file_name=lib_name,
+                        local=lib_paths['local'],
+                        remote=lib_paths['remote']))
+        
         # If this a restart, we need to upload the restart file
         if self.restart_rmg:
             restart_string = "restartFromSeed(path='seed')"
