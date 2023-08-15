@@ -116,7 +116,6 @@ class RMGConstantTP(SimulateAdapter):
         write_rmg_input_file(
             rmg=self.generate_rmg_reactors_for_simulation(),
             t3=self.t3,
-            iteration=1,  # Does not matter for simulating or computing SA.
             path=self.rmg_input_file,
             walltime=self.t3['options']['max_RMG_walltime'],
         )

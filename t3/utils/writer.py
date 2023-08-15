@@ -18,8 +18,8 @@ METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
 
 def write_rmg_input_file(rmg: dict,
                          t3: dict,
-                         iteration: int,
                          path: str,
+                         iteration: int = 1,
                          walltime: str = '00:00:00:00',
                          ):
     """
@@ -29,8 +29,9 @@ def write_rmg_input_file(rmg: dict,
     Args:
         rmg (dict): The arguments to write in a keyword argument dictionary format.
         t3 (dict): The T3 arguments in a keyword argument dictionary format. Includes atol and rtol for SA.
-        iteration (int): The T3 iteration, used to determine ``core_tolerance`` and ``tolerance_interrupt_simulation``.
         path (str): The path where the RMG input file should be saved.
+        iteration (int, optional): The T3 iteration, used to determine ``core_tolerance`` and
+                                   ``tolerance_interrupt_simulation``. Does not matter for simulating or computing SA.
         walltime (str, optional): The time cap for an RMG run. Should pass here t3['options']['max_RMG_walltime']
     """
     rmg = rmg.copy()
