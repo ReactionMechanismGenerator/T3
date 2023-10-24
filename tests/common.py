@@ -61,3 +61,22 @@ def check_expected_generated_radicals(radicals: list, expected_radicals: list):
     for rad_tuple in radicals:
         assert rad_tuple[0] in expected_labels
         assert any(isomorphic_smiles(rad_tuple[1], expected_rad_tuple[1]) for expected_rad_tuple in expected_radicals)
+
+
+def almost_equal(a: float,
+                 b: float,
+                 places: int = 4,
+                 ratio: Optional[float] = None,
+                 ) -> bool:
+    """
+    A helper function for testing almost equal assertions.
+
+    Args:
+        a (float): The first number.
+        b (float): The second number.
+        places (int, optional): The number of decimal places to round to. Default is 4.
+        ratio (float, optional): The ratio between the two numbers. Default is None.
+    """
+    if ratio is not None:
+        return abs(a - b) / abs(a) < ratio
+    return round(abs(a - b), places) == 0
