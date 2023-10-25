@@ -2,8 +2,9 @@
 t3 tests common module
 """
 
-import os
 from typing import Optional
+import os
+import shutil
 
 from rmgpy.molecule import Molecule
 
@@ -80,3 +81,23 @@ def almost_equal(a: float,
     if ratio is not None:
         return abs(a - b) / abs(a) < ratio
     return round(abs(a - b), places) == 0
+
+
+def copy_model(model_path: str, name: str = '') -> str:
+    """
+    Copy a model to a temporary location.
+
+    Args:
+        model_path (str): The path to the model to copy.
+        name (str, optional): A unique name for the copied model in addition to "temp_".
+
+    Returns:
+        str: The path to the copied model.
+    """
+    model_path = os.path.abspath(model_path)
+    model_name = os.path.basename(model_path)
+    model_dir = os.path.dirname(model_path)
+    name = f'{name}_' if name else ''
+    new_model_path = os.path.join(model_dir, f'temp_{name}' + model_name)
+    shutil.copyfile(model_path, new_model_path)
+    return new_model_path
