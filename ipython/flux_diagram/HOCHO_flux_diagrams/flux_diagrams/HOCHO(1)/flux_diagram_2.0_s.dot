@@ -1,0 +1,24 @@
+digraph G {
+label="Flux diagram at 2.0 s, ROP range: [8.01e-17, 1.51e-02] mol/cm³/s)";
+"HOCHO(1)" [fillcolor="#DCE5F4", fontsize=8, penwidth=4.0, style=filled, xlabel="1.69e-01"];
+"CO(8)" [fontsize=8, penwidth=2.6712938924744143, xlabel="4.68e-05"];
+"H2O(17)" [fontsize=8, penwidth=2.671293855796359, xlabel="4.68e-05"];
+"HOCHO(1)" -> "CO(8)"  [arrowhead=vee, fontsize=8, label="1.0\n- H2O(17)", penwidth=4.0];
+"HOCHO(1)" -> "H2O(17)"  [arrowhead=vee, fontsize=8, label="1.0\n- CO(8)", penwidth=4.0];
+"CO2(9)" [fontsize=8, penwidth=2.596470167350586, xlabel="2.95e-05"];
+"H2(4)" [fontsize=8, penwidth=2.5964701179685017, xlabel="2.95e-05"];
+"HOCHO(1)" -> "CO2(9)"  [arrowhead=vee, fontsize=8, label="0.6\n- H2(4)", penwidth=3.9466405710292745];
+"HOCHO(1)" -> "H2(4)"  [arrowhead=vee, fontsize=8, label="0.6\n- CO2(9)", penwidth=3.9466405710292745];
+"H(3)" [fontsize=8, penwidth=0.34783116462852137, xlabel="2.80e-11"];
+"H2(4)" -> "H(3)"  [arrowhead=vee, fontsize=8, label="5.2e-09\n+ OH(5)\n- H2O(17)", penwidth=1.7955577099046087];
+"H2(4)" -> "H2O(17)"  [arrowhead=vee, fontsize=8, label="5.2e-09\n+ OH(5)\n- H(3)", penwidth=1.7955577099046087];
+"HOCO(10)" [fontsize=8, penwidth=0.7324480422152477, xlabel="1.21e-14"];
+"CO2(9)" -> "HOCO(10)"  [arrowhead=vee, fontsize=8, label="1.8e-12\n+ HOCHO(1)", penwidth=1.1729774870268643];
+"OH(5)" [fontsize=8, penwidth=0.2000000000000002, xlabel="1.12e-11"];
+"H2O(17)" -> "H(3)"  [arrowhead=vee, fontsize=8, label="2.1e-14\n- OH(5)", penwidth=0.3608065303110556];
+"H2O(17)" -> "OH(5)"  [arrowhead=vee, fontsize=8, label="2.1e-14\n- H(3)", penwidth=0.3608065303110556];
+"H2O(17)" -> "CO2(9)"  [arrowhead=vee, fontsize=8, label="5.3e-15\n+ CO(8)\n- H2(4)", penwidth=0.2];
+"H2O(17)" -> "H2(4)"  [arrowhead=vee, fontsize=8, label="5.3e-15\n+ CO(8)\n- CO2(9)", penwidth=0.2];
+"CO(8)" -> "CO2(9)"  [arrowhead=vee, fontsize=8, label="1.0e-07\n+ OH(5)\n- H(3)", penwidth=2.138048850394896];
+"CO(8)" -> "H(3)"  [arrowhead=vee, fontsize=8, label="1.0e-07\n+ OH(5)\n- CO2(9)", penwidth=2.138048850394896];
+}
