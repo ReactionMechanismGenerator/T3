@@ -17,6 +17,17 @@ jobs:
         - name: Checkout T3
           uses: actions/checkout@v3
         
+        - name: Clean Ubuntu Image
+          uses: kfir4444/free-disk-space@main
+          with:
+            # This may remove tools actually needed - currently does not
+            tool-cache: true
+            android: true
+            dotnet: true
+            haskell: true
+            large-packages: true
+            swap-storage: true
+        
         - name: Cache RMG
           id: cache-rmg
           uses: actions/cache@v2
@@ -97,7 +108,7 @@ jobs:
               conda-${{ runner.os }}--${{ runner.arch }}-rmgpyenv-${{ env.CACHE_NUMBER}}
           env:
             # Increase this value to reset cache if etc/example-environment.yml has not changed
-            CACHE_NUMBER: 0
+            CACHE_NUMBER: 1
           id: cache-rmgpy-env
         - name: Update environment
           run: mamba env update -n rmg_env -f RMG-Py/environment.yml
@@ -107,6 +118,7 @@ jobs:
           run: |
             cd RMG-Py
             conda activate rmg_env
+            make clean
             make
             echo "PYTHONPATH=$(pwd):$PYTHONPATH" >> $GITHUB_ENV
             echo "PATH=$(pwd):$PATH" >> $GITHUB_ENV
@@ -115,9 +127,7 @@ jobs:
             echo "PATH=$(pwd):$PATH" >> ~/.bashrc
             echo "export rmgpy_path=$(pwd)" >> ~/.bashrc
         
-        - name: Install PyCall RMG_ENV
-          run: python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
-        
+
         - name: Cache RMS
           id: cache-rms
           uses: actions/cache@v2
@@ -133,12 +143,10 @@ jobs:
                 ${{ runner.os }}-julia-${{ env.CACHE_NUMBER }}-rms
 
         - name: Install RMS Julia
-          run: julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main"));using ReactionMechanismSimulator'
+          run: julia -e 'using Pkg; Pkg.add(PackageSpec(name="PyCall",rev="master"));Pkg.build("PyCall");Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanismSimulator;'
 
-        - name: Link Python-JL
-          run: |
-            ln -sfn $(which python-jl) $(which python)
-            cd .. 
+        - name: Install PyCall RMG_ENV
+          run: python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
 
         - name: Install ARC ENV
           run: |
