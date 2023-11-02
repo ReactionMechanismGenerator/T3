@@ -61,7 +61,10 @@ RUN micromamba create -y -f environment.yml && \
 # Add alias to bashrc - rmge to activate the environment
 # These commands are not necessary for the Docker image to run, but they are useful for the user
 RUN echo "alias arce='micromamba activate arc_env'" >> ~/.bashrc \
+    && echo "export PYTHONPATH=/home/rmguser/Code/ARC:$PYTHONPATH" >> ~/.bashrc \
+    && echo "export PYTHONPATH=\"${PYTHONPATH}:/home/rmguser/Code/AutoTST\"" >> ~/.bashrc \
     && echo "alias arc='python /home/rmguser/Code/ARC/ARC.py input.yml'" >> ~/.bashrc \
+    && echo "export PYTHONPATH=\"${PYTHONPATH}:/home/rmguser/Code/TS-GCN\"" >> ~/.bashrc \
     && echo "alias deact='micromamba deactivate'" >> ~/.bashrc \
     && echo "export arc_path='/home/rmguser/Code/ARC/'" >> ~/.bashrc \
     && echo "export t3_path='/home/rmguser/Code/T3/'" >> ~/.bashrc \
