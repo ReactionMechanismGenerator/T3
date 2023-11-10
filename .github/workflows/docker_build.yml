@@ -1,5 +1,9 @@
 name: Docker Image Build and Push
 
+#Ensure that top-level permissions are not set to write-all
+#https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#permissions
+
+
 on:
   schedule:
     - cron: "0 0 */7 * *" # every 7 days
@@ -12,6 +16,11 @@ on:
       - main
     paths:
       - "./Dockerfile"
+
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   ci-check:
     if: github.event_name == 'pull_request'
