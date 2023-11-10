@@ -248,7 +248,7 @@ def run_rmg_in_local_queue(project_directory: str,
     return job_id
 
 
-def rmg_runner(rmg_input_file_path: str,
+def  rmg_runner(rmg_input_file_path: str,
                job_log_path: str,
                logger: 'Logger',
                memory: Optional[int] = None,

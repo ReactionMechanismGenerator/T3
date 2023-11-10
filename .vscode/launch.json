@@ -1,17 +1,58 @@
-{
+{    
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Current File",
+            "name": "Python: RMG_Env",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
-            "env": {"PYDEVD_WARN_EVALUATION_TIMEOUT": "500"},
+            "program": "~/Code/RMG-Py/rmg.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false,
+            "args": ["${input:pickDir}/input.py"]
+        },
+        {
+            "name": "Python: ARC_Env",
+            "type": "python",
+            "request": "launch",
+            "program": "~/Code/ARC/ARC.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["${input:pickDir}/input.yml"]
+        },
+        {
+            "name": "Python: Restart_ARC_Env",
+            "type": "python",
+            "request": "launch",
+            "program": "~/Code/ARC/ARC.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["${input:pickDir}/restart.yml"]
+        },
+        {
+            "name": "Python: T3_Env",
+            "type": "python",
+            "request": "launch",
+            "program": "~/Code/T3/T3.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["${input:pickDir}/input.yml"]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "pickDir",
+            "type": "command",
+            "command": "extension.commandvariable.file.pickFile",
+            "args":{
+                "include":"**/*",
+                "display": "fileName",
+                "description": "Subdirectory to process",
+                "showDirs": true,
+                "fromFolder":{"fixed":"/home/calvin/Code/Runs/"}
+            }
         }
     ]
 }

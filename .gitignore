@@ -149,3 +149,4 @@ htmlcov/*
 #VSCode files
 .vscode/*
 .vscode/launch.json
+.code-workspace
