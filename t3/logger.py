@@ -123,7 +123,7 @@ class Logger(object):
                  f'################################################################\n'
                  f'#                                                              #\n'
                  f'#                  The   Tandem   Tool   (T3)                  #\n'
-                 f'#      Automated kinetic model generation and refinement       #\n'
+                 f'#       for automated chemical kinetic model development       #\n'
                  f'#                                                              #\n'
                  f'#                        Version: {VERSION}{" " * (10 - len(VERSION))}                   #\n'
                  f'#                                                              #\n'

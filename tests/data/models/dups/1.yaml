@@ -1,0 +1,101 @@
+generator: ck2yaml
+input-files: [chem_annotated.inp, tran.dat]
+cantera-version: 2.6.0
+date: Mon, 16 Oct 2023 09:32:11 +0300
+
+units: {length: cm, time: s, quantity: mol, activation-energy: kcal/mol}
+
+phases:
+- name: gas
+  thermo: ideal-gas
+  elements: [H, D, T, C, Ci, O, Oi, N, Ne, Ar, He, Si, S, F, Cl, Br, I,
+    X]
+  species: [HNO(63), HNO(T)(117)]
+  kinetics: gas
+  transport: mixture-averaged
+  state: {T: 300.0, P: 1 atm}
+
+elements:
+- symbol: Ci
+  atomic-weight: 13.003
+- symbol: D
+  atomic-weight: 2.014
+- symbol: Oi
+  atomic-weight: 17.999
+- symbol: T
+  atomic-weight: 3.016
+- symbol: X
+  atomic-weight: 195.083
+
+species:
+- name: HNO(63)
+  composition: {H: 1, N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 947.96, 2500.0]
+    data:
+    - [4.04892, -2.03371e-03, 9.1381e-06, -7.68952e-09, 2.1349e-12, 1.16828e+04,
+      3.72802]
+    - [2.28668, 5.40271e-03, -2.62961e-06, 5.86811e-10, -4.79003e-14, 1.20169e+04,
+      12.1356]
+    note: 'Thermo library: NH3'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 170.0
+    diameter: 3.43
+    dipole: 1.62
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: HNO(63)
+- name: HNO(T)(117)
+  composition: {H: 1, N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 797.95, 2500.0]
+    data:
+    - [3.9029, -7.20791e-04, 7.98867e-06, -8.20547e-09, 2.72225e-12, 2.13846e+04,
+      5.26094]
+    - [2.76701, 4.97317e-03, -2.71477e-06, 7.36833e-10, -7.93508e-14, 2.15659e+04,
+      10.4846]
+    note: 'Thermo library: NH3'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 419.116
+    diameter: 5.652
+    note: Epsilon & sigma estimated with Tc=544.31 K, Pc=43.8 bar (from
+      Joback method)
+  note: HNO(T)(117)
+
+reactions:
+- equation: HNO(63) + HNO(63) <=> HNO(T)(117) + HNO(T)(117)  # Reaction 515
+  type: Chebyshev
+  temperature-range: [500.0, 1600.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-9.899, -2.244e-07, -1.375e-07, -6.452e-08]
+  - [10.61, -1.791e-08, -1.098e-08, -5.15e-09]
+  - [0.1084, 5.789e-10, 3.548e-10, 1.665e-10]
+  - [0.02232, -9.015e-10, -5.526e-10, -2.592e-10]
+  - [4.458e-03, -6.43e-10, -3.941e-10, -1.849e-10]
+  - [8.737e-04, -2.09e-10, -1.281e-10, -6.01e-11]
+  note: |-
+    Reaction index: Chemkin #515; RMG #1957
+    PDep reaction: PDepNetwork #87
+    Flux pairs: HNO(63), HNO(T)(117); HNO(63), HNO(T)(117);
+- equation: HNO(T)(117) <=> HNO(63)  # Reaction 561
+  type: Chebyshev
+  temperature-range: [500.0, 1600.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [9.475, 0.7131, -0.2205, 5.328e-03]
+  - [-0.1518, 0.1572, 4.48e-04, -0.02016]
+  - [-0.03783, 0.0323, 5.309e-03, -3.914e-03]
+  - [-6.146e-03, 2.574e-03, 2.342e-03, -1.251e-05]
+  - [-2.889e-03, 1.998e-03, 2.569e-04, -8.23e-05]
+  - [4.209e-04, -9.79e-04, 2.049e-04, 1.623e-04]
+  note: |-
+    Reaction index: Chemkin #561; RMG #4867
+    PDep reaction: PDepNetwork #470
+    Flux pairs: HNO(T)(117), HNO(63);

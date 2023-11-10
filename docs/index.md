@@ -3,7 +3,7 @@
   <img src="T3_logo_small.gif" alt="T3"></a>
 </p>
 <p align="center">
-    <em>The Tandem Tool for automated kinetic model generation and refinement</em>
+    <em>The Tandem Tool for automated chemical kinetic model development</em>
 </p>
 <p align="center">
 <a href="https://github.com/ReactionMechanismGenerator/T3/releases" target="_blank">

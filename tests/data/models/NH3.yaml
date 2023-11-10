@@ -1,0 +1,4268 @@
+generator: ck2yaml
+input-files: [chem_annotated.inp, tran.dat]
+cantera-version: 2.6.0
+date: Thu, 05 Oct 2023 14:11:31 +0300
+
+units: {length: cm, time: s, quantity: mol, activation-energy: kcal/mol}
+
+phases:
+- name: gas
+  thermo: ideal-gas
+  elements: [H, D, T, C, Ci, O, Oi, N, Ne, Ar, He, Si, S, F, Cl, Br, I,
+    X]
+  species: [Ar, Ne, NH3(1), N2(2), O2(3), N(4), NH(5), NH2(6), NNH(7), N2H2(8),
+    H2NN(9), N2H3(10), N2H4(11), NO(12), HNO(13), HON(14), H2NO(15), HNOH(16),
+    NH2OH(17), N2O(18), NO2(19), HONO(20), HNO2(21), NO3(22), HONO2(23),
+    H(24), H2(25), OH(27), O(28), H2O(29), HO2(30), H2O2(31), NH(S)(71),
+    NH2OOH(132), 'NO[O](255)']
+  kinetics: gas
+  transport: mixture-averaged
+  state: {T: 300.0, P: 1 atm}
+
+elements:
+- symbol: Ci
+  atomic-weight: 13.003
+- symbol: D
+  atomic-weight: 2.014
+- symbol: Oi
+  atomic-weight: 17.999
+- symbol: T
+  atomic-weight: 3.016
+- symbol: X
+  atomic-weight: 195.083
+
+species:
+- name: Ar
+  composition: {Ar: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 4879.8, 5000.0]
+    data:
+    - [2.5, -3.01680531e-12, 3.74582141e-15, -1.50856878e-18, 1.86626471e-22,
+      -745.0, 4.36630363]
+    - [4.28461071, -1.45494649e-03, 4.44804306e-07, -6.04359642e-11, 3.07921551e-15,
+      -2496.12545, -7.08185419]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: atom
+    well-depth: 136.5
+    diameter: 3.33
+    note: NOx2018
+  note: Ar
+- name: Ne
+  composition: {Ne: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 6000.0]
+    data:
+    - [2.5, 0.0, 0.0, 0.0, 0.0, -745.375, 3.35532]
+    note: 'Thermo library: primaryThermoLibrary'
+  transport:
+    model: gas
+    geometry: atom
+    well-depth: 148.6
+    diameter: 3.758
+    note: Epsilon & sigma estimated with fixed Lennard Jones Parameters.
+      This is the fallback method! Try improving transport databases!
+  note: Ne
+- name: NH3(1)
+  composition: {H: 3, N: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 662.76, 3000.0]
+    data:
+    - [4.01918, -1.11235e-03, 6.14609e-06, -3.54773e-11, -2.77607e-12, -6318.53,
+      0.298251]
+    - [2.38263, 5.47981e-03, -1.33884e-06, 1.49668e-11, 2.58888e-14, -6029.46,
+      8.0648]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 481.0
+    diameter: 2.92
+    dipole: 1.47
+    rotational-relaxation: 10.0
+    note: NOx2018
+  note: NH3(1)
+- name: N2(2)
+  composition: {N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 808.19, 3000.0]
+    data:
+    - [3.50352, -1.71123e-04, 7.76551e-08, 1.41264e-09, -9.46134e-13, -1204.61,
+      3.1036]
+    - [3.08426, 8.69515e-04, 6.60717e-08, -1.6145e-10, 3.06518e-14, -1103.06,
+      5.24599]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 97.53
+    diameter: 3.621
+    polarizability: 1.76
+    rotational-relaxation: 4.0
+    note: PrimaryTransportLibrary
+  note: N2(2)
+- name: O2(3)
+  composition: {O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1087.71, 5000.0]
+    data:
+    - [3.53763631, -1.22826882e-03, 5.36756515e-06, -4.93125523e-09, 1.45954081e-12,
+      -1037.99023, 4.67180007]
+    - [3.16427597, 1.69453107e-03, -8.00332239e-07, 1.59029251e-10, -1.14890364e-14,
+      -1048.44704, 6.08300917]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 106.7
+    diameter: 3.467
+    note: PrimaryTransportLibrary
+  note: O2(3)
+- name: N(4)
+  composition: {N: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 4879.8, 5000.0]
+    data:
+    - [2.5, -3.01680531e-12, 3.74582141e-15, -1.50856878e-18, 1.86626471e-22,
+      5.60986144e+04, 4.19198858]
+    - [4.28461071, -1.45494649e-03, 4.44804306e-07, -6.04359642e-11, 3.07921551e-15,
+      5.43474889e+04, -7.25616923]
+    note: 'Thermo library: primaryNS'
+  transport:
+    model: gas
+    geometry: atom
+    well-depth: 71.4
+    diameter: 3.298
+    note: NOx2018
+  note: N(4)
+- name: NH(5)
+  composition: {H: 1, N: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1000.0, 3000.0]
+    data:
+    - [3.44697, 5.57848e-04, -2.00289e-06, 2.85953e-09, -1.12434e-12, 4.17899e+04,
+      2.02991]
+    - [2.95101, 9.09994e-04, -8.35582e-08, -5.17312e-11, 1.13981e-14, 4.19707e+04,
+      4.83057]
+    note: 'Thermo library: NitrogenCurran'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 80.0
+    diameter: 2.65
+    rotational-relaxation: 4.0
+    note: NOx2018
+  note: NH(5)
+- name: NH2(6)
+  composition: {H: 2, N: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 759.86, 3000.0]
+    data:
+    - [4.00376, -1.41677e-04, 1.05699e-07, 3.33579e-09, -2.31659e-12, 2.11838e+04,
+      0.617067]
+    - [3.22922, 1.87841e-03, 1.78925e-07, -2.91384e-10, 4.90166e-14, 2.13609e+04,
+      4.53183]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 80.0
+    diameter: 2.65
+    polarizability: 2.26
+    rotational-relaxation: 4.0
+    note: NOx2018
+  note: NH2(6)
+- name: NNH(7)
+  composition: {H: 1, N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 617.7, 3000.0]
+    data:
+    - [4.01442, -8.61414e-04, 4.58625e-06, 3.63024e-10, -2.89715e-12, 2.88405e+04,
+      4.16034]
+    - [2.7458, 4.6249e-03, -2.10994e-06, 4.38175e-10, -3.30145e-14, 2.90493e+04,
+      10.091]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 292.088
+    diameter: 3.459
+    dipole: 1.858
+    polarizability: 2.016
+    rotational-relaxation: 1.0
+    note: OneDMinN2
+  note: NNH(7)
+- name: N2H2(8)
+  composition: {H: 2, N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 597.44, 3000.0]
+    data:
+    - [4.03203, -1.94653e-03, 8.37687e-06, 3.91412e-09, -8.46889e-12, 2.54726e+04,
+      3.46578]
+    - [1.4695, 9.12925e-03, -4.16354e-06, 8.70699e-10, -6.61658e-14, 2.58873e+04,
+      15.4168]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 323.008
+    diameter: 3.531
+    polarizability: 2.297
+    rotational-relaxation: 1.0
+    note: OneDMinN2
+  note: N2H2(8)
+- name: H2NN(9)
+  composition: {H: 2, N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 562.69, 3000.0]
+    data:
+    - [4.03102, -1.9749e-03, 1.08994e-05, -2.27362e-10, -7.02557e-12, 3.56334e+04,
+      4.05454]
+    - [1.7302, 9.05511e-03, -4.30653e-06, 9.67276e-10, -8.28241e-14, 3.59766e+04,
+      14.5808]
+    note: 'Thermo library: primaryNS'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 387.557
+    diameter: 3.467
+    dipole: 3.507
+    polarizability: 2.349
+    rotational-relaxation: 1.0
+    note: OneDMinN2
+  note: H2NN(9)
+- name: N2H3(10)
+  composition: {H: 3, N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 566.05, 3000.0]
+    data:
+    - [4.05882, -4.81913e-03, 4.67399e-05, -7.10613e-08, 3.65108e-11, 2.59187e+04,
+      5.277]
+    - [2.16993, 0.0118455, -6.20966e-06, 1.65161e-09, -1.75135e-13, 2.60794e+04,
+      12.8455]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 327.797
+    diameter: 3.595
+    dipole: 2.254
+    polarizability: 2.772
+    rotational-relaxation: 1.0
+    note: OneDMinN2
+  note: N2H3(10)
+- name: N2H4(11)
+  composition: {H: 4, N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 411.51, 3000.0]
+    data:
+    - [4.021, -2.74793e-03, 5.23407e-05, -9.33827e-08, 5.7467e-11, 1.07824e+04,
+      4.98683]
+    - [2.36934, 0.0133067, -6.18026e-06, 1.42422e-09, -1.29983e-13, 1.09183e+04,
+      11.4886]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 344.722
+    diameter: 3.617
+    polarizability: 2.799
+    rotational-relaxation: 1.0
+    note: OneDMinN2
+  note: N2H4(11)
+- name: NO(12)
+  composition: {N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 713.36, 3000.0]
+    data:
+    - [3.50559, -2.98684e-04, 6.52931e-07, 1.51666e-09, -1.42817e-12, 9664.61,
+      4.75182]
+    - [2.91656, 1.65937e-03, -6.36572e-07, 7.91018e-11, 1.76092e-15, 9782.86,
+      7.63442]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 139.32
+    diameter: 3.339
+    dipole: 0.2
+    polarizability: 1.76
+    rotational-relaxation: 4.0
+    note: NOx2018
+  note: NO(12)
+- name: HNO(13)
+  composition: {H: 1, N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 668.6, 3000.0]
+    data:
+    - [4.01583, -8.87847e-04, 2.88645e-06, 3.21625e-09, -3.98243e-12, 1.14424e+04,
+      3.76824]
+    - [2.49772, 4.73796e-03, -1.98049e-06, 3.37063e-10, -1.47422e-14, 1.17227e+04,
+      11.0588]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 170.0
+    diameter: 3.43
+    dipole: 1.62
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: HNO(13)
+- name: HON(14)
+  composition: {H: 1, N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1000.0, 3000.0]
+    data:
+    - [3.05582, 4.43591e-03, -1.2222e-06, -1.14007e-09, 6.69025e-13, 2.46094e+04,
+      9.08279]
+    - [3.71175, 3.16089e-03, -1.3327e-06, 2.82288e-10, -2.37382e-14, 2.44108e+04,
+      5.58115]
+    note: 'Thermo library: NitrogenCurran'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 419.116
+    diameter: 5.652
+    note: Epsilon & sigma estimated with Tc=544.31 K, Pc=43.8 bar (from
+      Joback method)
+  note: HON(14)
+- name: H2NO(15)
+  composition: {H: 2, N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 619.5, 3000.0]
+    data:
+    - [3.99657, 1.13404e-04, 1.35976e-05, -1.73419e-08, 7.22011e-12, 6490.92,
+      4.93969]
+    - [2.92417, 7.03778e-03, -3.16867e-06, 7.01046e-10, -6.1224e-14, 6623.79,
+      9.59988]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 116.7
+    diameter: 3.492
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: H2NO(15)
+- name: HNOH(16)
+  composition: {H: 2, N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 874.19, 3000.0]
+    data:
+    - [4.05525, -3.37687e-03, 2.58062e-05, -2.84661e-08, 1.0047e-11, 1.01459e+04,
+      5.0575]
+    - [1.75509, 0.011356, -6.69408e-06, 1.82549e-09, -1.90446e-13, 1.03872e+04,
+      14.9254]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 116.7
+    diameter: 3.492
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: HNOH(16)
+- name: NH2OH(17)
+  composition: {H: 3, N: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 732.98, 3000.0]
+    data:
+    - [4.03917, -2.77266e-03, 3.75245e-05, -5.05185e-08, 2.16367e-11, -6282.49,
+      4.83679]
+    - [2.1546, 0.0135698, -8.31691e-06, 2.45152e-09, -2.75975e-13, -6168.95,
+      12.2332]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 116.7
+    diameter: 3.492
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: NH2OH(17)
+- name: N2O(18)
+  composition: {N: 2, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 483.71, 3000.0]
+    data:
+    - [3.53363, -3.74516e-03, 4.56975e-05, -9.12146e-08, 5.97094e-11, 8424.25,
+      6.02016]
+    - [2.87578, 7.11276e-03, -4.77458e-06, 1.50417e-09, -1.79469e-13, 8424.51,
+      8.06096]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 232.4
+    diameter: 3.828
+    dipole: 0.2
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: N2O(18)
+- name: NO2(19)
+  composition: {N: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 813.39, 3000.0]
+    data:
+    - [4.03077, -1.99902e-03, 1.67074e-05, -2.03667e-08, 7.90642e-12, 2306.55,
+      5.90169]
+    - [3.00805, 6.09511e-03, -3.87098e-06, 1.13192e-09, -1.25019e-13, 2371.54,
+      10.0012]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 333.59
+    diameter: 3.852
+    dipole: 0.4
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: NO2(19)
+- name: HONO(20)
+  composition: {H: 1, N: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 388.35, 3000.0]
+    data:
+    - [3.99079, 6.12571e-04, 2.96782e-05, -5.97308e-08, 3.94193e-11, -1.05667e+04,
+      6.5631]
+    - [3.08984, 9.89337e-03, -6.17253e-06, 1.81915e-09, -2.07469e-13, -1.04967e+04,
+      10.0574]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 350.0
+    diameter: 3.95
+    dipole: 1.639
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: HONO(20)
+- name: HNO2(21)
+  composition: {H: 1, N: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 858.11, 3000.0]
+    data:
+    - [4.05977, -3.71903e-03, 2.70581e-05, -3.04057e-08, 1.10004e-11, -6833.12,
+      5.65604]
+    - [1.95004, 0.0107228, -6.24062e-06, 1.72132e-09, -1.82323e-13, -6640.69,
+      14.523]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 350.0
+    diameter: 3.95
+    dipole: 1.639
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: HNO2(21)
+- name: NO3(22)
+  composition: {N: 1, O: 3}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 1248.23, 3000.0]
+    data:
+    - [3.92731, 0.0114355, -8.14776e-06, 2.13474e-09, -4.89806e-14, 6893.13,
+      6.7655]
+    - [7.07141, 3.87816e-03, -2.09214e-06, 5.16659e-10, -4.85934e-14, 5912.05,
+      -9.88594]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 400.0
+    diameter: 4.2
+    dipole: 0.2
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: NO3(22)
+- name: HONO2(23)
+  composition: {H: 1, N: 1, O: 3}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 570.66, 3000.0]
+    data:
+    - [4.07468, -7.07206e-03, 8.80857e-05, -1.56582e-07, 8.89778e-11, -1.79299e+04,
+      8.18741]
+    - [2.73727, 0.0165766, -1.15952e-05, 3.70073e-09, -4.42109e-13, -1.80097e+04,
+      11.853]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 400.0
+    diameter: 4.2
+    dipole: 0.2
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: HONO2(23)
+- name: H(24)
+  composition: {H: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 4879.8, 5000.0]
+    data:
+    - [2.5, -3.01680531e-12, 3.74582141e-15, -1.50856878e-18, 1.86626471e-22,
+      2.54727081e+04, -0.459566249]
+    - [4.28461071, -1.45494649e-03, 4.44804306e-07, -6.04359642e-11, 3.07921551e-15,
+      2.37215827e+04, -11.9077241]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: atom
+    well-depth: 145.0
+    diameter: 2.05
+    note: NOx2018
+  note: H(24)
+- name: H2(25)
+  composition: {H: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1962.84, 5000.0]
+    data:
+    - [3.42253716, 2.8665159e-04, -4.14674932e-07, 4.27551304e-10, -9.38127072e-14,
+      -1029.78489, -3.86364656]
+    - [2.74221074, 5.79509424e-04, 1.97216825e-07, -6.4112276e-11, 4.96023705e-15,
+      -552.051467, 0.413960148]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 59.7
+    diameter: 2.833
+    note: PrimaryTransportLibrary
+  note: H2(25)
+- name: OH(27)
+  composition: {H: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1005.24, 5000.0]
+    data:
+    - [3.48579435, 1.33398496e-03, -4.70049268e-06, 5.64387033e-09, -2.06321009e-12,
+      3411.95709, 1.99788208]
+    - [2.88225869, 1.03867746e-03, -2.35645912e-07, 1.40215423e-11, 6.34697142e-16,
+      3669.55747, 5.59049786]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 80.0
+    diameter: 2.75
+    note: NOx2018
+  note: OH(27)
+- name: O(28)
+  composition: {O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 4879.8, 5000.0]
+    data:
+    - [2.5, -3.01680531e-12, 3.74582141e-15, -1.50856878e-18, 1.86626471e-22,
+      2.92267216e+04, 5.1110677]
+    - [4.28461071, -1.45494649e-03, 4.44804306e-07, -6.04359642e-11, 3.07921551e-15,
+      2.74755961e+04, -6.33709012]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: atom
+    well-depth: 80.0
+    diameter: 2.75
+    note: NOx2018
+  note: O(28)
+- name: H2O(29)
+  composition: {H: 2, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1281.42, 5000.0]
+    data:
+    - [3.99882057, -5.54836321e-04, 2.76775546e-06, -1.55666129e-09, 3.023337e-13,
+      -3.02745569e+04, -0.0308963551]
+    - [3.19560815, 1.95239236e-03, -1.67113724e-07, -2.97949219e-11, 4.45148158e-15,
+      -3.00687041e+04, 4.04332009]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 809.102
+    diameter: 2.641
+    polarizability: 1.76
+    rotational-relaxation: 4.0
+    note: PrimaryTransportLibrary
+  note: H2O(29)
+- name: HO2(30)
+  composition: {H: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 923.9, 5000.0]
+    data:
+    - [4.02957148, -2.63999447e-03, 1.52235621e-05, -1.71678812e-08, 6.26772304e-12,
+      322.676787, 4.84423889]
+    - [4.15129844, 1.91151964e-03, -4.1130909e-07, 6.35040525e-11, -4.86454821e-15,
+      83.4346007, 3.0935982]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 107.4
+    diameter: 3.458
+    rotational-relaxation: 1.0
+    note: NOx2018
+  note: HO2(30)
+- name: H2O2(31)
+  composition: {H: 2, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 923.28, 5000.0]
+    data:
+    - [3.72866433, 4.13384648e-03, 5.67470353e-06, -1.01861897e-08, 4.2859484e-12,
+      -1.76963957e+04, 5.35913619]
+    - [4.95153547, 3.54226732e-03, -1.01038904e-06, 1.61937599e-10, -1.10205884e-14,
+      -1.81228012e+04, -1.5292173]
+    note: 'Thermo library: BurkeH2O2'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 289.3
+    diameter: 4.196
+    note: PrimaryTransportLibrary
+  note: H2O2(31)
+- name: NH(S)(71)
+  composition: {H: 1, N: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1744.83, 5000.0]
+    data:
+    - [3.6035421, -9.99893506e-04, 2.65884241e-06, -1.57811457e-09, 2.94438765e-13,
+      5.97892334e+04, 0.647765348]
+    - [2.91928674, 1.7875824e-03, -7.85304628e-07, 1.3817319e-10, -8.83294739e-15,
+      5.98424824e+04, 3.79813399]
+    note: 'Thermo library: primaryNS'
+  transport:
+    model: gas
+    geometry: linear
+    well-depth: 80.0
+    diameter: 2.65
+    rotational-relaxation: 4.0
+    note: PrimaryTransportLibrary
+  note: NH(S)(71)
+- name: NH2OOH(132)
+  composition: {H: 3, N: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 576.74, 3000.0]
+    data:
+    - [3.9744, 1.38254e-03, 5.55385e-05, -9.86838e-08, 5.38727e-11, -210.105,
+      7.89702]
+    - [2.21353, 0.0209827, -1.46522e-05, 4.66105e-09, -5.51641e-13, -129.86,
+      14.3579]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 436.674
+    diameter: 5.848
+    note: Epsilon & sigma estimated with Tc=567.11 K, Pc=41.2 bar (from
+      Joback method)
+  note: NH2OOH(132)
+- name: NO[O](255)
+  composition: {H: 2, N: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [10.0, 1110.86, 3000.0]
+    data:
+    - [3.94737, 7.21378e-03, 2.3391e-06, -5.71621e-09, 2.0445e-12, 1.70932e+04,
+      8.26249]
+    - [4.48889, 8.68665e-03, -4.27155e-06, 1.02479e-09, -9.67901e-14, 1.67617e+04,
+      4.64246]
+    note: 'Thermo library: CHON_G4'
+  transport:
+    model: gas
+    geometry: nonlinear
+    well-depth: 436.674
+    diameter: 5.848
+    note: Epsilon & sigma estimated with Tc=567.11 K, Pc=41.2 bar (from
+      Joback method)
+  note: NO[O](255)
+
+reactions:
+- equation: NH(5) + NH(5) <=> N(4) + NH2(6)  # Reaction 1
+  rate-constant: {A: 0.566, b: 3.88, Ea: 0.342}
+  note: |-
+    Reaction index: Chemkin #1; RMG #209
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH(5), NH2(6); NH(5), N(4);
+- equation: NH(5) + NH2(6) <=> N(4) + NH3(1)  # Reaction 2
+  rate-constant: {A: 9580.0, b: 2.46, Ea: 0.107}
+  note: |-
+    Reaction index: Chemkin #2; RMG #211
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(6), NH3(1); NH(5), N(4);
+- equation: NH2(6) + NH2(6) <=> NH(5) + NH3(1)  # Reaction 3
+  rate-constant: {A: 5.64, b: 3.53, Ea: 0.552}
+  note: |-
+    Reaction index: Chemkin #3; RMG #214
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(6), NH3(1); NH2(6), NH(5);
+- equation: NH(5) + NNH(7) <=> N2(2) + NH2(6)  # Reaction 4
+  rate-constant: {A: 5.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #4; RMG #995
+    Library reaction: NOx2018
+    Flux pairs: NNH(7), N2(2); NH(5), NH2(6);
+- equation: NNH(7) + NH2(6) <=> N2(2) + NH3(1)  # Reaction 5
+  rate-constant: {A: 5.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #5; RMG #996
+    Library reaction: NOx2018
+    Flux pairs: NNH(7), N2(2); NH2(6), NH3(1);
+- equation: NH2(6) + N2H2(8) <=> NNH(7) + NH3(1)  # Reaction 6
+  rate-constant: {A: 2.711e+05, b: 2.226, Ea: -1.034}
+  note: |-
+    Reaction index: Chemkin #6; RMG #359
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H2(8), NNH(7); NH2(6), NH3(1);
+- equation: N(4) + N2H2(8) <=> NH(5) + NNH(7)  # Reaction 7
+  rate-constant: {A: 2.18748, b: 3.969, Ea: 3.882}
+  note: |-
+    Reaction index: Chemkin #7; RMG #375
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H2(8), NNH(7); N(4), NH(5);
+- equation: NH(5) + N2H2(8) <=> NNH(7) + NH2(6)  # Reaction 8
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: -1.192}
+  note: |-
+    Reaction index: Chemkin #8; RMG #1056
+    Library reaction: NOx2018
+    Flux pairs: N2H2(8), NNH(7); NH(5), NH2(6);
+- equation: N2H2(8) <=> NH(5) + NH(5)  # Reaction 9
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-15.96, 1.372, -0.06883, -0.02495]
+  - [19.79, 0.08324, 0.04247, 0.0134]
+  - [-0.2749, 8.933e-03, 5.667e-03, 2.725e-03]
+  - [-0.09729, 6.007e-04, 4.825e-04, 3.139e-04]
+  - [-0.03265, -1.27e-04, -5.048e-05, -1.253e-06]
+  - [-0.01068, -7.896e-05, -4.102e-05, -1.315e-05]
+  note: |-
+    Reaction index: Chemkin #9; RMG #1701
+    PDep reaction: PDepNetwork #10
+    Flux pairs: N2H2(8), NH(5); N2H2(8), NH(5);
+- equation: H2NN(9) + NH3(1) <=> N2H2(8) + NH3(1)  # Reaction 10
+  rate-constant: {A: 0.207, b: 3.64, Ea: 7.433}
+  note: |-
+    Reaction index: Chemkin #10; RMG #310
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NN(9), N2H2(8); NH3(1), NH3(1);
+- equation: NNH(7) + H2NN(9) <=> NNH(7) + N2H2(8)  # Reaction 11
+  rate-constant: {A: 0.84716, b: 3.912, Ea: 1.472}
+  note: |-
+    Reaction index: Chemkin #11; RMG #430
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NN(9), N2H2(8); NNH(7), NNH(7);
+- equation: NH2(6) + H2NN(9) <=> NNH(7) + NH3(1)  # Reaction 12
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: -1.152}
+  note: |-
+    Reaction index: Chemkin #12; RMG #1067
+    Library reaction: NOx2018
+    Flux pairs: H2NN(9), NNH(7); NH2(6), NH3(1);
+- equation: H2NN(9) <=> N2H2(8)  # Reaction 13
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [0.6662, 0.7176, -0.1157, 3.856e-03]
+  - [7.187, 0.428, 0.01589, -0.01151]
+  - [-0.2521, 0.07866, 0.02585, 8.372e-04]
+  - [-0.1002, 7.366e-03, 5.463e-03, 1.15e-03]
+  - [-0.03039, -2.144e-03, -7.621e-05, 3.611e-04]
+  - [-7.459e-03, -1.282e-03, -1.385e-04, 4.765e-06]
+  note: |-
+    Reaction index: Chemkin #13; RMG #1720
+    PDep reaction: PDepNetwork #20
+    Flux pairs: H2NN(9), N2H2(8);
+- equation: NH2(6) + N2H3(10) <=> N2H2(8) + NH3(1)  # Reaction 14
+  rate-constant: {A: 0.6075, b: 3.574, Ea: 1.194}
+  note: |-
+    Reaction index: Chemkin #14; RMG #355
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H3(10), N2H2(8); NH2(6), NH3(1);
+- equation: NH2(6) + N2H3(10) <=> H2NN(9) + NH3(1)  # Reaction 15
+  rate-constant: {A: 11.11, b: 3.08, Ea: 0.211}
+  note: |-
+    Reaction index: Chemkin #15; RMG #356
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H3(10), H2NN(9); NH2(6), NH3(1);
+- equation: NH(5) + N2H3(10) <=> NH2(6) + N2H2(8)  # Reaction 16
+  rate-constant: {A: 2.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #16; RMG #1052
+    Library reaction: NOx2018
+    Flux pairs: N2H3(10), N2H2(8); NH(5), NH2(6);
+- equation: NH2(6) + NH2(6) (+M) <=> N2H4(11) (+M)  # Reaction 17
+  type: falloff
+  low-P-rate-constant: {A: 1.6e+34, b: -5.49, Ea: 1.987}
+  high-P-rate-constant: {A: 5.6e+14, b: -0.414, Ea: 0.066}
+  Troe: {A: 0.31, T3: 1.0e-30, T1: 1.0e+30}
+  efficiencies: {N2(2): 1.0, Ar: 0.5, O2(3): 0.61, NH3(1): 2.93}
+  note: |-
+    Reaction index: Chemkin #17; RMG #150
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(6), N2H4(11); NH2(6), N2H4(11);
+    Reaction library: 'primaryNitrogenLibrary'
+- equation: NH(5) + N2H4(11) <=> NH2(6) + N2H3(10)  # Reaction 18
+  rate-constant: {A: 60.9, b: 3.61, Ea: 5.808}
+  note: |-
+    Reaction index: Chemkin #18; RMG #280
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H4(11), N2H3(10); NH(5), NH2(6);
+- equation: N2H3(10) + N2H3(10) <=> H2NN(9) + N2H4(11)  # Reaction 19
+  rate-constant: {A: 0.111, b: 3.21, Ea: -0.359}
+  note: |-
+    Reaction index: Chemkin #19; RMG #285
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H3(10), N2H4(11); N2H3(10), H2NN(9);
+- equation: NH(5) + N2H3(10) <=> N(4) + N2H4(11)  # Reaction 20
+  rate-constant: {A: 4.18231e-04, b: 4.355, Ea: 5.369}
+  note: |-
+    Reaction index: Chemkin #20; RMG #380
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H3(10), N2H4(11); NH(5), N(4);
+- equation: NNH(7) + N2H4(11) <=> N2H2(8) + N2H3(10)  # Reaction 21
+  rate-constant: {A: 8.90238e-06, b: 5.001, Ea: 20.352}
+  note: |-
+    Reaction index: Chemkin #21; RMG #397
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H4(11), N2H3(10); NNH(7), N2H2(8);
+- equation: NH2(6) + N2H4(11) <=> NH3(1) + N2H3(10)  # Reaction 22
+  rate-constant: {A: 0.76, b: 4.0, Ea: 4.048}
+  note: |-
+    Reaction index: Chemkin #22; RMG #1043
+    Library reaction: NOx2018
+    Flux pairs: N2H4(11), N2H3(10); NH2(6), NH3(1);
+- equation: NO(12) + N2H4(11) <=> HNO(13) + N2H3(10)  # Reaction 23
+  rate-constant: {A: 64.4, b: 3.16, Ea: 30.488}
+  note: |-
+    Reaction index: Chemkin #23; RMG #143
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), HNO(13); N2H4(11), N2H3(10);
+- equation: HNO(13) + NH2(6) <=> NO(12) + NH3(1)  # Reaction 24
+  rate-constant: {A: 590.0, b: 2.95, Ea: -3.469}
+  note: |-
+    Reaction index: Chemkin #24; RMG #189
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO(13), NO(12); NH2(6), NH3(1);
+- equation: N(4) + HNO(13) <=> NO(12) + NH(5)  # Reaction 25
+  rate-constant: {A: 9.14196e+06, b: 2.178, Ea: 1.822}
+  note: |-
+    Reaction index: Chemkin #25; RMG #374
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO(13), NO(12); N(4), NH(5);
+- equation: HNO(13) + NNH(7) <=> NO(12) + N2H2(8)  # Reaction 26
+  rate-constant: {A: 6.14893e-05, b: 4.697, Ea: 3.598}
+  note: |-
+    Reaction index: Chemkin #26; RMG #404
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO(13), NO(12); NNH(7), N2H2(8);
+- equation: NO(12) + NNH(7) <=> N2(2) + HNO(13)  # Reaction 27
+  rate-constant: {A: 5.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #27; RMG #997
+    Library reaction: NOx2018
+    Flux pairs: NO(12), HNO(13); NNH(7), N2(2);
+- equation: NH2(6) + H2NO(15) <=> HNO(13) + NH3(1)  # Reaction 28
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: -0.58}
+  note: |-
+    Reaction index: Chemkin #28; RMG #367
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NO(15), HNO(13); NH2(6), NH3(1);
+- equation: NH(5) + H2NO(15) <=> HNO(13) + NH2(6)  # Reaction 29
+  rate-constant: {A: 4251.49, b: 2.559, Ea: 0.892}
+  note: |-
+    Reaction index: Chemkin #29; RMG #387
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NO(15), HNO(13); NH(5), NH2(6);
+- equation: NO(12) + H2NO(15) <=> HNO(13) + HNO(13)  # Reaction 30
+  rate-constant: {A: 0.0176994, b: 4.038, Ea: 20.234}
+  note: |-
+    Reaction index: Chemkin #30; RMG #410
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NO(15), HNO(13); NO(12), HNO(13);
+- equation: HNO(13) + N2H3(10) <=> HNOH(16) + N2H2(8)  # Reaction 31
+  rate-constant: {A: 4.85e-17, b: 8.15, Ea: 0.904}
+  note: |-
+    Reaction index: Chemkin #31; RMG #147
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO(13), HNOH(16); N2H3(10), N2H2(8);
+- equation: N(4) + HNOH(16) <=> NH(5) + HNO(13)  # Reaction 32
+  rate-constant: {A: 30.8138, b: 3.398, Ea: 5.408}
+  note: |-
+    Reaction index: Chemkin #32; RMG #378
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNOH(16), HNO(13); N(4), NH(5);
+- equation: NH(5) + HNOH(16) <=> HNO(13) + NH2(6)  # Reaction 33
+  rate-constant: {A: 2.18124e+05, b: 2.238, Ea: 2.592}
+  note: |-
+    Reaction index: Chemkin #33; RMG #388
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNOH(16), HNO(13); NH(5), NH2(6);
+- equation: HNOH(16) + N2H3(10) <=> HNO(13) + N2H4(11)  # Reaction 34
+  rate-constant: {A: 3.63865, b: 3.214, Ea: -0.659}
+  note: |-
+    Reaction index: Chemkin #34; RMG #396
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNOH(16), HNO(13); N2H3(10), N2H4(11);
+- equation: NO(12) + H2NN(9) <=> N2(2) + HNOH(16)  # Reaction 35
+  rate-constant: {A: 1.42556, b: 3.424, Ea: 0.467}
+  note: |-
+    Reaction index: Chemkin #35; RMG #440
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), HNOH(16); H2NN(9), N2(2);
+- equation: H2NO(15) + M <=> HNOH(16) + M  # Reaction 36
+  type: three-body
+  rate-constant: {A: 1.1e+29, b: -4.0, Ea: 44.0}
+  efficiencies: {H2O(29): 10.0}
+  note: |-
+    Reaction index: Chemkin #36; RMG #1004
+    Library reaction: NOx2018
+    Flux pairs: H2NO(15), HNOH(16);
+- equation: NH2(6) + HNOH(16) <=> HNO(13) + NH3(1)  # Reaction 37
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: -1.152}
+  note: |-
+    Reaction index: Chemkin #37; RMG #1016
+    Library reaction: NOx2018
+    Flux pairs: HNOH(16), HNO(13); NH2(6), NH3(1);
+- equation: NH2(6) + NH2OH(17) <=> HNOH(16) + NH3(1)  # Reaction 38
+  rate-constant: {A: 0.108, b: 4.0, Ea: -0.097}
+  note: |-
+    Reaction index: Chemkin #38; RMG #202
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), HNOH(16); NH2(6), NH3(1);
+- equation: NH2(6) + NH2OH(17) <=> H2NO(15) + NH3(1)  # Reaction 39
+  rate-constant: {A: 9.45, b: 3.42, Ea: -1.013}
+  note: |-
+    Reaction index: Chemkin #39; RMG #203
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), H2NO(15); NH2(6), NH3(1);
+- equation: NH(5) + NH2OH(17) <=> NH2(6) + HNOH(16)  # Reaction 40
+  rate-constant: {A: 2.91e-03, b: 4.4, Ea: 1.564}
+  note: |-
+    Reaction index: Chemkin #40; RMG #204
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), HNOH(16); NH(5), NH2(6);
+- equation: NH(5) + NH2OH(17) <=> NH2(6) + H2NO(15)  # Reaction 41
+  rate-constant: {A: 1.46e-03, b: 4.6, Ea: 2.424}
+  note: |-
+    Reaction index: Chemkin #41; RMG #205
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), H2NO(15); NH(5), NH2(6);
+- equation: N(4) + NH2OH(17) <=> NH(5) + H2NO(15)  # Reaction 42
+  rate-constant: {A: 4.47106e-05, b: 5.052, Ea: 6.801}
+  note: |-
+    Reaction index: Chemkin #42; RMG #376
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), H2NO(15); N(4), NH(5);
+- equation: NH(5) + HNOH(16) <=> N(4) + NH2OH(17)  # Reaction 43
+  rate-constant: {A: 2.85669e-06, b: 5.321, Ea: 3.533}
+  note: |-
+    Reaction index: Chemkin #43; RMG #379
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNOH(16), NH2OH(17); NH(5), N(4);
+- equation: HNOH(16) + N2H4(11) <=> NH2OH(17) + N2H3(10)  # Reaction 44
+  rate-constant: {A: 1.16857e-06, b: 4.973, Ea: 4.783}
+  note: |-
+    Reaction index: Chemkin #44; RMG #398
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNOH(16), NH2OH(17); N2H4(11), N2H3(10);
+- equation: NH2OH(17) + N2H3(10) <=> H2NO(15) + N2H4(11)  # Reaction 45
+  rate-constant: {A: 0.284206, b: 3.409, Ea: 8.535}
+  note: |-
+    Reaction index: Chemkin #45; RMG #400
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), H2NO(15); N2H3(10), N2H4(11);
+- equation: HNO(13) + H2NO(15) <=> NO(12) + NH2OH(17)  # Reaction 46
+  rate-constant: {A: 2.05244, b: 3.417, Ea: -0.928}
+  note: |-
+    Reaction index: Chemkin #46; RMG #405
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NO(15), NH2OH(17); HNO(13), NO(12);
+- equation: HNO(13) + HNOH(16) <=> NO(12) + NH2OH(17)  # Reaction 47
+  rate-constant: {A: 0.156126, b: 3.857, Ea: -1.871}
+  note: |-
+    Reaction index: Chemkin #47; RMG #406
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNOH(16), NH2OH(17); HNO(13), NO(12);
+- equation: H2NO(15) + N2H2(8) <=> NNH(7) + NH2OH(17)  # Reaction 48
+  rate-constant: {A: 2.04599e-04, b: 4.611, Ea: 2.743}
+  note: |-
+    Reaction index: Chemkin #48; RMG #429
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NO(15), NH2OH(17); N2H2(8), NNH(7);
+- equation: HNOH(16) + N2H2(8) <=> NNH(7) + NH2OH(17)  # Reaction 49
+  rate-constant: {A: 5.87998e-04, b: 4.575, Ea: 0.257}
+  note: |-
+    Reaction index: Chemkin #49; RMG #433
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNOH(16), NH2OH(17); N2H2(8), NNH(7);
+- equation: NO(12) + N2H2(8) <=> N2O(18) + NH2(6)  # Reaction 50
+  rate-constant: {A: 4.0e+12, b: 0.0, Ea: 11.922}
+  note: |-
+    Reaction index: Chemkin #50; RMG #1057
+    Library reaction: NOx2018
+    Flux pairs: NO(12), N2O(18); N2H2(8), NH2(6);
+- equation: NO(12) + N2O(18) <=> NO2(19) + N2(2)  # Reaction 51
+  rate-constant: {A: 5.26e+05, b: 2.23, Ea: 46.286}
+  note: |-
+    Reaction index: Chemkin #51; RMG #123
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2O(18), NO2(19); NO(12), N2(2);
+- equation: NO2(19) + NH2(6) <=> NO(12) + H2NO(15)  # Reaction 52
+  rate-constant: {A: 8.6e+11, b: 0.11, Ea: -1.186}
+  note: |-
+    Reaction index: Chemkin #52; RMG #222
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), H2NO(15); NH2(6), NO(12);
+- equation: NO2(19) + NO2(19) <=> O2(3) + NO(12) + NO(12)  # Reaction 53
+  rate-constant: {A: 4.51e+12, b: 0.0, Ea: 27.6}
+  note: |-
+    Reaction index: Chemkin #53; RMG #225
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), O2(3); NO2(19), NO(12); NO2(19), NO(12);
+- equation: NO2(19) + NH(5) <=> NO(12) + HNO(13)  # Reaction 54
+  rate-constant: {A: 1.25e+06, b: 1.96, Ea: 2.345}
+  note: |-
+    Reaction index: Chemkin #54; RMG #244
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HNO(13); NH(5), NO(12);
+- equation: O2(3) + H2NN(9) <=> NO2(19) + NH2(6)  # Reaction 55
+  rate-constant: {A: 1.5e+12, b: 0.0, Ea: 5.961}
+  note: |-
+    Reaction index: Chemkin #55; RMG #1066
+    Library reaction: NOx2018
+    Flux pairs: O2(3), NO2(19); H2NN(9), NH2(6);
+- equation: NO2(19) + N2H4(11) <=> HONO(20) + N2H3(10)  # Reaction 56
+  rate-constant: {A: 3.23, b: 3.56, Ea: 0.763}
+  note: |-
+    Reaction index: Chemkin #56; RMG #154
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HONO(20); N2H4(11), N2H3(10);
+- equation: NO2(19) + N2H3(10) <=> HONO(20) + N2H2(8)  # Reaction 57
+  rate-constant: {A: 2.4e+55, b: -16.7, Ea: -14.397}
+  note: |-
+    Reaction index: Chemkin #57; RMG #160
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HONO(20); N2H3(10), N2H2(8);
+- equation: NO2(19) + N2H2(8) <=> HONO(20) + NNH(7)  # Reaction 58
+  duplicate: true
+  rate-constant: {A: 1.25, b: 3.8, Ea: 10.41}
+  note: |-
+    Reaction index: Chemkin #58; RMG #170
+    Library reaction: primaryNitrogenLibrary
+- equation: NO2(19) + N2H2(8) <=> HONO(20) + NNH(7)  # Reaction 59
+  duplicate: true
+  rate-constant: {A: 0.233, b: 3.5, Ea: -0.129}
+  note: |-
+    Reaction index: Chemkin #59; RMG #170
+    Library reaction: primaryNitrogenLibrary
+- equation: HONO(20) + NH2(6) <=> NO2(19) + NH3(1)  # Reaction 60
+  rate-constant: {A: 6400.0, b: 2.34, Ea: -3.2}
+  note: |-
+    Reaction index: Chemkin #60; RMG #218
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), NO2(19); NH2(6), NH3(1);
+- equation: NO2(19) + HNO(13) <=> NO(12) + HONO(20)  # Reaction 61
+  rate-constant: {A: 784.7, b: 3.1, Ea: 3.882}
+  note: |-
+    Reaction index: Chemkin #61; RMG #228
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HONO(20); HNO(13), NO(12);
+- equation: NO2(19) + H2NO(15) <=> HNO(13) + HONO(20)  # Reaction 62
+  rate-constant: {A: 8.0e+11, b: 0.0, Ea: 6.0}
+  note: |-
+    Reaction index: Chemkin #62; RMG #368
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HONO(20); H2NO(15), HNO(13);
+- equation: HONO(20) + HNOH(16) <=> NO2(19) + NH2OH(17)  # Reaction 63
+  rate-constant: {A: 2731.65, b: 2.311, Ea: 4.392}
+  note: |-
+    Reaction index: Chemkin #63; RMG #417
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), NO2(19); HNOH(16), NH2OH(17);
+- equation: NO2(19) + NH2OH(17) <=> HONO(20) + H2NO(15)  # Reaction 64
+  rate-constant: {A: 1.28207e-07, b: 5.412, Ea: 5.628}
+  note: |-
+    Reaction index: Chemkin #64; RMG #422
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HONO(20); NH2OH(17), H2NO(15);
+- equation: NH(5) + HONO(20) <=> NO2(19) + NH2(6)  # Reaction 65
+  rate-constant: {A: 1.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #65; RMG #994
+    Library reaction: NOx2018
+    Flux pairs: HONO(20), NO2(19); NH(5), NH2(6);
+- equation: NO2(19) + HNOH(16) <=> HNO(13) + HONO(20)  # Reaction 66
+  rate-constant: {A: 6.0e+11, b: 0.0, Ea: 2.0}
+  note: |-
+    Reaction index: Chemkin #66; RMG #1017
+    Library reaction: NOx2018
+    Flux pairs: NO2(19), HONO(20); HNOH(16), HNO(13);
+- equation: NO2(19) + N2H4(11) <=> HNO2(21) + N2H3(10)  # Reaction 67
+  rate-constant: {A: 0.0241, b: 4.14, Ea: 7.947}
+  note: |-
+    Reaction index: Chemkin #67; RMG #145
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HNO2(21); N2H4(11), N2H3(10);
+- equation: NO2(19) + N2H3(10) <=> HNO2(21) + N2H2(8)  # Reaction 68
+  rate-constant: {A: 5.12e+07, b: -0.2, Ea: -2.736}
+  note: |-
+    Reaction index: Chemkin #68; RMG #161
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HNO2(21); N2H3(10), N2H2(8);
+- equation: NO2(19) + NH3(1) <=> HNO2(21) + NH2(6)  # Reaction 69
+  rate-constant: {A: 4.91, b: 3.41, Ea: 29.88}
+  note: |-
+    Reaction index: Chemkin #69; RMG #217
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HNO2(21); NH3(1), NH2(6);
+- equation: HNO2(21) <=> HONO(20)  # Reaction 70
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 1.09e+47, b: -11.48, Ea: 52.14}
+  - {P: 0.2154 atm, A: 1.6e+44, b: -10.63, Ea: 50.78}
+  - {P: 0.4641 atm, A: 2.01e+41, b: -9.74, Ea: 49.46}
+  - {P: 1.0 atm, A: 1.65e+38, b: -8.79, Ea: 48.16}
+  - {P: 2.154 atm, A: 7.49e+34, b: -7.73, Ea: 46.88}
+  - {P: 4.641 atm, A: 2.32e+31, b: -6.6, Ea: 45.68}
+  - {P: 10.0 atm, A: 9.05e+27, b: -5.47, Ea: 44.66}
+  - {P: 21.54 atm, A: 8.53e+24, b: -4.44, Ea: 43.88}
+  - {P: 46.41 atm, A: 2.73e+22, b: -3.55, Ea: 43.38}
+  - {P: 100.0 atm, A: 2.67e+20, b: -2.8, Ea: 43.12}
+  note: |-
+    Reaction index: Chemkin #70; RMG #362
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO2(21), HONO(20);
+- equation: N(4) + HNO2(21) <=> NO2(19) + NH(5)  # Reaction 71
+  rate-constant: {A: 0.0284234, b: 4.423, Ea: 3.279}
+  note: |-
+    Reaction index: Chemkin #71; RMG #373
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO2(21), NO2(19); N(4), NH(5);
+- equation: NH(5) + HNO2(21) <=> NO2(19) + NH2(6)  # Reaction 72
+  rate-constant: {A: 73.1449, b: 3.491, Ea: -0.515}
+  note: |-
+    Reaction index: Chemkin #72; RMG #386
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO2(21), NO2(19); NH(5), NH2(6);
+- equation: NO2(19) + HNO(13) <=> NO(12) + HNO2(21)  # Reaction 73
+  rate-constant: {A: 175.432, b: 3.222, Ea: 7.491}
+  note: |-
+    Reaction index: Chemkin #73; RMG #409
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HNO2(21); HNO(13), NO(12);
+- equation: NO2(19) + N2H2(8) <=> HNO2(21) + NNH(7)  # Reaction 74
+  rate-constant: {A: 2.26061e-04, b: 4.912, Ea: 4.498}
+  note: |-
+    Reaction index: Chemkin #74; RMG #411
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HNO2(21); N2H2(8), NNH(7);
+- equation: NO2(19) + HNO2(21) <=> NO2(19) + HONO(20)  # Reaction 75
+  rate-constant: {A: 1.74489e-21, b: 9.442, Ea: 16.818}
+  note: |-
+    Reaction index: Chemkin #75; RMG #412
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO2(21), HONO(20); NO2(19), NO2(19);
+- equation: HNO2(21) + H2NO(15) <=> NO2(19) + NH2OH(17)  # Reaction 76
+  rate-constant: {A: 4.95354e-05, b: 4.886, Ea: 1.247}
+  note: |-
+    Reaction index: Chemkin #76; RMG #418
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO2(21), NO2(19); H2NO(15), NH2OH(17);
+- equation: HNO2(21) + H2NO(15) <=> HONO(20) + HNOH(16)  # Reaction 77
+  rate-constant: {A: 0.855685, b: 3.382, Ea: -2.051}
+  note: |-
+    Reaction index: Chemkin #77; RMG #442
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO2(21), HONO(20); H2NO(15), HNOH(16);
+- equation: NO2(19) + NO2(19) <=> NO(12) + NO3(22)  # Reaction 78
+  rate-constant: {A: 1.0e+13, b: 0.0, Ea: 25.8}
+  note: |-
+    Reaction index: Chemkin #78; RMG #226
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), NO3(22); NO2(19), NO(12);
+- equation: NO2(19) + NO3(22) <=> O2(3) + NO(12) + NO2(19)  # Reaction 79
+  rate-constant: {A: 5.0e+10, b: 0.0, Ea: 2.94}
+  note: |-
+    Reaction index: Chemkin #79; RMG #1035
+    Library reaction: NOx2018
+    Flux pairs: NO3(22), NO2(19); NO2(19), NO(12); NO2(19), O2(3);
+- equation: NO3(22) + N2H4(11) <=> HONO2(23) + N2H3(10)  # Reaction 80
+  rate-constant: {A: 1.28e+04, b: 2.53, Ea: -2.947}
+  note: |-
+    Reaction index: Chemkin #80; RMG #155
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO3(22), HONO2(23); N2H4(11), N2H3(10);
+- equation: NO3(22) + NH3(1) <=> HONO2(23) + NH2(6)  # Reaction 81
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.001316 atm, A: 2.57, b: 3.61, Ea: 0.964}
+  - {P: 0.013158 atm, A: 5.67, b: 3.53, Ea: 1.598}
+  - {P: 0.131579 atm, A: 4.61, b: 3.56, Ea: 1.691}
+  - {P: 1.0 atm, A: 4.06, b: 3.57, Ea: 1.689}
+  - {P: 10.0 atm, A: 3.85, b: 3.58, Ea: 1.679}
+  - {P: 100.0 atm, A: 3.63, b: 3.59, Ea: 1.669}
+  note: |-
+    Reaction index: Chemkin #81; RMG #219
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO3(22), HONO2(23); NH3(1), NH2(6);
+- equation: HONO2(23) + NH2(6) <=> HONO(20) + H2NO(15)  # Reaction 82
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.001316 atm, A: 8.91e+04, b: 2.0, Ea: 24.641}
+  - {P: 0.013158 atm, A: 1.36e+07, b: 1.4, Ea: 26.39}
+  - {P: 0.131579 atm, A: 5.09e+08, b: 0.99, Ea: 28.353}
+  - {P: 1.0 atm, A: 1.73e+08, b: 1.17, Ea: 29.562}
+  - {P: 10.0 atm, A: 7.17e+04, b: 2.19, Ea: 29.87}
+  - {P: 100.0 atm, A: 0.0346, b: 4.04, Ea: 28.946}
+  note: |-
+    Reaction index: Chemkin #82; RMG #220
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO2(23), HONO(20); NH2(6), H2NO(15);
+- equation: NO2(19) + HONO(20) <=> NO(12) + HONO2(23)  # Reaction 83
+  duplicate: true
+  rate-constant: {A: 303.0, b: 3.33, Ea: 32.644}
+  note: |-
+    Reaction index: Chemkin #83; RMG #227
+    Library reaction: primaryNitrogenLibrary
+- equation: NO2(19) + HONO(20) <=> NO(12) + HONO2(23)  # Reaction 84
+  duplicate: true
+  rate-constant: {A: 200.0, b: 3.28, Ea: 30.692}
+  note: |-
+    Reaction index: Chemkin #84; RMG #227
+    Library reaction: primaryNitrogenLibrary
+- equation: HON(14) + NH2(6) <=> NO(12) + NH3(1)  # Reaction 85
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #85; RMG #1794
+    Template reaction: Disproportionation
+    Flux pairs: NH2(6), NH3(1); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: HON(14) + NH3(1) <=> NH2(6) + HNOH(16)  # Reaction 86
+  rate-constant: {A: 7.14, b: 3.59, Ea: 26.173}
+  note: |-
+    Reaction index: Chemkin #86; RMG #1797
+    Template reaction: H_Abstraction
+    Flux pairs: HON(14), HNOH(16); NH3(1), NH2(6);
+    From training reaction 3079 used for NH3;Y_1centerbirad
+    Exact match found for rate rule [NH3;Y_1centerbirad]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: N(4) + NNH(7) <=> N2(2) + NH(5)  # Reaction 87
+  rate-constant: {A: 9.31776e+07, b: 1.48, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #87; RMG #1814
+    Template reaction: Disproportionation
+    Flux pairs: N(4), NH(5); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H
+- equation: NNH(7) + NNH(7) <=> N2(2) + N2H2(8)  # Reaction 88
+  rate-constant: {A: 3.6333e+08, b: 1.265, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #88; RMG #1818
+    Template reaction: Disproportionation
+    Flux pairs: NNH(7), N2H2(8); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S
+- equation: NNH(7) + NNH(7) <=> N2(2) + H2NN(9)  # Reaction 89
+  rate-constant: {A: 7.2666e+08, b: 1.265, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #89; RMG #1819
+    Template reaction: Disproportionation
+    Flux pairs: NNH(7), H2NN(9); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S
+    Multiplied by reaction path degeneracy 2.0
+- equation: NNH(7) + N2H3(10) <=> N2(2) + N2H4(11)  # Reaction 90
+  rate-constant: {A: 3.6333e+08, b: 1.265, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #90; RMG #1822
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), N2H4(11); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S
+- equation: HON(14) + NNH(7) <=> N2(2) + HNOH(16)  # Reaction 91
+  rate-constant: {A: 1.08951e+10, b: 1.014, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #91; RMG #1831
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), HNOH(16); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_N-1R!H->O
+- equation: NNH(7) + H2NO(15) <=> N2(2) + NH2OH(17)  # Reaction 92
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #92; RMG #1833
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), NH2OH(17); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_N-Sp-2R!H-1CNS_N-1CNS->C_N-2R!H->C
+- equation: NNH(7) + HNOH(16) <=> N2(2) + NH2OH(17)  # Reaction 93
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #93; RMG #1834
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), NH2OH(17); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_5R!H->O_N-1CNS->C
+- equation: NO2(19) + NNH(7) <=> N2(2) + HONO(20)  # Reaction 94
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #94; RMG #1839
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HONO(20); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_N-Sp-2R!H-1CNS_N-1CNS->C_N-2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO2(19) + NNH(7) <=> N2(2) + HNO2(21)  # Reaction 95
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #95; RMG #1841
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HNO2(21); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_5R!H->O_N-1CNS->C
+- equation: NO3(22) + NNH(7) <=> N2(2) + HONO2(23)  # Reaction 96
+  rate-constant: {A: 3.6e+06, b: 2.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #96; RMG #1842
+    Template reaction: Disproportionation
+    Flux pairs: NO3(22), HONO2(23); NNH(7), N2(2);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_N-Sp-2R!H-1CNS_N-1CNS->C_N-2R!H->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: N(4) + H2NN(9) <=> NH(5) + NNH(7)  # Reaction 97
+  rate-constant: {A: 9.034753e+10, b: 0.832, Ea: 13.727}
+  note: |-
+    Reaction index: Chemkin #97; RMG #1862
+    Template reaction: H_Abstraction
+    Flux pairs: N(4), NH(5); H2NN(9), NNH(7);
+    Estimated using average of templates [X_H;N_atom_quartet] + [N5dc_H;Y_rad_birad_trirad_quadrad] for rate rule [N5dc_H;N_atom_quartet]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: N(4) + N2H3(10) <=> NH(5) + N2H2(8)  # Reaction 98
+  rate-constant: {A: 1.863552e+08, b: 1.48, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #98; RMG #1863
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), N2H2(8); N(4), NH(5);
+    Estimated from node Root_N-4R->H
+    Multiplied by reaction path degeneracy 2.0
+- equation: N(4) + N2H3(10) <=> NH(5) + H2NN(9)  # Reaction 99
+  rate-constant: {A: 9.31776e+07, b: 1.48, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #99; RMG #1864
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), H2NN(9); N(4), NH(5);
+    Estimated from node Root_N-4R->H
+- equation: N(4) + HON(14) <=> NO(12) + NH(5)  # Reaction 100
+  rate-constant: {A: 9.31776e+07, b: 1.48, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #100; RMG #1866
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); N(4), NH(5);
+    Estimated from node Root_N-4R->H
+- equation: N(4) + H2NO(15) <=> NH(5) + HNO(13)  # Reaction 101
+  rate-constant: {A: 1.863552e+08, b: 1.48, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #101; RMG #1868
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), HNO(13); N(4), NH(5);
+    Estimated from node Root_N-4R->H
+    Multiplied by reaction path degeneracy 2.0
+- equation: N(4) + HNOH(16) <=> NH(5) + HON(14)  # Reaction 102
+  rate-constant: {A: 1.385641e+13, b: 0.05, Ea: 10.63}
+  note: |-
+    Reaction index: Chemkin #102; RMG #1869
+    Template reaction: H_Abstraction
+    Flux pairs: N(4), NH(5); HNOH(16), HON(14);
+    Estimated using average of templates [Xrad_H;N_atom_quartet] + [N3s_rad_H_pri;Y_rad_birad_trirad_quadrad] for rate rule [N3s_rad_H_pri;N_atom_quartet]
+    Euclidian distance = 2.0
+    family: H_Abstraction
+- equation: N(4) + HONO(20) <=> NO2(19) + NH(5)  # Reaction 103
+  rate-constant: {A: 2.49336e+07, b: 1.67, Ea: 15.579}
+  note: |-
+    Reaction index: Chemkin #103; RMG #1870
+    Template reaction: H_Abstraction
+    Flux pairs: N(4), NH(5); HONO(20), NO2(19);
+    Estimated using template [O/H/OneDeN;Y_rad_birad_trirad_quadrad] for rate rule [O/H/OneDeN;N_atom_quartet]
+    Euclidian distance = 2.0
+    family: H_Abstraction
+- equation: NO3(22) + NH(5) <=> N(4) + HONO2(23)  # Reaction 104
+  rate-constant: {A: 0.508719, b: 3.755, Ea: 8.482}
+  note: |-
+    Reaction index: Chemkin #104; RMG #1871
+    Template reaction: H_Abstraction
+    Flux pairs: NH(5), N(4); NO3(22), HONO2(23);
+    Estimated using template [X_H_or_Xrad_H_Xbirad_H_Xtrirad_H;O_rad/OneDeN] for rate rule [NH_triplet_H;O_rad/OneDeN]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: NH(5) + H2NN(9) <=> NNH(7) + NH2(6)  # Reaction 105
+  rate-constant: {A: 3.4e+08, b: 1.5, Ea: 2.36}
+  note: |-
+    Reaction index: Chemkin #105; RMG #1879
+    Template reaction: H_Abstraction
+    Flux pairs: NH(5), NH2(6); H2NN(9), NNH(7);
+    Estimated using template [N5dc_H;Y_1centerbirad] for rate rule [N5dc_H;NH_triplet]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: NH(5) + N2H3(10) <=> NH2(6) + H2NN(9)  # Reaction 106
+  rate-constant: {A: 1.59386e+10, b: 0.994, Ea: 5.529}
+  note: |-
+    Reaction index: Chemkin #106; RMG #1883
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), H2NN(9); NH(5), NH2(6);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_N-1R!H->O_Sp-2R!H-1CNS
+- equation: NH(5) + HNO(13) <=> NO(12) + NH2(6)  # Reaction 107
+  rate-constant: {A: 1.03923e+09, b: 1.36, Ea: -0.265}
+  note: |-
+    Reaction index: Chemkin #107; RMG #1885
+    Template reaction: H_Abstraction
+    Flux pairs: NH(5), NH2(6); HNO(13), NO(12);
+    Estimated using average of templates [N3d/H/NonDe;NH_triplet] + [N3d/H/NonDeO;Y_1centerbirad] for rate rule [N3d/H/NonDeO;NH_triplet]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: NH(5) + HON(14) <=> NO(12) + NH2(6)  # Reaction 108
+  rate-constant: {A: 6.06985e+13, b: -0.073, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #108; RMG #1888
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); NH(5), NH2(6);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_1R!H->O
+- equation: NH(5) + HNOH(16) <=> HON(14) + NH2(6)  # Reaction 109
+  rate-constant: {A: 7.0e+12, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #109; RMG #1893
+    Template reaction: H_Abstraction
+    Flux pairs: NH(5), NH2(6); HNOH(16), HON(14);
+    Estimated using template [N3s_rad_H;Y_1centerbirad] for rate rule [N3s_rad_H_pri;NH_triplet]
+    Euclidian distance = 1.4142135623730951
+    family: H_Abstraction
+- equation: NO3(22) + NH2(6) <=> NH(5) + HONO2(23)  # Reaction 110
+  rate-constant: {A: 1.017438, b: 3.755, Ea: 8.482}
+  note: |-
+    Reaction index: Chemkin #110; RMG #1911
+    Template reaction: H_Abstraction
+    Flux pairs: NH2(6), NH(5); NO3(22), HONO2(23);
+    Estimated using template [X_H_or_Xrad_H_Xbirad_H_Xtrirad_H;O_rad/OneDeN] for rate rule [NH2_rad_H;O_rad/OneDeN]
+    Euclidian distance = 3.0
+    Multiplied by reaction path degeneracy 6.0
+    family: H_Abstraction
+- equation: NNH(7) + N2H3(10) <=> N2H2(8) + N2H2(8)  # Reaction 111
+  rate-constant: {A: 7.2666e+08, b: 1.265, Ea: 6.411}
+  note: |-
+    Reaction index: Chemkin #111; RMG #1961
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), N2H2(8); NNH(7), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S
+    Multiplied by reaction path degeneracy 2.0
+- equation: NNH(7) + N2H3(10) <=> H2NN(9) + N2H2(8)  # Reaction 112
+  rate-constant: {A: 1.08999e+09, b: 1.265, Ea: 17.153}
+  note: |-
+    Reaction index: Chemkin #112; RMG #1965
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), H2NN(9); NNH(7), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S
+    Multiplied by reaction path degeneracy 3.0
+- equation: NNH(7) + N2H3(10) <=> H2NN(9) + H2NN(9)  # Reaction 113
+  rate-constant: {A: 3.6333e+08, b: 1.265, Ea: 33.127}
+  note: |-
+    Reaction index: Chemkin #113; RMG #1972
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), H2NN(9); NNH(7), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S
+- equation: H2NN(9) + N2H3(10) <=> NNH(7) + N2H4(11)  # Reaction 114
+  rate-constant: {A: 1.84e+06, b: 1.94, Ea: 0.87}
+  note: |-
+    Reaction index: Chemkin #114; RMG #1977
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); N2H3(10), N2H4(11);
+    Estimated using template [N5dc_H;N3s_rad] for rate rule [N5dc_H;N3s_rad_pri]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: NO(12) + H2NN(9) <=> HNO(13) + NNH(7)  # Reaction 115
+  rate-constant: {A: 1.84e+06, b: 1.94, Ea: 0.87}
+  note: |-
+    Reaction index: Chemkin #115; RMG #1988
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); NO(12), HNO(13);
+    Estimated using template [N5dc_H;N3_rad] for rate rule [N5dc_H;N3d_rad]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: HON(14) + NNH(7) <=> NO(12) + N2H2(8)  # Reaction 116
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 1.105}
+  note: |-
+    Reaction index: Chemkin #116; RMG #1992
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); NNH(7), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: HON(14) + NNH(7) <=> NO(12) + H2NN(9)  # Reaction 117
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 5.677}
+  note: |-
+    Reaction index: Chemkin #117; RMG #1994
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); NNH(7), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: NNH(7) + H2NO(15) <=> HNO(13) + N2H2(8)  # Reaction 118
+  rate-constant: {A: 7.383e+08, b: 1.263, Ea: 12.737}
+  note: |-
+    Reaction index: Chemkin #118; RMG #2000
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), HNO(13); NNH(7), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS
+    Multiplied by reaction path degeneracy 2.0
+- equation: NNH(7) + H2NO(15) <=> HNO(13) + H2NN(9)  # Reaction 119
+  rate-constant: {A: 7.383e+08, b: 1.263, Ea: 25.955}
+  note: |-
+    Reaction index: Chemkin #119; RMG #2006
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), HNO(13); NNH(7), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS
+    Multiplied by reaction path degeneracy 2.0
+- equation: NNH(7) + HNOH(16) <=> HNO(13) + N2H2(8)  # Reaction 120
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 10.381}
+  note: |-
+    Reaction index: Chemkin #120; RMG #2009
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), HNO(13); NNH(7), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: HON(14) + N2H2(8) <=> NNH(7) + HNOH(16)  # Reaction 121
+  rate-constant: {A: 5.628499e+07, b: 1.75, Ea: 1.947}
+  note: |-
+    Reaction index: Chemkin #121; RMG #2012
+    Template reaction: H_Abstraction
+    Flux pairs: N2H2(8), NNH(7); HON(14), HNOH(16);
+    Estimated using an average for rate rule [N3d/H/NonDeN;Y_1centerbirad]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: NNH(7) + HNOH(16) <=> HNO(13) + H2NN(9)  # Reaction 122
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 21.771}
+  note: |-
+    Reaction index: Chemkin #122; RMG #2014
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), HNO(13); NNH(7), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: HON(14) + H2NN(9) <=> NNH(7) + HNOH(16)  # Reaction 123
+  rate-constant: {A: 3.4e+08, b: 1.5, Ea: 2.36}
+  note: |-
+    Reaction index: Chemkin #123; RMG #2018
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); HON(14), HNOH(16);
+    Estimated using an average for rate rule [N5dc_H;Y_1centerbirad]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: H2NO(15) + H2NN(9) <=> NNH(7) + NH2OH(17)  # Reaction 124
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: -0.79}
+  note: |-
+    Reaction index: Chemkin #124; RMG #2024
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); H2NO(15), NH2OH(17);
+    Estimated using template [N5dc_H;O_rad] for rate rule [N5dc_H;O_rad/NonDeN]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: HNOH(16) + H2NN(9) <=> NNH(7) + NH2OH(17)  # Reaction 125
+  rate-constant: {A: 1.84e+06, b: 1.94, Ea: 0.87}
+  note: |-
+    Reaction index: Chemkin #125; RMG #2025
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); HNOH(16), NH2OH(17);
+    Estimated using template [N5dc_H;N3s_rad] for rate rule [N5dc_H;N3s_rad_pri]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: NO2(19) + H2NN(9) <=> HONO(20) + NNH(7)  # Reaction 126
+  rate-constant: {A: 0.678292, b: 3.755, Ea: 8.482}
+  note: |-
+    Reaction index: Chemkin #126; RMG #2047
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); NO2(19), HONO(20);
+    Estimated using template [X_H;O_rad/OneDeN] for rate rule [N5dc_H;O_rad/OneDeN]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: NO2(19) + H2NN(9) <=> HNO2(21) + NNH(7)  # Reaction 127
+  rate-constant: {A: 7.65502e+06, b: 1.828, Ea: 2.27}
+  note: |-
+    Reaction index: Chemkin #127; RMG #2056
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); NO2(19), HNO2(21);
+    Estimated using template [N5dc_H;Y_rad] for rate rule [N5dc_H;N5dc_rad]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: NO3(22) + N2H2(8) <=> HONO2(23) + NNH(7)  # Reaction 128
+  rate-constant: {A: 1.44e+07, b: 2.0, Ea: -1.19}
+  note: |-
+    Reaction index: Chemkin #128; RMG #2061
+    Template reaction: H_Abstraction
+    Flux pairs: N2H2(8), NNH(7); NO3(22), HONO2(23);
+    Estimated using template [N3d/H/NonDeN;O_rad] for rate rule [N3d/H/NonDeN;O_rad/OneDeN]
+    Euclidian distance = 3.0
+    Multiplied by reaction path degeneracy 6.0
+    family: H_Abstraction
+- equation: NO3(22) + H2NN(9) <=> HONO2(23) + NNH(7)  # Reaction 129
+  rate-constant: {A: 1.017438, b: 3.755, Ea: 8.482}
+  note: |-
+    Reaction index: Chemkin #129; RMG #2063
+    Template reaction: H_Abstraction
+    Flux pairs: H2NN(9), NNH(7); NO3(22), HONO2(23);
+    Estimated using template [X_H;O_rad/OneDeN] for rate rule [N5dc_H;O_rad/OneDeN]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 6.0
+    family: H_Abstraction
+- equation: N2H3(10) + N2H3(10) <=> N2H2(8) + N2H4(11)  # Reaction 130
+  rate-constant: {A: 7.2666e+08, b: 1.265, Ea: 0.641}
+  note: |-
+    Reaction index: Chemkin #130; RMG #2068
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), N2H4(11); N2H3(10), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO(12) + N2H3(10) <=> HNO(13) + N2H2(8)  # Reaction 131
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: 14.365}
+  note: |-
+    Reaction index: Chemkin #131; RMG #2072
+    Template reaction: Disproportionation
+    Flux pairs: NO(12), HNO(13); N2H3(10), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_5R!H->O_N-1CNS->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: HON(14) + N2H3(10) <=> HNOH(16) + N2H2(8)  # Reaction 132
+  rate-constant: {A: 3.18772e+10, b: 0.994, Ea: 3.431}
+  note: |-
+    Reaction index: Chemkin #132; RMG #2078
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), HNOH(16); N2H3(10), N2H2(8);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_N-1R!H->O_Sp-2R!H-1CNS
+    Multiplied by reaction path degeneracy 2.0
+- equation: H2NO(15) + N2H3(10) <=> N2H2(8) + NH2OH(17)  # Reaction 133
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: 3.451}
+  note: |-
+    Reaction index: Chemkin #133; RMG #2080
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), NH2OH(17); N2H3(10), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_N-1CNS->C_2R!H->N_2N-u1
+    Multiplied by reaction path degeneracy 2.0
+- equation: HNOH(16) + N2H3(10) <=> N2H2(8) + NH2OH(17)  # Reaction 134
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: 1.853}
+  note: |-
+    Reaction index: Chemkin #134; RMG #2081
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), NH2OH(17); N2H3(10), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_5R!H->O_N-1CNS->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO3(22) + N2H3(10) <=> HONO2(23) + N2H2(8)  # Reaction 135
+  rate-constant: {A: 7.2e+06, b: 2.0, Ea: 0.159}
+  note: |-
+    Reaction index: Chemkin #135; RMG #2096
+    Template reaction: Disproportionation
+    Flux pairs: NO3(22), HONO2(23); N2H3(10), N2H2(8);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_N-1CNS->C_2R!H->N_2N-u1
+    Multiplied by reaction path degeneracy 6.0
+- equation: NO(12) + N2H3(10) <=> HNO(13) + H2NN(9)  # Reaction 136
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: 27.139}
+  note: |-
+    Reaction index: Chemkin #136; RMG #2107
+    Template reaction: Disproportionation
+    Flux pairs: NO(12), HNO(13); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_5R!H->O_N-1CNS->C
+- equation: HON(14) + N2H3(10) <=> HNOH(16) + H2NN(9)  # Reaction 137
+  rate-constant: {A: 1.59386e+10, b: 0.994, Ea: 9.824}
+  note: |-
+    Reaction index: Chemkin #137; RMG #2120
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), HNOH(16); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_N-1R!H->O_Sp-2R!H-1CNS
+- equation: H2NO(15) + N2H3(10) <=> H2NN(9) + NH2OH(17)  # Reaction 138
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: 10.214}
+  note: |-
+    Reaction index: Chemkin #138; RMG #2125
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), NH2OH(17); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_N-1CNS->C_2R!H->N_2N-u1
+- equation: HNOH(16) + N2H3(10) <=> H2NN(9) + NH2OH(17)  # Reaction 139
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: 7.203}
+  note: |-
+    Reaction index: Chemkin #139; RMG #2126
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), NH2OH(17); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_5R!H->O_N-1CNS->C
+- equation: NO2(19) + N2H3(10) <=> HONO(20) + H2NN(9)  # Reaction 140
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: 10.23}
+  note: |-
+    Reaction index: Chemkin #140; RMG #2139
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HONO(20); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_N-1CNS->C_2R!H->N_2N-u1
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO2(19) + N2H3(10) <=> HNO2(21) + H2NN(9)  # Reaction 141
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: 13.45}
+  note: |-
+    Reaction index: Chemkin #141; RMG #2145
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HNO2(21); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_5R!H->O_N-1CNS->C
+- equation: NO3(22) + N2H3(10) <=> HONO2(23) + H2NN(9)  # Reaction 142
+  rate-constant: {A: 3.6e+06, b: 2.0, Ea: 2.537}
+  note: |-
+    Reaction index: Chemkin #142; RMG #2147
+    Template reaction: Disproportionation
+    Flux pairs: NO3(22), HONO2(23); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_N-1CNS->C_2R!H->N_2N-u1
+    Multiplied by reaction path degeneracy 3.0
+- equation: HON(14) + N2H3(10) <=> NO(12) + N2H4(11)  # Reaction 143
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #143; RMG #2170
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); N2H3(10), N2H4(11);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: H2NO(15) + N2H3(10) <=> HNO(13) + N2H4(11)  # Reaction 144
+  rate-constant: {A: 7.383e+08, b: 1.263, Ea: 3.518}
+  note: |-
+    Reaction index: Chemkin #144; RMG #2179
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), HNO(13); N2H3(10), N2H4(11);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS
+    Multiplied by reaction path degeneracy 2.0
+- equation: HNOH(16) + N2H3(10) <=> HON(14) + N2H4(11)  # Reaction 145
+  rate-constant: {A: 1.861451e+06, b: 1.965, Ea: 8.377}
+  note: |-
+    Reaction index: Chemkin #145; RMG #2188
+    Template reaction: H_Abstraction
+    Flux pairs: N2H3(10), N2H4(11); HNOH(16), HON(14);
+    Estimated using average of templates [N3s_rad_H;N3s_rad_pri] + [N3s_rad_H_pri;N3s_rad] for rate rule [N3s_rad_H_pri;N3s_rad_pri]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: NO(12) + HON(14) <=> NO(12) + HNO(13)  # Reaction 146
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 2.996}
+  note: |-
+    Reaction index: Chemkin #146; RMG #2249
+    Template reaction: Disproportionation
+    Flux pairs: NO(12), HNO(13); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: NO(12) + HNOH(16) <=> HNO(13) + HNO(13)  # Reaction 147
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 15.765}
+  note: |-
+    Reaction index: Chemkin #147; RMG #2257
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), HNO(13); NO(12), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: HON(14) + HON(14) <=> NO(12) + HNOH(16)  # Reaction 148
+  rate-constant: {A: 6.06985e+13, b: -0.073, Ea: 0.903}
+  note: |-
+    Reaction index: Chemkin #148; RMG #2259
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), HNOH(16); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_1R!H->O
+- equation: HNO(13) + HON(14) <=> NO(12) + HNOH(16)  # Reaction 149
+  rate-constant: {A: 4.5e+11, b: 0.72, Ea: 0.66}
+  note: |-
+    Reaction index: Chemkin #149; RMG #2260
+    Template reaction: H_Abstraction
+    Flux pairs: HNO(13), NO(12); HON(14), HNOH(16);
+    Estimated using an average for rate rule [N3d/H/NonDeO;Y_1centerbirad]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: HON(14) + H2NO(15) <=> NO(12) + NH2OH(17)  # Reaction 150
+  rate-constant: {A: 2.94e+04, b: 2.69, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #150; RMG #2262
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), NH2OH(17); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+- equation: HON(14) + HNOH(16) <=> NO(12) + NH2OH(17)  # Reaction 151
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #151; RMG #2263
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), NH2OH(17); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: NO2(19) + HON(14) <=> NO(12) + HONO(20)  # Reaction 152
+  rate-constant: {A: 5.88e+04, b: 2.69, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #152; RMG #2268
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HONO(20); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO2(19) + HON(14) <=> NO(12) + HNO2(21)  # Reaction 153
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 0.124}
+  note: |-
+    Reaction index: Chemkin #153; RMG #2269
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HNO2(21); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: NO3(22) + HON(14) <=> NO(12) + HONO2(23)  # Reaction 154
+  rate-constant: {A: 8.82e+04, b: 2.69, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #154; RMG #2270
+    Template reaction: Disproportionation
+    Flux pairs: NO3(22), HONO2(23); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+    Multiplied by reaction path degeneracy 3.0
+- equation: NO3(22) + HNO(13) <=> NO(12) + HONO2(23)  # Reaction 155
+  rate-constant: {A: 7.2e+06, b: 2.0, Ea: -1.19}
+  note: |-
+    Reaction index: Chemkin #155; RMG #2271
+    Template reaction: H_Abstraction
+    Flux pairs: HNO(13), NO(12); NO3(22), HONO2(23);
+    Estimated using template [N3d/H/NonDe;O_rad] for rate rule [N3d/H/NonDeO;O_rad/OneDeN]
+    Euclidian distance = 3.1622776601683795
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: HON(14) + HNOH(16) <=> HNO(13) + HNOH(16)  # Reaction 156
+  rate-constant: {A: 6.06985e+13, b: -0.073, Ea: 7.117}
+  note: |-
+    Reaction index: Chemkin #156; RMG #2284
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), HNOH(16); HON(14), HNO(13);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_1R!H->O
+- equation: HON(14) + H2NO(15) <=> HNO(13) + HNOH(16)  # Reaction 157
+  rate-constant: {A: 3.18772e+10, b: 0.994, Ea: 6.355}
+  note: |-
+    Reaction index: Chemkin #157; RMG #2286
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), HNOH(16); HON(14), HNO(13);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_N-1R!H->O_Sp-2R!H-1CNS
+    Multiplied by reaction path degeneracy 2.0
+- equation: H2NO(15) + HNOH(16) <=> HNO(13) + NH2OH(17)  # Reaction 158
+  duplicate: true
+  rate-constant: {A: 2.94e+04, b: 2.69, Ea: 0.755}
+  note: |-
+    Reaction index: Chemkin #158; RMG #2289
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), NH2OH(17); HNOH(16), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+- equation: HNOH(16) + HNOH(16) <=> HNO(13) + NH2OH(17)  # Reaction 159
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 2.156}
+  note: |-
+    Reaction index: Chemkin #159; RMG #2290
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), NH2OH(17); HNOH(16), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: H2NO(15) + H2NO(15) <=> HNO(13) + NH2OH(17)  # Reaction 160
+  rate-constant: {A: 4.8e+06, b: 2.0, Ea: 6.771}
+  note: |-
+    Reaction index: Chemkin #160; RMG #2291
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), NH2OH(17); H2NO(15), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_N-1CNS->C_N-2R!H->N_N-2CO->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: H2NO(15) + HNOH(16) <=> HNO(13) + NH2OH(17)  # Reaction 161
+  duplicate: true
+  rate-constant: {A: 7.383e+08, b: 1.263, Ea: 2.873}
+  note: |-
+    Reaction index: Chemkin #161; RMG #2292
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), NH2OH(17); H2NO(15), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO2(19) + HNOH(16) <=> HNO(13) + HNO2(21)  # Reaction 162
+  rate-constant: {A: 1.8e+06, b: 1.94, Ea: 5.882}
+  note: |-
+    Reaction index: Chemkin #162; RMG #2302
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HNO2(21); HNOH(16), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_N-4CNOS->O_N-4CN->C_2NOS->N
+- equation: NO2(19) + H2NO(15) <=> HNO(13) + HNO2(21)  # Reaction 163
+  rate-constant: {A: 7.383e+08, b: 1.263, Ea: 7.394}
+  note: |-
+    Reaction index: Chemkin #163; RMG #2303
+    Template reaction: Disproportionation
+    Flux pairs: NO2(19), HNO2(21); H2NO(15), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO3(22) + HNOH(16) <=> HNO(13) + HONO2(23)  # Reaction 164
+  rate-constant: {A: 8.82e+04, b: 2.69, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #164; RMG #2304
+    Template reaction: Disproportionation
+    Flux pairs: NO3(22), HONO2(23); HNOH(16), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+    Multiplied by reaction path degeneracy 3.0
+- equation: NO3(22) + H2NO(15) <=> HNO(13) + HONO2(23)  # Reaction 165
+  rate-constant: {A: 1.44e+07, b: 2.0, Ea: 1.122}
+  note: |-
+    Reaction index: Chemkin #165; RMG #2305
+    Template reaction: Disproportionation
+    Flux pairs: NO3(22), HONO2(23); H2NO(15), HNO(13);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Sp-2R!H-1CNS_N-1CNS->C_N-2R!H->N_N-2CO->C
+    Multiplied by reaction path degeneracy 6.0
+- equation: HON(14) + NH2OH(17) <=> H2NO(15) + HNOH(16)  # Reaction 166
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: 24.76}
+  note: |-
+    Reaction index: Chemkin #166; RMG #2311
+    Template reaction: H_Abstraction
+    Flux pairs: HON(14), HNOH(16); NH2OH(17), H2NO(15);
+    Estimated using an average for rate rule [O/H/NonDeN;Y_1centerbirad]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: HNOH(16) + HNOH(16) <=> HON(14) + NH2OH(17)  # Reaction 167
+  rate-constant: {A: 1.861451e+06, b: 1.965, Ea: 8.377}
+  note: |-
+    Reaction index: Chemkin #167; RMG #2312
+    Template reaction: H_Abstraction
+    Flux pairs: HNOH(16), HON(14); HNOH(16), NH2OH(17);
+    Estimated using average of templates [N3s_rad_H;N3s_rad_pri] + [N3s_rad_H_pri;N3s_rad] for rate rule [N3s_rad_H_pri;N3s_rad_pri]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: HON(14) + HONO(20) <=> NO2(19) + HNOH(16)  # Reaction 168
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: 24.76}
+  note: |-
+    Reaction index: Chemkin #168; RMG #2316
+    Template reaction: H_Abstraction
+    Flux pairs: HON(14), HNOH(16); HONO(20), NO2(19);
+    Estimated using an average for rate rule [O/H/OneDeN;Y_1centerbirad]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: HON(14) + HNO2(21) <=> NO2(19) + HNOH(16)  # Reaction 169
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: 2.36}
+  note: |-
+    Reaction index: Chemkin #169; RMG #2317
+    Template reaction: H_Abstraction
+    Flux pairs: HON(14), HNOH(16); HNO2(21), NO2(19);
+    Estimated using an average for rate rule [N5dc_H;Y_1centerbirad]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: NO3(22) + HNOH(16) <=> HON(14) + HONO2(23)  # Reaction 170
+  rate-constant: {A: 6.76644e+06, b: 1.877, Ea: 4.241}
+  note: |-
+    Reaction index: Chemkin #170; RMG #2318
+    Template reaction: H_Abstraction
+    Flux pairs: HNOH(16), HON(14); NO3(22), HONO2(23);
+    Estimated using average of templates [X_H_or_Xrad_H_Xbirad_H_Xtrirad_H;O_rad/OneDeN] + [N3s_rad_H_pri;O_rad] for rate rule
+    [N3s_rad_H_pri;O_rad/OneDeN]
+    Euclidian distance = 3.0
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: H2NO(15) + HNOH(16) <=> HNO(13) + NH2OH(17)  # Reaction 171
+  duplicate: true
+  rate-constant: {A: 2.94e+04, b: 2.69, Ea: 0.755}
+  note: |-
+    Reaction index: Chemkin #171; RMG #2329
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), HNO(13); H2NO(15), NH2OH(17);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+- equation: H2NO(15) + HNOH(16) <=> HNO(13) + NH2OH(17)  # Reaction 172
+  duplicate: true
+  rate-constant: {A: 7.383e+08, b: 1.263, Ea: 2.873}
+  note: |-
+    Reaction index: Chemkin #172; RMG #2330
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), HNO(13); HNOH(16), NH2OH(17);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS
+    Multiplied by reaction path degeneracy 2.0
+- equation: HNOH(16) + NH2OH(17) <=> H2NO(15) + NH2OH(17)  # Reaction 173
+  rate-constant: {A: 9.2e+05, b: 1.94, Ea: 2.785}
+  note: |-
+    Reaction index: Chemkin #173; RMG #2332
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OH(17), H2NO(15); HNOH(16), NH2OH(17);
+    Estimated using template [O_sec;N3s_rad] for rate rule [O/H/NonDeN;N3s_rad_pri]
+    Euclidian distance = 1.4142135623730951
+    family: H_Abstraction
+- equation: NO3(22) + NH2OH(17) <=> HONO2(23) + H2NO(15)  # Reaction 174
+  rate-constant: {A: 0.10485, b: 3.75, Ea: 19.545}
+  note: |-
+    Reaction index: Chemkin #174; RMG #2353
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OH(17), H2NO(15); NO3(22), HONO2(23);
+    Estimated using template [O_sec;O_rad/OneDe] for rate rule [O/H/NonDeN;O_rad/OneDeN]
+    Euclidian distance = 1.4142135623730951
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: HNO2(21) + HNOH(16) <=> NO2(19) + NH2OH(17)  # Reaction 175
+  rate-constant: {A: 9.2e+05, b: 1.94, Ea: 0.87}
+  note: |-
+    Reaction index: Chemkin #175; RMG #2376
+    Template reaction: H_Abstraction
+    Flux pairs: HNOH(16), NH2OH(17); HNO2(21), NO2(19);
+    Estimated using template [N5dc_H;N3s_rad] for rate rule [N5dc_H;N3s_rad_pri]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: NO3(22) + NH2OH(17) <=> HONO2(23) + HNOH(16)  # Reaction 176
+  rate-constant: {A: 1.74e+05, b: 2.69, Ea: 9.56}
+  note: |-
+    Reaction index: Chemkin #176; RMG #2377
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OH(17), HNOH(16); NO3(22), HONO2(23);
+    Estimated using template [N3s/H2/NonDeO;O_sec_rad] for rate rule [N3s/H2/NonDeO;O_rad/OneDeN]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 6.0
+    family: H_Abstraction
+- equation: NO3(22) + HNO2(21) <=> NO2(19) + HONO2(23)  # Reaction 177
+  rate-constant: {A: 0.508719, b: 3.755, Ea: 8.482}
+  note: |-
+    Reaction index: Chemkin #177; RMG #2414
+    Template reaction: H_Abstraction
+    Flux pairs: HNO2(21), NO2(19); NO3(22), HONO2(23);
+    Estimated using template [X_H;O_rad/OneDeN] for rate rule [N5dc_H;O_rad/OneDeN]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: NO3(22) + HONO(20) <=> NO2(19) + HONO2(23)  # Reaction 178
+  rate-constant: {A: 0.10485, b: 3.75, Ea: 19.545}
+  note: |-
+    Reaction index: Chemkin #178; RMG #2416
+    Template reaction: H_Abstraction
+    Flux pairs: HONO(20), NO2(19); NO3(22), HONO2(23);
+    Estimated using template [O_sec;O_rad/OneDe] for rate rule [O/H/OneDeN;O_rad/OneDeN]
+    Euclidian distance = 2.23606797749979
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: NH(5) + NH2(6) <=> N2H3(10)  # Reaction 179
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [12.56, 0.9071, -0.1266, -4.89e-03]
+  - [-0.862, 0.4085, 0.05078, -0.01039]
+  - [-0.3183, 0.0433, 0.02369, 4.472e-03]
+  - [-0.1027, 5.238e-04, 2.91e-03, 1.593e-03]
+  - [-0.03404, -1.149e-03, -1.232e-04, 1.021e-04]
+  - [-0.01104, -5.637e-04, -1.517e-04, -3.372e-05]
+  note: |-
+    Reaction index: Chemkin #179; RMG #2455
+    PDep reaction: PDepNetwork #101
+    Flux pairs: NH(5), N2H3(10); NH2(6), N2H3(10);
+- equation: O2(3) + NNH(7) <=> N2(2) + HO2(30)  # Reaction 180
+  rate-constant: {A: 5.6e+14, b: -0.385, Ea: -0.013}
+  note: |-
+    Reaction index: Chemkin #180; RMG #134
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), HO2(30); NNH(7), N2(2);
+- equation: O2(3) + HNO(13) <=> NO(12) + HO2(30)  # Reaction 181
+  rate-constant: {A: 2.0e+13, b: 0.0, Ea: 16.0}
+  note: |-
+    Reaction index: Chemkin #181; RMG #314
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), HO2(30); HNO(13), NO(12);
+- equation: HO2(30) + NH2(6) <=> O2(3) + NH3(1)  # Reaction 182
+  rate-constant: {A: 6.04e+18, b: -1.91, Ea: 0.608}
+  note: |-
+    Reaction index: Chemkin #182; RMG #316
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), O2(3); NH2(6), NH3(1);
+- equation: NO(12) + HO2(30) (+M) <=> HONO2(23) (+M)  # Reaction 183
+  type: falloff
+  low-P-rate-constant: {A: 1.2e+42, b: -8.8, Ea: 3.118}
+  high-P-rate-constant: {A: 2.85e+15, b: -0.82, Ea: -0.042}
+  note: |-
+    Reaction index: Chemkin #183; RMG #319
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), HONO2(23); HO2(30), HONO2(23);
+- equation: N(4) + HO2(30) <=> O2(3) + NH(5)  # Reaction 184
+  rate-constant: {A: 27.7894, b: 3.472, Ea: 1.313}
+  note: |-
+    Reaction index: Chemkin #184; RMG #371
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), O2(3); N(4), NH(5);
+- equation: HO2(30) + NH(5) <=> O2(3) + NH2(6)  # Reaction 185
+  duplicate: true
+  rate-constant: {A: 2.17541e-26, b: 11.138, Ea: 17.99}
+  note: |-
+    Reaction index: Chemkin #185; RMG #384
+    Library reaction: primaryNitrogenLibrary
+- equation: HO2(30) + NH(5) <=> O2(3) + NH2(6)  # Reaction 186
+  duplicate: true
+  rate-constant: {A: 3947.27, b: 2.958, Ea: -1.36}
+  note: |-
+    Reaction index: Chemkin #186; RMG #384
+    Library reaction: primaryNitrogenLibrary
+- equation: HO2(30) + NH(5) <=> O2(3) + NH2(6)  # Reaction 187
+  duplicate: true
+  rate-constant: {A: 2.39523e-26, b: 11.126, Ea: 17.915}
+  note: |-
+    Reaction index: Chemkin #187; RMG #390
+    Library reaction: primaryNitrogenLibrary
+- equation: HO2(30) + NH(5) <=> O2(3) + NH2(6)  # Reaction 188
+  duplicate: true
+  rate-constant: {A: 4342.52, b: 2.946, Ea: -1.385}
+  note: |-
+    Reaction index: Chemkin #188; RMG #390
+    Library reaction: primaryNitrogenLibrary
+- equation: HO2(30) + NNH(7) <=> O2(3) + N2H2(8)  # Reaction 189
+  rate-constant: {A: 8.30235e-06, b: 4.809, Ea: 1.24}
+  note: |-
+    Reaction index: Chemkin #189; RMG #423
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), O2(3); NNH(7), N2H2(8);
+- equation: O2(3) + HNOH(16) <=> HO2(30) + HNO(13)  # Reaction 190
+  rate-constant: {A: 3.76483e-04, b: 4.615, Ea: 18.134}
+  note: |-
+    Reaction index: Chemkin #190; RMG #426
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), HO2(30); HNOH(16), HNO(13);
+- equation: HO2(30) + HNO(13) <=> O2(3) + H2NO(15)  # Reaction 191
+  rate-constant: {A: 4.47159e-03, b: 3.944, Ea: 4.336}
+  note: |-
+    Reaction index: Chemkin #191; RMG #427
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), O2(3); HNO(13), H2NO(15);
+- equation: HO2(30) + HNOH(16) <=> O2(3) + NH2OH(17)  # Reaction 192
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: -1.6}
+  note: |-
+    Reaction index: Chemkin #192; RMG #1015
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), O2(3); HNOH(16), NH2OH(17);
+- equation: NO2(19) + HO2(30) <=> O2(3) + HONO(20)  # Reaction 193
+  rate-constant: {A: 1.9, b: 3.32, Ea: 3.044}
+  note: |-
+    Reaction index: Chemkin #193; RMG #1023
+    Library reaction: NOx2018
+    Flux pairs: NO2(19), HONO(20); HO2(30), O2(3);
+- equation: NO2(19) + HO2(30) <=> O2(3) + HNO2(21)  # Reaction 194
+  rate-constant: {A: 19.0, b: 3.26, Ea: 4.983}
+  note: |-
+    Reaction index: Chemkin #194; RMG #1024
+    Library reaction: NOx2018
+    Flux pairs: NO2(19), HNO2(21); HO2(30), O2(3);
+- equation: HO2(30) + N2H3(10) <=> O2(3) + N2H4(11)  # Reaction 195
+  rate-constant: {A: 9.2e+05, b: 1.94, Ea: 2.126}
+  note: |-
+    Reaction index: Chemkin #195; RMG #1051
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), O2(3); N2H3(10), N2H4(11);
+- equation: HO2(30) + H2NO(15) <=> O2(3) + NH2OH(17)  # Reaction 196
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: -1.599}
+  note: |-
+    Reaction index: Chemkin #196; RMG #1617
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: HO2(30), O2(3); H2NO(15), NH2OH(17);
+- equation: O2(3) + H2NN(9) <=> HO2(30) + NNH(7)  # Reaction 197
+  rate-constant: {A: 2.520309e+09, b: 1.199, Ea: 28.205}
+  note: |-
+    Reaction index: Chemkin #197; RMG #1848
+    Template reaction: H_Abstraction
+    Flux pairs: O2(3), HO2(30); H2NN(9), NNH(7);
+    Estimated using average of templates [X_H;O2b] + [N5dc_H;Y_rad] for rate rule [N5dc_H;O2b]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: O2(3) + N2H3(10) <=> HO2(30) + N2H2(8)  # Reaction 198
+  rate-constant: {A: 2.892e+13, b: 0.0, Ea: 23.048}
+  note: |-
+    Reaction index: Chemkin #198; RMG #1851
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), N2H2(8); O2(3), HO2(30);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_N-5R!H-u0_Sp-2R!H-1CNS
+    Multiplied by reaction path degeneracy 4.0
+- equation: O2(3) + N2H3(10) <=> HO2(30) + H2NN(9)  # Reaction 199
+  rate-constant: {A: 1.446e+13, b: 0.0, Ea: 34.707}
+  note: |-
+    Reaction index: Chemkin #199; RMG #1854
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), H2NN(9); O2(3), HO2(30);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_N-5R!H-u0_Sp-2R!H-1CNS
+    Multiplied by reaction path degeneracy 2.0
+- equation: O2(3) + HON(14) <=> NO(12) + HO2(30)  # Reaction 200
+  rate-constant: {A: 2.54276e+08, b: 1.573, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #200; RMG #1857
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); O2(3), HO2(30);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O
+    Multiplied by reaction path degeneracy 2.0
+- equation: HO2(30) + HON(14) <=> O2(3) + HNOH(16)  # Reaction 201
+  rate-constant: {A: 4.949747e+10, b: 0.0, Ea: -1.637}
+  note: |-
+    Reaction index: Chemkin #201; RMG #1858
+    Template reaction: H_Abstraction
+    Flux pairs: HO2(30), O2(3); HON(14), HNOH(16);
+    Estimated using template [Orad_O_H;Y_rad_birad_trirad_quadrad] for rate rule [Orad_O_H;Y_1centerbirad]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: NO3(22) + HO2(30) <=> O2(3) + HONO2(23)  # Reaction 202
+  rate-constant: {A: 2.748471e+05, b: 1.877, Ea: 3.422}
+  note: |-
+    Reaction index: Chemkin #202; RMG #1860
+    Template reaction: H_Abstraction
+    Flux pairs: HO2(30), O2(3); NO3(22), HONO2(23);
+    Estimated using average of templates [X_H;O_rad/OneDeN] + [Orad_O_H;O_sec_rad] for rate rule [Orad_O_H;O_rad/OneDeN]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: NO[O](255) <=> O2(3) + NH2(6)  # Reaction 203
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [7.592, 0.2872, -0.1146, 0.02186]
+  - [0.2102, -0.243, 0.09241, -6.949e-03]
+  - [-0.3415, -0.01822, 0.0265, -0.0119]
+  - [-0.1191, 0.02115, -3.127e-04, -3.894e-03]
+  - [-0.04574, 0.01725, -5.271e-03, 1.052e-03]
+  - [-0.01688, 6.442e-03, -2.675e-03, 1.724e-03]
+  note: |-
+    Reaction index: Chemkin #203; RMG #2590
+    PDep reaction: PDepNetwork #294
+    Flux pairs: NO[O](255), O2(3); NO[O](255), NH2(6);
+- equation: HO2(30) + HO2(30) <=> O2(3) + H2O2(31)  # Reaction 204
+  rate-constant: {A: 0.0193, b: 4.12, Ea: -9.857}
+  note: |-
+    Reaction index: Chemkin #204; RMG #33
+    Library reaction: primaryH2O2
+    Flux pairs: HO2(30), H2O2(31); HO2(30), O2(3);
+- equation: HO2(30) + NH(5) <=> N(4) + H2O2(31)  # Reaction 205
+  rate-constant: {A: 0.211726, b: 4.021, Ea: 3.695}
+  note: |-
+    Reaction index: Chemkin #205; RMG #372
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), H2O2(31); NH(5), N(4);
+- equation: NH(5) + H2O2(31) <=> HO2(30) + NH2(6)  # Reaction 206
+  rate-constant: {A: 1.71391e-04, b: 4.921, Ea: 3.349}
+  note: |-
+    Reaction index: Chemkin #206; RMG #385
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2O2(31), HO2(30); NH(5), NH2(6);
+- equation: HO2(30) + NH3(1) <=> H2O2(31) + NH2(6)  # Reaction 207
+  rate-constant: {A: 0.132333, b: 4.138, Ea: 18.41}
+  note: |-
+    Reaction index: Chemkin #207; RMG #392
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), H2O2(31); NH3(1), NH2(6);
+- equation: HO2(30) + N2H4(11) <=> H2O2(31) + N2H3(10)  # Reaction 208
+  rate-constant: {A: 4.31241e-03, b: 4.186, Ea: 2.115}
+  note: |-
+    Reaction index: Chemkin #208; RMG #395
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), H2O2(31); N2H4(11), N2H3(10);
+- equation: HO2(30) + HONO(20) <=> NO2(19) + H2O2(31)  # Reaction 209
+  rate-constant: {A: 4.05386e-06, b: 5.046, Ea: 9.267}
+  note: |-
+    Reaction index: Chemkin #209; RMG #415
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), NO2(19); HO2(30), H2O2(31);
+- equation: HO2(30) + HNO2(21) <=> NO2(19) + H2O2(31)  # Reaction 210
+  rate-constant: {A: 2.13862e-03, b: 4.537, Ea: 0.208}
+  note: |-
+    Reaction index: Chemkin #210; RMG #416
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO2(21), NO2(19); HO2(30), H2O2(31);
+- equation: HO2(30) + N2H2(8) <=> NNH(7) + H2O2(31)  # Reaction 211
+  rate-constant: {A: 3.36973, b: 3.535, Ea: -0.43}
+  note: |-
+    Reaction index: Chemkin #211; RMG #428
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), H2O2(31); N2H2(8), NNH(7);
+- equation: HO2(30) + NH2OH(17) <=> H2O2(31) + HNOH(16)  # Reaction 212
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: 9.557}
+  note: |-
+    Reaction index: Chemkin #212; RMG #1002
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), H2O2(31); NH2OH(17), HNOH(16);
+- equation: HO2(30) + NH2OH(17) <=> H2O2(31) + H2NO(15)  # Reaction 213
+  rate-constant: {A: 1.4e+04, b: 2.69, Ea: 6.418}
+  note: |-
+    Reaction index: Chemkin #213; RMG #1003
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), H2O2(31); NH2OH(17), H2NO(15);
+- equation: HO2(30) + H2NO(15) <=> HNO(13) + H2O2(31)  # Reaction 214
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: -1.6}
+  note: |-
+    Reaction index: Chemkin #214; RMG #1008
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), H2O2(31); H2NO(15), HNO(13);
+- equation: HO2(30) + HNOH(16) <=> HNO(13) + H2O2(31)  # Reaction 215
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: -1.6}
+  note: |-
+    Reaction index: Chemkin #215; RMG #1014
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), H2O2(31); HNOH(16), HNO(13);
+- equation: HO2(30) + N2H3(10) <=> H2O2(31) + N2H2(8)  # Reaction 216
+  rate-constant: {A: 1.4e+04, b: 2.69, Ea: -1.6}
+  note: |-
+    Reaction index: Chemkin #216; RMG #1050
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), H2O2(31); N2H3(10), N2H2(8);
+- equation: HO2(30) + H2NN(9) <=> NNH(7) + H2O2(31)  # Reaction 217
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: -1.6}
+  note: |-
+    Reaction index: Chemkin #217; RMG #1065
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), H2O2(31); H2NN(9), NNH(7);
+- equation: HO2(30) + NNH(7) <=> N2(2) + H2O2(31)  # Reaction 218
+  rate-constant: {A: 1.4e+04, b: 2.69, Ea: -1.192}
+  note: |-
+    Reaction index: Chemkin #218; RMG #1606
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: HO2(30), H2O2(31); NNH(7), N2(2);
+- equation: HO2(30) + N2H3(10) <=> H2O2(31) + H2NN(9)  # Reaction 219
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: 3.136}
+  note: |-
+    Reaction index: Chemkin #219; RMG #2477
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), H2NN(9); HO2(30), H2O2(31);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_5R!H-u0_Sp-2R!H-1CNS_2R!H->N_2N-u1
+- equation: HO2(30) + HNO(13) <=> NO(12) + H2O2(31)  # Reaction 220
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: -1.19}
+  note: |-
+    Reaction index: Chemkin #220; RMG #2481
+    Template reaction: H_Abstraction
+    Flux pairs: HO2(30), H2O2(31); HNO(13), NO(12);
+    Estimated using template [N3d/H/NonDe;O_rad] for rate rule [N3d/H/NonDeO;O_rad/NonDeO]
+    Euclidian distance = 2.23606797749979
+    family: H_Abstraction
+- equation: HO2(30) + HON(14) <=> NO(12) + H2O2(31)  # Reaction 221
+  rate-constant: {A: 2.94e+04, b: 2.69, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #221; RMG #2482
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); HO2(30), H2O2(31);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+- equation: HO2(30) + HNOH(16) <=> HON(14) + H2O2(31)  # Reaction 222
+  rate-constant: {A: 3.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #222; RMG #2484
+    Template reaction: H_Abstraction
+    Flux pairs: HO2(30), H2O2(31); HNOH(16), HON(14);
+    Estimated using template [N3s_rad_H_pri;O_rad] for rate rule [N3s_rad_H_pri;O_rad/NonDeO]
+    Euclidian distance = 2.0
+    family: H_Abstraction
+- equation: NO3(22) + H2O2(31) <=> HO2(30) + HONO2(23)  # Reaction 223
+  rate-constant: {A: 0.2097, b: 3.75, Ea: 19.545}
+  note: |-
+    Reaction index: Chemkin #223; RMG #2494
+    Template reaction: H_Abstraction
+    Flux pairs: H2O2(31), HO2(30); NO3(22), HONO2(23);
+    Estimated using template [H2O2;O_rad/OneDe] for rate rule [H2O2;O_rad/OneDeN]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 6.0
+    family: H_Abstraction
+- equation: H2O2(31) (+M) <=> OH(27) + OH(27) (+M)  # Reaction 224
+  type: falloff
+  low-P-rate-constant: {A: 2.49e+24, b: -2.3, Ea: 48.75}
+  high-P-rate-constant: {A: 2.0e+12, b: 0.9, Ea: 48.75}
+  Troe: {A: 0.42, T3: 1.0e+30, T1: 1.0e+30}
+  efficiencies: {N2(2): 1.5, H2O(29): 7.5, H2O2(31): 7.7, H2(25): 3.7, O2(3): 1.2}
+  note: |-
+    Reaction index: Chemkin #224; RMG #23
+    Library reaction: primaryH2O2
+    Flux pairs: H2O2(31), OH(27); H2O2(31), OH(27);
+- equation: HO2(30) + HO2(30) <=> O2(3) + OH(27) + OH(27)  # Reaction 225
+  rate-constant: {A: 6.41e+17, b: -1.54, Ea: 16.971}
+  note: |-
+    Reaction index: Chemkin #225; RMG #50
+    Library reaction: primaryH2O2
+    Flux pairs: HO2(30), O2(3); HO2(30), OH(27); HO2(30), OH(27);
+- equation: N2O(18) + OH(27) <=> N2(2) + HO2(30)  # Reaction 226
+  rate-constant: {A: 0.0129, b: 4.72, Ea: 36.565}
+  note: |-
+    Reaction index: Chemkin #226; RMG #124
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2O(18), HO2(30); OH(27), N2(2);
+- equation: N2O(18) + OH(27) <=> NO(12) + HNO(13)  # Reaction 227
+  rate-constant: {A: 1.18e-04, b: 4.33, Ea: 25.039}
+  note: |-
+    Reaction index: Chemkin #227; RMG #125
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2O(18), HNO(13); OH(27), NO(12);
+- equation: NO(12) + NH2(6) <=> OH(27) + NNH(7)  # Reaction 228
+  rate-constant: {A: 4.3e+10, b: 0.294, Ea: -0.866}
+  note: |-
+    Reaction index: Chemkin #228; RMG #190
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), OH(27); NH2(6), NNH(7);
+- equation: NO(12) + NH(5) <=> N2(2) + OH(27)  # Reaction 229
+  rate-constant: {A: 2.7e+12, b: -0.072, Ea: -0.512}
+  note: |-
+    Reaction index: Chemkin #229; RMG #194
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), OH(27); NH(5), N2(2);
+- equation: O2(3) + NH2(6) <=> OH(27) + HNO(13)  # Reaction 230
+  rate-constant: {A: 0.029, b: 3.764, Ea: 18.185}
+  note: |-
+    Reaction index: Chemkin #230; RMG #196
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), HNO(13); NH2(6), OH(27);
+- equation: NH2OH(17) (+M) <=> OH(27) + NH2(6) (+M)  # Reaction 231
+  type: falloff
+  low-P-rate-constant: {A: 5.45e+37, b: -5.96, Ea: 66.79}
+  high-P-rate-constant: {A: 8.43e+43, b: -1.31, Ea: 64.087}
+  Troe: {A: 0.35, T3: 1.0e-30, T1: 1.0e+30}
+  note: |-
+    Reaction index: Chemkin #231; RMG #197
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), OH(27); NH2OH(17), NH2(6);
+    Reaction library: 'primaryNitrogenLibrary'
+- equation: NO2(19) + NH(5) + M <=> N2O(18) + OH(27) + M  # Reaction 232
+  type: three-body
+  rate-constant: {A: 2.08e+13, b: -0.49, Ea: 0.715}
+  note: |-
+    Reaction index: Chemkin #232; RMG #243
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), N2O(18); NH(5), OH(27);
+- equation: NO2(19) + OH(27) (+M) <=> HONO2(23) (+M)  # Reaction 233
+  type: falloff
+  low-P-rate-constant: {A: 1.2e+42, b: -8.8, Ea: 3.118}
+  high-P-rate-constant: {A: 2.85e+15, b: -0.82, Ea: -0.042}
+  note: |-
+    Reaction index: Chemkin #233; RMG #256
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HONO2(23); OH(27), HONO2(23);
+    Reaction library: 'primaryNitrogenLibrary'
+- equation: NO2(19) + OH(27) <=> NO(12) + HO2(30)  # Reaction 234
+  rate-constant: {A: 2.0e+06, b: 2.0, Ea: 3.0}
+  note: |-
+    Reaction index: Chemkin #234; RMG #258
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), HO2(30); OH(27), NO(12);
+- equation: O2(3) + NH(5) <=> NO(12) + OH(27)  # Reaction 235
+  rate-constant: {A: 1.28e+06, b: 1.5, Ea: 0.1}
+  note: |-
+    Reaction index: Chemkin #235; RMG #260
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), NO(12); NH(5), OH(27);
+- equation: HO2(30) + NH2(6) <=> OH(27) + H2NO(15)  # Reaction 236
+  rate-constant: {A: 2.19e+09, b: 0.791, Ea: -2.838}
+  note: |-
+    Reaction index: Chemkin #236; RMG #317
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), H2NO(15); NH2(6), OH(27);
+- equation: NO(12) + OH(27) (+M) <=> HONO(20) (+M)  # Reaction 237
+  type: falloff
+  low-P-rate-constant: {A: 3.4e+23, b: -2.5, Ea: 0.0}
+  high-P-rate-constant: {A: 1.1e+14, b: 0.3, Ea: 0.0}
+  Troe: {A: 0.75, T3: 1.0e-30, T1: 1.0e+30, T2: 1.0e+30}
+  efficiencies: {Ar: 1.1, N2(2): 2.0, NH3(1): 4.0}
+  note: |-
+    Reaction index: Chemkin #237; RMG #365
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), HONO(20); OH(27), HONO(20);
+- equation: HO2(30) + HNO(13) <=> OH(27) + HNO2(21)  # Reaction 238
+  rate-constant: {A: 2000.0, b: 2.36, Ea: 8.98}
+  note: |-
+    Reaction index: Chemkin #238; RMG #1020
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), HNO2(21); HNO(13), OH(27);
+- equation: NO3(22) + OH(27) <=> NO2(19) + HO2(30)  # Reaction 239
+  rate-constant: {A: 1.4e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #239; RMG #1033
+    Library reaction: NOx2018
+    Flux pairs: NO3(22), NO2(19); OH(27), HO2(30);
+- equation: NO3(22) + HO2(30) <=> O2(3) + NO2(19) + OH(27)  # Reaction 240
+  rate-constant: {A: 1.5e+12, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #240; RMG #1034
+    Library reaction: NOx2018
+    Flux pairs: NO3(22), NO2(19); HO2(30), OH(27); HO2(30), O2(3);
+- equation: NH2(6) + HNOH(16) <=> OH(27) + N2H3(10)  # Reaction 241
+  rate-constant: {A: 10.0, b: 3.46, Ea: -0.467}
+  note: |-
+    Reaction index: Chemkin #241; RMG #1036
+    Library reaction: NOx2018
+    Flux pairs: HNOH(16), OH(27); NH2(6), N2H3(10);
+- equation: OH(27) + N2H3(10) <=> HNO(13) + NH3(1)  # Reaction 242
+  rate-constant: {A: 1.0e+12, b: 0.0, Ea: 15.0}
+  note: |-
+    Reaction index: Chemkin #242; RMG #1049
+    Library reaction: NOx2018
+    Flux pairs: OH(27), HNO(13); N2H3(10), NH3(1);
+- equation: HO2(30) + H2NN(9) => NO(12) + OH(27) + NH2(6)  # Reaction 243
+  rate-constant: {A: 9.0e+12, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #243; RMG #1064
+    Library reaction: NOx2018
+    Flux pairs: HO2(30), NO(12); H2NN(9), NH2(6); H2NN(9), OH(27);
+- equation: O2(3) + NNH(7) <=> N2O(18) + OH(27)  # Reaction 244
+  rate-constant: {A: 2.9e+11, b: -0.34, Ea: 2.453}
+  note: |-
+    Reaction index: Chemkin #244; RMG #1605
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: O2(3), N2O(18); NNH(7), OH(27);
+- equation: OH(27) + NH(5) <=> HNOH(16)  # Reaction 245
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [12.05, 1.162, -0.09976, -9.989e-03]
+  - [-0.849, 0.2465, 0.05652, 2.579e-04]
+  - [-0.2471, 2.742e-03, 9.844e-03, 2.718e-03]
+  - [-0.0759, 3.654e-03, -9.06e-04, 2.78e-04]
+  - [-0.02136, -2.201e-03, 5.798e-04, 7.865e-07]
+  - [-7.729e-03, 2.312e-04, -1.481e-04, 6.035e-05]
+  note: |-
+    Reaction index: Chemkin #245; RMG #2669
+    PDep reaction: PDepNetwork #306
+    Flux pairs: OH(27), HNOH(16); NH(5), HNOH(16);
+- equation: HO2(30) + NH(5) <=> OH(27) + HNO(13)  # Reaction 246
+  rate-constant: {A: 1.355705e+09, b: 1.408, Ea: -2.861}
+  note: |-
+    Reaction index: Chemkin #246; RMG #2463
+    Template reaction: Birad_R_Recombination
+    Flux pairs: NH(5), OH(27); HO2(30), OH(27);
+    Estimated using template [O_rad/NonDe;Birad] for rate rule [O_rad/NonDe;N_birad/H]
+    Euclidian distance = 2.0
+    family: Birad_R_Recombination
+- equation: NO[O](255) <=> OH(27) + HNO(13)  # Reaction 247
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [0.8167, 1.175, -0.1179, -0.01509]
+  - [6.502, 0.1778, 0.07366, 9.731e-03]
+  - [-0.1693, 0.04447, 0.01012, -1.206e-03]
+  - [-0.04603, 3.72e-03, -3.047e-04, 5.73e-05]
+  - [-0.03188, 4.305e-03, 1.025e-03, 2.121e-04]
+  - [-0.02179, 2.455e-03, 6.791e-04, 1.663e-04]
+  note: |-
+    Reaction index: Chemkin #247; RMG #2593
+    PDep reaction: PDepNetwork #294
+    Flux pairs: NO[O](255), OH(27); NO[O](255), HNO(13);
+- equation: N2(2) + HNO(13) <=> N2O(18) + NH(5)  # Reaction 248
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-19.74, -1.687e-06, -1.034e-06, -4.85e-07]
+  - [18.1, 8.808e-07, 5.398e-07, 2.532e-07]
+  - [0.04172, 7.451e-09, 4.567e-09, 2.143e-09]
+  - [4.861e-04, 6.828e-09, 4.185e-09, 1.963e-09]
+  - [-2.041e-03, 1.704e-09, 1.044e-09, 4.899e-10]
+  - [-8.963e-04, 6.635e-10, 4.067e-10, 1.907e-10]
+  note: |-
+    Reaction index: Chemkin #248; RMG #2663
+    PDep reaction: PDepNetwork #82
+    Flux pairs: HNO(13), N2O(18); N2(2), NH(5);
+- equation: OH(27) + HO2(30) <=> O2(3) + H2O(29)  # Reaction 249
+  rate-constant: {A: 2.14e+06, b: 1.65, Ea: 2.18}
+  note: |-
+    Reaction index: Chemkin #249; RMG #17
+    Library reaction: primaryH2O2
+    Flux pairs: HO2(30), O2(3); OH(27), H2O(29);
+- equation: OH(27) + H2O2(31) <=> HO2(30) + H2O(29)  # Reaction 250
+  duplicate: true
+  rate-constant: {A: 1.74e+12, b: 0.0, Ea: 0.318}
+  note: |-
+    Reaction index: Chemkin #250; RMG #27
+    Library reaction: primaryH2O2
+- equation: OH(27) + H2O2(31) <=> HO2(30) + H2O(29)  # Reaction 251
+  duplicate: true
+  rate-constant: {A: 7.59e+13, b: 0.0, Ea: 7.269}
+  note: |-
+    Reaction index: Chemkin #251; RMG #27
+    Library reaction: primaryH2O2
+- equation: OH(27) + NNH(7) <=> N2(2) + H2O(29)  # Reaction 252
+  duplicate: true
+  rate-constant: {A: 2.4e+22, b: -2.88, Ea: 2.444}
+  note: |-
+    Reaction index: Chemkin #252; RMG #136
+    Library reaction: primaryNitrogenLibrary
+- equation: OH(27) + NNH(7) <=> N2(2) + H2O(29)  # Reaction 253
+  duplicate: true
+  rate-constant: {A: 1.25e+06, b: 2.0, Ea: -1.192}
+  note: |-
+    Reaction index: Chemkin #253; RMG #136
+    Library reaction: primaryNitrogenLibrary
+- equation: HONO(20) + N2H3(10) <=> NO(12) + H2O(29) + N2H2(8)  # Reaction 254
+  rate-constant: {A: 2.79e-08, b: 5.51, Ea: 11.112}
+  note: |-
+    Reaction index: Chemkin #254; RMG #149
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), NO(12); N2H3(10), N2H2(8); N2H3(10), H2O(29);
+- equation: OH(27) + N2H2(8) <=> NNH(7) + H2O(29)  # Reaction 255
+  duplicate: true
+  rate-constant: {A: 6740.0, b: 2.8, Ea: -0.507}
+  note: |-
+    Reaction index: Chemkin #255; RMG #173
+    Library reaction: primaryNitrogenLibrary
+- equation: OH(27) + N2H2(8) <=> NNH(7) + H2O(29)  # Reaction 256
+  duplicate: true
+  rate-constant: {A: 7.65e+04, b: 2.25, Ea: -2.351}
+  note: |-
+    Reaction index: Chemkin #256; RMG #173
+    Library reaction: primaryNitrogenLibrary
+- equation: NO(12) + NH2(6) <=> N2(2) + H2O(29)  # Reaction 257
+  rate-constant: {A: 2.6e+19, b: -2.369, Ea: 0.87}
+  note: |-
+    Reaction index: Chemkin #257; RMG #191
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), H2O(29); NH2(6), N2(2);
+- equation: OH(27) + NH2(6) <=> NH(5) + H2O(29)  # Reaction 258
+  rate-constant: {A: 2.84e+06, b: 1.97, Ea: -2.246}
+  note: |-
+    Reaction index: Chemkin #258; RMG #198
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: OH(27), H2O(29); NH2(6), NH(5);
+- equation: OH(27) + NH2OH(17) <=> H2O(29) + HNOH(16)  # Reaction 259
+  rate-constant: {A: 1.54e+04, b: 2.61, Ea: -3.537}
+  note: |-
+    Reaction index: Chemkin #259; RMG #200
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), HNOH(16); OH(27), H2O(29);
+- equation: OH(27) + NH2OH(17) <=> H2O(29) + H2NO(15)  # Reaction 260
+  rate-constant: {A: 1.53e+05, b: 2.28, Ea: -1.296}
+  note: |-
+    Reaction index: Chemkin #260; RMG #201
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2OH(17), H2NO(15); OH(27), H2O(29);
+- equation: OH(27) + NH(5) + M <=> N(4) + H2O(29) + M  # Reaction 261
+  type: three-body
+  rate-constant: {A: 1.59e+07, b: 1.737, Ea: -0.576}
+  note: |-
+    Reaction index: Chemkin #261; RMG #206
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: OH(27), H2O(29); NH(5), N(4);
+- equation: OH(27) + NH3(1) <=> H2O(29) + NH2(6)  # Reaction 262
+  rate-constant: {A: 2.0e+06, b: 2.04, Ea: 0.566}
+  note: |-
+    Reaction index: Chemkin #262; RMG #216
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: OH(27), H2O(29); NH3(1), NH2(6);
+- equation: NO2(19) + NH2(6) <=> N2O(18) + H2O(29)  # Reaction 263
+  rate-constant: {A: 4.3e+17, b: -1.874, Ea: 0.588}
+  note: |-
+    Reaction index: Chemkin #263; RMG #221
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), N2O(18); NH2(6), H2O(29);
+- equation: HONO(20) + HONO(20) <=> NO(12) + NO2(19) + H2O(29)  # Reaction 264
+  rate-constant: {A: 0.349, b: 3.64, Ea: 12.14}
+  note: |-
+    Reaction index: Chemkin #264; RMG #237
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), NO2(19); HONO(20), H2O(29); HONO(20), NO(12);
+- equation: OH(27) + HONO2(23) <=> NO3(22) + H2O(29)  # Reaction 265
+  rate-constant: {A: 8.73, b: 3.5, Ea: -1.667}
+  note: |-
+    Reaction index: Chemkin #265; RMG #255
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO2(23), NO3(22); OH(27), H2O(29);
+- equation: HO2(30) + NH2(6) <=> HNO(13) + H2O(29)  # Reaction 266
+  rate-constant: {A: 1.02e+12, b: 0.166, Ea: -1.864}
+  note: |-
+    Reaction index: Chemkin #266; RMG #313
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HO2(30), HNO(13); NH2(6), H2O(29);
+- equation: OH(27) + H2NO(15) <=> HNO(13) + H2O(29)  # Reaction 267
+  rate-constant: {A: 2.14e+15, b: -0.751, Ea: -0.922}
+  note: |-
+    Reaction index: Chemkin #267; RMG #363
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H2NO(15), HNO(13); OH(27), H2O(29);
+- equation: OH(27) + HNOH(16) <=> HNO(13) + H2O(29)  # Reaction 268
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: -1.192}
+  note: |-
+    Reaction index: Chemkin #268; RMG #1013
+    Library reaction: NOx2018
+    Flux pairs: HNOH(16), HNO(13); OH(27), H2O(29);
+- equation: OH(27) + HNO(13) <=> NO(12) + H2O(29)  # Reaction 269
+  rate-constant: {A: 1.2e+09, b: 1.189, Ea: 0.334}
+  note: |-
+    Reaction index: Chemkin #269; RMG #1019
+    Library reaction: NOx2018
+    Flux pairs: HNO(13), NO(12); OH(27), H2O(29);
+- equation: HNO(13) + HNO(13) <=> N2O(18) + H2O(29)  # Reaction 270
+  rate-constant: {A: 9.0e+08, b: 0.0, Ea: 3.1}
+  note: |-
+    Reaction index: Chemkin #270; RMG #1021
+    Library reaction: NOx2018
+    Flux pairs: HNO(13), N2O(18); HNO(13), H2O(29);
+- equation: OH(27) + HONO(20) <=> NO2(19) + H2O(29)  # Reaction 271
+  rate-constant: {A: 1.7e+12, b: 0.0, Ea: -0.52}
+  note: |-
+    Reaction index: Chemkin #271; RMG #1026
+    Library reaction: NOx2018
+    Flux pairs: HONO(20), NO2(19); OH(27), H2O(29);
+- equation: OH(27) + HNO2(21) <=> NO2(19) + H2O(29)  # Reaction 272
+  rate-constant: {A: 4.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #272; RMG #1029
+    Library reaction: NOx2018
+    Flux pairs: HNO2(21), NO2(19); OH(27), H2O(29);
+- equation: NH2(6) + HNOH(16) <=> H2O(29) + H2NN(9)  # Reaction 273
+  rate-constant: {A: 8.8e+16, b: -1.08, Ea: 1.113}
+  note: |-
+    Reaction index: Chemkin #273; RMG #1037
+    Library reaction: NOx2018
+    Flux pairs: HNOH(16), H2O(29); NH2(6), H2NN(9);
+- equation: OH(27) + N2H4(11) <=> H2O(29) + N2H3(10)  # Reaction 274
+  rate-constant: {A: 1.3e+13, b: 0.0, Ea: -0.318}
+  note: |-
+    Reaction index: Chemkin #274; RMG #1042
+    Library reaction: NOx2018
+    Flux pairs: OH(27), H2O(29); N2H4(11), N2H3(10);
+- equation: OH(27) + N2H3(10) <=> H2O(29) + N2H2(8)  # Reaction 275
+  rate-constant: {A: 1.2e+06, b: 2.0, Ea: -1.192}
+  note: |-
+    Reaction index: Chemkin #275; RMG #1047
+    Library reaction: NOx2018
+    Flux pairs: OH(27), H2O(29); N2H3(10), N2H2(8);
+- equation: OH(27) + N2H3(10) <=> H2O(29) + H2NN(9)  # Reaction 276
+  rate-constant: {A: 3.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #276; RMG #1048
+    Library reaction: NOx2018
+    Flux pairs: OH(27), H2O(29); N2H3(10), H2NN(9);
+- equation: OH(27) + H2NN(9) <=> NNH(7) + H2O(29)  # Reaction 277
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: -1.192}
+  note: |-
+    Reaction index: Chemkin #277; RMG #1062
+    Library reaction: NOx2018
+    Flux pairs: OH(27), H2O(29); H2NN(9), NNH(7);
+- equation: OH(27) + HON(14) <=> NO(12) + H2O(29)  # Reaction 278
+  rate-constant: {A: 1.27138e+08, b: 1.573, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #278; RMG #2635
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); OH(27), H2O(29);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O
+- equation: OH(27) + HNOH(16) <=> HON(14) + H2O(29)  # Reaction 279
+  rate-constant: {A: 3.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #279; RMG #2640
+    Template reaction: H_Abstraction
+    Flux pairs: OH(27), H2O(29); HNOH(16), HON(14);
+    Estimated using an average for rate rule [N3s_rad_H_pri;O_pri_rad]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: N2(2) + HONO(20) <=> N2O(18) + HON(14)  # Reaction 280
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-22.28, -2.326e-06, -1.426e-06, -6.688e-07]
+  - [21.74, 1.269e-06, 7.78e-07, 3.65e-07]
+  - [0.1304, 1.869e-08, 1.146e-08, 5.375e-09]
+  - [0.03567, 7.317e-09, 4.485e-09, 2.104e-09]
+  - [9.434e-03, 2.434e-09, 1.492e-09, 6.997e-10]
+  - [2.681e-03, 5.732e-10, 3.513e-10, 1.647e-10]
+  note: |-
+    Reaction index: Chemkin #280; RMG #2736
+    PDep reaction: PDepNetwork #90
+    Flux pairs: HONO(20), N2O(18); N2(2), HON(14);
+- equation: N2(2) + HONO(20) <=> NO2(19) + NNH(7)  # Reaction 281
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-13.65, -5.959e-04, -3.651e-04, -1.711e-04]
+  - [15.88, -1.957e-04, -1.199e-04, -5.615e-05]
+  - [0.1934, -1.33e-04, -8.147e-05, -3.815e-05]
+  - [0.04192, 5.518e-05, 3.381e-05, 1.584e-05]
+  - [9.47e-03, 4.389e-05, 2.688e-05, 1.26e-05]
+  - [2.485e-03, -5.495e-07, -3.378e-07, -1.593e-07]
+  note: |-
+    Reaction index: Chemkin #281; RMG #2789
+    PDep reaction: PDepNetwork #91
+    Flux pairs: HONO(20), NO2(19); N2(2), NNH(7);
+- equation: OH(27) + OH(27) <=> O(28) + H2O(29)  # Reaction 282
+  rate-constant: {A: 2.668e+06, b: 1.82, Ea: -1.647}
+  note: |-
+    Reaction index: Chemkin #282; RMG #16
+    Library reaction: primaryH2O2
+    Flux pairs: OH(27), H2O(29); OH(27), O(28);
+- equation: O(28) + O(28) + M <=> O2(3) + M  # Reaction 283
+  type: three-body
+  rate-constant: {A: 1.0e+17, b: -1.0, Ea: 0.0}
+  efficiencies: {Ar: 0.0, N2(2): 2.0, NO(12): 2.0, N(4): 2.0, H2O(29): 5.0,
+    O(28): 28.8, O2(3): 8.0}
+  note: |-
+    Reaction index: Chemkin #283; RMG #18
+    Library reaction: primaryH2O2
+    Flux pairs: O(28), O2(3); O(28), O2(3);
+- equation: Ar + O(28) + O(28) <=> Ar + O2(3)  # Reaction 284
+  rate-constant: {A: 1.886e+13, b: 0.0, Ea: -1.788}
+  note: |-
+    Reaction index: Chemkin #284; RMG #19
+    Library reaction: primaryH2O2
+    Flux pairs: O(28), O2(3); Ar, Ar; O(28), Ar;
+- equation: O(28) + H2O2(31) <=> OH(27) + HO2(30)  # Reaction 285
+  rate-constant: {A: 9.55e+06, b: 2.0, Ea: 3.97}
+  note: |-
+    Reaction index: Chemkin #285; RMG #26
+    Library reaction: primaryH2O2
+    Flux pairs: H2O2(31), HO2(30); O(28), OH(27);
+- equation: O(28) + HO2(30) <=> O2(3) + OH(27)  # Reaction 286
+  rate-constant: {A: 2.85e+10, b: 1.0, Ea: -0.724}
+  note: |-
+    Reaction index: Chemkin #286; RMG #30
+    Library reaction: primaryH2O2
+    Flux pairs: HO2(30), O2(3); O(28), OH(27);
+- equation: O(28) + OH(27) + M <=> HO2(30) + M  # Reaction 287
+  type: three-body
+  rate-constant: {A: 1.0e+15, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #287; RMG #47
+    Library reaction: primaryH2O2
+    Flux pairs: O(28), HO2(30); OH(27), HO2(30);
+- equation: O(28) + H2O2(31) <=> O2(3) + H2O(29)  # Reaction 288
+  rate-constant: {A: 8.43e+11, b: 0.0, Ea: 3.97}
+  note: |-
+    Reaction index: Chemkin #288; RMG #49
+    Library reaction: primaryH2O2
+    Flux pairs: H2O2(31), O2(3); O(28), H2O(29);
+- equation: N(4) + NO(12) <=> O(28) + N2(2)  # Reaction 289
+  rate-constant: {A: 4.29e+13, b: 0.0, Ea: 1.564}
+  note: |-
+    Reaction index: Chemkin #289; RMG #51
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), O(28); N(4), N2(2);
+- equation: O2(3) + N(4) <=> O(28) + NO(12)  # Reaction 290
+  rate-constant: {A: 9.0e+09, b: 1.0, Ea: 6.5}
+  note: |-
+    Reaction index: Chemkin #290; RMG #52
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), NO(12); N(4), O(28);
+- equation: N2O(18) + M <=> O(28) + N2(2) + M  # Reaction 291
+  type: three-body
+  rate-constant: {A: 4.0e+14, b: 0.0, Ea: 56.099}
+  note: |-
+    Reaction index: Chemkin #291; RMG #117
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2O(18), O(28); N2O(18), N2(2);
+- equation: O(28) + N2O(18) <=> O2(3) + N2(2)  # Reaction 292
+  rate-constant: {A: 1.4e+12, b: 0.0, Ea: 10.81}
+  note: |-
+    Reaction index: Chemkin #292; RMG #118
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2O(18), O2(3); O(28), N2(2);
+- equation: O(28) + N2O(18) <=> NO(12) + NO(12)  # Reaction 293
+  rate-constant: {A: 2.9e+13, b: 0.0, Ea: 23.151}
+  note: |-
+    Reaction index: Chemkin #293; RMG #119
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2O(18), NO(12); O(28), NO(12);
+- equation: O(28) + NNH(7) <=> N2(2) + OH(27)  # Reaction 294
+  rate-constant: {A: 1.2e+13, b: 0.145, Ea: -0.217}
+  note: |-
+    Reaction index: Chemkin #294; RMG #128
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O(28), OH(27); NNH(7), N2(2);
+- equation: O(28) + NNH(7) <=> NO(12) + NH(5)  # Reaction 295
+  rate-constant: {A: 5.2e+11, b: 0.388, Ea: -0.409}
+  note: |-
+    Reaction index: Chemkin #295; RMG #129
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O(28), NO(12); NNH(7), NH(5);
+- equation: O2(3) + NH2(6) <=> O(28) + H2NO(15)  # Reaction 296
+  rate-constant: {A: 2.6e+11, b: 0.487, Ea: 29.05}
+  note: |-
+    Reaction index: Chemkin #296; RMG #195
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), H2NO(15); NH2(6), O(28);
+- equation: O(28) + NH3(1) <=> OH(27) + NH2(6)  # Reaction 297
+  rate-constant: {A: 443.0, b: 3.18, Ea: 6.74}
+  note: |-
+    Reaction index: Chemkin #297; RMG #199
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O(28), OH(27); NH3(1), NH2(6);
+- equation: NO2(19) (+M) <=> O(28) + NO(12) (+M)  # Reaction 298
+  type: falloff
+  low-P-rate-constant: {A: 3.98e+15, b: 0.0, Ea: 60.0}
+  high-P-rate-constant: {A: 3.98e+14, b: 0.0, Ea: 72.701}
+  note: |-
+    Reaction index: Chemkin #298; RMG #224
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), O(28); NO2(19), NO(12);
+    Reaction library: 'primaryNitrogenLibrary'
+- equation: NO(12) + M <=> O(28) + N(4) + M  # Reaction 299
+  type: three-body
+  rate-constant: {A: 9.6e+14, b: 0.0, Ea: 148.0}
+  efficiencies: {N2(2): 1.5}
+  note: |-
+    Reaction index: Chemkin #299; RMG #233
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), O(28); NO(12), N(4);
+- equation: O(28) + H2NN(9) <=> NO(12) + NH2(6)  # Reaction 300
+  rate-constant: {A: 3.2e+09, b: 1.03, Ea: 0.684}
+  note: |-
+    Reaction index: Chemkin #300; RMG #311
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O(28), NO(12); H2NN(9), NH2(6);
+- equation: O(28) + H2NN(9) <=> OH(27) + NNH(7)  # Reaction 301
+  rate-constant: {A: 3.3e+08, b: 1.5, Ea: 0.226}
+  note: |-
+    Reaction index: Chemkin #301; RMG #312
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O(28), OH(27); H2NN(9), NNH(7);
+- equation: O2(3) + NH(5) <=> O(28) + HNO(13)  # Reaction 302
+  rate-constant: {A: 1.0e-30, b: 0.0, Ea: 119.503}
+  note: |-
+    Reaction index: Chemkin #302; RMG #383
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O2(3), HNO(13); NH(5), O(28);
+- equation: O(28) + NH2(6) <=> OH(27) + NH(5)  # Reaction 303
+  duplicate: true
+  rate-constant: {A: 7.0e+12, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #303; RMG #990
+    Library reaction: NOx2018
+- equation: O(28) + NH2(6) <=> OH(27) + NH(5)  # Reaction 304
+  duplicate: true
+  rate-constant: {A: 0.86, b: 4.01, Ea: 1.673}
+  note: |-
+    Reaction index: Chemkin #304; RMG #990
+    Library reaction: NOx2018
+- equation: O(28) + NH2OH(17) <=> OH(27) + HNOH(16)  # Reaction 305
+  rate-constant: {A: 3.3e+08, b: 1.5, Ea: 3.865}
+  note: |-
+    Reaction index: Chemkin #305; RMG #1000
+    Library reaction: NOx2018
+    Flux pairs: NH2OH(17), HNOH(16); O(28), OH(27);
+- equation: O(28) + NH2OH(17) <=> OH(27) + H2NO(15)  # Reaction 306
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: 3.01}
+  note: |-
+    Reaction index: Chemkin #306; RMG #1001
+    Library reaction: NOx2018
+    Flux pairs: NH2OH(17), H2NO(15); O(28), OH(27);
+- equation: O(28) + H2NO(15) <=> OH(27) + HNO(13)  # Reaction 307
+  rate-constant: {A: 3.0e+07, b: 2.0, Ea: 2.0}
+  note: |-
+    Reaction index: Chemkin #307; RMG #1007
+    Library reaction: NOx2018
+    Flux pairs: H2NO(15), HNO(13); O(28), OH(27);
+- equation: O(28) + HNOH(16) <=> OH(27) + HNO(13)  # Reaction 308
+  duplicate: true
+  rate-constant: {A: 7.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #308; RMG #1012
+    Library reaction: NOx2018
+- equation: O(28) + HNOH(16) <=> OH(27) + HNO(13)  # Reaction 309
+  duplicate: true
+  rate-constant: {A: 3.3e+08, b: 1.5, Ea: -0.358}
+  note: |-
+    Reaction index: Chemkin #309; RMG #1012
+    Library reaction: NOx2018
+- equation: O(28) + HNO(13) <=> NO(12) + OH(27)  # Reaction 310
+  rate-constant: {A: 2.3e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #310; RMG #1018
+    Library reaction: NOx2018
+    Flux pairs: HNO(13), NO(12); O(28), OH(27);
+- equation: O(28) + NO2(19) <=> O2(3) + NO(12)  # Reaction 311
+  rate-constant: {A: 1.1e+14, b: -0.52, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #311; RMG #1022
+    Library reaction: NOx2018
+    Flux pairs: NO2(19), O2(3); O(28), NO(12);
+- equation: O(28) + HONO(20) <=> NO2(19) + OH(27)  # Reaction 312
+  rate-constant: {A: 1.2e+13, b: 0.0, Ea: 5.96}
+  note: |-
+    Reaction index: Chemkin #312; RMG #1025
+    Library reaction: NOx2018
+    Flux pairs: HONO(20), NO2(19); O(28), OH(27);
+- equation: O(28) + HNO2(21) <=> NO2(19) + OH(27)  # Reaction 313
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: 2.0}
+  note: |-
+    Reaction index: Chemkin #313; RMG #1028
+    Library reaction: NOx2018
+    Flux pairs: HNO2(21), NO2(19); O(28), OH(27);
+- equation: O(28) + NO2(19) (+M) <=> NO3(22) (+M)  # Reaction 314
+  type: falloff
+  low-P-rate-constant: {A: 2.5e+20, b: -1.5, Ea: 0.0}
+  high-P-rate-constant: {A: 3.5e+12, b: 0.24, Ea: 0.0}
+  Troe: {A: 0.71, T3: 1.0e-30, T1: 1700.0, T2: 1.0e+30}
+  note: |-
+    Reaction index: Chemkin #314; RMG #1030
+    Library reaction: NOx2018
+    Flux pairs: O(28), NO3(22); NO2(19), NO3(22);
+    Reaction library: 'NOx2018'
+- equation: O(28) + NO3(22) <=> O2(3) + NO2(19)  # Reaction 315
+  rate-constant: {A: 1.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #315; RMG #1032
+    Library reaction: NOx2018
+    Flux pairs: NO3(22), NO2(19); O(28), O2(3);
+- equation: O(28) + N2H4(11) <=> OH(27) + N2H3(10)  # Reaction 316
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: -1.27}
+  note: |-
+    Reaction index: Chemkin #316; RMG #1040
+    Library reaction: NOx2018
+    Flux pairs: O(28), OH(27); N2H4(11), N2H3(10);
+- equation: O(28) + N2H4(11) <=> H2O(29) + N2H2(8)  # Reaction 317
+  rate-constant: {A: 2.9e+11, b: 0.0, Ea: -1.27}
+  note: |-
+    Reaction index: Chemkin #317; RMG #1041
+    Library reaction: NOx2018
+    Flux pairs: O(28), H2O(29); N2H4(11), N2H2(8);
+- equation: O(28) + N2H3(10) <=> OH(27) + N2H2(8)  # Reaction 318
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: -0.646}
+  note: |-
+    Reaction index: Chemkin #318; RMG #1044
+    Library reaction: NOx2018
+    Flux pairs: O(28), OH(27); N2H3(10), N2H2(8);
+- equation: O(28) + N2H3(10) <=> HNO(13) + NH2(6)  # Reaction 319
+  rate-constant: {A: 3.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #319; RMG #1045
+    Library reaction: NOx2018
+    Flux pairs: O(28), HNO(13); N2H3(10), NH2(6);
+- equation: O(28) + N2H2(8) <=> OH(27) + NNH(7)  # Reaction 320
+  rate-constant: {A: 3.3e+08, b: 1.5, Ea: 0.497}
+  note: |-
+    Reaction index: Chemkin #320; RMG #1054
+    Library reaction: NOx2018
+    Flux pairs: O(28), OH(27); N2H2(8), NNH(7);
+- equation: O(28) + N2H2(8) <=> NO(12) + NH2(6)  # Reaction 321
+  rate-constant: {A: 1.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #321; RMG #1055
+    Library reaction: NOx2018
+    Flux pairs: O(28), NO(12); N2H2(8), NH2(6);
+- equation: N(4) + OH(27) <=> O(28) + NH(5)  # Reaction 322
+  rate-constant: {A: 6.4e+12, b: 0.1, Ea: 21.249}
+  note: |-
+    Reaction index: Chemkin #322; RMG #1603
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: OH(27), O(28); N(4), NH(5);
+- equation: O(28) + NH2(6) <=> H2NO(15)  # Reaction 323
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [11.17, 1.217, -0.124, -0.02703]
+  - [-0.331, 0.211, 0.07914, 7.537e-03]
+  - [-0.1637, 0.02076, 0.01481, 6.621e-03]
+  - [-0.06217, -4.951e-04, 1.082e-03, 1.374e-03]
+  - [-0.02186, -1.258e-03, -4.261e-04, 8.0e-05]
+  - [-7.365e-03, -5.405e-04, -2.658e-04, -6.188e-05]
+  note: |-
+    Reaction index: Chemkin #323; RMG #2836
+    PDep reaction: PDepNetwork #326
+    Flux pairs: O(28), H2NO(15); NH2(6), H2NO(15);
+- equation: O(28) + H2NO(15) <=> NO[O](255)  # Reaction 324
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [11.81, 1.099, -0.1136, -7.713e-03]
+  - [-0.2503, 0.1291, 0.0674, 5.383e-03]
+  - [-0.1306, 0.05063, 7.216e-03, -3.265e-03]
+  - [-0.052, 0.01916, -1.348e-03, -2.494e-04]
+  - [-0.03233, 7.717e-03, -7.182e-05, 6.951e-04]
+  - [-0.02096, 2.928e-03, 6.179e-04, 3.571e-04]
+  note: |-
+    Reaction index: Chemkin #324; RMG #2840
+    PDep reaction: PDepNetwork #337
+    Flux pairs: O(28), NO[O](255); H2NO(15), NO[O](255);
+- equation: O(28) + N2H3(10) <=> OH(27) + H2NN(9)  # Reaction 325
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: 2.355}
+  note: |-
+    Reaction index: Chemkin #325; RMG #2624
+    Template reaction: Disproportionation
+    Flux pairs: O(28), OH(27); N2H3(10), H2NN(9);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_N-1R!H->O_Sp-2R!H-1CNS_N-1CNS->C_N-2R!H->C_2NO-u1_2NO->N
+- equation: O(28) + HON(14) <=> NO(12) + OH(27)  # Reaction 326
+  rate-constant: {A: 3.3e+08, b: 1.5, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #326; RMG #2632
+    Template reaction: Disproportionation
+    Flux pairs: O(28), OH(27); HON(14), NO(12);
+    Estimated from node Root_N-4R->H_N-4CNOS-u1_1R!H->O_N-4CNOS->C_N-2R!H->C
+- equation: O(28) + HNOH(16) <=> OH(27) + HON(14)  # Reaction 327
+  rate-constant: {A: 7.0e+12, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #327; RMG #2636
+    Template reaction: H_Abstraction
+    Flux pairs: HNOH(16), HON(14); O(28), OH(27);
+    Estimated using template [N3s_rad_H;O_atom_triplet] for rate rule [N3s_rad_H_pri;O_atom_triplet]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: O(28) + HONO2(23) <=> NO3(22) + OH(27)  # Reaction 328
+  rate-constant: {A: 1.7e+08, b: 1.5, Ea: 24.76}
+  note: |-
+    Reaction index: Chemkin #328; RMG #2654
+    Template reaction: H_Abstraction
+    Flux pairs: HONO2(23), NO3(22); O(28), OH(27);
+    From training reaction 657 used for O/H/OneDeN;O_atom_triplet
+    Exact match found for rate rule [O/H/OneDeN;O_atom_triplet]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: O2(3) + N2H3(10) <=> HO2(30) + N2H2(8)  # Reaction 329
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [0.6902, -1.115e-03, -6.813e-04, -3.179e-04]
+  - [7.149, -1.952e-03, -1.193e-03, -5.561e-04]
+  - [0.06532, -1.355e-03, -8.269e-04, -3.851e-04]
+  - [-0.05892, -7.465e-04, -4.55e-04, -2.114e-04]
+  - [-0.06284, -3.059e-04, -1.858e-04, -8.578e-05]
+  - [-0.04066, -6.493e-05, -3.881e-05, -1.738e-05]
+  note: |-
+    Reaction index: Chemkin #329; RMG #2829
+    PDep reaction: PDepNetwork #98
+    Flux pairs: O2(3), HO2(30); N2H3(10), N2H2(8);
+- equation: OH(27) + H2O(29) <=> HO2(30) + H2(25)  # Reaction 330
+  rate-constant: {A: 7.9e+09, b: 0.43, Ea: 71.7}
+  note: |-
+    Reaction index: Chemkin #330; RMG #22
+    Library reaction: primaryH2O2
+    Flux pairs: H2O(29), HO2(30); OH(27), H2(25);
+- equation: O2(3) + H2(25) <=> OH(27) + OH(27)  # Reaction 331
+  rate-constant: {A: 2.04e+12, b: 0.44, Ea: 69.155}
+  note: |-
+    Reaction index: Chemkin #331; RMG #44
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), OH(27); H2(25), OH(27);
+- equation: O2(3) + H2(25) <=> O(28) + H2O(29)  # Reaction 332
+  rate-constant: {A: 3.0e+13, b: 0.0, Ea: 69.545}
+  note: |-
+    Reaction index: Chemkin #332; RMG #45
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), H2O(29); H2(25), O(28);
+- equation: O2(3) + O2(3) + H2(25) <=> HO2(30) + HO2(30)  # Reaction 333
+  rate-constant: {A: 2.0e+17, b: 0.0, Ea: 25.83}
+  note: |-
+    Reaction index: Chemkin #333; RMG #46
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), HO2(30); H2(25), HO2(30); O2(3), HO2(30);
+- equation: NO(12) + NH2(6) <=> N2O(18) + H2(25)  # Reaction 334
+  rate-constant: {A: 7.0e+13, b: 0.0, Ea: 15.7}
+  note: |-
+    Reaction index: Chemkin #334; RMG #192
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), N2O(18); NH2(6), H2(25);
+- equation: NH2(6) + NH2(6) + M <=> H2(25) + N2H2(8) + M  # Reaction 335
+  type: three-body
+  rate-constant: {A: 1.74e+08, b: 1.02, Ea: 11.784}
+  note: |-
+    Reaction index: Chemkin #335; RMG #212
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(6), N2H2(8); NH2(6), H2(25);
+- equation: NH2(6) + NH2(6) + M <=> H2(25) + H2NN(9) + M  # Reaction 336
+  type: three-body
+  rate-constant: {A: 7.17e+04, b: 1.88, Ea: 8.803}
+  note: |-
+    Reaction index: Chemkin #336; RMG #213
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(6), H2NN(9); NH2(6), H2(25);
+- equation: H2(25) + N2H2(8) <=> N2(2) + H2(25) + H2(25)  # Reaction 337
+  rate-constant: {A: 3.22e+06, b: 1.8, Ea: 21.4}
+  note: |-
+    Reaction index: Chemkin #337; RMG #307
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H2(8), N2(2); H2(25), H2(25); H2(25), H2(25);
+- equation: H2NN(9) <=> N2(2) + H2(25)  # Reaction 338
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-1.237, 1.361, -0.07386, -0.0258]
+  - [8.556, 0.08933, 0.04531, 0.01409]
+  - [-0.2994, 0.02618, 0.01364, 4.56e-03]
+  - [-0.08092, -4.783e-03, -1.638e-03, 1.482e-04]
+  - [-0.02503, -1.406e-03, -6.997e-04, -1.97e-04]
+  - [-5.615e-03, -4.071e-04, -2.769e-04, -1.394e-04]
+  note: |-
+    Reaction index: Chemkin #338; RMG #1722
+    PDep reaction: PDepNetwork #20
+    Flux pairs: H2NN(9), N2(2); H2NN(9), H2(25);
+- equation: N2H4(11) <=> H2(25) + H2NN(9)  # Reaction 339
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-8.587, 1.429, -0.03917, -0.01508]
+  - [12.49, 0.08562, 0.04634, 0.01694]
+  - [-0.214, -0.01312, -5.831e-03, -1.053e-03]
+  - [-0.04269, -3.764e-03, -2.474e-03, -1.255e-03]
+  - [5.197e-05, -1.446e-04, -1.472e-04, -1.234e-04]
+  - [4.441e-03, 8.283e-04, 4.264e-04, 1.375e-04]
+  note: |-
+    Reaction index: Chemkin #339; RMG #1726
+    PDep reaction: PDepNetwork #23
+    Flux pairs: N2H4(11), H2(25); N2H4(11), H2NN(9);
+- equation: N2H4(11) <=> H2(25) + N2H2(8)  # Reaction 340
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-1.359, 0.2052, -7.59e-03, 9.774e-03]
+  - [8.562, 0.284, 7.352e-03, 0.01105]
+  - [-0.3929, 0.1099, 0.01515, 5.391e-03]
+  - [-0.169, 0.02098, 6.767e-03, 2.432e-03]
+  - [-0.05696, 2.305e-04, 5.78e-04, 3.577e-04]
+  - [-0.01493, -2.427e-04, 1.844e-05, -5.221e-04]
+  note: |-
+    Reaction index: Chemkin #340; RMG #1727
+    PDep reaction: PDepNetwork #23
+    Flux pairs: N2H4(11), H2(25); N2H4(11), N2H2(8);
+- equation: NO2(19) + NH3(1) <=> HNO(13) + H2NO(15)  # Reaction 341
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-14.88, -6.35e-05, -3.892e-05, -1.826e-05]
+  - [16.48, 8.647e-06, 5.3e-06, 2.486e-06]
+  - [0.2413, 8.596e-06, 5.268e-06, 2.471e-06]
+  - [0.06125, 2.26e-06, 1.385e-06, 6.495e-07]
+  - [0.01657, 1.644e-07, 1.007e-07, 4.722e-08]
+  - [4.827e-03, -1.123e-07, -6.88e-08, -3.227e-08]
+  note: |-
+    Reaction index: Chemkin #341; RMG #2875
+    PDep reaction: PDepNetwork #73
+    Flux pairs: NO2(19), H2NO(15); NH3(1), HNO(13);
+- equation: O2(3) + N2H3(10) <=> HO2(30) + H2NN(9)  # Reaction 342
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-2.597, -7.785e-05, -4.77e-05, -2.237e-05]
+  - [8.396, -1.434e-04, -8.785e-05, -4.119e-05]
+  - [0.1899, -1.157e-04, -7.088e-05, -3.323e-05]
+  - [0.05401, -8.428e-05, -5.163e-05, -2.42e-05]
+  - [0.01437, -5.65e-05, -3.462e-05, -1.622e-05]
+  - [3.98e-03, -3.508e-05, -2.149e-05, -1.007e-05]
+  note: |-
+    Reaction index: Chemkin #342; RMG #2891
+    PDep reaction: PDepNetwork #99
+    Flux pairs: O2(3), HO2(30); N2H3(10), H2NN(9);
+- equation: NO(12) + N2H3(10) <=> N2O(18) + NH3(1)  # Reaction 343
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [7.296, -0.1296, -0.05748, -0.01384]
+  - [2.682, 0.1738, 0.0734, 0.01509]
+  - [0.2144, -0.04423, -0.01415, 2.004e-04]
+  - [0.06204, -6.484e-03, -5.014e-03, -2.38e-03]
+  - [0.01942, 3.799e-03, 1.38e-03, -4.79e-06]
+  - [4.832e-03, 1.18e-03, 8.015e-04, 3.556e-04]
+  note: |-
+    Reaction index: Chemkin #343; RMG #3232
+    PDep reaction: PDepNetwork #203
+    Flux pairs: NO(12), N2O(18); N2H3(10), NH3(1);
+- equation: H(24) + H(24) + M <=> H2(25) + M  # Reaction 344
+  type: three-body
+  rate-constant: {A: 7.0e+17, b: -1.0, Ea: 0.0}
+  efficiencies: {Ar: 0.0, N2(2): 0.0, H(24): 0.0, H2(25): 0.0, O2(3): 0.0,
+    H2O(29): 14.3}
+  note: |-
+    Reaction index: Chemkin #344; RMG #1
+    Library reaction: primaryH2O2
+    Flux pairs: H(24), H2(25); H(24), H2(25);
+- equation: O2(3) + H(24) + H(24) <=> O2(3) + H2(25)  # Reaction 345
+  rate-constant: {A: 8.8e+22, b: -1.835, Ea: 0.8}
+  note: |-
+    Reaction index: Chemkin #345; RMG #2
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), O2(3); H(24), H2(25); H(24), H2(25);
+- equation: Ar + H2(25) <=> Ar + H(24) + H(24)  # Reaction 346
+  rate-constant: {A: 5.84e+18, b: -1.1, Ea: 104.38}
+  note: |-
+    Reaction index: Chemkin #346; RMG #3
+    Library reaction: primaryH2O2
+    Flux pairs: H2(25), H(24); Ar, Ar; Ar, H(24);
+- equation: H(24) + H(24) + H2(25) <=> H2(25) + H2(25)  # Reaction 347
+  rate-constant: {A: 1.0e+17, b: -0.6, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #347; RMG #5
+    Library reaction: primaryH2O2
+    Flux pairs: H2(25), H2(25); H(24), H2(25); H(24), H2(25);
+- equation: N2(2) + H(24) + H(24) <=> N2(2) + H2(25)  # Reaction 348
+  rate-constant: {A: 5.4e+18, b: -1.3, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #348; RMG #6
+    Library reaction: primaryH2O2
+    Flux pairs: N2(2), N2(2); H(24), H2(25); H(24), H2(25);
+- equation: H(24) + H(24) + H(24) <=> H(24) + H2(25)  # Reaction 349
+  rate-constant: {A: 3.2e+15, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #349; RMG #7
+    Library reaction: primaryH2O2
+    Flux pairs: H(24), H2(25); H(24), H(24); H(24), H(24);
+- equation: O2(3) + H(24) + H(24) <=> OH(27) + OH(27)  # Reaction 350
+  rate-constant: {A: 4.0e+22, b: -1.835, Ea: 0.8}
+  note: |-
+    Reaction index: Chemkin #350; RMG #8
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), OH(27); H(24), OH(27); H(24), OH(27);
+- equation: O(28) + H(24) + M <=> OH(27) + M  # Reaction 351
+  type: three-body
+  rate-constant: {A: 6.75e+18, b: -1.0, Ea: 0.0}
+  efficiencies: {H2(25): 2.5, Ar: 0.75, O2(3): 0.0, H2O(29): 5.0}
+  note: |-
+    Reaction index: Chemkin #351; RMG #9
+    Library reaction: primaryH2O2
+    Flux pairs: O(28), OH(27); H(24), OH(27);
+- equation: O(28) + O2(3) + H(24) <=> O2(3) + OH(27)  # Reaction 352
+  rate-constant: {A: 7.35e+22, b: -1.835, Ea: 0.8}
+  note: |-
+    Reaction index: Chemkin #352; RMG #10
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), O2(3); H(24), OH(27); O(28), OH(27);
+- equation: H2O(29) + M <=> H(24) + OH(27) + M  # Reaction 353
+  type: three-body
+  rate-constant: {A: 6.06e+27, b: -3.312, Ea: 120.77}
+  efficiencies: {N2(2): 2.0, H2O(29): 0.0, H2(25): 3.0, O2(3): 0.0}
+  note: |-
+    Reaction index: Chemkin #353; RMG #11
+    Library reaction: primaryH2O2
+    Flux pairs: H2O(29), H(24); H2O(29), OH(27);
+- equation: H2O(29) + H2O(29) <=> H(24) + OH(27) + H2O(29)  # Reaction 354
+  rate-constant: {A: 1.0e+26, b: -2.44, Ea: 120.16}
+  note: |-
+    Reaction index: Chemkin #354; RMG #12
+    Library reaction: primaryH2O2
+    Flux pairs: H2O(29), H2O(29); H2O(29), H(24); H2O(29), OH(27);
+- equation: O2(3) + H(24) + OH(27) <=> O2(3) + H2O(29)  # Reaction 355
+  rate-constant: {A: 2.56e+22, b: -1.835, Ea: 0.8}
+  note: |-
+    Reaction index: Chemkin #355; RMG #13
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), O2(3); H(24), H2O(29); OH(27), H2O(29);
+- equation: O2(3) + H(24) (+M) <=> HO2(30) (+M)  # Reaction 356
+  type: falloff
+  low-P-rate-constant: {A: 1.225e+19, b: -1.2, Ea: 0.0}
+  high-P-rate-constant: {A: 4.66e+12, b: 0.44, Ea: 0.0}
+  Troe: {A: 0.0, T3: 1750.0, T1: 1.0e-10, T2: 1.0e+30}
+  efficiencies: {H2(25): 1.5, Ar: 0.72, H2O(29): 16.6}
+  note: |-
+    Reaction index: Chemkin #356; RMG #14
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), HO2(30); H(24), HO2(30);
+- equation: O2(3) + H(24) <=> O(28) + OH(27)  # Reaction 357
+  rate-constant: {A: 1.04e+14, b: 0.0, Ea: 15.286}
+  note: |-
+    Reaction index: Chemkin #357; RMG #15
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), OH(27); H(24), O(28);
+- equation: O(28) + H2O(29) <=> H(24) + HO2(30)  # Reaction 358
+  rate-constant: {A: 2.2e+08, b: 2.0, Ea: 61.6}
+  note: |-
+    Reaction index: Chemkin #358; RMG #21
+    Library reaction: primaryH2O2
+    Flux pairs: H2O(29), HO2(30); O(28), H(24);
+- equation: H(24) + H2O2(31) <=> HO2(30) + H2(25)  # Reaction 359
+  rate-constant: {A: 5.02e+06, b: 2.07, Ea: 4.3}
+  note: |-
+    Reaction index: Chemkin #359; RMG #24
+    Library reaction: primaryH2O2
+    Flux pairs: H2O2(31), HO2(30); H(24), H2(25);
+- equation: H(24) + H2O2(31) <=> OH(27) + H2O(29)  # Reaction 360
+  rate-constant: {A: 2.03e+07, b: 2.02, Ea: 2.62}
+  note: |-
+    Reaction index: Chemkin #360; RMG #25
+    Library reaction: primaryH2O2
+    Flux pairs: H2O2(31), H2O(29); H(24), OH(27);
+- equation: O(28) + H2(25) <=> H(24) + OH(27)  # Reaction 361
+  rate-constant: {A: 5.08e+04, b: 2.67, Ea: 6.292}
+  note: |-
+    Reaction index: Chemkin #361; RMG #28
+    Library reaction: primaryH2O2
+    Flux pairs: O(28), OH(27); H2(25), H(24);
+- equation: OH(27) + H2(25) <=> H(24) + H2O(29)  # Reaction 362
+  rate-constant: {A: 2.14e+08, b: 1.52, Ea: 3.45}
+  note: |-
+    Reaction index: Chemkin #362; RMG #29
+    Library reaction: primaryH2O2
+    Flux pairs: OH(27), H2O(29); H2(25), H(24);
+- equation: H(24) + HO2(30) <=> OH(27) + OH(27)  # Reaction 363
+  rate-constant: {A: 7.079e+13, b: 0.0, Ea: 0.295}
+  note: |-
+    Reaction index: Chemkin #363; RMG #31
+    Library reaction: primaryH2O2
+    Flux pairs: HO2(30), OH(27); H(24), OH(27);
+- equation: O2(3) + H2(25) <=> H(24) + HO2(30)  # Reaction 364
+  rate-constant: {A: 7.4e+05, b: 2.43, Ea: 53.5}
+  note: |-
+    Reaction index: Chemkin #364; RMG #32
+    Library reaction: primaryH2O2
+    Flux pairs: O2(3), HO2(30); H2(25), H(24);
+- equation: H(24) + HO2(30) + M <=> H2O2(31) + M  # Reaction 365
+  type: three-body
+  rate-constant: {A: 6.0e+14, b: 1.25, Ea: -0.27}
+  note: |-
+    Reaction index: Chemkin #365; RMG #48
+    Library reaction: primaryH2O2
+    Flux pairs: H(24), H2O2(31); HO2(30), H2O2(31);
+- equation: NO(12) + H(24) <=> N(4) + OH(27)  # Reaction 366
+  rate-constant: {A: 1.7e+14, b: 0.0, Ea: 47.574}
+  note: |-
+    Reaction index: Chemkin #366; RMG #53
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), OH(27); H(24), N(4);
+- equation: O(28) + NNH(7) <=> N2O(18) + H(24)  # Reaction 367
+  rate-constant: {A: 1.9e+14, b: -0.274, Ea: -0.022}
+  note: |-
+    Reaction index: Chemkin #367; RMG #127
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: O(28), N2O(18); NNH(7), H(24);
+- equation: N(4) + NH(5) <=> N2(2) + H(24)  # Reaction 368
+  rate-constant: {A: 6.41e+11, b: 0.51, Ea: 0.018}
+  note: |-
+    Reaction index: Chemkin #368; RMG #131
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH(5), N2(2); N(4), H(24);
+- equation: N(4) + NH(5) <=> N(4) + N(4) + H(24)  # Reaction 369
+  rate-constant: {A: 7.75e+14, b: -0.2, Ea: 54.159}
+  duplicate: true
+  note: |-
+    Reaction index: Chemkin #369; RMG #132
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH(5), N(4); N(4), H(24); N(4), N(4);
+- equation: H(24) + NNH(7) <=> N2(2) + H2(25)  # Reaction 370
+  rate-constant: {A: 2.4e+08, b: 1.5, Ea: -0.894}
+  note: |-
+    Reaction index: Chemkin #370; RMG #135
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NNH(7), N2(2); H(24), H2(25);
+- equation: H(24) + NH2(6) (+M) <=> NH3(1) (+M)  # Reaction 371
+  type: falloff
+  low-P-rate-constant: {A: 3.6e+22, b: -1.76, Ea: 0.0}
+  high-P-rate-constant: {A: 1.6e+14, b: 0.0, Ea: 0.0}
+  Troe: {A: 0.5, T3: 1.0e-30, T1: 1.0e+30}
+  efficiencies: {N2(2): 1.0, Ar: 0.32, O2(3): 0.5, NH3(1): 4.39}
+  note: |-
+    Reaction index: Chemkin #371; RMG #137
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H(24), NH3(1); NH2(6), NH3(1);
+- equation: H(24) + NH2(6) <=> NH(5) + H2(25)  # Reaction 372
+  rate-constant: {A: 4.0e+13, b: 0.0, Ea: 3.65}
+  note: |-
+    Reaction index: Chemkin #372; RMG #138
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(6), NH(5); H(24), H2(25);
+- equation: NH(5) + M <=> N(4) + H(24) + M  # Reaction 373
+  type: three-body
+  duplicate: true
+  rate-constant: {A: 2.65e+14, b: 0.0, Ea: 75.5}
+  note: |-
+    Reaction index: Chemkin #373; RMG #142
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH(5), N(4); NH(5), H(24);
+- equation: N2H4(11) (+M) <=> H(24) + N2H3(10) (+M)  # Reaction 374
+  type: falloff
+  low-P-rate-constant: {A: 1.95e+47, b: -8.5, Ea: 82.384}
+  high-P-rate-constant: {A: 5.69e+14, b: -0.28, Ea: 80.7}
+  note: |-
+    Reaction index: Chemkin #374; RMG #151
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H4(11), H(24); N2H4(11), N2H3(10);
+    Reaction library: 'primaryNitrogenLibrary'
+- equation: NO(12) + NH(5) <=> N2O(18) + H(24)  # Reaction 375
+  rate-constant: {A: 1.8e+14, b: -0.351, Ea: -0.244}
+  note: |-
+    Reaction index: Chemkin #375; RMG #193
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), N2O(18); NH(5), H(24);
+- equation: OH(27) + NH(5) + M <=> H(24) + HNO(13) + M  # Reaction 376
+  type: three-body
+  rate-constant: {A: 3.25e+14, b: -0.376, Ea: -0.046}
+  note: |-
+    Reaction index: Chemkin #376; RMG #207
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: OH(27), HNO(13); NH(5), H(24);
+- equation: NH(5) + NH2(6) + M <=> H(24) + N2H2(8) + M  # Reaction 377
+  type: three-body
+  rate-constant: {A: 4.26e+14, b: -0.272, Ea: -0.078}
+  note: |-
+    Reaction index: Chemkin #377; RMG #210
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(6), N2H2(8); NH(5), H(24);
+- equation: H(24) + NH3(1) <=> H2(25) + NH2(6)  # Reaction 378
+  rate-constant: {A: 6.4e+05, b: 2.39, Ea: 10.171}
+  note: |-
+    Reaction index: Chemkin #378; RMG #215
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH3(1), NH2(6); H(24), H2(25);
+- equation: N2O(18) + H(24) <=> N2(2) + OH(27)  # Reaction 379
+  rate-constant: {A: 6.4e+07, b: 1.835, Ea: 13.492}
+  note: |-
+    Reaction index: Chemkin #379; RMG #229
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2O(18), OH(27); H(24), N2(2);
+- equation: H(24) + HONO(20) <=> NO2(19) + H2(25)  # Reaction 380
+  rate-constant: {A: 2.01e+08, b: 1.55, Ea: 6.614}
+  note: |-
+    Reaction index: Chemkin #380; RMG #232
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), NO2(19); H(24), H2(25);
+- equation: H(24) + HNO(13) <=> NO(12) + H2(25)  # Reaction 381
+  rate-constant: {A: 4.46e+11, b: 0.72, Ea: 0.655}
+  note: |-
+    Reaction index: Chemkin #381; RMG #235
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HNO(13), NO(12); H(24), H2(25);
+- equation: H(24) + HONO(20) <=> OH(27) + HNO(13)  # Reaction 382
+  rate-constant: {A: 5.64e+10, b: 0.86, Ea: 4.97}
+  note: |-
+    Reaction index: Chemkin #382; RMG #236
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), HNO(13); H(24), OH(27);
+- equation: H(24) + HONO2(23) <=> NO3(22) + H2(25)  # Reaction 383
+  rate-constant: {A: 5.56e+08, b: 1.53, Ea: 16.4}
+  note: |-
+    Reaction index: Chemkin #383; RMG #238
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO2(23), NO3(22); H(24), H2(25);
+- equation: H(24) + HONO2(23) <=> OH(27) + HONO(20)  # Reaction 384
+  rate-constant: {A: 3.82e+05, b: 2.3, Ea: 6.977}
+  note: |-
+    Reaction index: Chemkin #384; RMG #239
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO2(23), HONO(20); H(24), OH(27);
+- equation: H(24) + HONO2(23) <=> NO2(19) + H2O(29)  # Reaction 385
+  rate-constant: {A: 60.8, b: 3.29, Ea: 6.286}
+  note: |-
+    Reaction index: Chemkin #385; RMG #240
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO2(23), NO2(19); H(24), H2O(29);
+- equation: N2H3(10) (+M) <=> H(24) + N2H2(8) (+M)  # Reaction 386
+  type: falloff
+  low-P-rate-constant: {A: 3.84e+40, b: -6.88, Ea: 54.463}
+  high-P-rate-constant: {A: 1.275e+11, b: 0.819, Ea: 48.065}
+  Troe: {A: 0.842, T3: 8.0e+04, T1: 28.0, T2: 7300.0}
+  efficiencies: {Ar: 1.0, N2(2): 2.0}
+  note: |-
+    Reaction index: Chemkin #386; RMG #350
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H3(10), H(24); N2H3(10), N2H2(8);
+- equation: H(24) + N2H3(10) <=> H2(25) + N2H2(8)  # Reaction 387
+  rate-constant: {A: 7476.0, b: 2.796, Ea: 4.684}
+  note: |-
+    Reaction index: Chemkin #387; RMG #351
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H3(10), N2H2(8); H(24), H2(25);
+- equation: H(24) + N2H3(10) <=> H2(25) + H2NN(9)  # Reaction 388
+  rate-constant: {A: 6.243e+06, b: 1.89, Ea: 0.247}
+  note: |-
+    Reaction index: Chemkin #388; RMG #352
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H3(10), H2NN(9); H(24), H2(25);
+- equation: H(24) + N2H2(8) <=> NNH(7) + H2(25)  # Reaction 389
+  rate-constant: {A: 3.886e+08, b: 1.732, Ea: 0.738}
+  note: |-
+    Reaction index: Chemkin #389; RMG #357
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: N2H2(8), NNH(7); H(24), H2(25);
+- equation: H(24) + HNO(13) (+M) <=> H2NO(15) (+M)  # Reaction 390
+  type: falloff
+  low-P-rate-constant: {A: 1.5e+19, b: -1.632, Ea: 0.0}
+  high-P-rate-constant: {A: 5.5e+13, b: 0.0, Ea: 3.25}
+  note: |-
+    Reaction index: Chemkin #390; RMG #366
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H(24), H2NO(15); HNO(13), H2NO(15);
+- equation: NO(12) + H(24) (+M) <=> HNO(13) (+M)  # Reaction 391
+  type: falloff
+  low-P-rate-constant: {A: 2.4e+14, b: 0.206, Ea: -1.55}
+  high-P-rate-constant: {A: 1.5e+15, b: -0.41, Ea: 0.0}
+  Troe: {A: 0.82, T3: 1.0e-30, T1: 1.0e+30, T2: 1.0e+30}
+  efficiencies: {N2(2): 1.6}
+  note: |-
+    Reaction index: Chemkin #391; RMG #369
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO(12), HNO(13); H(24), HNO(13);
+    Reaction library: 'primaryNitrogenLibrary'
+- equation: NO2(19) + H(24) <=> NO(12) + OH(27)  # Reaction 392
+  rate-constant: {A: 1.3e+14, b: 0.0, Ea: 0.362}
+  note: |-
+    Reaction index: Chemkin #392; RMG #370
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NO2(19), NO(12); H(24), OH(27);
+- equation: H(24) + HONO(20) <=> NO(12) + H2O(29)  # Reaction 393
+  rate-constant: {A: 502.962, b: 3.308, Ea: 9.894}
+  note: |-
+    Reaction index: Chemkin #393; RMG #421
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: HONO(20), NO(12); H(24), H2O(29);
+- equation: H(24) + NH(5) <=> N(4) + H2(25)  # Reaction 394
+  rate-constant: {A: 1.06816e+08, b: 1.649, Ea: 0.474}
+  note: |-
+    Reaction index: Chemkin #394; RMG #443
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH(5), N(4); H(24), H2(25);
+- equation: O(28) + NH2(6) <=> H(24) + HNO(13)  # Reaction 395
+  rate-constant: {A: 6.6e+14, b: -0.5, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #395; RMG #989
+    Library reaction: NOx2018
+    Flux pairs: O(28), HNO(13); NH2(6), H(24);
+- equation: N(4) + NH2(6) <=> N2(2) + H(24) + H(24)  # Reaction 396
+  rate-constant: {A: 7.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #396; RMG #992
+    Library reaction: NOx2018
+    Flux pairs: NH2(6), N2(2); N(4), H(24); N(4), H(24);
+- equation: O(28) + NH(5) <=> NO(12) + H(24)  # Reaction 397
+  rate-constant: {A: 9.2e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #397; RMG #993
+    Library reaction: NOx2018
+    Flux pairs: O(28), NO(12); NH(5), H(24);
+- equation: H(24) + NH2OH(17) <=> H2(25) + HNOH(16)  # Reaction 398
+  rate-constant: {A: 4.8e+08, b: 1.5, Ea: 6.249}
+  note: |-
+    Reaction index: Chemkin #398; RMG #998
+    Library reaction: NOx2018
+    Flux pairs: NH2OH(17), HNOH(16); H(24), H2(25);
+- equation: H(24) + NH2OH(17) <=> H2(25) + H2NO(15)  # Reaction 399
+  rate-constant: {A: 2.4e+08, b: 1.5, Ea: 5.067}
+  note: |-
+    Reaction index: Chemkin #399; RMG #999
+    Library reaction: NOx2018
+    Flux pairs: NH2OH(17), H2NO(15); H(24), H2(25);
+- equation: H(24) + H2NO(15) <=> HNO(13) + H2(25)  # Reaction 400
+  rate-constant: {A: 3.0e+07, b: 2.0, Ea: 2.0}
+  note: |-
+    Reaction index: Chemkin #400; RMG #1005
+    Library reaction: NOx2018
+    Flux pairs: H2NO(15), HNO(13); H(24), H2(25);
+- equation: H(24) + H2NO(15) <=> OH(27) + NH2(6)  # Reaction 401
+  rate-constant: {A: 5.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #401; RMG #1006
+    Library reaction: NOx2018
+    Flux pairs: H2NO(15), OH(27); H(24), NH2(6);
+- equation: HNOH(16) + M <=> H(24) + HNO(13) + M  # Reaction 402
+  type: three-body
+  rate-constant: {A: 2.0e+24, b: -2.84, Ea: 58.934}
+  efficiencies: {H2O(29): 10.0}
+  note: |-
+    Reaction index: Chemkin #402; RMG #1009
+    Library reaction: NOx2018
+    Flux pairs: HNOH(16), H(24); HNOH(16), HNO(13);
+- equation: H(24) + HNOH(16) <=> OH(27) + NH2(6)  # Reaction 403
+  rate-constant: {A: 4.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #403; RMG #1010
+    Library reaction: NOx2018
+    Flux pairs: HNOH(16), OH(27); H(24), NH2(6);
+- equation: H(24) + HNOH(16) <=> HNO(13) + H2(25)  # Reaction 404
+  rate-constant: {A: 4.8e+08, b: 1.5, Ea: 0.378}
+  note: |-
+    Reaction index: Chemkin #404; RMG #1011
+    Library reaction: NOx2018
+    Flux pairs: HNOH(16), HNO(13); H(24), H2(25);
+- equation: NO2(19) + H2(25) <=> H(24) + HNO2(21)  # Reaction 405
+  rate-constant: {A: 240.0, b: 3.15, Ea: 31.1}
+  note: |-
+    Reaction index: Chemkin #405; RMG #1027
+    Library reaction: NOx2018
+    Flux pairs: NO2(19), HNO2(21); H2(25), H(24);
+- equation: NO3(22) + H(24) <=> NO2(19) + OH(27)  # Reaction 406
+  rate-constant: {A: 6.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #406; RMG #1031
+    Library reaction: NOx2018
+    Flux pairs: NO3(22), NO2(19); H(24), OH(27);
+- equation: H(24) + N2H4(11) <=> H2(25) + N2H3(10)  # Reaction 407
+  rate-constant: {A: 7.0e+12, b: 0.0, Ea: 2.5}
+  note: |-
+    Reaction index: Chemkin #407; RMG #1038
+    Library reaction: NOx2018
+    Flux pairs: N2H4(11), N2H3(10); H(24), H2(25);
+- equation: H(24) + N2H4(11) <=> NH2(6) + NH3(1)  # Reaction 408
+  rate-constant: {A: 2.3e+05, b: 1.42, Ea: 8.202}
+  note: |-
+    Reaction index: Chemkin #408; RMG #1039
+    Library reaction: NOx2018
+    Flux pairs: N2H4(11), NH3(1); H(24), NH2(6);
+- equation: O(28) + N2H3(10) => NO(12) + H(24) + NH2(6)  # Reaction 409
+  rate-constant: {A: 3.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #409; RMG #1046
+    Library reaction: NOx2018
+    Flux pairs: O(28), NO(12); N2H3(10), H(24); N2H3(10), NH2(6);
+- equation: N2H2(8) + M <=> H(24) + NNH(7) + M  # Reaction 410
+  type: three-body
+  rate-constant: {A: 1.9e+27, b: -3.05, Ea: 66.107}
+  efficiencies: {H2O(29): 7.0}
+  note: |-
+    Reaction index: Chemkin #410; RMG #1053
+    Library reaction: NOx2018
+    Flux pairs: N2H2(8), H(24); N2H2(8), NNH(7);
+- equation: H(24) + H2NN(9) <=> NNH(7) + H2(25)  # Reaction 411
+  rate-constant: {A: 4.8e+08, b: 1.5, Ea: -0.894}
+  note: |-
+    Reaction index: Chemkin #411; RMG #1060
+    Library reaction: NOx2018
+    Flux pairs: H2NN(9), NNH(7); H(24), H2(25);
+- equation: H(24) + H2NN(9) <=> H(24) + N2H2(8)  # Reaction 412
+  rate-constant: {A: 7.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #412; RMG #1061
+    Library reaction: NOx2018
+    Flux pairs: H2NN(9), N2H2(8); H(24), H(24);
+- equation: OH(27) + H2NN(9) => NO(12) + H(24) + NH2(6)  # Reaction 413
+  rate-constant: {A: 2.0e+12, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #413; RMG #1063
+    Library reaction: NOx2018
+    Flux pairs: OH(27), NO(12); H2NN(9), H(24); H2NN(9), NH2(6);
+- equation: O2(3) + NH(5) <=> NO2(19) + H(24)  # Reaction 414
+  rate-constant: {A: 2.3e+10, b: 0.0, Ea: 2.482}
+  note: |-
+    Reaction index: Chemkin #414; RMG #1590
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: O2(3), NO2(19); NH(5), H(24);
+- equation: NH2(6) + NH2(6) <=> H(24) + N2H3(10)  # Reaction 415
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 9.2e+11, b: -0.01, Ea: 10.014}
+  - {P: 1.0 atm, A: 1.2e+12, b: -0.03, Ea: 10.084}
+  - {P: 10.0 atm, A: 4.7e+12, b: -0.2, Ea: 10.62}
+  note: |-
+    Reaction index: Chemkin #415; RMG #1591
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: NH2(6), N2H3(10); NH2(6), H(24);
+- equation: NH(5) + NH(5) <=> N2(2) + H(24) + H(24)  # Reaction 416
+  rate-constant: {A: 5.1e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #416; RMG #1604
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: NH(5), N2(2); NH(5), H(24); NH(5), H(24);
+- equation: NNH(7) <=> N2(2) + H(24)  # Reaction 417
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [8.395, 1.497, -1.689e-03, -7.89e-04]
+  - [1.017, -2.159e-04, -1.31e-04, -6.03e-05]
+  - [0.01462, -4.199e-04, -2.559e-04, -1.188e-04]
+  - [0.01445, -1.767e-04, -1.076e-04, -4.986e-05]
+  - [4.413e-03, -6.023e-05, -3.658e-05, -1.687e-05]
+  - [9.16e-04, -1.97e-05, -1.192e-05, -5.467e-06]
+  note: |-
+    Reaction index: Chemkin #417; RMG #1693
+    PDep reaction: PDepNetwork #3
+    Flux pairs: NNH(7), N2(2); NNH(7), H(24);
+- equation: H(24) + NNH(7) <=> H2NN(9)  # Reaction 418
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [8.354, 0.4091, -0.153, 0.02164]
+  - [-0.07497, -0.2329, 0.06907, 1.84e-03]
+  - [-0.3234, 0.03933, -3.197e-03, -7.564e-03]
+  - [-0.06013, 8.178e-04, -6.035e-03, 3.564e-03]
+  - [-0.01803, 2.199e-03, -1.064e-03, 1.086e-03]
+  - [-6.599e-03, 2.602e-03, -7.749e-04, -1.152e-04]
+  note: |-
+    Reaction index: Chemkin #418; RMG #2935
+    PDep reaction: PDepNetwork #345
+    Flux pairs: H(24), H2NN(9); NNH(7), H2NN(9);
+- equation: H(24) + NH(5) <=> NH2(6)  # Reaction 419
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [11.64, 1.101, -0.1055, -9.383e-03]
+  - [-0.5606, 0.1938, 0.04219, -1.314e-03]
+  - [-0.1418, 0.02121, 7.066e-03, 1.435e-03]
+  - [-0.04317, 3.73e-03, 1.282e-03, 3.25e-04]
+  - [-0.01408, 8.24e-04, 3.037e-04, 8.047e-05]
+  - [-4.624e-03, 1.879e-04, 7.711e-05, 2.195e-05]
+  note: |-
+    Reaction index: Chemkin #419; RMG #2934
+    PDep reaction: PDepNetwork #344
+    Flux pairs: H(24), NH2(6); NH(5), NH2(6);
+- equation: H(24) + H2NN(9) <=> N2H3(10)  # Reaction 420
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [6.812, 1.382, -0.0621, -0.02146]
+  - [-1.376, 0.1223, 0.06141, 0.01872]
+  - [-0.7695, -8.074e-03, -1.38e-03, 1.822e-03]
+  - [-0.212, -3.223e-03, -2.011e-03, -8.743e-04]
+  - [-0.06393, -6.3e-04, -4.444e-04, -2.592e-04]
+  - [-0.02006, -1.264e-04, -8.359e-05, -4.557e-05]
+  note: |-
+    Reaction index: Chemkin #420; RMG #2936
+    PDep reaction: PDepNetwork #347
+    Flux pairs: H(24), N2H3(10); H2NN(9), N2H3(10);
+- equation: H(24) + HON(14) <=> HNOH(16)  # Reaction 421
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [10.32, 1.481, -0.01148, -5.173e-03]
+  - [-0.657, 0.01817, 0.01081, 4.794e-03]
+  - [-0.1597, -1.352e-03, -7.396e-04, -2.737e-04]
+  - [-0.04926, -8.286e-05, -5.92e-05, -3.451e-05]
+  - [-0.01509, -5.78e-05, -3.499e-05, -1.608e-05]
+  - [-4.906e-03, -2.792e-05, -1.614e-05, -6.775e-06]
+  note: |-
+    Reaction index: Chemkin #421; RMG #2944
+    PDep reaction: PDepNetwork #351
+    Flux pairs: H(24), HNOH(16); HON(14), HNOH(16);
+- equation: H(24) + H2NO(15) <=> NH2OH(17)  # Reaction 422
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-13.57, 1.5, 1.866e-15, -7.737e-16]
+  - [-0.4375, 7.889e-15, -5.016e-15, -1.446e-15]
+  - [-0.1903, -4.388e-15, 3.657e-15, -4.441e-16]
+  - [-0.06286, 1.52e-15, -9.244e-16, -2.821e-15]
+  - [-0.02009, 1.329e-16, 6.065e-15, -8.153e-16]
+  - [-5.641e-03, 2.702e-15, 4.403e-15, -1.804e-15]
+  note: |-
+    Reaction index: Chemkin #422; RMG #2947
+    PDep reaction: PDepNetwork #353
+    Flux pairs: H(24), NH2OH(17); H2NO(15), NH2OH(17);
+- equation: H(24) + HNOH(16) <=> NH2OH(17)  # Reaction 423
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-13.66, 1.5, 1.644e-15, -5.898e-17]
+  - [-0.3448, 7.51e-15, -4.822e-15, -1.769e-15]
+  - [-0.1568, -3.742e-15, 2.812e-15, -1.505e-16]
+  - [-0.04979, 1.606e-15, -6.256e-16, -3.273e-15]
+  - [-0.01537, 4.166e-16, 5.828e-15, -7.676e-16]
+  - [-4.039e-03, 2.593e-15, 4.486e-15, -2.235e-15]
+  note: |-
+    Reaction index: Chemkin #423; RMG #2950
+    PDep reaction: PDepNetwork #354
+    Flux pairs: H(24), NH2OH(17); HNOH(16), NH2OH(17);
+- equation: NO2(19) + H(24) <=> HONO(20)  # Reaction 424
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [12.93, 0.6546, -0.1, 1.429e-03]
+  - [-0.5755, 0.3828, 0.01584, -8.479e-03]
+  - [-0.2196, 0.07165, 0.01586, 7.639e-04]
+  - [-0.06968, 8.781e-03, 3.345e-03, 8.421e-04]
+  - [-0.02209, 1.573e-03, 3.364e-04, 9.771e-05]
+  - [-7.349e-03, 1.349e-03, 2.508e-05, -7.185e-05]
+  note: |-
+    Reaction index: Chemkin #424; RMG #2954
+    PDep reaction: PDepNetwork #361
+    Flux pairs: NO2(19), HONO(20); H(24), HONO(20);
+- equation: NO2(19) + H(24) <=> HNO2(21)  # Reaction 425
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [11.43, 0.4392, -0.1151, 6.312e-03]
+  - [-1.037, 0.1214, -5.889e-03, -6.808e-03]
+  - [-0.2203, 0.04472, -2.953e-03, -2.162e-03]
+  - [-0.05926, 0.01452, -1.281e-03, -4.505e-04]
+  - [-0.01725, 4.371e-03, -3.553e-04, -9.832e-05]
+  - [-4.985e-03, 9.548e-04, 5.067e-05, -7.1e-05]
+  note: |-
+    Reaction index: Chemkin #425; RMG #2953
+    PDep reaction: PDepNetwork #358
+    Flux pairs: NO2(19), HNO2(21); H(24), HNO2(21);
+- equation: NO3(22) + H(24) <=> HONO2(23)  # Reaction 426
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [10.25, 1.498, -9.859e-04, -4.613e-04]
+  - [-0.3601, 1.411e-03, 8.63e-04, 4.033e-04]
+  - [-0.05481, -1.258e-04, -7.657e-05, -3.547e-05]
+  - [-1.061e-04, -2.783e-05, -1.71e-05, -8.057e-06]
+  - [9.724e-03, -1.546e-05, -9.468e-06, -4.437e-06]
+  - [8.153e-03, -3.753e-06, -2.306e-06, -1.086e-06]
+  note: |-
+    Reaction index: Chemkin #426; RMG #2956
+    PDep reaction: PDepNetwork #366
+    Flux pairs: NO3(22), HONO2(23); H(24), HONO2(23);
+- equation: NH(5) + NH2(6) <=> H(24) + H2NN(9)  # Reaction 427
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [7.874, -0.1034, -0.05492, -0.01933]
+  - [-1.08, 0.1155, 0.05906, 0.01888]
+  - [-0.4641, -0.01179, -3.735e-03, 7.318e-04]
+  - [-0.1163, -4.069e-03, -2.582e-03, -1.195e-03]
+  - [-0.0368, -4.807e-04, -3.837e-04, -2.558e-04]
+  - [-0.013, 4.024e-05, 1.281e-05, -5.394e-06]
+  note: |-
+    Reaction index: Chemkin #427; RMG #2458
+    PDep reaction: PDepNetwork #101
+    Flux pairs: NH2(6), H2NN(9); NH(5), H(24);
+- equation: H(24) + HON(14) <=> OH(27) + NH(5)  # Reaction 428
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [12.95, -0.01651, -9.912e-03, -4.476e-03]
+  - [-0.02003, 0.01709, 0.01019, 4.543e-03]
+  - [-0.01765, -1.807e-03, -1.021e-03, -4.078e-04]
+  - [-7.91e-03, -1.764e-04, -1.173e-04, -6.235e-05]
+  - [-3.558e-03, -6.846e-05, -4.152e-05, -1.915e-05]
+  - [-1.498e-03, -8.471e-06, -5.006e-06, -2.2e-06]
+  note: |-
+    Reaction index: Chemkin #428; RMG #2945
+    PDep reaction: PDepNetwork #351
+    Flux pairs: HON(14), OH(27); H(24), NH(5);
+- equation: H(24) + NO[O](255) <=> HO2(30) + NH2(6)  # Reaction 429
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [13.51, -6.83e-03, -4.156e-03, -1.924e-03]
+  - [0.4236, 7.537e-03, 4.574e-03, 2.108e-03]
+  - [0.07733, -1.339e-03, -8.022e-04, -3.611e-04]
+  - [0.01867, -1.454e-04, -9.224e-05, -4.584e-05]
+  - [4.76e-03, 3.002e-05, 1.799e-05, 8.086e-06]
+  - [1.09e-03, -6.229e-05, -3.785e-05, -1.748e-05]
+  note: |-
+    Reaction index: Chemkin #429; RMG #2959
+    PDep reaction: PDepNetwork #367
+    Flux pairs: NO[O](255), HO2(30); H(24), NH2(6);
+- equation: H(24) + HON(14) <=> NO(12) + H2(25)  # Reaction 430
+  rate-constant: {A: 4.8e+08, b: 1.5, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #430; RMG #2848
+    Template reaction: Disproportionation
+    Flux pairs: H(24), H2(25); HON(14), NO(12);
+    Estimated from node Root_4R->H_Sp-2R!H-1R!H_N-2R!H-u1
+- equation: H(24) + HNOH(16) <=> HON(14) + H2(25)  # Reaction 431
+  rate-constant: {A: 1.2e+11, b: 0.75, Ea: 3.97}
+  note: |-
+    Reaction index: Chemkin #431; RMG #2849
+    Template reaction: H_Abstraction
+    Flux pairs: HNOH(16), HON(14); H(24), H2(25);
+    Estimated using average of templates [N3s_rad_H;H_rad] + [N3s_rad_H_pri;Y_rad] for rate rule [N3s_rad_H_pri;H_rad]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: H(24) + HNOH(16) <=> H(24) + H2NO(15)  # Reaction 432
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-12.54, -1.733e-15, 1.344e-15, -1.048e-15]
+  - [0.8332, 3.321e-15, -2.212e-15, 2.591e-15]
+  - [0.1634, -1.643e-15, 2.566e-15, -2.033e-15]
+  - [0.02961, 4.989e-15, -1.685e-15, -4.718e-16]
+  - [6.976e-03, -8.033e-16, 1.711e-15, -2.838e-15]
+  - [4.01e-03, 2.715e-15, -1.617e-15, -1.128e-15]
+  note: |-
+    Reaction index: Chemkin #432; RMG #2952
+    PDep reaction: PDepNetwork #354
+    Flux pairs: HNOH(16), H2NO(15); H(24), H(24);
+- equation: OH(27) + H2NO(15) <=> NH2OOH(132)  # Reaction 433
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.098692 atm, A: 6.07e+24, b: -5.64, Ea: 2.715}
+  - {P: 0.986923 atm, A: 3.37e+26, b: -5.84, Ea: 2.589}
+  - {P: 9.869233 atm, A: 2.18e+28, b: -6.07, Ea: 3.036}
+  - {P: 98.692327 atm, A: 1.98e+29, b: -6.02, Ea: 3.835}
+  - {P: 296.07698 atm, A: 1.48e+29, b: -5.82, Ea: 4.215}
+  note: |-
+    Reaction index: Chemkin #433; RMG #364
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: OH(27), NH2OOH(132); H2NO(15), NH2OOH(132);
+- equation: NH2(6) + NH2OOH(132) <=> NO[O](255) + NH3(1)  # Reaction 434
+  rate-constant: {A: 9.2e+05, b: 1.94, Ea: 2.785}
+  note: |-
+    Reaction index: Chemkin #434; RMG #2520
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OOH(132), NO[O](255); NH2(6), NH3(1);
+    Estimated using template [O_sec;NH2_rad] for rate rule [O/H/NonDeO;NH2_rad]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: NH(5) + NO[O](255) <=> N(4) + NH2OOH(132)  # Reaction 435
+  rate-constant: {A: 7.870017e+04, b: 2.261, Ea: 3.685}
+  note: |-
+    Reaction index: Chemkin #435; RMG #2526
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); NH(5), N(4);
+    Estimated using average of templates [X_H_or_Xrad_H_Xbirad_H_Xtrirad_H;O_rad/NonDeO] + [NH_triplet_H;O_rad] for rate rule [NH_triplet_H;O_rad/NonDeO]
+    Euclidian distance = 2.0
+    family: H_Abstraction
+- equation: NH(5) + NH2OOH(132) <=> NH2(6) + NO[O](255)  # Reaction 436
+  rate-constant: {A: 8.7e+12, b: 0.0, Ea: 4.75}
+  note: |-
+    Reaction index: Chemkin #436; RMG #2528
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OOH(132), NO[O](255); NH(5), NH2(6);
+    Estimated using template [O/H/NonDeO;Y_1centerbirad] for rate rule [O/H/NonDeO;NH_triplet]
+    Euclidian distance = 1.0
+    family: H_Abstraction
+- equation: NNH(7) + NO[O](255) <=> N2(2) + NH2OOH(132)  # Reaction 437
+  rate-constant: {A: 1.4e+04, b: 2.69, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #437; RMG #2531
+    Template reaction: Disproportionation
+    Flux pairs: NNH(7), N2(2); NO[O](255), NH2OOH(132);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_5R!H-u0_N-Sp-2R!H-1CNS_N-1CNS->C
+- equation: NO[O](255) + N2H2(8) <=> NNH(7) + NH2OOH(132)  # Reaction 438
+  rate-constant: {A: 4.8e+06, b: 2.0, Ea: -1.19}
+  note: |-
+    Reaction index: Chemkin #438; RMG #2540
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); N2H2(8), NNH(7);
+    Estimated using template [N3d/H/NonDeN;O_rad] for rate rule [N3d/H/NonDeN;O_rad/NonDeO]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: NO[O](255) + H2NN(9) <=> NNH(7) + NH2OOH(132)  # Reaction 439
+  rate-constant: {A: 4.307142e+05, b: 2.16, Ea: 4.185}
+  note: |-
+    Reaction index: Chemkin #439; RMG #2544
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); H2NN(9), NNH(7);
+    Estimated using average of templates [X_H;O_rad/NonDeO] + [N5dc_H;O_rad] for rate rule [N5dc_H;O_rad/NonDeO]
+    Euclidian distance = 2.0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: NO[O](255) + N2H3(10) <=> N2H2(8) + NH2OOH(132)  # Reaction 440
+  rate-constant: {A: 5.8e+04, b: 2.69, Ea: 0.138}
+  note: |-
+    Reaction index: Chemkin #440; RMG #2547
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), N2H2(8); NO[O](255), NH2OOH(132);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_5R!H-u0_Sp-2R!H-1CNS_2R!H->N_2N-u1
+    Multiplied by reaction path degeneracy 2.0
+- equation: NO[O](255) + N2H3(10) <=> H2NN(9) + NH2OOH(132)  # Reaction 441
+  rate-constant: {A: 2.9e+04, b: 2.69, Ea: 3.493}
+  note: |-
+    Reaction index: Chemkin #441; RMG #2551
+    Template reaction: Disproportionation
+    Flux pairs: N2H3(10), H2NN(9); NO[O](255), NH2OOH(132);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_5R!H-u0_Sp-2R!H-1CNS_2R!H->N_2N-u1
+- equation: NO[O](255) + N2H4(11) <=> NH2OOH(132) + N2H3(10)  # Reaction 442
+  rate-constant: {A: 1.16e+05, b: 2.69, Ea: -1.6}
+  note: |-
+    Reaction index: Chemkin #442; RMG #2555
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); N2H4(11), N2H3(10);
+    From training reaction 724 used for N3s/H2/NonDeN;O_rad/NonDeO
+    Exact match found for rate rule [N3s/H2/NonDeN;O_rad/NonDeO]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: HNO(13) + NO[O](255) <=> NO(12) + NH2OOH(132)  # Reaction 443
+  rate-constant: {A: 2.4e+06, b: 2.0, Ea: -1.19}
+  note: |-
+    Reaction index: Chemkin #443; RMG #2560
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); HNO(13), NO(12);
+    Estimated using template [N3d/H/NonDe;O_rad] for rate rule [N3d/H/NonDeO;O_rad/NonDeO]
+    Euclidian distance = 2.23606797749979
+    family: H_Abstraction
+- equation: HON(14) + NO[O](255) <=> NO(12) + NH2OOH(132)  # Reaction 444
+  rate-constant: {A: 2.94e+04, b: 2.69, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #444; RMG #2561
+    Template reaction: Disproportionation
+    Flux pairs: HON(14), NO(12); NO[O](255), NH2OOH(132);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+- equation: H2NO(15) + NO[O](255) <=> HNO(13) + NH2OOH(132)  # Reaction 445
+  rate-constant: {A: 5.8e+04, b: 2.69, Ea: 0.033}
+  note: |-
+    Reaction index: Chemkin #445; RMG #2565
+    Template reaction: Disproportionation
+    Flux pairs: H2NO(15), HNO(13); NO[O](255), NH2OOH(132);
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_4CNOS->O_Ext-4O-R_5R!H-u0_Sp-2R!H-1CNS_N-2R!H->N
+    Multiplied by reaction path degeneracy 2.0
+- equation: HNOH(16) + NO[O](255) <=> HNO(13) + NH2OOH(132)  # Reaction 446
+  rate-constant: {A: 2.94e+04, b: 2.69, Ea: 0.022}
+  note: |-
+    Reaction index: Chemkin #446; RMG #2567
+    Template reaction: Disproportionation
+    Flux pairs: HNOH(16), HNO(13); NO[O](255), NH2OOH(132);
+    Estimated from node Root_N-4R->H_4CNOS-u1_1R!H->O_N-2R!H->C_4CNOS->O_Ext-4O-R_2NOS->N
+- equation: HNOH(16) + NO[O](255) <=> HON(14) + NH2OOH(132)  # Reaction 447
+  rate-constant: {A: 3.0e+13, b: 0.0, Ea: 0.0}
+  note: |-
+    Reaction index: Chemkin #447; RMG #2568
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); HNOH(16), HON(14);
+    Estimated using template [N3s_rad_H_pri;O_rad] for rate rule [N3s_rad_H_pri;O_rad/NonDeO]
+    Euclidian distance = 2.0
+    family: H_Abstraction
+- equation: NO[O](255) + NH2OH(17) <=> H2NO(15) + NH2OOH(132)  # Reaction 448
+  rate-constant: {A: 1.4e+04, b: 2.69, Ea: 15.62}
+  note: |-
+    Reaction index: Chemkin #448; RMG #2570
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); NH2OH(17), H2NO(15);
+    From training reaction 717 used for O/H/NonDeN;O_rad/NonDeO
+    Exact match found for rate rule [O/H/NonDeN;O_rad/NonDeO]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: NO[O](255) + NH2OH(17) <=> HNOH(16) + NH2OOH(132)  # Reaction 449
+  rate-constant: {A: 5.8e+04, b: 2.69, Ea: 9.56}
+  note: |-
+    Reaction index: Chemkin #449; RMG #2571
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); NH2OH(17), HNOH(16);
+    From training reaction 711 used for N3s/H2/NonDeO;O_rad/NonDeO
+    Exact match found for rate rule [N3s/H2/NonDeO;O_rad/NonDeO]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: H_Abstraction
+- equation: HONO(20) + NO[O](255) <=> NO2(19) + NH2OOH(132)  # Reaction 450
+  rate-constant: {A: 4486.829, b: 2.72, Ea: 5.736}
+  note: |-
+    Reaction index: Chemkin #450; RMG #2581
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); HONO(20), NO2(19);
+    Estimated using average of templates [O_sec;O_rad/NonDeO] + [O/H/OneDeN;O_rad] for rate rule [O/H/OneDeN;O_rad/NonDeO]
+    Euclidian distance = 2.0
+    family: H_Abstraction
+- equation: HNO2(21) + NO[O](255) <=> NO2(19) + NH2OOH(132)  # Reaction 451
+  rate-constant: {A: 2.153571e+05, b: 2.16, Ea: 4.185}
+  note: |-
+    Reaction index: Chemkin #451; RMG #2584
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); HNO2(21), NO2(19);
+    Estimated using average of templates [X_H;O_rad/NonDeO] + [N5dc_H;O_rad] for rate rule [N5dc_H;O_rad/NonDeO]
+    Euclidian distance = 2.0
+    family: H_Abstraction
+- equation: NO3(22) + NH2OOH(132) <=> HONO2(23) + NO[O](255)  # Reaction 452
+  rate-constant: {A: 0.10485, b: 3.75, Ea: 19.545}
+  note: |-
+    Reaction index: Chemkin #452; RMG #2586
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OOH(132), NO[O](255); NO3(22), HONO2(23);
+    Estimated using template [O/H/NonDeO;O_rad/OneDe] for rate rule [O/H/NonDeO;O_rad/OneDeN]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 3.0
+    family: H_Abstraction
+- equation: HO2(30) + NO[O](255) <=> O2(3) + NH2OOH(132)  # Reaction 453
+  rate-constant: {A: 1.75e+10, b: 0.0, Ea: -3.275}
+  note: |-
+    Reaction index: Chemkin #453; RMG #2587
+    Template reaction: H_Abstraction
+    Flux pairs: NO[O](255), NH2OOH(132); HO2(30), O2(3);
+    From training reaction 404 used for Orad_O_H;O_rad/NonDeO
+    Exact match found for rate rule [Orad_O_H;O_rad/NonDeO]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: HO2(30) + NH2OOH(132) <=> H2O2(31) + NO[O](255)  # Reaction 454
+  rate-constant: {A: 4.1e+04, b: 2.5, Ea: 10.206}
+  note: |-
+    Reaction index: Chemkin #454; RMG #2608
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OOH(132), NO[O](255); HO2(30), H2O2(31);
+    From training reaction 208 used for O/H/NonDeO;O_rad/NonDeO
+    Exact match found for rate rule [O/H/NonDeO;O_rad/NonDeO]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: O(28) + NH2OOH(132) <=> OH(27) + NO[O](255)  # Reaction 455
+  rate-constant: {A: 8.7e+12, b: 0.0, Ea: 4.75}
+  note: |-
+    Reaction index: Chemkin #455; RMG #2656
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OOH(132), NO[O](255); O(28), OH(27);
+    From training reaction 205 used for O/H/NonDeO;O_atom_triplet
+    Exact match found for rate rule [O/H/NonDeO;O_atom_triplet]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: OH(27) + NH2OOH(132) <=> H2O(29) + NO[O](255)  # Reaction 456
+  rate-constant: {A: 1.1e+12, b: 0.0, Ea: -0.437}
+  note: |-
+    Reaction index: Chemkin #456; RMG #2723
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OOH(132), NO[O](255); OH(27), H2O(29);
+    From training reaction 206 used for O/H/NonDeO;O_pri_rad
+    Exact match found for rate rule [O/H/NonDeO;O_pri_rad]
+    Euclidian distance = 0
+    family: H_Abstraction
+    Ea raised from -1.8 to -1.8 kJ/mol.
+- equation: HO2(30) + NH2(6) <=> NH2OOH(132)  # Reaction 457
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [12.1, 0.9707, -0.09875, -8.444e-03]
+  - [-1.131, 0.4538, 0.06094, -3.354e-03]
+  - [-0.3414, 0.02596, 0.02056, 6.096e-03]
+  - [-0.07745, -0.01224, -1.314e-03, 9.925e-04]
+  - [-6.02e-03, -4.201e-03, -2.049e-03, -3.593e-04]
+  - [0.01056, -2.786e-03, -6.639e-04, -2.019e-04]
+  note: |-
+    Reaction index: Chemkin #457; RMG #2799
+    PDep reaction: PDepNetwork #283
+    Flux pairs: HO2(30), NH2OOH(132); NH2(6), NH2OOH(132);
+- equation: H(24) + NH2OOH(132) <=> H2(25) + NO[O](255)  # Reaction 458
+  rate-constant: {A: 5.4e+10, b: 0.0, Ea: 1.86}
+  note: |-
+    Reaction index: Chemkin #458; RMG #2861
+    Template reaction: H_Abstraction
+    Flux pairs: NH2OOH(132), NO[O](255); H(24), H2(25);
+    From training reaction 203 used for O/H/NonDeO;H_rad
+    Exact match found for rate rule [O/H/NonDeO;H_rad]
+    Euclidian distance = 0
+    family: H_Abstraction
+- equation: H(24) + NO[O](255) <=> NH2OOH(132)  # Reaction 459
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [10.43, 1.493, -4.195e-03, -1.942e-03]
+  - [-0.242, 7.584e-03, 4.603e-03, 2.121e-03]
+  - [-0.02228, -1.329e-03, -7.96e-04, -3.58e-04]
+  - [0.0211, -1.47e-04, -9.32e-05, -4.628e-05]
+  - [0.02027, 2.89e-05, 1.728e-05, 7.746e-06]
+  - [0.0186, -6.36e-05, -3.865e-05, -1.785e-05]
+  note: |-
+    Reaction index: Chemkin #459; RMG #2958
+    PDep reaction: PDepNetwork #367
+    Flux pairs: H(24), NH2OOH(132); NO[O](255), NH2OOH(132);
+- equation: OH(27) + NH2(6) <=> NH(S)(71) + H2O(29)  # Reaction 460
+  rate-constant: {A: 6.54e+09, b: 2.145, Ea: 1.055}
+  note: |-
+    Reaction index: Chemkin #460; RMG #133
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: OH(27), H2O(29); NH2(6), NH(S)(71);
+- equation: H(24) + NH2(6) <=> NH(S)(71) + H2(25)  # Reaction 461
+  rate-constant: {A: 4.8e+08, b: 1.5, Ea: 7.934}
+  note: |-
+    Reaction index: Chemkin #461; RMG #1588
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: NH2(6), NH(S)(71); H(24), H2(25);
+- equation: HONO(20) + NH3(1) <=> H2NO(15) + HNOH(16)  # Reaction 462
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-13.47, -3.086e-03, -1.886e-03, -8.801e-04]
+  - [16.51, 7.045e-04, 4.295e-04, 1.996e-04]
+  - [0.2414, -8.535e-04, -5.206e-04, -2.42e-04]
+  - [0.05732, -3.719e-04, -2.271e-04, -1.058e-04]
+  - [0.01073, -2.145e-05, -1.308e-05, -6.077e-06]
+  - [1.084e-03, 1.948e-05, 1.199e-05, 5.663e-06]
+  note: |-
+    Reaction index: Chemkin #462; RMG #3225
+    PDep reaction: PDepNetwork #75
+    Flux pairs: HONO(20), HNOH(16); NH3(1), H2NO(15);
+- equation: HNO(13) + HNO(13) <=> NH(5) + HNO2(21)  # Reaction 463
+  type: Chebyshev
+  temperature-range: [500.0, 2500.0]
+  pressure-range: [0.099 atm, 98.692 atm]
+  data:
+  - [-2.522, -3.24e-06, -1.986e-06, -9.316e-07]
+  - [7.713, 2.233e-06, 1.369e-06, 6.421e-07]
+  - [0.1677, 4.725e-08, 2.896e-08, 1.359e-08]
+  - [0.03747, 8.374e-10, 5.133e-10, 2.408e-10]
+  - [8.882e-03, -4.966e-09, -3.044e-09, -1.428e-09]
+  - [2.895e-03, -2.019e-09, -1.237e-09, -5.804e-10]
+  note: |-
+    Reaction index: Chemkin #463; RMG #3359
+    PDep reaction: PDepNetwork #246
+    Flux pairs: HNO(13), HNO2(21); HNO(13), NH(5);

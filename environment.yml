@@ -3,6 +3,7 @@ channels:
   - conda-forge
 dependencies:
   - python=3.7
+  - pydot
   - cantera=2.6
   - ca-certificates
   - openssl
