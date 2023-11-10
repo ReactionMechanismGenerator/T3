@@ -177,11 +177,8 @@ class Logger(object):
         Args:
             species_keys (List[int]): Entries are T3 species indices.
             species_dict (dict): The T3 species dictionary.
-
-        Todo:
-            Log the reasons one by one with line breaks and enumerate
         """
-        if len(species_keys):
+        if len(species_keys) and any(spc_dict['compute_thermo'] for spc_dict in species_dict.values()):
             self.info('\n\nSpecies to calculate thermodynamic data for:')
             max_label_length = max([len(spc_dict['QM label'])
                                     for key, spc_dict in species_dict.items() if key in species_keys])
@@ -193,6 +190,8 @@ class Logger(object):
             self.info(f'-----{space1} ------{space2}    -----------------------------')
             for key in species_keys:
                 spc_dict = species_dict[key]
+                if not spc_dict['compute_thermo']:
+                    continue
                 smiles = spc_dict['object'].molecule[0].to_smiles()
                 space1 = ' ' * (max_label_length - len(spc_dict['QM label']) + 1)
                 space2 = ' ' * (max_smiles_length - len(smiles) + 1)
