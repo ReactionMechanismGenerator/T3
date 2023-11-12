@@ -1,9 +1,7 @@
 # Using the a base image of rmgpy:latest from DockerHub - Not the official version but a custom version that is smaller in size
 FROM --platform=linux/amd64 laxzal/rmgpy:latest
 
-
 USER rmguser
-
 
 # Installing ARC
 # Change directory to Code

@@ -1,62 +1,109 @@
 name: Docker Image Build and Push
 
+#Ensure that top-level permissions are not set to write-all
+#https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#permissions
+
+
 on:
   schedule:
     - cron: "0 0 */7 * *" # every 7 days
   push:
     branches:
-        - main
+      - main
   pull_request:
+    types: [opened, synchronize, reopened]
     branches:
-        - main
+      - main
     paths:
-        - './Dockerfile'
+      - "./Dockerfile"
+
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   ci-check:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: true
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: false
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4.1.1
       # Add steps for CI checks of the Dockerfile
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.0.0
       - name: Build RMG-Py
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5.0.0
         with:
           context: .
           file: ./devtools/Dockerfile_rmgpy
           push: false
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rmgpy:latest
       - name: Build T3
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5.0.0
         with:
           context: .
           file: ./Dockerfile
           push: false
-  
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/thetandemtool-t3:latest
+
   build-and-push:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Login to Docker Hub
-      uses: docker/login-action@v1
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
-    - name: Build and push RMG-Py
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        file: ./devtools/Dockerfile_rmgpy
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/rmgpy:latest
-    - name: Build and push T3
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/thetandemtool-t3:latest
-        
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: true
+
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: false
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.0.0
+      - name: Build and push RMG-Py
+        uses: docker/build-push-action@v5.0.0
+        with:
+          context: .
+          file: ./devtools/Dockerfile_rmgpy
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rmgpy:latest
+      - name: Build and push T3
+        uses: docker/build-push-action@v5.0.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/thetandemtool-t3:latest
