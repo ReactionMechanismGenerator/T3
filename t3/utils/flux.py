@@ -331,17 +331,21 @@ def run_jsr(gas: ct.Solution,
         dict: The T, P, X, and ROP profiles (values) at a specific time.
     """
     V = V or 100
+    num_steps = 500
     profiles = dict()
     stoichiometry = get_rxn_stoichiometry(gas)
     for tau in times:
-        network, reactor = set_jsr(gas=gas, time=tau, composition=composition, T=T, P=P, V=V, a_tol=a_tol, r_tol=r_tol)
         t = 0
-        while t < tau:
+        dt = tau/num_steps
+        time_steps_array = np.arange(t, tau+dt, dt) #the last number is tau
+        network, reactor = set_jsr(gas=gas, time=tau, composition=composition, T=T, P=P, V=V, a_tol=a_tol, r_tol=r_tol)
+        t_step_index = 1 
+        while t_step_index <= len(time_steps_array) -1 : #till t =tau
             rops = {spc.name: dict() for spc in gas.species()}
-            t = network.step()
-            if t > tau:
-                network.advance(tau)
-                t = tau
+            t = time_steps_array[t_step_index]
+            network.advance(time_steps_array[t_step_index])
+            print(network.time)
+            t_step_index +=1
             cantera_reaction_rops = gas.net_rates_of_progress
             for spc in gas.species():
                 for i, rxn in enumerate(gas.reactions()):
@@ -351,6 +355,7 @@ def run_jsr(gas: ct.Solution,
                         rops[spc.name][rxn.equation] += cantera_reaction_rops[i] * stoichiometry[spc.name][i]
             profile = {'P': gas.P, 'T': gas.T, 'X': {s.name: x for s, x in zip(gas.species(), gas.X)}, 'ROPs': rops}
             if t == tau:
+                print("exactly tau")
                 profiles[t] = profile
     return profiles
 
