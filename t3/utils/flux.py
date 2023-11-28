@@ -568,6 +568,10 @@ def create_digraph(flux_graph: dict,
         for rop_list in rxn_dict.values():
             species_to_consider.update(rop_list[0])
     xs = [v for k, v in profile['X'].items() if k in species_to_consider]
+    if not len(xs):
+        print(f'Could not create a flux diagram for observables {observables} at {time} s. '
+              f'Could not simulate the system.')
+        return
     x_max, x_min = max(xs), min(xs)
     abs_rops = [abs(values[1]) for inner_dict in flux_graph.values() for values in inner_dict.values()]
     rop_min, rop_max = min(abs_rops), max(abs_rops)
@@ -821,7 +825,7 @@ def get_flux_graph(profile: dict,
                 graph[node][rxn][1] += rop
             else:
                 graph[node][rxn] = [opposite_rxn_species, rop]
-    min_rop = min_rop * max_rop
+    min_rop = min_rop * max_rop if min_rop is not None else 0
     return graph, nodes_to_explore, min_rop, max_rop
 
 
