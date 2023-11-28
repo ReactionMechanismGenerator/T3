@@ -894,12 +894,35 @@ def get_opposite_rxn_species(rxn: str, spc: str) -> List[str]:
     """
     arrow = ' <=> ' if ' <=> ' in rxn else ' => '
     wells = rxn.split(arrow)
-    counts = wells[0].count(spc), wells[1].count(spc)
+    counts = count_species_in_well(well=wells[0], spc=spc), count_species_in_well(well=wells[1], spc=spc)
     i = int(counts[0] > counts[1])
     species = wells[i].split(' + ')
     for token in [' + M', ' (+M)', 'M', ' + ']:
         species = [s.replace(token, '') for s in species]
     return [s for s in species if s != '']
+
+
+def count_species_in_well(well: str,
+                          spc: str,
+                          ) -> int:
+    """
+    Count the number of times a species appears in a well.
+
+    Args:
+        well (str): The well string.
+        spc (str): The species label.
+
+    Returns:
+        int: The number of times a species appears in the well.
+    """
+    count = 0
+    for token in [' + M', ' (+M)', 'M']:
+        well = well.replace(token, '')
+    splits = well.split(' + ')
+    for s in splits:
+        if s == spc:
+            count += 1
+    return count
 
 
 def unpack_stoichiometry(labels: List[str]) -> Tuple[List[str], List[int]]:
