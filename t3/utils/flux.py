@@ -694,6 +694,8 @@ def get_width(x: float,
     max_width, min_width = 4, 0.2
     x, x_min, x_max = abs(x), abs(x_min), abs(x_max)
     if not log_scale:
+        if x == x_min == x_max:
+            return 1
         return min_width + (x - x_min) * (max_width - min_width) / (x_max - x_min)
     return get_width(x=-np.log10(x_min) - np.log10(x_max) + np.log10(x),
                      x_min=-np.log10(x_max),
