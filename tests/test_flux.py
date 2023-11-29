@@ -33,7 +33,7 @@ def test_generate_flux():
                        explore_tol=0.95,
                        dead_end_tol=0.10,
                        generate_separate_diagrams_per_observable=False,
-                       display_flux_ratio=True,
+                       report_flux_ratio=True,
                        display_concentrations=True,
                        display_r_n_p=True,
                        fix_cantera_model=False,
@@ -54,7 +54,7 @@ def test_generate_flux():
                        explore_tol=0.95,
                        dead_end_tol=0.10,
                        generate_separate_diagrams_per_observable=True,
-                       display_flux_ratio=True,
+                       report_flux_ratio=True,
                        display_concentrations=True,
                        display_r_n_p=True,
                        fix_cantera_model=False,
@@ -227,7 +227,7 @@ def test_create_digraph_NH3():
                         max_rop=max_rop,
                         folder_path=folder_path,
                         display_concentrations=False,
-                        display_flux_ratio=False,
+                        report_flux_ratio=False,
                         display_r_n_p=True,
                         )
     assert os.path.isfile(os.path.join(folder_path, 'flux_diagram_0.01_s.png'))
@@ -255,7 +255,7 @@ def test_create_digraph_N2H4():
                         max_rop=max_rop,
                         folder_path=folder_path,
                         display_concentrations=True,
-                        display_flux_ratio=True,
+                        report_flux_ratio=True,
                         display_r_n_p=True,
                         )
     assert os.path.isfile(os.path.join(folder_path, 'flux_diagram_0.005_s.png'))

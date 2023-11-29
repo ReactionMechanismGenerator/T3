@@ -29,7 +29,8 @@ def generate_flux(model_path: str,
                   explore_tol: float = 0.95,
                   dead_end_tol: float = 0.10,
                   generate_separate_diagrams_per_observable: bool = False,
-                  display_flux_ratio: bool = True,
+                  report_flux_ratio: bool = True,
+                  report_actual_flux: bool = False,
                   display_concentrations: bool = True,
                   display_r_n_p: bool = True,
                   scaling: Optional[float] = None,
@@ -62,7 +63,8 @@ def generate_flux(model_path: str,
                                         Don't explore further consumption is lower than this tolerance
                                         times the net rate of production.
         generate_separate_diagrams_per_observable (bool, optional): Whether to generate a separate flux diagram for each observable.
-        display_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_actual_flux (bool, optional): Whether to report the actual flux values rather than the relative flux.
         display_concentrations (bool, optional): Whether to display the concentrations.
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
         scaling (Optional[float], optional): The scaling of the final image, 100 means no scaling.
@@ -108,7 +110,8 @@ def generate_flux(model_path: str,
                                    explore_tol=explore_tol,
                                    dead_end_tol=dead_end_tol,
                                    display_concentrations=display_concentrations,
-                                   display_flux_ratio=display_flux_ratio,
+                                   report_flux_ratio=report_flux_ratio,
+                                   report_actual_flux=report_actual_flux,
                                    display_r_n_p=display_r_n_p,
                                    scaling=scaling,
                                    allowed_nodes=allowed_nodes,
@@ -120,7 +123,8 @@ def generate_flux(model_path: str,
                                explore_tol=explore_tol,
                                dead_end_tol=dead_end_tol,
                                display_concentrations=display_concentrations,
-                               display_flux_ratio=display_flux_ratio,
+                               report_flux_ratio=report_flux_ratio,
+                               report_actual_flux=report_actual_flux,
                                display_r_n_p=display_r_n_p,
                                scaling=scaling,
                                allowed_nodes=allowed_nodes,
@@ -484,7 +488,8 @@ def generate_flux_diagrams(profiles: dict,
                            explore_tol: float = 0.95,
                            dead_end_tol: float = 0.10,
                            display_concentrations: bool = True,
-                           display_flux_ratio: bool = True,
+                           report_flux_ratio: bool = True,
+                           report_actual_flux: bool = False,
                            display_r_n_p: bool = True,
                            scaling: Optional[float] = None,
                            allowed_nodes: Optional[List[str]] = None,
@@ -501,7 +506,8 @@ def generate_flux_diagrams(profiles: dict,
                                         Don't explore further consumption is lower than this tolerance
                                         times the net rate of production.
         display_concentrations (bool, optional): Whether to display the concentrations.
-        display_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_actual_flux (bool, optional): Whether to report the actual flux values rather than the relative flux.
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
         scaling (Optional[float], optional): The scaling of the final image.
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
@@ -530,7 +536,8 @@ def generate_flux_diagrams(profiles: dict,
                        max_rop=max_rop,
                        folder_path=folder_path,
                        display_concentrations=display_concentrations,
-                       display_flux_ratio=display_flux_ratio,
+                       report_flux_ratio=report_flux_ratio,
+                       report_actual_flux=report_actual_flux,
                        display_r_n_p=display_r_n_p,
                        scaling=scaling,
                        allowed_nodes=allowed_nodes,
@@ -546,7 +553,8 @@ def create_digraph(flux_graph: dict,
                    max_rop: float,
                    folder_path: str,
                    display_concentrations: bool = True,
-                   display_flux_ratio: bool = True,
+                   report_flux_ratio: bool = True,
+                   report_actual_flux: bool = False,
                    display_r_n_p: bool = True,
                    scaling: Optional[float] = None,
                    allowed_nodes: Optional[List[str]] = None,
@@ -564,7 +572,8 @@ def create_digraph(flux_graph: dict,
         max_rop (float): The absolute maximal ROP value.
         folder_path (str): The path to the folder in which to save the flux diagrams and accompanied data.
         display_concentrations (bool, optional): Whether to display the concentrations.
-        display_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_actual_flux (bool, optional): Whether to report the actual flux values rather than the relative flux.
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
         scaling (Optional[float], optional): The scaling of the final image.
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
@@ -624,10 +633,12 @@ def create_digraph(flux_graph: dict,
                       downstream_nodes=downstream_nodes,
                       downstream_node_labels=downstream_node_labels,
                       width=get_width(x=rop, x_min=rop_min, x_max=rop_max),
-                      rel_rop=abs(rop) / abs(rop_max),
+                      rop=rop,
+                      max_rop=max_rop,
                       rxn=rxn_string,
                       multipliers=multipliers,
-                      display_flux_ratio=display_flux_ratio,
+                      report_flux_ratio=report_flux_ratio,
+                      report_actual_flux=report_actual_flux,
                       display_r_n_p=display_r_n_p,
                       allowed_nodes=allowed_nodes,
                       )
@@ -646,7 +657,6 @@ def create_digraph(flux_graph: dict,
         graph.write_png(graph_png_path)
     except AssertionError:
         print(f'Could not create a flux diagram for observables {observables} at {time} s.')
-    # todo: add smiles in transparent, and add the species label
 
 
 def add_edges(graph: pydot.Dot,
@@ -655,10 +665,12 @@ def add_edges(graph: pydot.Dot,
               downstream_nodes: List[pydot.Node],
               downstream_node_labels: List[str],
               width: float,
-              rel_rop: float,
+              rop: float,
+              max_rop: float,
               rxn: Optional[str] = None,
               multipliers: Optional[List[float]] = None,
-              display_flux_ratio: bool = True,
+              report_flux_ratio: bool = True,
+              report_actual_flux: bool = False,
               display_r_n_p: bool = True,
               allowed_nodes: Optional[List[str]] = None,
               ):
@@ -673,8 +685,11 @@ def add_edges(graph: pydot.Dot,
         downstream_node_labels (List[str]): The downstream node labels.
         rxn (str): The reaction string.
         width (float): The edge width.
+        rop (float): The normalized ROP value.
+        max_rop (float): The maximal ROP value.
         multipliers (List[float]): The stoichiometric multipliers.
-        display_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_flux_ratio (bool, optional): Whether to display the flux ratio.
+        report_actual_flux (bool, optional): Whether to report the actual flux values rather than the relative flux.
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
                                                        any node outside this list will not appear in the flux diagram.
@@ -684,8 +699,12 @@ def add_edges(graph: pydot.Dot,
             rs, ps = get_other_reactants_and_products(rxn=rxn, spcs=[origin_label, node_label])
             edge = pydot.Edge(origin_node, node, penwidth=width + np.log10(multiplier), fontsize=8)
             label = ''
-            if display_flux_ratio:
-                label = f'{rel_rop:.1f}' if rel_rop > 0.1 else f'{rel_rop:.1e}'
+            rop = abs(rop)
+            if report_flux_ratio:
+                label = f'{rop:.1f}' if rop > 0.1 else f'{rop:.1e}'
+            elif report_actual_flux:
+                actual_rop = rop * max_rop
+                label = f'{actual_rop:.1f}' if actual_rop > 0.1 else f'{actual_rop:.1e}'
             if display_r_n_p and rs:
                 label += f'\n{rs}'
             if display_r_n_p and ps:
