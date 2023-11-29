@@ -34,6 +34,7 @@ def generate_flux(model_path: str,
                   display_r_n_p: bool = True,
                   scaling: Optional[float] = None,
                   fix_cantera_model: bool = True,
+                  allowed_nodes: Optional[List[str]] = None,
                   ):
     """
     Generate a flux diagram for a given model and composition.
@@ -66,6 +67,8 @@ def generate_flux(model_path: str,
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
         scaling (Optional[float], optional): The scaling of the final image, 100 means no scaling.
         fix_cantera_model (bool, optional): Whether to fix the Cantera model before running the simulation.
+        allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
+                                                       any node outside this list will not appear in the flux diagram.
 
     Structures:
         profiles: {<time in s>: {'P': <pressure in bar>,
@@ -108,6 +111,7 @@ def generate_flux(model_path: str,
                                    display_flux_ratio=display_flux_ratio,
                                    display_r_n_p=display_r_n_p,
                                    scaling=scaling,
+                                   allowed_nodes=allowed_nodes,
                                    )
     else:
         generate_flux_diagrams(profiles=profiles,
@@ -119,6 +123,7 @@ def generate_flux(model_path: str,
                                display_flux_ratio=display_flux_ratio,
                                display_r_n_p=display_r_n_p,
                                scaling=scaling,
+                               allowed_nodes=allowed_nodes,
                                )
 
 
@@ -482,6 +487,7 @@ def generate_flux_diagrams(profiles: dict,
                            display_flux_ratio: bool = True,
                            display_r_n_p: bool = True,
                            scaling: Optional[float] = None,
+                           allowed_nodes: Optional[List[str]] = None,
                            ):
     """
     Generate flux diagrams.
@@ -498,6 +504,8 @@ def generate_flux_diagrams(profiles: dict,
         display_flux_ratio (bool, optional): Whether to display the flux ratio.
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
         scaling (Optional[float], optional): The scaling of the final image.
+        allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
+                                                       any node outside this list will not appear in the flux diagram.
 
     Structures:
         graph: {<species1>: {'rxn1': [[<the species formed>], <rop_value>],
@@ -525,6 +533,7 @@ def generate_flux_diagrams(profiles: dict,
                        display_flux_ratio=display_flux_ratio,
                        display_r_n_p=display_r_n_p,
                        scaling=scaling,
+                       allowed_nodes=allowed_nodes,
                        )
 
 
@@ -540,6 +549,7 @@ def create_digraph(flux_graph: dict,
                    display_flux_ratio: bool = True,
                    display_r_n_p: bool = True,
                    scaling: Optional[float] = None,
+                   allowed_nodes: Optional[List[str]] = None,
                    ) -> None:
     """
     Create a directed graph from the flux graph and save it as a .dot file.
@@ -557,6 +567,8 @@ def create_digraph(flux_graph: dict,
         display_flux_ratio (bool, optional): Whether to display the flux ratio.
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
         scaling (Optional[float], optional): The scaling of the final image.
+        allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
+                                                       any node outside this list will not appear in the flux diagram.
     """
     if not os.path.isdir(folder_path):
         os.makedirs(folder_path)
@@ -594,7 +606,8 @@ def create_digraph(flux_graph: dict,
             for downstream_node_label in downstream_node_labels:
                 if downstream_node_label in nodes_to_explore and downstream_node_label not in visited:
                     visited.add(downstream_node_label)
-                    stack.append(downstream_node_label)
+                    if allowed_nodes is None or downstream_node_label in allowed_nodes:
+                        stack.append(downstream_node_label)
             downstream_nodes = [get_node(graph=graph,
                                          label=downstream_node_label,
                                          nodes=nodes,
@@ -616,11 +629,16 @@ def create_digraph(flux_graph: dict,
                       multipliers=multipliers,
                       display_flux_ratio=display_flux_ratio,
                       display_r_n_p=display_r_n_p,
+                      allowed_nodes=allowed_nodes,
                       )
     graph.set(name='label', value=f'Flux diagram at {time} s, ROP range: [{min_rop:.2e}, {max_rop:.2e}] ' +
                                   'mol/cm\N{SUPERSCRIPT THREE}/s)')
     if scaling is not None:
         graph.set('size', f'{scaling},{scaling}')
+    if allowed_nodes is not None:
+        for node in graph.get_nodes():
+            if node.get_name() not in allowed_nodes:
+                graph.del_node(node)
     graph_dot_path = os.path.join(folder_path, f'flux_diagram_{time}_s.dot')
     graph_png_path = os.path.join(folder_path, f'flux_diagram_{time}_s.png')
     graph.write(graph_dot_path)
@@ -642,6 +660,7 @@ def add_edges(graph: pydot.Dot,
               multipliers: Optional[List[float]] = None,
               display_flux_ratio: bool = True,
               display_r_n_p: bool = True,
+              allowed_nodes: Optional[List[str]] = None,
               ):
     """
     Add edges to the graph.
@@ -657,21 +676,24 @@ def add_edges(graph: pydot.Dot,
         multipliers (List[float]): The stoichiometric multipliers.
         display_flux_ratio (bool, optional): Whether to display the flux ratio.
         display_r_n_p (bool, optional): Whether to display the other reactants and products on each arrow.
+        allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
+                                                       any node outside this list will not appear in the flux diagram.
     """
     for multiplier, node, node_label in zip(multipliers, downstream_nodes, downstream_node_labels):
-        rs, ps = get_other_reactants_and_products(rxn=rxn, spcs=[origin_label, node_label])
-        edge = pydot.Edge(origin_node, node, penwidth=width + np.log10(multiplier), fontsize=8)
-        label = ''
-        if display_flux_ratio:
-            label = f'{rel_rop:.1f}' if rel_rop > 0.1 else f'{rel_rop:.1e}'
-        if display_r_n_p and rs:
-            label += f'\n{rs}'
-        if display_r_n_p and ps:
-            label += f'\n{ps}'
-        if label != '':
-            edge.set('label', label)
-        edge.set('arrowhead', 'vee')
-        graph.add_edge(edge)
+        if allowed_nodes is None or (origin_label in allowed_nodes and node_label in allowed_nodes):
+            rs, ps = get_other_reactants_and_products(rxn=rxn, spcs=[origin_label, node_label])
+            edge = pydot.Edge(origin_node, node, penwidth=width + np.log10(multiplier), fontsize=8)
+            label = ''
+            if display_flux_ratio:
+                label = f'{rel_rop:.1f}' if rel_rop > 0.1 else f'{rel_rop:.1e}'
+            if display_r_n_p and rs:
+                label += f'\n{rs}'
+            if display_r_n_p and ps:
+                label += f'\n{ps}'
+            if label != '':
+                edge.set('label', label)
+            edge.set('arrowhead', 'vee')
+            graph.add_edge(edge)
 
 
 def get_width(x: float,
