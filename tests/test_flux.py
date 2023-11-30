@@ -361,7 +361,8 @@ def test_get_flux_graph():
         assert len(profile['ROPs']) == 36
         flux_graph, nodes_to_explore, min_rop, max_rop = flux.get_flux_graph(profile=profile, observables=['H4N2(1)'])
         if i == 0:
-            assert nodes_to_explore == {'H2(4)', 'H3N2(6)', 'ammonia(9)', 'H(3)', 'H2N2(7)', '2 NH2(5)', 'HN2(10)', 'N2(2)', 'NH2(5)'}
+            assert nodes_to_explore == {'H2(4)', '2 H3N2(6)', 'ammonia(9)', 'H(3)', 'H2N2(7)', '2 NH2(5)',
+                                        'HN2(10)', 'N2(2)', 'NH2(5)', 'H3N2(6)'}
             assert almost_equal(min_rop, 3.27e-21, ratio=100)
             assert almost_equal(max_rop, 20.3659, places=3)
             assert list(flux_graph.keys()) == ['H4N2(1)', 'NH2(5)', 'HN2(10)', 'H(3)', 'H2N2(7)', 'H2(4)', 'ammonia(9)', 'H3N2(6)']
@@ -390,6 +391,21 @@ def test_get_opposite_rxn_species():
     assert flux.get_opposite_rxn_species(rxn=rxn, spc='HO2(6)') == ['H2O2(18)']
     assert flux.get_opposite_rxn_species(rxn=rxn, spc='H(3)') == ['H2O2(18)']
     assert flux.get_opposite_rxn_species(rxn=rxn, spc='H2O2(18)') == ['H(3)', 'HO2(6)']
+
+    rxn = 'HO2 + NO <=> NO2 + OH'
+    assert flux.get_opposite_rxn_species(rxn=rxn, spc='HO2') == ['NO2', 'OH']
+    assert flux.get_opposite_rxn_species(rxn=rxn, spc='NO') == ['NO2', 'OH']
+    assert flux.get_opposite_rxn_species(rxn=rxn, spc='NO2') == ['HO2', 'NO']
+    assert flux.get_opposite_rxn_species(rxn=rxn, spc='OH') == ['HO2', 'NO']
+
+
+def test_count_species_in_well():
+    """Test counting a species in a well"""
+    assert flux.count_species_in_well(well='H2O + H + H', spc='H2O') == 1
+    assert flux.count_species_in_well(well='H2O + H + H', spc='H') == 2
+    assert flux.count_species_in_well(well='H2O + H + H', spc='H2') == 0
+    assert flux.count_species_in_well(well='HO2 + NO', spc='NO') == 1
+    assert flux.count_species_in_well(well='NO2 + OH', spc='NO') == 0
 
 
 def test_get_other_reactants_and_products():
