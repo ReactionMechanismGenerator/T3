@@ -304,6 +304,15 @@ def set_batch_p(gas: ct.Solution,
     network.rtol = r_tol
     return network, reactor
 
+def closest_bigger_number(array, target):
+    # Filter the numbers greater than the target
+    candidates = [(num, i) for i, num in enumerate(array) if num > target]
+    # Find the closest bigger number
+    if candidates:
+        m, i = min(candidates, key=lambda x: x[0])
+        return m, i
+    else:
+        return None, None  # No number greater than the target was found
 
 def run_jsr(gas: ct.Solution,
             times: List[float],
@@ -313,6 +322,7 @@ def run_jsr(gas: ct.Solution,
             V: Optional[float] = None,
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
+            tau_tolerance: float = 0.1,
             ) -> Dict[float, dict]:
     """
     Run a JSR reactor with constant pressure, constant temperature, and constant volume.
@@ -326,6 +336,7 @@ def run_jsr(gas: ct.Solution,
         V (float, optional): The reactor volume in cm^3.
         a_tol (float, optional): The absolute tolerance for the simulation.
         r_tol (float, optional): The relative tolerance for the simulation.
+        tau_tolerance (float, optional): Cantera will solve JSR equations with step() till tau*tolerance time, after that, it will solve them by advance(t_i). This will adress stiff equestion in which small time steps are required.
 
     Returns:
         dict: The T, P, X, and ROP profiles (values) at a specific time.
@@ -339,26 +350,32 @@ def run_jsr(gas: ct.Solution,
         dt = tau/num_steps
         time_steps_array = np.arange(t, tau+dt, dt) #the last number is tau
         network, reactor = set_jsr(gas=gas, time=tau, composition=composition, T=T, P=P, V=V, a_tol=a_tol, r_tol=r_tol)
-        t_step_index = 1 
-        while t_step_index <= len(time_steps_array) -1 : #till t =tau
-            rops = {spc.name: dict() for spc in gas.species()}
-            t = time_steps_array[t_step_index]
-            network.advance(time_steps_array[t_step_index])
-            print(network.time)
-            t_step_index +=1
-            cantera_reaction_rops = gas.net_rates_of_progress
-            for spc in gas.species():
-                for i, rxn in enumerate(gas.reactions()):
-                    if stoichiometry[spc.name][i]:
-                        if rxn.equation not in rops[spc.name].keys():
-                            rops[spc.name][rxn.equation] = 0
-                        rops[spc.name][rxn.equation] += cantera_reaction_rops[i] * stoichiometry[spc.name][i]
-            profile = {'P': gas.P, 'T': gas.T, 'X': {s.name: x for s, x in zip(gas.species(), gas.X)}, 'ROPs': rops}
-            if t == tau:
-                print("exactly tau")
-                profiles[t] = profile
+        while t <= tau*tau_tolerance:
+            network.step()
+            #update the system's time
+            t = network.time
+        if t > tau*tau_tolerance:
+            #get the current time of the system after step()
+            #find the closest_bigger time value in time_array, and continue with advance func
+            t = network.time
+            t_array, t_step_index = closest_bigger_number(time_steps_array, t)
+            t = t_array
+            while t_step_index < len(time_steps_array) -1 : #till t =tau
+                rops = {spc.name: dict() for spc in gas.species()}
+                network.advance(t)
+                t_step_index +=1
+                t = time_steps_array[t_step_index]
+                cantera_reaction_rops = gas.net_rates_of_progress
+                for spc in gas.species():
+                    for i, rxn in enumerate(gas.reactions()):
+                        if stoichiometry[spc.name][i]:
+                            if rxn.equation not in rops[spc.name].keys():
+                                rops[spc.name][rxn.equation] = 0
+                            rops[spc.name][rxn.equation] += cantera_reaction_rops[i] * stoichiometry[spc.name][i]
+                profile = {'P': gas.P, 'T': gas.T, 'X': {s.name: x for s, x in zip(gas.species(), gas.X)}, 'ROPs': rops}
+                if t == tau:
+                    profiles[t] = profile
     return profiles
-
 
 def run_batch_p(gas: ct.Solution,
                 times: List[float],
