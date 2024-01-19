@@ -89,6 +89,8 @@ rmg:
       reactive: true  # optional, default: ``True``
       xyz: [ethane.log]  # each entry could be a string/dictionary XYZ format or a file path to parse the information from
       seed_all_rads: ['radical', 'alkoxyl', 'peroxyl']  # radical derivatives that will be added the RMG input file
+      role: 'fuel'  # optional mark if this is a 'fuel', 'oxygen', or 'nitrogen' **instead** of specifying concentration, default: ``None``
+      equivalence_ratios: [0.5, 1.0, 1.5]  # optional, but must be given if the role is 'fuel', default: ``None``
     - label: OH
       smiles: '[OH]'
       observable: true  # optional, will be used as both SA and UA observable, default: ``False``
@@ -97,6 +99,7 @@ rmg:
     - label: O2
       smiles: '[O][O]'
       concentration: 3.5
+      role: 'oxygen'  # optional mark if this is a 'fuel', 'oxygen', or 'nitrogen' **instead** of specifying concentration, default: ``None``
     - label: N2
       adjlist: |
         1 N u0 p1 c0 {2,T}
@@ -104,6 +107,7 @@ rmg:
       concentration: 3.5 * 3.76
       constant: true  # optional, only allowed to be ``True`` in liquid phase simulations, default: ``False``
       balance: true  # optional, only allowed to be ``True`` in gas phase simulations, default: ``False``
+      role: 'nitrogen'  # optional mark if this is a 'fuel', 'oxygen', or 'nitrogen' **instead** of specifying concentration, default: ``None``
     - label: water
       smiles: O
       solvent: true  # optional, only allowed to be ``True`` in liquid phase simulations, required for one species for liquid phase simulations, default: ``False``
