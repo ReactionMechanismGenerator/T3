@@ -181,3 +181,18 @@ def test_get_parameter_from_header():
 
     label = common.get_parameter_from_header('dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)')
     assert label == 'k8'
+
+
+def test_get_o2_stoichiometry():
+    """Test the get_o2_stoichiometry() function"""
+    assert common.get_o2_stoichiometry(smiles='C') == 2  # 1 CO2 + 2 H2O
+    assert common.get_o2_stoichiometry(adjlist="""1 C u0 p0 c0 {2,S} {3,S} {4,S} {5,S}
+                                                  2 H u0 p0 c0 {1,S}
+                                                  3 H u0 p0 c0 {1,S}
+                                                  4 H u0 p0 c0 {1,S}
+                                                  5 H u0 p0 c0 {1,S}""") == 2
+    assert common.get_o2_stoichiometry(inchi='InChI=1S/CH4/h1H4') == 2
+    assert common.get_o2_stoichiometry(smiles='CCCCC') == 8  # 5 CO2 + 6 H2O
+    assert common.get_o2_stoichiometry(smiles='CCCCCC') == 9.5  # 6 CO2 + 7 H2O
+    assert common.get_o2_stoichiometry(smiles='CCO') == 3  # 2 CO2 + 3 H2O - O
+    assert common.get_o2_stoichiometry(smiles='NCC') == 7.5 / 2  # 2 CO2 + 3.5 H2O
