@@ -369,7 +369,7 @@ class T3(object):
             'RMG job log': os.path.join(iteration_path, 'RMG', 'job.log'),
             'RMG coll vio': os.path.join(iteration_path, 'RMG', 'collision_rate_violators.log'),
             'RMS': os.path.join(iteration_path, 'RMG', 'rms'),
-            'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.cti'),
+            'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.yaml'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
             'SA': os.path.join(iteration_path, 'SA'),
