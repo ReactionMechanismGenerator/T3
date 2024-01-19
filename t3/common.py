@@ -302,3 +302,40 @@ def get_parameter_from_header(header: str) -> Optional[str]:
         text.append(header[i])
     return ''.join(text)
 
+
+def get_o2_stoichiometry(smiles: Optional[str] = None,
+                         adjlist: Optional[str] = None,
+                         inchi: Optional[str] = None,
+                         ) -> float:
+    """
+    Get the stoichiometry number of O2 for complete combustion of the ``fuel`` molecule.
+
+    Args:
+        smiles (Optional[str]): A SMILES string for the fuel molecule.
+        adjlist (Optional[str]): An adjacency list string for the fuel molecule.
+        inchi (Optional[str]): An InChI string for the fuel molecule.
+
+    Returns:
+        float: The stoichiometry of O2 for complete combustion.
+    """
+    if smiles is None and adjlist is None and inchi is None:
+        raise ValueError('Must provide either a SMILES, an adjacency list, or an InChI string for the fuel molecule.')
+    if adjlist is None:
+        fuel = Species(smiles=smiles, inchi=inchi)
+    else:
+        fuel = Species().from_adjacency_list(adjlist)
+    c, h, n, o, other = 0, 0, 0, 0, 0
+    for atom in fuel.molecule[0].atoms:
+        if atom.is_carbon():
+            c += 1
+        elif atom.is_hydrogen():
+            h += 1
+        elif atom.is_nitrogen():
+            n += 1
+        elif atom.is_oxygen():
+            o += 1
+        else:
+            other += 1
+    if other:
+        raise ValueError(f'Cannot calculate O2 stoichiometry for {fuel.label} with {other} atoms which are not C/H/N/O.')
+    return 0.5 * (2 * c + 0.5 * h - o)
