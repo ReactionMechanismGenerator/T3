@@ -139,3 +139,17 @@ def test_get_chem_to_rmg_rxn_index_map():
                        39: 36, 40: 37, 41: 38, 42: 39, 43: 40, 44: 41, 45: 41, 46: 42, 47: 43, 48: 44, 49: 45, 50: 46,
                        51: 47, 52: 48, 53: 49, 54: 50, 55: 51, 56: 52, 57: 53, 58: 54, 59: 55, 60: 56, 61: 57, 62: 58,
                        63: 59, 64: 60, 65: 61}
+
+def test_get_o2_stoichiometry():
+    """Test the get_o2_stoichiometry() function"""
+    assert common.get_o2_stoichiometry(smiles='C') == 2  # 1 CO2 + 2 H2O
+    assert common.get_o2_stoichiometry(adjlist="""1 C u0 p0 c0 {2,S} {3,S} {4,S} {5,S}
+                                                  2 H u0 p0 c0 {1,S}
+                                                  3 H u0 p0 c0 {1,S}
+                                                  4 H u0 p0 c0 {1,S}
+                                                  5 H u0 p0 c0 {1,S}""") == 2
+    assert common.get_o2_stoichiometry(inchi='InChI=1S/CH4/h1H4') == 2
+    assert common.get_o2_stoichiometry(smiles='CCCCC') == 8  # 5 CO2 + 6 H2O
+    assert common.get_o2_stoichiometry(smiles='CCCCCC') == 9.5  # 6 CO2 + 7 H2O
+    assert common.get_o2_stoichiometry(smiles='CCO') == 3  # 2 CO2 + 3 H2O - O
+    assert common.get_o2_stoichiometry(smiles='NCC') == 7.5 / 2  # 2 CO2 + 3.5 H2O
