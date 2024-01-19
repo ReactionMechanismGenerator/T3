@@ -12,6 +12,7 @@ import time
 from arc.job.local import _determine_job_id, change_mode, execute_command, parse_running_jobs_ids, submit_job
 
 from t3.imports import local_t3_path, settings, submit_scripts
+from t3.utils.fix_cantera import fix_cantera
 
 if TYPE_CHECKING:
     from t3.logger import Logger
@@ -257,6 +258,7 @@ def rmg_runner(rmg_input_file_path: str,
                t3_project_name: Optional[str] = None,
                rmg_execution_type: Optional[str] = None,
                restart_rmg: bool = False,
+               fix_cantera_model: bool = True,
                ) -> bool:
     """
     Run an RMG job as a subprocess under the rmg_env.
@@ -271,6 +273,7 @@ def rmg_runner(rmg_input_file_path: str,
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
         rmg_execution_type (str, optional): The RMG execution type (incore or local). Also set via settings.py.
         restart_rmg (bool, optional): Whether to restart RMG from seed.
+        fix_cantera_model (bool, optional): Whether to fix the Cantera model before running the simulation.
 
     Returns:
         bool: Whether an exception was raised.
@@ -321,9 +324,11 @@ def rmg_runner(rmg_input_file_path: str,
                       and not(len(rmg_errors) >= 2 and error is not None and error == rmg_errors[-2])
             restart_rmg = False if error is not None and 'Could not find one or more of the required files/directories ' \
                                                          'for restarting from a seed mechanism' in error else True
+        if fix_cantera_model:
+            fix_cantera_model_files(rmg_path=os.path.dirname(rmg_input_file_path))
         return not converged
     else:
-        logger.warning(f'Expected wither "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'
+        logger.warning(f'Expected either "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'
                        f'Not executing RMG.')
         return True
 
@@ -374,6 +379,17 @@ def get_new_memory_for_an_rmg_run(job_log_path: str,
     new_mem = min(new_mem, settings['servers']['local']['max mem'] * 1000) if new_mem is not None else MEM
     logger.info(f'Setting RMG job memory to {new_mem / 1000:.2f} GB')
     return new_mem
+
+
+def fix_cantera_model_files(rmg_path: str) -> None:
+    """
+    Fix a Cantera model file that has undeclared duplicate reactions.
+
+    Args:
+        rmg_path (str): The path to the RMG folder.
+    """
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera', 'chem_annotated.yaml'))
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera', 'chem.yaml'))
 
 
 # def get_names_by_sub_folders(pwd: str) -> List[str]:
