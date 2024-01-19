@@ -98,8 +98,8 @@ class T3Sensitivity(BaseModel):
         """T3Sensitivity.global_observables validator"""
         if value is not None:
             for i, entry in enumerate(value):
-                if entry.lower() not in ['igd', 'esr', 'sl']:
-                    raise ValueError(f'The global observables list must contain a combination of "IgD", "ESR", and "SL", '
+                if entry.lower() not in ['idt', 'esr', 'sl']:
+                    raise ValueError(f'The global observables list must contain a combination of "IDT", "ESR", and "SL", '
                                      f'Got {entry} in {value}')
                 if entry.lower() in [value[j].lower() for j in range(i)]:
                     raise ValueError(f'The global observables list must not contain repetitions, got {value}')
