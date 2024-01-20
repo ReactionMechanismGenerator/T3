@@ -1040,6 +1040,38 @@ multiplicity 1
     assert label_2 == 'CH2(S)'
 
 
+def test_update_species_concentrations():
+    """Test the update_species_concentrations() function"""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    t3.rmg['species'] = [{'label': 'propane', 'smiles': 'CCC', 'adjlist': None, 'inchi': None, 'role': 'fuel',
+                          'concentration': 0, 'equivalence_ratios': [0.5, 1.0, 1.5]},
+                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+    t3.update_species_concentrations()
+    assert t3.rmg['species'][0]['label'] == 'propane'
+    assert t3.rmg['species'][0]['role'] == 'fuel'
+    assert t3.rmg['species'][0]['concentration'] == 1
+    assert t3.rmg['species'][1]['label'] == 'O2'
+    assert t3.rmg['species'][1]['concentration'] == [2.5, 7.5]
+    assert t3.rmg['species'][2]['label'] == 'N2'
+    assert t3.rmg['species'][2]['concentration'] == [2.5 * 3.76, 7.5 * 3.76]
+
+    t3.rmg['species'] = [{'label': 'propane', 'smiles': 'CCC', 'adjlist': None, 'inchi': None, 'role': 'fuel',
+                          'concentration': 0, 'equivalence_ratios': [0.5, 1.0, 1.5]},
+                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': [30, 50], 'role': 'nitrogen'}]
+    t3.update_species_concentrations()
+    assert t3.rmg['species'][0]['label'] == 'propane'
+    assert t3.rmg['species'][0]['concentration'] == 1
+    assert t3.rmg['species'][1]['label'] == 'O2'
+    assert t3.rmg['species'][1]['concentration'] == [2.5, 7.5]
+    assert t3.rmg['species'][2]['label'] == 'N2'
+    assert t3.rmg['species'][2]['concentration'] == [30, 50]
+
+
 def test_check_overtime():
     """Test checking overtime"""
     t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
