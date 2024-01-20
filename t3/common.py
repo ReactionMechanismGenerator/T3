@@ -276,7 +276,8 @@ def determine_concentrations_by_equivalence_ratios(species):
         elif spc['role'] == 'nitrogen':
             objects['nitrogen'] = spc.copy()
     if objects['fuel'] is not None and objects['oxygen'] is not None and objects['fuel']['equivalence_ratios'] is not None:
-        objects['fuel']['concentration'] = 1
+        if objects['fuel']['concentration'] == 0:
+            objects['fuel']['concentration'] = 1
         o2_stoichiometry = get_o2_stoichiometry(smiles=objects['fuel']['smiles'],
                                                 adjlist=objects['fuel']['adjlist'],
                                                 inchi=objects['fuel']['inchi'],
