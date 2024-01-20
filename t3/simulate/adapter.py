@@ -35,15 +35,3 @@ class SimulateAdapter(ABC):
              sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
         """
         pass
-
-    @abstractmethod
-    def get_idt_by_T(self):
-        """
-        Finds the ignition point by approximating dT/dt as a first order forward difference
-        and then finds the point of maximum slope.
-
-        Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
-                             the ignition delay time in seconds and index at which idt occurs respectively.
-        """
-        pass
