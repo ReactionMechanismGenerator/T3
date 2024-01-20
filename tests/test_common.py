@@ -140,6 +140,24 @@ def test_get_chem_to_rmg_rxn_index_map():
                        51: 47, 52: 48, 53: 49, 54: 50, 55: 51, 56: 52, 57: 53, 58: 54, 59: 55, 60: 56, 61: 57, 62: 58,
                        63: 59, 64: 60, 65: 61}
 
+
+def test_determine_concentrations_by_equivalence_ratios():
+    """Test determining the concentrations of fuel/oxygen/nitrogen species using the equivalence ratio."""
+    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'))
+    t3.rmg['species'] = [{'label': 'propane', 'smiles': 'CCC', 'adjlist': None, 'inchi': None, 'role': 'fuel',
+                          'equivalence_ratios': [0.5, 1.0, 1.5]},
+                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+    objects = common.determine_concentrations_by_equivalence_ratios(species=t3.rmg['species'])
+    assert objects['fuel']['label'] == 'propane'
+    assert objects['fuel']['role'] == 'fuel'
+    assert objects['fuel']['concentration'] == 1
+    assert objects['oxygen']['label'] == 'O2'
+    assert objects['oxygen']['concentration'] == [2.5, 5.0, 7.5]
+    assert objects['nitrogen']['label'] == 'N2'
+    assert objects['nitrogen']['concentration'] == [2.5 * 3.76, 5.0 * 3.76, 7.5 * 3.76]
+
+
 def test_get_o2_stoichiometry():
     """Test the get_o2_stoichiometry() function"""
     assert common.get_o2_stoichiometry(smiles='C') == 2  # 1 CO2 + 2 H2O
