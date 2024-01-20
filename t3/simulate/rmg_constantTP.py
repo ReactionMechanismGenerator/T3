@@ -267,21 +267,6 @@ class RMGConstantTP(SimulateAdapter):
                     sa_dict[sa_type][observable_label][parameter] = df[header].values
         return sa_dict
 
-    def get_idt_by_T(self) -> dict:
-        """
-        Finds the ignition point by approximating dT/dt as a first order forward difference and then finds
-        the point of maximum slope. However, the RMG reactors only simulate at constant T, so this implementation
-        only returns a dictionary whose values are empty lists.
-
-        Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
-                             the ignition delay time in seconds and index at which idt occurs respectively.
-        """
-        idt_dict = {'idt': list(),
-                    'idt_index': list(),
-                    }
-        return idt_dict
-
     def generate_rmg_reactors_for_simulation(self) -> dict:
         """
         Turn all RMG ranged reactors into individual reactors with specific species concentrations,
