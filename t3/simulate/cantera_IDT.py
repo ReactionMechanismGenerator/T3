@@ -36,7 +36,6 @@ class CanteraIDT(SimulateAdapter):
         cantera_simulation (ct.ReactorNet): Cantera reactor net object.
         inert_list (list): List of possible inert species in the model
         inert_index_list (list): List of indices corresponding to the inert species present in the model.
-        initialconds (dict): Key is the Cantera species. Value is the initial mol fraction.
         logger (Logger): Instance of T3's Logger class.
         model (ct.Solution): Cantera solution object for the mechanism.
         num_ct_reactions (int): Number of reactions in the model.
@@ -73,7 +72,6 @@ class CanteraIDT(SimulateAdapter):
         self.sa_atol = sa_atol
         self.sa_rtol = sa_rtol
 
-        self.initialconds = dict()
         self.model = None
         self.cantera_simulation = None
         self.inert_list = ['He', 'Ne', 'Ar', 'Kr', 'Xe', 'N2']
@@ -89,7 +87,7 @@ class CanteraIDT(SimulateAdapter):
 
     def set_up(self):
         """
-        Read in the Cantera input file and set up the empty attributes initialized in the init method.
+        Read in the Cantera input file and set up attributes.
         """
         self.model = ct.Solution(infile=self.paths['cantera annotated'])
         self.num_ct_reactions = len(self.model.reactions())
@@ -104,14 +102,10 @@ class CanteraIDT(SimulateAdapter):
             self.rxn_identifier_lookup[rxn.equation] = i
         self.species_names_without_indices = [self.model.species()[i].name.split('(')[0] for i in range(self.num_ct_species)]
 
-        for input_species in self.rmg['species']:
-            # find the index of this species in the list of Cantera species
-            idx = self.species_names_without_indices.index(input_species['label'])
-            self.initialconds.update({self.model.species(idx).name: input_species['concentration']})
-
         self.T_list = ([self.rmg['reactors'][0]['T']], 'K')
         self.P_list = ([self.rmg['reactors'][0]['P']], 'bar')
-        self.reaction_time_list = ([0.001, 0.01, 0.1, 1, 10], 's')  # tuple giving the ([list of reaction times], units)
+        # self.reaction_time_list = [1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1]
+        self.reaction_time_list = [0.001, 0.01, 1]
 
     def simulate(self):
         """
@@ -122,10 +116,13 @@ class CanteraIDT(SimulateAdapter):
         equivalence_ratios, concentration_combinations = self.get_concentration_combinations()
         for reactor in self.rmg['reactors']:
             T_list, P_list = get_t_and_p_lists(reactor)
+            print(f'T_list: {T_list}, P_list: {P_list}')
             for i, X in enumerate(concentration_combinations):
-                for T, P in [T_list, P_list]:
-                    self.model.TPX = T, P, X
-                    self.idt_dict[(equivalence_ratios[i], P, T)] = self.simulate_idt()
+                for P in P_list:
+                    for T in T_list:
+                        print(f'Simulating {equivalence_ratios[i]}, {P}, {T}')
+                        self.model.TPX = T, P, X
+                        self.idt_dict[(equivalence_ratios[i], P, T)] = self.simulate_idt()
 
     def simulate_idt(self, energy: str = 'off') -> Optional[float]:
         """
@@ -153,11 +150,19 @@ class CanteraIDT(SimulateAdapter):
             t += dt
             sim.advance(t)
             time_history.append(reactor.thermo.state, t=t)
+            # print(f'appending {time_history("OH(6)").X[-1]} at t={t}. Lengths: {len(time_history.t)}, {len(time_history("OH(6)").X)}')
+            # if len(time_history.t) != len(time_history("OH(6)").X):
+            #     raise Exception('Lengths of time and concentration arrays are not equal.')
             if t > self.reaction_time_list[max_t_counter]:
+                if max_t_counter == len(self.reaction_time_list) - 1:
+                    print(f'No IDT found for {self.model.T}, {self.model.P}')
+                    return None
                 max_t_counter += 1
+                # print(f'increasing max_t_counter to {self.reaction_time_list[max_t_counter]:.2e} s, max OH is {max(time_history("OH(6)").X)}')
                 idt = compute_idt(time_history, self.radical_label)
                 if idt is not None:
                     return idt
+        print(f'No IDT found for {self.model.T}, {self.model.P}')
         return None
 
     def determine_radical_label(self) -> str:
@@ -165,7 +170,7 @@ class CanteraIDT(SimulateAdapter):
         Determine the label of the prominent ignition radical: OH if present, else H (e.g., in hydrazine).
 
         Returns:
-            radical_label (str): The label of the prominent ignition radical.
+            str: The label of the prominent ignition radical.
         """
         h, oh = None, None
         for i, species in enumerate(self.species_names_without_indices):
@@ -176,6 +181,18 @@ class CanteraIDT(SimulateAdapter):
             if oh is not None:
                 break
         return oh or h
+
+    def get_cantera_species_label(self, rmg_label: str) -> Optional[str]:
+        """
+        Determine the corresponding label in the Cantera model for an RMG input species.
+
+        Returns:
+            Optional[str]: The label of the corresponding Cantera species.
+        """
+        for i, label in enumerate(self.species_names_without_indices):
+            if label == rmg_label:
+                return self.model.species()[i].name
+        return None
 
     def get_concentration_combinations(self) -> Tuple[List[float], List[dict]]:
         """
@@ -195,15 +212,21 @@ class CanteraIDT(SimulateAdapter):
             raise Exception('No species with a designated role "fuel" was found.')
         equivalence_ratios = self.rmg['species'][fuel_idx]['equivalence_ratios']
         concentration_combinations = list()
-        for i in enumerate(equivalence_ratios):
+        for i, _ in enumerate(equivalence_ratios):
             concentration_dict = dict()
             for spc in self.rmg['species']:
                 if spc['role'] is None:
-                    concentration_dict[spc['label']] = spc['concentration']
+                    cantera_label = self.get_cantera_species_label(spc['label'])
+                    if cantera_label is not None:
+                        concentration_dict[cantera_label] = spc['concentration']
                 if spc['role'] == 'fuel':
-                    concentration_dict[spc['label']] = objects['fuel']['concentration']
-                elif spc['role'] in ['oxygen', 'nitrogen'] and len(spc['concentration']) == len(equivalence_ratios):
-                    concentration_dict[spc['label']] = objects[spc['role']]['concentration'][i]
+                    cantera_label = self.get_cantera_species_label(spc['label'])
+                    if cantera_label is not None:
+                        concentration_dict[cantera_label] = objects['fuel']['concentration']
+                elif spc['role'] in ['oxygen', 'nitrogen'] and len(objects[spc['role']]['concentration']) == len(equivalence_ratios):
+                    cantera_label = self.get_cantera_species_label(spc['label'])
+                    if cantera_label is not None:
+                        concentration_dict[cantera_label] = objects[spc['role']]['concentration'][i]
             concentration_combinations.append(concentration_dict)
         return equivalence_ratios, concentration_combinations
 
@@ -254,9 +277,14 @@ def compute_idt(time_history, radical_label) -> Optional[float]:
         Optional[float]: The IDT in seconds.
     """
     times = time_history.t
-    concentration = time_history(radical_label).X
-    dc_dt = np.diff(concentration) / np.diff(times)
-    idt_index = np.argmax(dc_dt)
+    concentration = np.asarray([x[0] for x in time_history(radical_label).X], dtype=np.float32)
+    if max(concentration) == concentration[-1]:
+        print('still rising...')
+        return None
+    print(f'max OH is {max(concentration)}')
+    # dc_dt = np.diff(concentration) / np.diff(times)
+    # idt_index = np.argmax(dc_dt)
+    idt_index = np.argmax(concentration)
     idt = times[idt_index]
     if idt_index > len(times) - 10 or idt < 5e-8:
         return None
