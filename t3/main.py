@@ -302,21 +302,33 @@ class T3(object):
                     for species in self.rmg['species']:
                         if species['observable'] or species['SA_observable']:
                             self.sa_observables.append(species['label'])
-
-                simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
-                                                    t3=self.t3,
-                                                    rmg=self.rmg,
-                                                    paths=self.paths,
-                                                    logger=self.logger,
-                                                    atol=self.rmg['model']['atol'],
-                                                    rtol=self.rmg['model']['rtol'],
-                                                    observable_list=self.sa_observables,
-                                                    sa_atol=self.t3['sensitivity']['atol'],
-                                                    sa_rtol=self.t3['sensitivity']['rtol'],
-                                                    global_observables=None,
-                                                    )
-                simulate_adapter.simulate()
-                self.sa_dict = simulate_adapter.get_sa_coefficients()
+                if self.sa_observables:
+                    simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        observable_list=self.sa_observables,
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict = simulate_adapter.get_sa_coefficients()
+                if self.t3['sensitivity']['global_observables'] == 'IDT':
+                    simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict_idt = simulate_adapter.get_sa_coefficients()
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
