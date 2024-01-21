@@ -316,6 +316,7 @@ class T3(object):
                                                         )
                     simulate_adapter.simulate()
                     self.sa_dict = simulate_adapter.get_sa_coefficients()
+                    save_yaml_file(path=self.paths['SA dict'], content=self.sa_dict)
                 if self.t3['sensitivity']['global_observables'] == 'IDT':
                     simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
                                                         t3=self.t3,
@@ -329,6 +330,7 @@ class T3(object):
                                                         )
                     simulate_adapter.simulate()
                     self.sa_dict_idt = simulate_adapter.get_sa_coefficients()
+                    save_yaml_file(path=self.paths['SA idt dict'], content=self.sa_dict_idt)
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
@@ -392,6 +394,8 @@ class T3(object):
             'SA': os.path.join(iteration_path, 'SA'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
+            'SA dict': os.path.join(iteration_path, 'SA', 'sa.yaml'),
+            'SA idt dict': os.path.join(iteration_path, 'SA', 'sa_idt.yaml'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
             'ARC': os.path.join(iteration_path, 'ARC'),
             'ARC input': os.path.join(iteration_path, 'ARC', 'input.yml'),
