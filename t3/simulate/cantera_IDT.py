@@ -5,6 +5,9 @@ Used to run mechanism analysis with Cantera for IDT.
 
 from typing import List, Optional, Tuple
 
+import matplotlib.pyplot as plt
+import os
+
 import cantera as ct
 import math
 import numpy as np
@@ -124,9 +127,12 @@ class CanteraIDT(SimulateAdapter):
                     for T in T_list:
                         print(f'Simulating {equivalence_ratios[i]}, {P}, {T}')
                         self.model.TPX = T, P * 1e5, X
-                        self.idt_dict[(equivalence_ratios[i], P, T)] = self.simulate_idt()
+                        self.idt_dict[(equivalence_ratios[i], P, T)] = \
+                            self.simulate_idt(fig_name=f'{equivalence_ratios[i]}_{P}bar_{T}K.png')
 
-    def simulate_idt(self, energy: str = 'on') -> Optional[float]:
+    def simulate_idt(self, energy: str = 'on',
+                     fig_name: str = 'idt.png',
+                     ) -> Optional[float]:
         """
         Simulate an IdealGasReactor to find the IDT value.
 
@@ -150,7 +156,7 @@ class CanteraIDT(SimulateAdapter):
             t = net.step()
             time_history.append(reactor.thermo.state, t=t)
 
-        idt = compute_idt(time_history, self.radical_label)
+        idt = compute_idt(time_history, self.radical_label, figs_path=self.paths['figs'], fig_name=fig_name)
         return idt
 
     def determine_radical_label(self) -> str:
@@ -256,32 +262,47 @@ class CanteraIDT(SimulateAdapter):
         # return sa_dict
 
 
-def compute_idt(time_history, radical_label) -> Optional[float]:
+def compute_idt(time_history: ct.SolutionArray,
+                radical_label: str,
+                figs_path: str,
+                fig_name: str,
+                ) -> Optional[float]:
     """
     Finds the ignition point by approximating dT/dt as a first order forward difference
     and then finds the point of maximum slope.
 
+    Args:
+        time_history (ct.SolutionArray): Cantera solution array.
+        radical_label (str): The label of the prominent ignition radical.
+        figs_path (str): The path to the figures' directory.
+
     Returns:
         Optional[float]: The IDT in seconds.
+
+    Todo:
+        - solve possible noice in dc/dt.
     """
-    import matplotlib.pyplot as plt
+    if not os.path.isdir(figs_path):
+        os.makedirs(figs_path)
     times = time_history.t
     concentration = np.asarray([x[0] for x in time_history(radical_label).X], dtype=np.float32)
-    plt.plot(times, concentration)
-    plt.savefig('/home/alon/Code/T3/tests/test_simulate_adapters/data/cantera_idt_test/iteration_1/RMG/cantera/ct.png')
-    plt.close()
-    tau_i = concentration.argmax()
-    tau = times[tau_i]
-    if tau_i == len(concentration) - 1:
-        print(f'still rising... tau_i is {tau_i}, len(c) is {len(concentration)}\n')
-        return None
-    print(f'max OH is {concentration[tau_i]}, tau is {tau:.2e} s\n')
-    # dc_dt = np.diff(concentration) / np.diff(times)
-    # idt_index = np.argmax(dc_dt)
-    idt_index = np.argmax(concentration)
+    dc_dt = np.diff(concentration) / np.diff(times)
+    idt_index = np.argmax(dc_dt)
     idt = times[idt_index]
-    if idt_index > len(times) - 10 or idt < 5e-8:
+    if idt_index > len(times) - 10 or idt < 1e-8:
         return None
+    try:
+        plt.plot(times, concentration)
+        plt.plot(times[idt_index], concentration[idt_index], 'ro')
+        plt.xlabel('Time (s)')
+        plt.ylabel(f'[{radical_label}]')
+        plt.title(f'IDT = {idt:.2e} s')
+        plt.xlim(times[idt_index] * 0.8, times[idt_index] * 1.2)
+        plt.savefig(os.path.join(figs_path, fig_name))
+        plt.close()
+        print(f'plot saved to {os.path.join(figs_path, fig_name)}')
+    except (AttributeError, ValueError):
+        pass
     return idt
 
 
