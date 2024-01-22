@@ -104,12 +104,10 @@ class CanteraIDT(SimulateAdapter):
             self.spc_identifier_lookup[spc.name] = i
         for i, rxn in enumerate(self.model.reactions()):
             self.rxn_identifier_lookup[rxn.equation] = i
-        self.species_names_without_indices = [self.model.species()[i].name.split('(')[0] for i in range(self.num_ct_species)]
+        self.species_names_without_indices = [self.model.species()[i].name.split('(')[0] for i in range(self.num_ct_species)]  # Todo: what about HNO(T)(21)? make more robust
 
         self.T_list = ([self.rmg['reactors'][0]['T']], 'K')
         self.P_list = ([self.rmg['reactors'][0]['P']], 'bar')
-        # self.reaction_time_list = [1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1]
-        self.reaction_time_list = [0.001, 0.01, 10]
 
     def simulate(self):
         """
@@ -125,7 +123,6 @@ class CanteraIDT(SimulateAdapter):
                 print(f'X: {X}')
                 for P in P_list:
                     for T in T_list:
-                        print(f'Simulating {equivalence_ratios[i]}, {P}, {T}')
                         self.model.TPX = T, P * 1e5, X
                         self.idt_dict[(equivalence_ratios[i], P, T)] = \
                             self.simulate_idt(fig_name=f'{equivalence_ratios[i]}_{P}bar_{T}K.png')
@@ -151,10 +148,19 @@ class CanteraIDT(SimulateAdapter):
         net.rtol_sensitivity = self.sa_rtol
 
         time_history = ct.SolutionArray(self.model, extra='t')
-        t, est_idt = 0, 10
-        while t < est_idt:
+        t, counter, max_idt = 0, 0, 1000
+
+        while t < max_idt:
             t = net.step()
             time_history.append(reactor.thermo.state, t=t)
+            if counter % 100 == 0:
+                concentrations = np.asarray([x[0] for x in time_history(self.radical_label).X], dtype=np.float32)
+                max_c_idx = np.argmax(concentrations)
+                if concentrations[max_c_idx] > concentrations[-1] * 1.2 \
+                        and len(concentrations) > max_c_idx * 1.1 \
+                        and time_history.t[-1] > time_history.t[max_c_idx] * 1.2:
+                    break
+            counter += 1
 
         idt = compute_idt(time_history, self.radical_label, figs_path=self.paths['figs'], fig_name=fig_name)
         return idt
@@ -275,32 +281,40 @@ def compute_idt(time_history: ct.SolutionArray,
         time_history (ct.SolutionArray): Cantera solution array.
         radical_label (str): The label of the prominent ignition radical.
         figs_path (str): The path to the figures' directory.
+        fig_name (str): The name of the figure to save.
 
     Returns:
         Optional[float]: The IDT in seconds.
 
     Todo:
-        - solve possible noice in dc/dt.
+        - solve possible noice in dc/dt. ** add IDT(1000/T) figure.
     """
     if not os.path.isdir(figs_path):
         os.makedirs(figs_path)
     times = time_history.t
     concentration = np.asarray([x[0] for x in time_history(radical_label).X], dtype=np.float32)
     dc_dt = np.diff(concentration) / np.diff(times)
-    idt_index = np.argmax(dc_dt)
-    idt = times[idt_index]
-    if idt_index > len(times) - 10 or idt < 1e-8:
+    idt_index_dc_dt = np.argmax(dc_dt)
+    idt_index_c = np.argmax(concentration)
+    idt = times[idt_index_dc_dt]
+    if idt_index_dc_dt > len(times) - 10 or idt < 1e-8 or max(concentration) < concentration[0] * 100:
         return None
     try:
         plt.plot(times, concentration)
-        plt.plot(times[idt_index], concentration[idt_index], 'ro')
+        plt.plot(times[idt_index_dc_dt], concentration[idt_index_dc_dt], 'ro')
         plt.xlabel('Time (s)')
         plt.ylabel(f'[{radical_label}]')
         plt.title(f'IDT = {idt:.2e} s')
-        plt.xlim(times[idt_index] * 0.8, times[idt_index] * 1.2)
+        if times[idt_index_c] > times[idt_index_dc_dt] * 2.5:
+            x_min = min(times[idt_index_dc_dt] * 0.8, times[np.argmax(concentration)] * 0.1)
+            x_max = max(times[idt_index_dc_dt] * 1.2, times[np.argmax(concentration)] * 1.5)
+            if times[idt_index_dc_dt] < x_max * 0.05:
+                x_min = 0
+        else:
+            x_min, x_max = times[idt_index_dc_dt] * 0.8, times[idt_index_dc_dt] * 1.2
+        plt.xlim(x_min, x_max)
         plt.savefig(os.path.join(figs_path, fig_name))
         plt.close()
-        print(f'plot saved to {os.path.join(figs_path, fig_name)}')
     except (AttributeError, ValueError):
         pass
     return idt
