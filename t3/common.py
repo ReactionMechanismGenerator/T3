@@ -5,7 +5,7 @@ t3 common module
 import datetime
 import os
 import string
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from rmgpy.species import Species
 
@@ -255,6 +255,37 @@ def get_chem_to_rmg_rxn_index_map(chem_annotated_path: str) -> Dict[int, int]:
                 splits = line.split()
                 rxn_map[int(splits[4].split('#')[1].split(';')[0])] = int(splits[-1].split('#')[1])
     return rxn_map
+
+
+def determine_concentrations_by_equivalence_ratios(species: List[dict]):
+    """
+    Determine species concentrations based on the equivalence ratios if given.
+
+    Args:
+        species (list): Entries are species dictionaries following the schema format for RMG species.
+
+    Returns:
+        dict: A species dictionary with the concentrations as a list (not a range).
+    """
+    objects = {'fuel': None, 'oxygen': None, 'nitrogen': None}
+    for spc in species:
+        if spc['role'] == 'fuel':
+            objects['fuel'] = spc.copy()
+        elif spc['role'] == 'oxygen':
+            objects['oxygen'] = spc.copy()
+        elif spc['role'] == 'nitrogen':
+            objects['nitrogen'] = spc.copy()
+    if objects['fuel'] is not None and objects['oxygen'] is not None and objects['fuel']['equivalence_ratios'] is not None:
+        if objects['fuel']['concentration'] == 0:
+            objects['fuel']['concentration'] = 1
+        o2_stoichiometry = get_o2_stoichiometry(smiles=objects['fuel']['smiles'],
+                                                adjlist=objects['fuel']['adjlist'] if 'adjlist' in objects['fuel'].keys() else None,
+                                                inchi=objects['fuel']['inchi'] if 'inchi' in objects['fuel'].keys() else None
+                                                )
+        objects['oxygen']['concentration'] = [eq_ratio * o2_stoichiometry for eq_ratio in objects['fuel']['equivalence_ratios']]
+        if objects['nitrogen'] is not None and objects['nitrogen']['concentration'] == 0:
+            objects['nitrogen']['concentration'] = [o2 * 3.76 for o2 in objects['oxygen']['concentration']]
+    return objects
 
 
 def get_o2_stoichiometry(smiles: Optional[str] = None,
