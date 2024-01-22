@@ -301,21 +301,35 @@ class T3(object):
                     for species in self.rmg['species']:
                         if species['observable'] or species['SA_observable']:
                             self.sa_observables.append(species['label'])
-
-                simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
-                                                    t3=self.t3,
-                                                    rmg=self.rmg,
-                                                    paths=self.paths,
-                                                    logger=self.logger,
-                                                    atol=self.rmg['model']['atol'],
-                                                    rtol=self.rmg['model']['rtol'],
-                                                    observable_list=self.sa_observables,
-                                                    sa_atol=self.t3['sensitivity']['atol'],
-                                                    sa_rtol=self.t3['sensitivity']['rtol'],
-                                                    global_observables=None,
-                                                    )
-                simulate_adapter.simulate()
-                self.sa_dict = simulate_adapter.get_sa_coefficients()
+                if self.sa_observables:
+                    simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        observable_list=self.sa_observables,
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict = simulate_adapter.get_sa_coefficients()
+                    save_yaml_file(path=self.paths['SA dict'], content=self.sa_dict)
+                if self.t3['sensitivity']['global_observables'] == 'IDT':
+                    simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict_idt = simulate_adapter.get_sa_coefficients()
+                    save_yaml_file(path=self.paths['SA idt dict'], content=self.sa_dict_idt)
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
@@ -376,9 +390,12 @@ class T3(object):
             'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.yaml'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
+            'figs': os.path.join(iteration_path, 'Figures'),
             'SA': os.path.join(iteration_path, 'SA'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
+            'SA dict': os.path.join(iteration_path, 'SA', 'sa.yaml'),
+            'SA IDT dict': os.path.join(iteration_path, 'SA', 'sa_idt.yaml'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
             'ARC': os.path.join(iteration_path, 'ARC'),
             'ARC input': os.path.join(iteration_path, 'ARC', 'input.yml'),
