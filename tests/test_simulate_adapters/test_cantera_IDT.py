@@ -107,10 +107,10 @@ def test_simulate_seiser():
                            'T': 1000, 'P': 1,
                            'termination_rate_ratio': 0.01},
                           ]
-    t3.rmg['species'] = [{'label': 'nc7h16', 'smiles': 'CCCCCCC', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'fuel',
+    t3.rmg['species'] = [{'label': 'nc7h16', 'smiles': 'CCCCCCC', 'concentration': 0, 'role': 'fuel',
                           'equivalence_ratios': [1.0]},
-                         {'label': 'o2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
-                         {'label': 'n2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+                         {'label': 'o2', 'smiles': '[O][O]', 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'n2', 'smiles': 'N#N', 'concentration': 0, 'role': 'nitrogen'}]
     ct_adapter = CanteraIDT(t3=t3.t3,
                             rmg=t3.rmg,
                             paths=t3.paths,
@@ -135,10 +135,10 @@ def test_simulate_rmg_ammonia():
                            'T': [1500, 1600], 'P': [1, 100],
                            'termination_rate_ratio': 0.01},
                           ]
-    t3.rmg['species'] = [{'label': 'NH3', 'smiles': 'N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'fuel',
+    t3.rmg['species'] = [{'label': 'NH3', 'smiles': 'N', 'concentration': 0, 'role': 'fuel',
                           'equivalence_ratios': [0.5, 1.0]},
-                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
-                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+                         {'label': 'O2', 'smiles': '[O][O]', 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'concentration': 0, 'role': 'nitrogen'}]
     ct_adapter = CanteraIDT(t3=t3.t3,
                             rmg=t3.rmg,
                             paths=t3.paths,
@@ -165,10 +165,10 @@ def test_simulate_rmg_methane():
                            'T': [1000, 1200], 'P': 10,
                            'termination_rate_ratio': 0.01},
                           ]
-    t3.rmg['species'] = [{'label': 'methane', 'smiles': 'C', 'adjlist': None, 'concentration': 0, 'role': 'fuel',
+    t3.rmg['species'] = [{'label': 'methane', 'smiles': 'C', 'concentration': 0, 'role': 'fuel',
                           'equivalence_ratios': [1.0]},
-                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'concentration': 0, 'role': 'oxygen'},
-                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'concentration': 0, 'role': 'nitrogen'}]
+                         {'label': 'O2', 'smiles': '[O][O]', 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'concentration': 0, 'role': 'nitrogen'}]
     ct_adapter = CanteraIDT(t3=t3.t3,
                             rmg=t3.rmg,
                             paths=t3.paths,
@@ -178,7 +178,7 @@ def test_simulate_rmg_methane():
                             )
     assert ct_adapter.idt_dict == dict()
     ct_adapter.simulate()
-    assert len(ct_adapter.idt_dict.keys()) == 30
+    assert len(ct_adapter.idt_dict.keys()) == 15
     for val in ct_adapter.idt_dict.values():
         assert val is not None
     assert almost_equal(ct_adapter.idt_dict[(1.0, 10, 1150.6849315068491)], 0.009160914)
@@ -196,10 +196,10 @@ def test_simulate_rmg_heptane():
                            'T': [1000, 2000], 'P': 10,
                            'termination_rate_ratio': 0.01},
                           ]
-    t3.rmg['species'] = [{'label': 'n-heptane', 'smiles': 'CCCCCCC', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'fuel',
+    t3.rmg['species'] = [{'label': 'n-heptane', 'smiles': 'CCCCCCC', 'concentration': 0, 'role': 'fuel',
                           'equivalence_ratios': [1.0, 2.0]},
-                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
-                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+                         {'label': 'O2', 'smiles': '[O][O]', 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'concentration': 0, 'role': 'nitrogen'}]
     ct_adapter = CanteraIDT(t3=t3.t3,
                             rmg=t3.rmg,
                             paths=t3.paths,
@@ -227,10 +227,10 @@ def test_get_concentration_combinations():
                            'T': 1000, 'P': 1,
                            'termination_rate_ratio': 0.01},
                           ]
-    t3.rmg['species'] = [{'label': 'nc7h16', 'smiles': 'CCCCCCC', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'fuel',
+    t3.rmg['species'] = [{'label': 'nc7h16', 'smiles': 'CCCCCCC', 'concentration': 0, 'role': 'fuel',
                           'equivalence_ratios': [1.0]},
-                         {'label': 'o2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
-                         {'label': 'n2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+                         {'label': 'o2', 'smiles': '[O][O]', 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'n2', 'smiles': 'N#N', 'concentration': 0, 'role': 'nitrogen'}]
     ct_adapter = CanteraIDT(t3=t3.t3,
                             rmg=t3.rmg,
                             paths=t3.paths,
@@ -248,10 +248,10 @@ def test_get_concentration_combinations():
                            'T': [800, 1750], 'P': [1, 100],
                            'termination_rate_ratio': 0.01},
                           ]
-    t3.rmg['species'] = [{'label': 'NH3', 'smiles': 'N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'fuel',
+    t3.rmg['species'] = [{'label': 'NH3', 'smiles': 'N', 'concentration': 0, 'role': 'fuel',
                           'equivalence_ratios': [0.5, 1.0, 1.5]},
-                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
-                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+                         {'label': 'O2', 'smiles': '[O][O]', 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'concentration': 0, 'role': 'nitrogen'}]
     ct_adapter = CanteraIDT(t3=t3.t3,
                             rmg=t3.rmg,
                             paths=t3.paths,
