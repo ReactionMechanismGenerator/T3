@@ -279,8 +279,8 @@ def determine_concentrations_by_equivalence_ratios(species):
         if objects['fuel']['concentration'] == 0:
             objects['fuel']['concentration'] = 1
         o2_stoichiometry = get_o2_stoichiometry(smiles=objects['fuel']['smiles'],
-                                                adjlist=objects['fuel']['adjlist'],
-                                                inchi=objects['fuel']['inchi'],
+                                                adjlist=objects['fuel']['adjlist'] if 'adjlist' in objects['fuel'].keys() else None,
+                                                inchi=objects['fuel']['inchi'] if 'inchi' in objects['fuel'].keys() else None
                                                 )
         objects['oxygen']['concentration'] = [eq_ratio * o2_stoichiometry for eq_ratio in objects['fuel']['equivalence_ratios']]
         if objects['nitrogen'] is not None and objects['nitrogen']['concentration'] == 0:
