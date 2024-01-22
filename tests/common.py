@@ -80,7 +80,10 @@ def almost_equal(a: float,
     """
     if ratio is not None:
         return abs(a - b) / abs(a) < ratio
-    return round(abs(a - b), places) == 0
+    result = round(abs(a - b), places) == 0
+    if not result:
+        print(f'{a} != {b}')
+    return result
 
 
 def copy_model(model_path: str, name: str = '') -> str:
