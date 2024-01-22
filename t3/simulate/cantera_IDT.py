@@ -123,19 +123,17 @@ class CanteraIDT(SimulateAdapter):
                 for P in P_list:
                     for T in T_list:
                         print(f'Simulating {equivalence_ratios[i]}, {P}, {T}')
-                        # self.model.TPX = T, P * 1e5, X
-                        self.model.TPX = 1000, ct.one_atm, X
+                        self.model.TPX = T, P * 1e5, X
                         self.idt_dict[(equivalence_ratios[i], P, T)] = self.simulate_idt()
 
-    def simulate_idt(self, energy: str = 'off') -> Optional[float]:
+    def simulate_idt(self, energy: str = 'on') -> Optional[float]:
         """
         Simulate an IdealGasReactor to find the IDT value.
 
         Returns:
             Optional[float]: The IDT in seconds.
         """
-        # reactor = ct.IdealGasReactor(contents=self.model, energy=energy)
-        reactor = ct.IdealGasReactor(contents=self.model)
+        reactor = ct.IdealGasReactor(contents=self.model, energy=energy)
         net = ct.ReactorNet([reactor])
 
         # for i in range(self.model.n_reactions):
@@ -147,29 +145,36 @@ class CanteraIDT(SimulateAdapter):
         net.rtol_sensitivity = self.sa_rtol
 
         time_history = ct.SolutionArray(self.model, extra='t')
+        est_idt = 0.1
         t = 0
-        max_t_counter = 0
-        while t < self.reaction_time_list[-1]:
-            # dt = 5e-8 if t < 1e-6 else 10 ** (math.floor(math.log(t, 10)) - 1)
-            # t += dt
-            # sim.advance(t)
+        while t < est_idt:
+        #     # dt = 5e-8 if t < 1e-6 else 10 ** (math.floor(math.log(t, 10)) - 1)
+        #     # t += dt
+        #     # sim.advance(t)
             t = net.step()
-            # t = net.time
+        #     # t = net.time
+        #     time_history.append(reactor.thermo.state, t=t)
+        #     # print(f'appending {time_history("OH(6)").X[-1]} at t={t}. Lengths: {len(time_history.t)}, {len(time_history("OH(6)").X)}')
+        #     # if len(time_history.t) != len(time_history("OH(6)").X):
+        #     #     raise Exception('Lengths of time and concentration arrays are not equal.')
+        #     if t > self.reaction_time_list[max_t_counter]:
+        #         if max_t_counter == len(self.reaction_time_list) - 1:
+        #             print(f'No IDT found for T={self.model.T}, P={self.model.P}')
+        #             return None
+        #         max_t_counter += 1
+        #         # print(f'increasing max_t_counter to {self.reaction_time_list[max_t_counter]:.2e} s, max OH is {max(time_history("OH(6)").X)}')
+        #         idt = compute_idt(time_history, self.radical_label)
+        #         if idt is not None:
+        #             return idt
+        # # print(f'No IDT found for {self.model.T}, {self.model.P}')
             time_history.append(reactor.thermo.state, t=t)
-            # print(f'appending {time_history("OH(6)").X[-1]} at t={t}. Lengths: {len(time_history.t)}, {len(time_history("OH(6)").X)}')
-            # if len(time_history.t) != len(time_history("OH(6)").X):
-            #     raise Exception('Lengths of time and concentration arrays are not equal.')
-            if t > self.reaction_time_list[max_t_counter]:
-                if max_t_counter == len(self.reaction_time_list) - 1:
-                    print(f'No IDT found for T={self.model.T}, P={self.model.P}')
-                    return None
-                max_t_counter += 1
-                # print(f'increasing max_t_counter to {self.reaction_time_list[max_t_counter]:.2e} s, max OH is {max(time_history("OH(6)").X)}')
-                idt = compute_idt(time_history, self.radical_label)
-                if idt is not None:
-                    return idt
-        # print(f'No IDT found for {self.model.T}, {self.model.P}')
-        return None
+
+        ref_spc = 'oh'
+        i_idt = time_history(ref_spc).Y.argmax()
+        tau = time_history.t[i_idt]
+        return tau
+
+        # return None
 
     def determine_radical_label(self) -> str:
         """
