@@ -158,7 +158,7 @@ class T3(object):
                  clean_dir: bool = False,
                  ):
 
-        self.sa_dict = None
+        self.sa_dict, self.sa_dict_idt = None, None
         self.sa_observables = list()
         self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
 
@@ -300,21 +300,41 @@ class T3(object):
                     for species in self.rmg['species']:
                         if species['observable'] or species['SA_observable']:
                             self.sa_observables.append(species['label'])
-
-                simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
-                                                    t3=self.t3,
-                                                    rmg=self.rmg,
-                                                    paths=self.paths,
-                                                    logger=self.logger,
-                                                    atol=self.rmg['model']['atol'],
-                                                    rtol=self.rmg['model']['rtol'],
-                                                    observable_list=self.sa_observables,
-                                                    sa_atol=self.t3['sensitivity']['atol'],
-                                                    sa_rtol=self.t3['sensitivity']['rtol'],
-                                                    global_observables=None,
-                                                    )
-                simulate_adapter.simulate()
-                self.sa_dict = simulate_adapter.get_sa_coefficients()
+                if self.sa_observables:
+                    simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        observable_list=self.sa_observables,
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict = simulate_adapter.get_sa_coefficients(
+                        top_SA_species=self.t3['sensitivity']['top_SA_species'],
+                        top_SA_reactions=self.t3['sensitivity']['top_SA_reactions'],
+                        max_workers=self.t3['sensitivity']['max_workers'],
+                        save_yaml=True)
+                if self.t3['sensitivity']['global_observables'].lower() == 'idt':
+                    simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict_idt = simulate_adapter.get_sa_coefficients(
+                        top_SA_species=self.t3['sensitivity']['top_SA_species'],
+                        top_SA_reactions=self.t3['sensitivity']['top_SA_reactions'],
+                        max_workers=self.t3['sensitivity']['max_workers'],
+                        save_yaml=True)
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
@@ -375,9 +395,13 @@ class T3(object):
             'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.yaml'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
+            'figs': os.path.join(iteration_path, 'Figures'),
             'SA': os.path.join(iteration_path, 'SA'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
+            'SA dict': os.path.join(iteration_path, 'SA', 'sa.yaml'),
+            'SA IDT dict': os.path.join(iteration_path, 'SA', 'sa_idt.yaml'),
+            'SA IDT dict top X': os.path.join(iteration_path, 'SA', 'sa_idt_top_x.yaml'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
             'ARC': os.path.join(iteration_path, 'ARC'),
             'ARC input': os.path.join(iteration_path, 'ARC', 'input.yml'),
@@ -674,6 +698,7 @@ class T3(object):
             bool: Whether additional calculations are required.
         """
         species_keys, reaction_keys, coll_vio_spc_keys, coll_vio_rxn_keys = list(), list(), list(), list()
+        rxn_idt_keys = None
 
         self.rmg_species, self.rmg_reactions = self.load_species_and_reactions_from_chemkin_file()
         self.logger.info(f'This RMG model has {len(self.rmg_species)} species '
@@ -709,6 +734,9 @@ class T3(object):
             # 1.2. SA
             if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
+            if self.t3['sensitivity']['global_observables'].lower() == 'idt':
+                species_idt_keys, rxn_idt_keys = self.determine_params_based_on_sa_idt()
+                species_keys.extend(species_idt_keys)
             # 1.3. collision violators
             if self.t3['options']['collision_violators_thermo']:
                 species_keys.extend(coll_vio_spc_keys)
@@ -717,6 +745,10 @@ class T3(object):
         # 2.1. SA
         if sa_observables_exist:
             reaction_keys.extend(self.determine_reactions_based_on_sa())
+        if self.t3['sensitivity']['global_observables'].lower() == 'idt':
+            if rxn_idt_keys is None:
+                species_idt_keys, rxn_idt_keys = self.determine_params_based_on_sa_idt()
+            reaction_keys.extend(rxn_idt_keys)
         # 2.2. collision violators
         if self.t3['options']['collision_violators_rates']:
             reaction_keys.extend(coll_vio_rxn_keys)
@@ -794,6 +826,58 @@ class T3(object):
         species_keys.extend(self.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore))
 
         return species_keys
+
+    def determine_params_based_on_sa_idt(self) -> Tuple[List[int], List[int]]:
+        """
+        Determine species or reactions to calculate based on sensitivity analysis of IDT.
+
+        Returns:
+            List[int]: Entries are T3 species indices of species determined to be calculated based on IDT SA.
+        """
+        visited_species, species_keys = list(), list()
+        visited_rxns, rxn_keys = list(), list()
+        if self.sa_dict_idt is None:
+            self.logger.error(f"T3's sa_dict_idt was None. Please check that the input file contains a proper "
+                              f"'sensitivity' block, that 'IDT' was defined in the global_observables list, "
+                              f"and/or that SA was run successfully.\n"
+                              f"Not performing refinement based on IDT sensitivity analysis!")
+            return species_keys, rxn_keys
+        for token in ['thermo', 'kinetics']:
+            for r, reactor_idt_data in self.sa_dict_idt[token]['IDT'].items():
+                for phi, phi_data in reactor_idt_data.items():
+                    for p, p_data in phi_data.items():
+                        for t, idt_data in p_data.items():
+                            for index, sa in idt_data.items():
+                                if token == 'thermo':
+                                    if index not in visited_species:
+                                        visited_species.append(index)
+                                        species = self.get_species_by_index(index)
+                                        if self.species_requires_refinement(species=species):
+                                            reason = f'(i {self.iteration}) IDT is sensitive to this species.'
+                                            key = self.add_species(species=species, reasons=reason)
+                                            if key is not None:
+                                                species_keys.append(key)
+                                elif token == 'kinetics':
+                                    if index not in visited_rxns:
+                                        visited_rxns.append(index)
+                                        reaction = self.get_reaction_by_index(index)
+                                        if self.reaction_requires_refinement(reaction):
+                                            reason = f'(i {self.iteration}) IDT is sensitive to this reaction.'
+                                            key = self.add_reaction(reaction=reaction, reasons=reason)
+                                            if key is not None:
+                                                rxn_keys.append(key)
+                                        for spc in reaction.reactants + reaction.products:
+                                            spc_index = self.get_species_key(spc)
+                                            if spc_index not in visited_species:
+                                                visited_species.append(spc_index)
+                                                if self.species_requires_refinement(species=spc):
+                                                    reason = f'(i {self.iteration}) IDT is sensitive to a reaction ' \
+                                                             f'({reaction}) in which this species participates.'
+                                                    key = self.add_species(species=spc, reasons=reason)
+                                                    if key is not None:
+                                                        species_keys.append(key)
+        return species_keys, rxn_keys
+
 
     def determine_reactions_based_on_sa(self) -> List[int]:
         """
@@ -1161,6 +1245,21 @@ class T3(object):
                 return key
         return None
 
+    def get_species_by_index(self, index) -> Optional[Species]:
+        """
+        Get a species object by its T3 index.
+
+        Args:
+            index (int): The species index.
+
+        Returns:
+            Optional[Species]: The species object if it exists, ``None`` if it does not.
+        """
+        for key, species_dict in self.species.items():
+            if key == index:
+                return species_dict['object']
+        return None
+
     def get_reaction_key(self,
                          reaction: Optional[Reaction] = None,
                          label: Optional[str] = None,
@@ -1187,6 +1286,21 @@ class T3(object):
                 return key
             if label is not None and label == reaction_dict[f'{label_type} label']:
                 return key
+        return None
+
+    def get_reaction_by_index(self, index) -> Optional[Reaction]:
+        """
+        Get a reaction object by its T3 index.
+
+        Args:
+            index (int): The reaction index.
+
+        Returns:
+            Optional[Reaction]: The reaction object if it exists, ``None`` if it does not.
+        """
+        for key, reaction_dict in self.reactions.items():
+            if key == index:
+                return reaction_dict['object']
         return None
 
     def load_species_and_reactions_from_chemkin_file(self) -> Tuple[List[Species], List[Reaction]]:
@@ -1234,7 +1348,7 @@ class T3(object):
                     ) -> Optional[int]:
         """
         Add a species to self.species and to self.qm['species'].
-        If the species already exists in self.species, only the reasons to compute will be appended.
+        If the species already exists in self.species, only the reasons to compute it will be appended.
 
         Args:
             species (Species): The species to consider.
