@@ -200,7 +200,7 @@ class RMGSpecies(BaseModel):
     @validator('role')
     def check_species_role(cls, value, values):
         """RMGSpecies.role validator"""
-        if value not in ['fuel', 'oxygen', 'nitrogen']:
+        if value not in ['fuel', 'oxygen', 'nitrogen', None]:
             raise ValueError(f'The species role must be either "fuel", "oxygen", or "nitrogen".\nGot: {value}')
         if value == 'fuel' and value['equivalence_ratios'] is None:
             raise ValueError(f'If the species role is "fuel", then the equivalence ratios must be specified.')
