@@ -36,7 +36,7 @@ t3:
     adapter: RMGConstantTP  # *required* (this is how SA is requested), can use any implemented simulation adapter
     atol: 1e-6  # optional, default: 1e-6
     rtol: 1e-4  # optional, default: 1e-4
-    global_observables: ['IgD', 'ESR', 'SL']  # optional, only implemented in the Cantera adapter, default: ``None``
+    global_observables: ['IDT', 'ESR', 'SL']  # optional, only implemented in the Cantera adapter, default: ``None``
     SA_threshold: 0.01  # optional, default: 0.01
     pdep_SA_threshold: 0.001  # optional, used to determine wells and reactions (to be implemented) to calculate
                               # thermo and rates for from a PES of a sensitive reaction, default: 0.001
@@ -93,6 +93,8 @@ rmg:
       reactive: true  # optional, default: ``True``
       xyz: [ethane.log]  # each entry could be a string/dictionary XYZ format or a file path to parse the information from
       seed_all_rads: ['radical', 'alkoxyl', 'peroxyl']  # radical derivatives that will be added the RMG input file
+      role: 'fuel'  # optional mark if this is a 'fuel', 'oxygen', or 'nitrogen' **instead** of specifying concentration, default: ``None``
+      equivalence_ratios: [0.5, 1.0, 1.5]  # optional, but must be given if the role is 'fuel', default: ``None``
     - label: OH
       smiles: '[OH]'
       observable: true  # optional, will be used as both SA and UA observable, default: ``False``
@@ -101,6 +103,7 @@ rmg:
     - label: O2
       smiles: '[O][O]'
       concentration: 3.5
+      role: 'oxygen'  # optional mark if this is a 'fuel', 'oxygen', or 'nitrogen' **instead** of specifying concentration, default: ``None``
     - label: N2
       adjlist: |
         1 N u0 p1 c0 {2,T}
@@ -108,6 +111,7 @@ rmg:
       concentration: 3.5 * 3.76
       constant: true  # optional, only allowed to be ``True`` in liquid phase simulations, default: ``False``
       balance: true  # optional, only allowed to be ``True`` in gas phase simulations, default: ``False``
+      role: 'nitrogen'  # optional mark if this is a 'fuel', 'oxygen', or 'nitrogen' **instead** of specifying concentration, default: ``None``
     - label: water
       smiles: O
       solvent: true  # optional, only allowed to be ``True`` in liquid phase simulations, required for one species for liquid phase simulations, default: ``False``
