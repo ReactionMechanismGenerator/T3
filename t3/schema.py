@@ -170,6 +170,8 @@ class RMGSpecies(BaseModel):
     """
     label: str
     concentration: Union[confloat(ge=0), Tuple[confloat(ge=0), confloat(ge=0)]] = 0
+    equivalence_ratios: Optional[List[confloat(gt=0)]] = None
+    role: Optional[str] = None
     smiles: Optional[str] = None
     inchi: Optional[str] = None
     adjlist: Optional[str] = None
@@ -193,6 +195,15 @@ class RMGSpecies(BaseModel):
         if value and isinstance(values['concentration'], tuple):
             raise ValueError(f"A constant species cannot have a concentration range.\n"
                              f"Got{label}: {values['concentration']}.")
+        return value
+
+    @validator('role')
+    def check_species_role(cls, value, values):
+        """RMGSpecies.role validator"""
+        if value not in ['fuel', 'oxygen', 'nitrogen', None]:
+            raise ValueError(f'The species role must be either "fuel", "oxygen", or "nitrogen".\nGot: {value}')
+        if value == 'fuel' and value['equivalence_ratios'] is None:
+            raise ValueError(f'If the species role is "fuel", then the equivalence ratios must be specified.')
         return value
 
     @validator('concentration')
