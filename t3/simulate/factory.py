@@ -40,7 +40,6 @@ def simulate_factory(simulate_method: str,
                      observable_list: Optional[list] = None,
                      sa_atol: float = 1e-6,
                      sa_rtol: float = 1e-4,
-                     global_observables: Optional[List[str]] = None,
                      ) -> SimulateAdapter:
     """
     A factory generating the simulate adapter corresponding to ``simulate_adapter``.
@@ -57,7 +56,6 @@ def simulate_factory(simulate_method: str,
         observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
         sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
         sa_rtol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera.
 
     Raises:
         ValueError: If the provided simulate_method is not in the keys for the _registered_simulate_adapters dictionary.
@@ -80,6 +78,5 @@ def simulate_factory(simulate_method: str,
                                                                             observable_list=observable_list,
                                                                             sa_atol=sa_atol,
                                                                             sa_rtol=sa_rtol,
-                                                                            global_observables=global_observables,
                                                                             )
     return simulate_adapter_class
