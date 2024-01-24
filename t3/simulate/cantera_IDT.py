@@ -12,6 +12,8 @@ import cantera as ct
 import math
 import numpy as np
 
+from arc.common import save_yaml_file
+
 from t3.common import determine_concentrations_by_equivalence_ratios
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
@@ -116,16 +118,19 @@ class CanteraIDT(SimulateAdapter):
         self.logger.info('Running a simulation using CanteraIDT...')
 
         equivalence_ratios, concentration_combinations = self.get_concentration_combinations()
-        for reactor in self.rmg['reactors']:
+        reactor_idt_dict = dict()
+        for r, reactor in enumerate(self.rmg['reactors']):
             T_list, P_list = get_t_and_p_lists(reactor)
-            print(f'T_list: {T_list}, P_list: {P_list}')
             for i, X in enumerate(concentration_combinations):
-                print(f'X: {X}')
                 for P in P_list:
                     for T in T_list:
                         self.model.TPX = T, P * 1e5, X
                         self.idt_dict[(equivalence_ratios[i], P, T)] = \
-                            self.simulate_idt(fig_name=f'{equivalence_ratios[i]}_{P}bar_{T}K.png')
+                            self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{P}bar_{T}K.png')
+            if len(T_list) >= 3:
+                plot_idt_vs_temperature(self.idt_dict, figs_path=self.paths['figs'], reactor_index=r)
+            reactor_idt_dict[r] = self.idt_dict
+        save_yaml_file(os.path.join(self.paths['figs'], 'idt_dict.yaml'), reactor_idt_dict)
 
     def simulate_idt(self, energy: str = 'on',
                      fig_name: str = 'idt.png',
@@ -289,6 +294,7 @@ def compute_idt(time_history: ct.SolutionArray,
     Todo:
         - solve possible noice in dc/dt. ** add IDT(1000/T) figure.
     """
+    figs_path = os.path.join(figs_path, 'IDTs')
     if not os.path.isdir(figs_path):
         os.makedirs(figs_path)
     times = time_history.t
@@ -297,7 +303,7 @@ def compute_idt(time_history: ct.SolutionArray,
     idt_index_dc_dt = np.argmax(dc_dt)
     idt_index_c = np.argmax(concentration)
     idt = times[idt_index_dc_dt]
-    if idt_index_dc_dt > len(times) - 10 or idt < 1e-8 or max(concentration) < concentration[0] * 100:
+    if idt_index_dc_dt > len(times) - 10 or idt < 1e-12 or max(concentration) < concentration[0] * 100:
         return None
     try:
         plt.plot(times, concentration)
@@ -345,6 +351,60 @@ def get_t_and_p_lists(reactor: dict) -> Tuple[List[float], List[float]]:
                             math.log(reactor['P'][1], base), num=3) # 3 pressure in log10 space
         P_list = [base ** p for p in log_p]
     return T_list, P_list
+
+
+def plot_idt_vs_temperature(idt_dict: dict,
+                            figs_path: str,
+                            reactor_index: int = 0,
+                            ) -> None:
+    """
+    Plot IDT vs. 1000/T per phi and P condition combination.
+
+    idt_dict[(equivalence_ratios[i], P, T)]
+
+    Args:
+        idt_dict (dict): A dictionary containing IDT values.
+        figs_path (str): The path to the figures' directory.
+        reactor_index (int, optional): The reactor index.
+    """
+    figs_path = os.path.join(figs_path, 'IDT_vs_T')
+    if not os.path.isdir(figs_path):
+        os.makedirs(figs_path)
+    data = get_idt_per_phi_p_condition(idt_dict)
+    for phi, phi_data in data.items():
+        for p, phi_p_data in phi_data.items():
+            fig_name = f'R{reactor_index}_{phi}_{p}bar.png'
+            try:
+                fig, ax = plt.subplots()
+                ax.set_xlabel('1000/T (1/K)')
+                ax.set_ylabel('IDT (s)')
+                ax.set_title(f'IDT vs. 1000/T, phi = {phi}, P = {p} bar')
+                ax.semilogy(phi_p_data.keys(), phi_p_data.values())
+                fig.savefig(os.path.join(figs_path, fig_name))
+            except (AttributeError, ValueError):
+                pass
+
+
+def get_idt_per_phi_p_condition(idt_dict: dict) -> dict:
+    """
+    Get IDT values per phi, P, and 1000/T condition combination.
+
+    Args:
+        idt_dict (dict): A dictionary containing IDT values.
+
+    Returns:
+        dict: A dictionary containing IDT values per phi and P condition combination corresponding to the 1000/T list.
+    """
+    data = dict()
+    for triple_key in idt_dict.keys():
+        phi, p, _ = triple_key
+        if phi not in data.keys():
+            data[phi] = dict()
+        if p not in data[phi].keys():
+            data[phi][p] = dict()
+    for triple_key, value in idt_dict.items():
+        data[triple_key[0]][triple_key[1]][1000 / triple_key[2]] = value
+    return data
 
 
 register_simulate_adapter("CanteraIDT", CanteraIDT)
