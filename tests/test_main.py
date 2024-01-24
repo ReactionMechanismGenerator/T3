@@ -283,11 +283,13 @@ def test_set_paths():
              'SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA',
              'SA input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
              'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
-             'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera/chem_annotated.cti',
+             'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera/chem_annotated.yaml',
              'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
              'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
-             'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
-                             'species_dictionary.txt',
+             'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/species_dictionary.txt',
+             'figs': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/Figures',
+             'SA dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
+             'SA IDT dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
              'RMG T3 thermo lib': 'test_minimal_delete_after_usage/Libraries/T3lib.py',
              'RMG T3 kinetics lib': 'test_minimal_delete_after_usage/Libraries/T3',
              }
