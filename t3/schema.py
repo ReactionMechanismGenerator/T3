@@ -103,8 +103,9 @@ class T3Sensitivity(BaseModel):
     adapter: constr(max_length=255) = 'RMGConstantTP'
     atol: confloat(gt=0, lt=1e-1) = 1e-6
     rtol: confloat(gt=0, lt=1e-1) = 1e-4
-    global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None
+    global_observables: Optional[List[str]] = None  # ['IDT', 'ESR', 'SL']
     SA_threshold: confloat(gt=0, lt=0.5) = 0.01
+    max_sa_workers: conint(ge=1) = 24
     pdep_SA_threshold: Optional[confloat(gt=0, lt=0.5)] = 0.001
     ME_methods: List[constr(min_length=2, max_length=3)] = ['CSE', 'MSC']
     top_SA_species: conint(ge=0) = 10
@@ -130,8 +131,8 @@ class T3Sensitivity(BaseModel):
         """T3Sensitivity.global_observables validator"""
         if value is not None:
             for i, entry in enumerate(value):
-                if entry.lower() not in ['igd', 'esr', 'sl']:
-                    raise ValueError(f'The global observables list must contain a combination of "IgD", "ESR", and "SL", '
+                if entry.lower() not in ['idt', 'esr', 'sl']:
+                    raise ValueError(f'The global observables list must contain a combination of "IDT", "ESR", and "SL", '
                                      f'Got {entry} in {value}')
                 if entry.lower() in [value[j].lower() for j in range(i)]:
                     raise ValueError(f'The global observables list must not contain repetitions, got {value}')
