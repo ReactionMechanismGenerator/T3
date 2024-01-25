@@ -348,9 +348,10 @@ def run_jsr(gas: ct.Solution,
         a_tol (float, optional): The absolute tolerance for the simulation.
         r_tol (float, optional): The relative tolerance for the simulation.
         tau_tolerance (float, optional): Cantera will solve JSR equations with step()
-        till tau * tolerance time, after that, it will solve them by advance(t_i).
-        This will adress stiff equestion in which small time steps are required.
-
+                                         till tau * tolerance time, after that, it will 
+                                         solve them by advance(t_i).
+    
+    This will adress stiff equestion in which small time steps are required.
     Returns:
         dict: The T, P, X, and ROP profiles (values) at a specific time.
     """
