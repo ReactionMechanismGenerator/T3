@@ -108,10 +108,12 @@ jobs:
               conda-${{ runner.os }}--${{ runner.arch }}-rmgpyenv-${{ env.CACHE_NUMBER}}
           env:
             # Increase this value to reset cache if etc/example-environment.yml has not changed
-            CACHE_NUMBER: 1
+            CACHE_NUMBER: 2
           id: cache-rmgpy-env
         - name: Update environment
-          run: mamba env update -n rmg_env -f RMG-Py/environment.yml
+          run: |
+            sed -i 's/conda-forge::julia>=1.8.5,!=1.9.0/conda-forge::julia>=1.8.5,!=1.9.0, <1.10.0/g' RMG-Py/environment.yml
+            mamba env update -n rmg_env -f RMG-Py/environment.yml
           if: steps.cache-rmgpy-env.outputs.cache-hit != 'true'
 
         - name: Cythonize RMG-Py
