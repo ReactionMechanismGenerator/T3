@@ -1,6 +1,6 @@
 name: CI
 
-on: 
+on:
     pull_request:
         branches:
             - main
@@ -27,7 +27,7 @@ jobs:
             haskell: true
             large-packages: true
             swap-storage: true
-        
+
         - name: Cache RMG
           id: cache-rmg
           uses: actions/cache@v2
@@ -64,7 +64,7 @@ jobs:
             path: RMG-database
             ref: main
             fetch-depth: 1
-        
+ 
         - name: Cache ARC
           id: cache-arc
           uses: actions/cache@v2
@@ -91,9 +91,8 @@ jobs:
             key:
                 ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}-t3
 
-
         - name: Setup RMG-Py Env
-          uses: conda-incubator/setup-miniconda@v2
+          uses: conda-incubator/setup-miniconda@v3.0.1
           with:
               miniforge-variant: Mambaforge
               miniforge-version: latest
@@ -108,12 +107,10 @@ jobs:
               conda-${{ runner.os }}--${{ runner.arch }}-rmgpyenv-${{ env.CACHE_NUMBER}}
           env:
             # Increase this value to reset cache if etc/example-environment.yml has not changed
-            CACHE_NUMBER: 2
+            CACHE_NUMBER: 3
           id: cache-rmgpy-env
         - name: Update environment
-          run: |
-            sed -i 's/conda-forge::julia>=1.8.5,!=1.9.0/conda-forge::julia>=1.8.5,!=1.9.0, <1.10.0/g' RMG-Py/environment.yml
-            mamba env update -n rmg_env -f RMG-Py/environment.yml
+          run: mamba env update -n rmg_env -f RMG-Py/environment.yml
           if: steps.cache-rmgpy-env.outputs.cache-hit != 'true'
 
         - name: Cythonize RMG-Py
@@ -166,7 +163,7 @@ jobs:
             mamba install -c conda-forge pytest-cov
 
         - name: Run T3 Tests
-          shell: bash -el {0} 
+          shell: bash -el {0}
           run: |
             source ~/.bashrc
             conda activate t3_env
