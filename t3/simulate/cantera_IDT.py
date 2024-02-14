@@ -126,7 +126,7 @@ class CanteraIDT(SimulateAdapter):
                     for T in T_list:
                         self.model.TPX = T, P * 1e5, X
                         self.idt_dict[(equivalence_ratios[i], P, T)] = \
-                            self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{P}bar_{T}K.png')
+                            self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{round(P,2)}_bar_{round(T,2)}_K.png')
             if len(T_list) >= 3:
                 plot_idt_vs_temperature(self.idt_dict, figs_path=self.paths['figs'], reactor_index=r)
             reactor_idt_dict[r] = self.idt_dict
@@ -373,7 +373,7 @@ def plot_idt_vs_temperature(idt_dict: dict,
     data = get_idt_per_phi_p_condition(idt_dict)
     for phi, phi_data in data.items():
         for p, phi_p_data in phi_data.items():
-            fig_name = f'R{reactor_index}_{phi}_{p}bar.png'
+            fig_name = f'R{reactor_index}_{phi}_{round(p,2)}_bar.png'
             try:
                 fig, ax = plt.subplots()
                 ax.set_xlabel('1000/T (1/K)')
