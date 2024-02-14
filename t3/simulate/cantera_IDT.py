@@ -121,12 +121,20 @@ class CanteraIDT(SimulateAdapter):
         reactor_idt_dict = dict()
         for r, reactor in enumerate(self.rmg['reactors']):
             T_list, P_list = get_t_and_p_lists(reactor)
-            for i, X in enumerate(concentration_combinations):
+            if equivalence_ratios is not None and concentration_combinations is not None:
+                for i, X in enumerate(concentration_combinations):
+                    for P in P_list:
+                        for T in T_list:
+                            self.model.TPX = T, P * 1e5, X
+                            self.idt_dict[(equivalence_ratios[i], P, T)] = \
+                                self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{round(P,2)}_bar_{round(T,2)}_K.png')
+            else:
+                X = {spc['label']: spc['concentration'] for spc in self.rmg['species'] if spc['concentration']}
                 for P in P_list:
                     for T in T_list:
                         self.model.TPX = T, P * 1e5, X
-                        self.idt_dict[(equivalence_ratios[i], P, T)] = \
-                            self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{round(P,2)}_bar_{round(T,2)}_K.png')
+                        self.idt_dict[(0, P, T)] = \
+                            self.simulate_idt(fig_name=f'R{r}_{round(P,2)}_bar_{round(T,2)}_K.png')
             if len(T_list) >= 3:
                 plot_idt_vs_temperature(self.idt_dict, figs_path=self.paths['figs'], reactor_index=r)
             reactor_idt_dict[r] = self.idt_dict
@@ -199,22 +207,22 @@ class CanteraIDT(SimulateAdapter):
                 return self.model.species()[i].name
         return None
 
-    def get_concentration_combinations(self) -> Tuple[List[float], List[dict]]:
+    def get_concentration_combinations(self) -> Tuple[Optional[List[float]], Optional[List[dict]]]:
         """
         Get concentration combinations according to the equivalence ratios of the fuel.
 
-        Returns: Tuple[List[float], List[dict]]
+        Returns: Tuple[Optional[List[float]], Optional[List[dict]]]
             - List[float]: List of equivalence ratios.
             - List[dict]: List of dictionaries, each is a combination of concentrations for an IDT simulation.
         """
         objects = determine_concentrations_by_equivalence_ratios(species=self.rmg['species'])
         fuel_idx = None
         for i, spc in enumerate(self.rmg['species']):
-            if spc['role'] == 'fuel':
+            if 'role' in spc.keys() and spc['role'] == 'fuel':
                 fuel_idx = i
                 break
         if fuel_idx is None:
-            raise Exception('No species with a designated role "fuel" was found.')
+            return None, None
         equivalence_ratios = self.rmg['species'][fuel_idx]['equivalence_ratios']
         concentration_combinations = list()
         for i, _ in enumerate(equivalence_ratios):
