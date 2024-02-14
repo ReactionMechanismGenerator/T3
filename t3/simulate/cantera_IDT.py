@@ -135,8 +135,12 @@ class CanteraIDT(SimulateAdapter):
                 for P in P_list:
                     for T in T_list:
                         self.model.TPX = T, P * 1e5, X
-                        self.idt_dict[(0, P, T)] = \
-                            self.simulate_idt(fig_name=f'R{r}_{round(P,2)}_bar_{round(T,2)}_K.png')
+                        if equivalence_ratios is None:
+                            self.idt_dict[(0, P, T)] = \
+                                self.simulate_idt(fig_name=f'R{r}_{round(P,2)}_bar_{round(T,2)}_K.png')
+                        else:
+                            self.idt_dict[(equivalence_ratios[i], P, T)] = \
+                                self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{round(P,2)}_bar_{round(T,2)}_K.png')
             if len(T_list) >= 3:
                 plot_idt_vs_temperature(self.idt_dict, figs_path=self.paths['figs'], reactor_index=r)
             reactor_idt_dict[r] = self.idt_dict
@@ -392,11 +396,10 @@ def plot_idt_vs_temperature(idt_dict: dict,
                 ax.set_xlabel('1000/T (1/K)')
                 ax.set_ylabel('IDT (s)')
                 ax.set_title(f'IDT vs. 1000/T, phi = {phi}, P = {p} bar')
-                ax.scatter(phi_p_data.keys(), phi_p_data.values(),label='simulation', color='blue',marker="o")
+                ax.scatter(phi_p_data.keys(), phi_p_data.values(), label='simulation', color='blue', marker="o")
                 ax.set_yscale('log')
-                #Add experimental data specified by the user
                 if exp_data is not None:
-                    ax.scatter(exp_data[0], exp_data[1], label='experiment', color='orange',marker="D")
+                    ax.scatter(exp_data[0], exp_data[1], label='experiment', color='orange', marker="D")
                     ax.set_yscale('log')
                 ax.legend(loc='lower right')
                 fig.savefig(os.path.join(figs_path, fig_name))
