@@ -14,6 +14,8 @@ import numpy as np
 
 from arc.common import save_yaml_file
 
+from rmgpy.chemkin import load_chemkin_file
+
 from t3.common import determine_concentrations_by_equivalence_ratios
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
@@ -315,7 +317,7 @@ def compute_idt(time_history: ct.SolutionArray,
         return None
     try:
         plt.plot(times, concentration)
-        plt.plot(times[idt_index_dc_dt], concentration[idt_index_dc_dt], 'ro')
+        plt.plot(times[idt_index_dc_dt], concentration[idt_index_dc_dt], 'o')
         plt.xlabel('Time (s)')
         plt.ylabel(f'[{radical_label}]')
         plt.title(f'IDT = {idt:.2e} s')
@@ -349,7 +351,7 @@ def get_t_and_p_lists(reactor: dict) -> Tuple[List[float], List[float]]:
         T_list = [reactor['T']]
     else:
         inverse_ts = np.linspace(1 / reactor['T'][1],
-                                 1 / reactor['T'][0], num=15)  # 15 inverse T points
+                                 1 / reactor['T'][0], num=100)  # 15 inverse T points
         T_list = [1 / inverse_t for inverse_t in inverse_ts[::-1]]
     if isinstance(reactor['P'], (int, float)):
         P_list = [reactor['P']]
@@ -364,6 +366,7 @@ def get_t_and_p_lists(reactor: dict) -> Tuple[List[float], List[float]]:
 def plot_idt_vs_temperature(idt_dict: dict,
                             figs_path: str,
                             reactor_index: int = 0,
+                            exp_data: tuple = None,
                             ) -> None:
     """
     Plot IDT vs. 1000/T per phi and P condition combination.
@@ -374,11 +377,13 @@ def plot_idt_vs_temperature(idt_dict: dict,
         idt_dict (dict): A dictionary containing IDT values.
         figs_path (str): The path to the figures' directory.
         reactor_index (int, optional): The reactor index.
+        exp_data (tuple): Experimental data in lists for IDT [sec] and 1000/T [K] 
     """
     figs_path = os.path.join(figs_path, 'IDT_vs_T')
     if not os.path.isdir(figs_path):
         os.makedirs(figs_path)
     data = get_idt_per_phi_p_condition(idt_dict)
+    
     for phi, phi_data in data.items():
         for p, phi_p_data in phi_data.items():
             fig_name = f'R{reactor_index}_{phi}_{round(p,2)}_bar.png'
@@ -387,7 +392,13 @@ def plot_idt_vs_temperature(idt_dict: dict,
                 ax.set_xlabel('1000/T (1/K)')
                 ax.set_ylabel('IDT (s)')
                 ax.set_title(f'IDT vs. 1000/T, phi = {phi}, P = {p} bar')
-                ax.semilogy(phi_p_data.keys(), phi_p_data.values())
+                ax.scatter(phi_p_data.keys(), phi_p_data.values(),label='simulation', color='blue',marker="o")
+                ax.set_yscale('log')
+                #Add experimental data specified by the user
+                if exp_data is not None:
+                    ax.scatter(exp_data[0], exp_data[1], label='experiment', color='orange',marker="D")
+                    ax.set_yscale('log')
+                ax.legend(loc='lower right')
                 fig.savefig(os.path.join(figs_path, fig_name))
             except (AttributeError, ValueError):
                 pass
