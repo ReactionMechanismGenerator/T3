@@ -510,6 +510,26 @@ def test_almost_equal():
     assert almost_equal(1e-5, 1e-6, ratio=100)
     assert almost_equal(1e-6, 1e-5, ratio=100)
 
+def test_closest_bigger_number():
+    """Test getting closest bigger number and its index from a list."""
+    # Test case 1
+    num, i = flux.closest_bigger_number([1, 2, 2.5, 3, 3.5, 4.5, 5], 3.7)
+    assert num == 4.5
+    assert i == 5
+    print("\npassed test case 1")
+
+    # Test case 2
+    num, i = flux.closest_bigger_number([1, 2, 2.5, 3, 3.5, 4.5, 5], 5.5)
+    assert num is None
+    assert i is None
+    print("passed test case 2")
+
+    # Test case 3
+    num, i = flux.closest_bigger_number([1, 2, 2.5, 3, 3.5, 4.5, 5], 0.5)
+    assert num == 1
+    assert i == 0
+    print("passed test case 3")
+
 
 def teardown_module():
     """teardown any state that was previously setup with a setup_module method."""
