@@ -49,7 +49,13 @@ from arc.main import ARC
 from arc.species.species import ARCSpecies, check_label
 from arc.species.converter import check_xyz_dict
 
-from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
+from t3.common import (PROJECTS_BASE_PATH,
+                       VALID_CHARS,
+                       delete_root_rmg_log,
+                       determine_concentrations_by_equivalence_ratios,
+                       get_species_by_label,
+                       time_lapse,
+                       )
 from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
@@ -182,6 +188,7 @@ class T3(object):
         self.rmg = self.schema['rmg']
         self.qm = self.schema['qm']
         self.verbose = self.schema['verbose']
+        self.update_species_concentrations()
 
         if clean_dir and os.path.isdir(self.project_directory):
             self.cleanup()
@@ -1499,6 +1506,18 @@ class T3(object):
                                                             if key in mod_rxn_dict['product_keys']],
                                                   )
                 self.reactions[key] = mod_rxn_dict
+
+    def update_species_concentrations(self):
+        """
+        Update the species concentrations based on species roles and equivalence ratios.
+        """
+        objects = determine_concentrations_by_equivalence_ratios(species=self.rmg['species'])
+        for spc in self.rmg['species']:
+            if spc['role'] == 'fuel' and spc['concentration'] == 0 and objects['fuel'] is not None:
+                spc['concentration'] = objects['fuel']['concentration']
+            elif (spc['role'] == 'oxygen' or (spc['role'] == 'nitrogen' and spc['concentration'] == 0)) \
+                    and objects[spc['role']] is not None:
+                spc['concentration'] = [min(objects[spc['role']]['concentration']), max(objects[spc['role']]['concentration'])]
 
     def check_overtime(self) -> bool:
         """
