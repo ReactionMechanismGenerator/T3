@@ -49,8 +49,10 @@ from t3.common import (DATA_BASE_PATH,
                        PROJECTS_BASE_PATH,
                        VALID_CHARS,
                        delete_root_rmg_log,
+                       determine_concentrations_by_equivalence_ratios,
                        get_species_by_label,
-                       time_lapse)
+                       time_lapse,
+                       )
 from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
@@ -185,6 +187,7 @@ class T3(object):
         self.rmg['database'] = auto_complete_rmg_libraries(database=self.rmg['database'])
         self.qm = self.schema['qm']
         self.verbose = self.schema['verbose']
+        self.update_species_concentrations()
 
         if clean_dir and os.path.isdir(self.project_directory):
             self.cleanup()
@@ -1412,6 +1415,18 @@ class T3(object):
             self.rmg['database'][library_type] = [library_name] + self.rmg['database'][library_type]
         elif library_name in self.rmg['database'][library_type] and not exists_function(library_name):
             self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
+
+    def update_species_concentrations(self):
+        """
+        Update the species concentrations based on species roles and equivalence ratios.
+        """
+        objects = determine_concentrations_by_equivalence_ratios(species=self.rmg['species'])
+        for spc in self.rmg['species']:
+            if spc['role'] == 'fuel' and spc['concentration'] == 0 and objects['fuel'] is not None:
+                spc['concentration'] = objects['fuel']['concentration']
+            elif (spc['role'] == 'oxygen' or (spc['role'] == 'nitrogen' and spc['concentration'] == 0)) \
+                    and objects[spc['role']] is not None:
+                spc['concentration'] = [min(objects[spc['role']]['concentration']), max(objects[spc['role']]['concentration'])]
 
     def check_overtime(self) -> bool:
         """
