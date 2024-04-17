@@ -320,7 +320,7 @@ class RMGConstantTP(SimulateAdapter):
                 v_vals = get_values_within_range(value_range=reactor['V'],
                                                  num=self.t3['options']['num_sa_per_volume_range'])
             for t_val in t_vals:
-                for param in p_vals if ranged_p else v_vals:
+                for param in p_vals if (ranged_p or len(p_vals) == 1) else v_vals:
                     for species_list in species_lists:
                         new_reactor = {k: v for k, v in reactor.items() if k not in ['T', 'P', 'V']}
                         new_reactor['T'] = t_val
@@ -340,10 +340,10 @@ class RMGConstantTP(SimulateAdapter):
         species_lists = list()
         spc_indices_w_ranges = [i for i, spc in enumerate(self.rmg['species'])
                                 if isinstance(spc['concentration'], (list, tuple))]
-        species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in self.rmg['species']
-                        if (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
-                        or spc['balance'] or not spc['reactive']]
-        species_vals = [get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges.index(species_index)]['concentration'],
+        species_list_wo_ranges = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in self.rmg['species']
+                                  if (isinstance(spc['concentration'], (float, int)) and spc['concentration'] > 0)
+                                  or (spc['balance'] and spc['concentration'] == 0)]
+        species_vals = [get_values_within_range(value_range=self.rmg['species'][species_index]['concentration'],
                                                 num=self.t3['options']['num_sa_per_concentration_range'])
                         for species_index in spc_indices_w_ranges]
 
@@ -353,13 +353,13 @@ class RMGConstantTP(SimulateAdapter):
                      if spc['concentration'] > 0 or spc['balance'] or not spc['reactive']]]
 
         # 2. Only two ranged concentrations and modify_concentration_ranges_in_reverse is True
-        if len(spc_indices_w_ranges) == 2 and self.t3['options']['modify_concentration_ranges_in_reverse']:
+        elif len(spc_indices_w_ranges) == 2 and self.t3['options']['modify_concentration_ranges_in_reverse']:
             spc_0_vals = get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[0]]['concentration'],
                                                  num=self.t3['options']['num_sa_per_concentration_range'])
             spc_1_vals = get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[1]]['concentration'],
                                                  num=self.t3['options']['num_sa_per_concentration_range'])
             for val_0, val_1 in zip(spc_0_vals, spc_1_vals[::-1]):
-                new_species_list = species_list
+                new_species_list = species_list_wo_ranges
                 new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[0]]['label'],
                                          'concentration': val_0})
                 new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[1]]['label'],
@@ -368,17 +368,17 @@ class RMGConstantTP(SimulateAdapter):
 
         # 3. No combinations, modify_concentration_ranges_together is True
         elif self.t3['options']['modify_concentration_ranges_together']:
-                for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
-                    new_species_list = species_list
-                    for i, spc_index in enumerate(spc_indices_w_ranges):
-                        new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
-                                                'concentration': species_vals[i][point_number]})
+            for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
+                new_species_list = [entry for entry in species_list_wo_ranges]
+                for i, spc_index in enumerate(spc_indices_w_ranges):
+                    new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
+                                            'concentration': species_vals[i][point_number]})
                 species_lists.append(new_species_list)
 
         # 4. Combinations (products)
         else:
             for vals in itertools.product(*species_vals):
-                new_species_list = species_list
+                new_species_list = species_list_wo_ranges
                 for i, val in enumerate(vals):
                     new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[i]]['label'],
                                              'concentration': val})
