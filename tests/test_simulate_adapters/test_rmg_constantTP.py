@@ -8,6 +8,8 @@ t3 tests test_rmg_constantTP module
 import os
 import shutil
 
+from arc.common import read_yaml_file
+
 from t3.common import SIMULATE_DATA_BASE_PATH
 from tests.common import run_minimal
 from t3.main import T3
@@ -17,6 +19,7 @@ from t3.simulate.rmg_constantTP import RMGConstantTP
 TEST_DIR_1 = os.path.join(SIMULATE_DATA_BASE_PATH, 'rmg_simulator_test')
 TEST_DIR_2 = os.path.join(SIMULATE_DATA_BASE_PATH, 'rmg_simulator_test_ranges_3a')
 TEST_DIR_3 = os.path.join(SIMULATE_DATA_BASE_PATH, 'rmg_simulator_test_ranges_3b')
+TEST_DIR_4 = os.path.join(SIMULATE_DATA_BASE_PATH, 'rmg_simulator_test_ranges_3c')
 RANGED_INPUT_DICT_1 = {'verbose': 10, 'project_directory': TEST_DIR_2,
                        'project': 'test_get_species_concentration_lists_from_ranged_params_case_3a',
                        't3': {'options': {'max_T3_iterations': 2, 'max_RMG_walltime': '00:00:05:00'},
@@ -35,6 +38,7 @@ RANGED_INPUT_DICT_2 = {'verbose': 10, 'project_directory': TEST_DIR_3,
                                              'T': 1000, 'P': 1, 'termination_rate_ratio': 0.1}],
                                'model': {'core_tolerance': [0.01, 0.001]}},
                        'qm': {'adapter': 'ARC', 'level_of_theory': 'b3lyp/6-31g(d,p)'}}
+
 
 def test_set_up_no_sa():
     """
@@ -178,6 +182,29 @@ def test_get_species_concentration_lists_from_ranged_params_case_3():
                              [{'label': 'FA', 'concentration': 4.0},
                               {'label': 'N2', 'concentration': 3.76},
                               {'label': 'O2', 'concentration': 1.0}]]
+
+
+def test_run_sa_via_rmg():
+    """Test running sensitivity analysis via RMG"""
+    input_dict = read_yaml_file(os.path.join(TEST_DIR_4, 'input.yml'))
+    input_dict['project_directory'] = TEST_DIR_4
+    t3_object = T3(**input_dict)
+    t3_object.iteration = 1
+    t3_object.set_paths()
+    t3_object.sa_observable = ['FA']
+    simulate_adapter = RMGConstantTP(t3=t3_object.t3,
+                                     rmg=t3_object.rmg,
+                                     paths=t3_object.paths,
+                                     logger=t3_object.logger,
+                                     atol=t3_object.rmg['model']['atol'],
+                                     rtol=t3_object.rmg['model']['rtol'],
+                                     observable_list=t3_object.sa_observables,
+                                     sa_atol=t3_object.t3['sensitivity']['atol'],
+                                     sa_rtol=t3_object.t3['sensitivity']['rtol'],
+                                     global_observables=None,
+                                     )
+    simulate_adapter.simulate()
+    t3_object.sa_dict = simulate_adapter.get_sa_coefficients()
 
 
 def teardown_module():
