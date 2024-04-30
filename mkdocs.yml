@@ -1,6 +1,6 @@
 # Project information
 site_name: T3
-site_description: The Tandem Tool for automated chemical kinetic model development
+site_description: The Tandem Tool for automated kinetic model generation and refinement
 site_author: Alon Grinberg Dana
 site_url: https://reactionmechanismgenerator.github.io/T3/
 

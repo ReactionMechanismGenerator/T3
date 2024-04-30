@@ -116,6 +116,7 @@ class RMGConstantTP(SimulateAdapter):
         write_rmg_input_file(
             rmg=self.generate_rmg_reactors_for_simulation(),
             t3=self.t3,
+            iteration=1,  # Does not matter for simulating or computing SA.
             path=self.rmg_input_file,
             walltime=self.t3['options']['max_RMG_walltime'],
         )
@@ -358,7 +359,7 @@ class RMGConstantTP(SimulateAdapter):
             spc_1_vals = get_values_within_range(value_range=self.rmg['species'][spc_indices_w_ranges[1]]['concentration'],
                                                  num=self.t3['options']['num_sa_per_concentration_range'])
             for val_0, val_1 in zip(spc_0_vals, spc_1_vals[::-1]):
-                new_species_list = species_list_wo_ranges
+                new_species_list = species_list_wo_ranges  # Not final - needs modification
                 new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[0]]['label'],
                                          'concentration': val_0})
                 new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[1]]['label'],
@@ -377,7 +378,7 @@ class RMGConstantTP(SimulateAdapter):
         # 4. Combinations (products)
         else:
             for vals in itertools.product(*species_vals):
-                new_species_list = species_list_wo_ranges
+                new_species_list = species_list_wo_ranges  # Not final - needs modification
                 for i, val in enumerate(vals):
                     new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[i]]['label'],
                                              'concentration': val})

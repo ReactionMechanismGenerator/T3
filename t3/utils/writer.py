@@ -18,9 +18,8 @@ METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
 
 def write_rmg_input_file(rmg: dict,
                          t3: dict,
+                         iteration: int,
                          path: str,
-                         iteration: int = 1,
-                         run_sa: bool = False,
                          walltime: str = '00:00:00:00',
                          ):
     """
@@ -30,10 +29,8 @@ def write_rmg_input_file(rmg: dict,
     Args:
         rmg (dict): The arguments to write in a keyword argument dictionary format.
         t3 (dict): The T3 arguments in a keyword argument dictionary format. Includes atol and rtol for SA.
+        iteration (int): The T3 iteration, used to determine ``core_tolerance`` and ``tolerance_interrupt_simulation``.
         path (str): The path where the RMG input file should be saved.
-        iteration (int, optional): The T3 iteration, used to determine ``core_tolerance`` and
-                                   ``tolerance_interrupt_simulation``. Does not matter for simulating or computing SA.
-        run_sa (bool, optional): Whether to add sensitivity analysis information into the RMG input file.
         walltime (str, optional): The time cap for an RMG run. Should pass here t3['options']['max_RMG_walltime']
     """
     rmg = rmg.copy()
@@ -103,7 +100,7 @@ simpleReactor(
     pressure=${pressure},
     initialMoleFractions={${concentrations()}    },
     ${termination}
-    nSims=${conditions_per_iteration},${balance}${constant}${sensitivity}
+    nSims=${conditions_per_iteration},${balance}${constant}
 )
 <%def name="concentrations()">
 % for spc in species_list:
@@ -121,7 +118,7 @@ liquidReactor(
     temperature=${temperature},
     initialConcentrations={${concentrations()}    },
     ${termination}
-    nSims=${conditions_per_iteration},${constant}${sensitivity}
+    nSims=${conditions_per_iteration},${constant}
 )
 <%def name="concentrations()">
 % for spc in species_list:
@@ -169,16 +166,6 @@ liquidReactor(
                     constant = '\n    constantSpecies=['
                 constant += f"'{spc['label']}', "
         constant += '],' if constant else ''
-        sensitivity = ''
-        observables = [spc['label'] for spc in species if spc['observable']]
-        if run_sa and len(observables):
-            sensitivity = '\n    sensitivity=['
-            for i, observable in enumerate(observables):
-                sensitivity += f"'{observable}'"
-                if i < len(observables) - 1:
-                    sensitivity += ', '
-            sensitivity += f"],\n    sensitivityThreshold={t3['sensitivity']['SA_threshold']}"
-
 
         if reactor['type'] == 'gas batch constant T P':
             if isinstance(reactor['P'], float):
@@ -201,7 +188,6 @@ liquidReactor(
                 conditions_per_iteration=reactor['conditions_per_iteration'],
                 balance=balance,
                 constant=constant,
-                sensitivity=sensitivity,
             )
 
         elif reactor['type'] == 'liquid batch constant T V':

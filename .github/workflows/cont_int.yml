@@ -1,6 +1,6 @@
 name: CI
 
-on:
+on: 
     pull_request:
         branches:
             - main
@@ -17,17 +17,6 @@ jobs:
         - name: Checkout T3
           uses: actions/checkout@v3
         
-        - name: Clean Ubuntu Image
-          uses: kfir4444/free-disk-space@main
-          with:
-            # This may remove tools actually needed - currently does not
-            tool-cache: true
-            android: true
-            dotnet: true
-            haskell: true
-            large-packages: true
-            swap-storage: true
-
         - name: Cache RMG
           id: cache-rmg
           uses: actions/cache@v2
@@ -64,7 +53,7 @@ jobs:
             path: RMG-database
             ref: main
             fetch-depth: 1
- 
+        
         - name: Cache ARC
           id: cache-arc
           uses: actions/cache@v2
@@ -91,8 +80,9 @@ jobs:
             key:
                 ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}-t3
 
+
         - name: Setup RMG-Py Env
-          uses: conda-incubator/setup-miniconda@v3.0.1
+          uses: conda-incubator/setup-miniconda@v2
           with:
               miniforge-variant: Mambaforge
               miniforge-version: latest
@@ -107,7 +97,7 @@ jobs:
               conda-${{ runner.os }}--${{ runner.arch }}-rmgpyenv-${{ env.CACHE_NUMBER}}
           env:
             # Increase this value to reset cache if etc/example-environment.yml has not changed
-            CACHE_NUMBER: 3
+            CACHE_NUMBER: 0
           id: cache-rmgpy-env
         - name: Update environment
           run: mamba env update -n rmg_env -f RMG-Py/environment.yml
@@ -117,7 +107,6 @@ jobs:
           run: |
             cd RMG-Py
             conda activate rmg_env
-            make clean
             make
             echo "PYTHONPATH=$(pwd):$PYTHONPATH" >> $GITHUB_ENV
             echo "PATH=$(pwd):$PATH" >> $GITHUB_ENV
@@ -125,12 +114,31 @@ jobs:
             echo "PYTHONPATH=$(pwd):$PYTHONPATH" >> ~/.bashrc
             echo "PATH=$(pwd):$PATH" >> ~/.bashrc
             echo "export rmgpy_path=$(pwd)" >> ~/.bashrc
-
-        - name: Install RMS Julia
-          run: julia -e 'using Pkg; Pkg.add(PackageSpec(name="PyCall",rev="master"));Pkg.build("PyCall");Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main")); using ReactionMechanismSimulator;'
-
+        
         - name: Install PyCall RMG_ENV
           run: python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
+        
+        - name: Cache RMS
+          id: cache-rms
+          uses: actions/cache@v2
+          env:
+            CACHE_NUMBER: 0
+          with:
+            path: | 
+                /usr/share/miniconda3/envs/rmg_env/share/julia/artifacts/
+                /usr/share/miniconda3/envs/rmg_env/share/julia/packages/
+                /usr/share/miniconda3/envs/rmg_env/share/julia/registries/
+                /usr/share/miniconda3/envs/rmg_env/share/julia/compiled/
+            key:
+                ${{ runner.os }}-julia-${{ env.CACHE_NUMBER }}-rms
+
+        - name: Install RMS Julia
+          run: julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main"));using ReactionMechanismSimulator'
+
+        - name: Link Python-JL
+          run: |
+            ln -sfn $(which python-jl) $(which python)
+            cd .. 
 
         - name: Install ARC ENV
           run: |
@@ -163,7 +171,7 @@ jobs:
             mamba install -c conda-forge pytest-cov
 
         - name: Run T3 Tests
-          shell: bash -el {0}
+          shell: bash -el {0} 
           run: |
             source ~/.bashrc
             conda activate t3_env

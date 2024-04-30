@@ -8,7 +8,6 @@ t3 tests test_tandem module
 import datetime
 import os
 import shutil
-import re
 
 from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.reaction import Reaction
@@ -735,12 +734,7 @@ def test_determine_species_based_on_collision_violators():
         'S(26357)',
         'S(25149)'
     ]
-    expected_numeric_identifiers = [int(re.findall(r'\((\d+)\)', species)[0]) for species in expected_species_to_calc]
-    numeric_identifiers = [int(re.findall(r'\((\d+)\)', t3.species[index]['Chemkin label'])[0]) for index in species_to_calc]
-
-    # Assert that the numeric identifiers are the same
-    # We do this because 'S' is a generic label for a species, and the numeric identifier is what distinguishes them
-    assert expected_numeric_identifiers == numeric_identifiers
+    assert [t3.species[index]['Chemkin label'] for index in species_to_calc] == expected_species_to_calc
 
 
 def test_trsh_rmg_tol():
@@ -871,7 +865,7 @@ def test_add_reaction():
 
     assert t3.get_reaction_key(reaction=rmg_reactions[342]) == 0
     assert t3.reactions[0]['RMG label'] == 's0_H + s1_CC=CCCC <=> s2_S2XC6H13'
-    assert 'H(2)+C6H12(1229)<=>S2XC6H13(794)' in t3.reactions[0]['Chemkin label']
+    assert 'H(2)+S(1229)=C6H13(794)' in t3.reactions[0]['Chemkin label']
     assert t3.reactions[0]['QM label'] == 's0_H + s1_CC=CCCC <=> s2_S2XC6H13'
     assert t3.reactions[0]['SMILES label'] == '[H] + CC=CCCC <=> CC[CH]CCC'
     assert isinstance(t3.reactions[0]['object'], Reaction)
@@ -881,7 +875,7 @@ def test_add_reaction():
 
     assert t3.get_reaction_key(reaction=rmg_reactions[100]) == 1
     assert t3.reactions[1]['RMG label'] == 's3_S2XC12H25 + s4_fuel <=> s5_S3XC12H25 + s4_fuel'
-    assert 'S2XC12H25(839)+fuel(1)<=>S3XC12H25(840)+fuel(1)' in t3.reactions[1]['Chemkin label']
+    assert 'S(839)+fuel(1)=S(840)+fuel(1)' in t3.reactions[1]['Chemkin label']
     assert t3.reactions[1]['QM label'] == 's3_S2XC12H25 + s4_fuel <=> s5_S3XC12H25 + s4_fuel'
     assert t3.reactions[1]['SMILES label'] == 'CC[CH]CCCCCCCCC + CCCCCCCCCCCC <=> CCC[CH]CCCCCCCC + CCCCCCCCCCCC'
     assert isinstance(t3.reactions[1]['object'], Reaction)
@@ -891,7 +885,7 @@ def test_add_reaction():
 
     assert t3.get_reaction_key(reaction=rmg_reactions[14]) == 2
     assert t3.reactions[2]['RMG label'] == 's6_PC4H9 <=> s7_C2H4 + s8_C2H5'
-    assert 'PC4H9(191)<=>C2H4(22)+C2H5(52)' in t3.reactions[2]['Chemkin label']
+    assert 'PC4H9(191)=C2H4(22)+C2H5(52)' in t3.reactions[2]['Chemkin label']
     assert t3.reactions[2]['QM label'] == 's6_PC4H9 <=> s7_C2H4 + s8_C2H5'
     assert t3.reactions[2]['SMILES label'] == '[CH2]CCC <=> C=C + C[CH2]'
     assert isinstance(t3.reactions[2]['object'], Reaction)
