@@ -321,7 +321,7 @@ class T3(object):
                     self.run_arc(arc_kwargs=self.qm)
                     self.process_arc_run()
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
-                # T3 iterated through all of the user requested tolerances, and there are no more calculations required
+                # T3 iterated through all the user requested tolerances, and there are no more calculations required
                 break
 
             if self.check_overtime():
@@ -1231,6 +1231,7 @@ class T3(object):
     def add_species(self,
                     species: Species,
                     reasons: Union[List[str], str],
+                    compute_thermo: bool = True,
                     ) -> Optional[int]:
         """
         Add a species to self.species and to self.qm['species'].
@@ -1239,6 +1240,7 @@ class T3(object):
         Args:
             species (Species): The species to consider.
             reasons (Union[List[str], str]): Reasons for calculating this species.
+            compute_thermo (bool, optional): Whether to compute thermo for this species (default: ``True``).
 
         Returns:
             Optional[int]: The T3 species index (the respective self.species key) if the species was just added,
@@ -1256,6 +1258,7 @@ class T3(object):
                                  'reasons': reasons,
                                  'converged': None,
                                  'iteration': self.iteration,
+                                 'compute_thermo': compute_thermo,
                                  }
 
             # Check whether T3 has xyz information for this species, if so process it.
@@ -1274,7 +1277,7 @@ class T3(object):
                             xyzs.append(xyz_dict)
                     if len(xyzs):
                         if self.qm['adapter'] == 'ARC':
-                            # Make qm_species and ARCSpecies instance to consider the xyz information
+                            # Make qm_species an ARCSpecies instance to consider the xyz information
                             qm_species = ARCSpecies(label=qm_species.label,
                                                     rmg_species=qm_species,
                                                     xyz=xyzs,
@@ -1283,6 +1286,17 @@ class T3(object):
                         else:
                             raise NotImplementedError(f"Passing XYZ information to {self.qm['adapter']} "
                                                       f"is not yet implemented.")
+            if not self.species_requires_refinement(qm_species):
+                if isinstance(qm_species, ARCSpecies):
+                    qm_species.compute_thermo = False
+                    qm_species.include_in_thermo_lib = False
+                else:
+                    qm_species = ARCSpecies(label=qm_species.label,
+                                            rmg_species=qm_species,
+                                            xyz=None,
+                                            compute_thermo=False,
+                                            include_in_thermo_lib=False,
+                                            )
             self.qm['species'].append(qm_species)
             return key
 
