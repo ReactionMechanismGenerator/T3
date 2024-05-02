@@ -805,8 +805,8 @@ class T3(object):
         """
         reaction_keys, pdep_rxns_to_explore = list(), list()
         if not os.path.isdir(self.paths['SA solver']):
-            self.logger.error("Could not find the path to the SA solver output folder.\n"
-                              "Not performing refinement based on sensitivity analysis!")
+            self.logger.error(f"Could not find the path to the SA solver output folder:\n{self.paths['SA solver']}\n"
+                              f"Not performing refinement based on sensitivity analysis!")
             return reaction_keys
 
         sa_dict_max = dict()
