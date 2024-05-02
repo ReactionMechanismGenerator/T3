@@ -235,17 +235,16 @@ class RMGConstantTP(SimulateAdapter):
              sa_dict (Optional[dict]): An SA dictionary, structure is given in the docstring for T3/t3/main.py
         """
         chem_to_rmg_rxn_index_map = get_chem_to_rmg_rxn_index_map(chem_annotated_path=self.paths['chem annotated'])
-        solver_path = os.path.join(self.paths['SA'], 'solver')
-        if not os.path.exists(solver_path):
-            self.logger.error("Could not find the path to RMG's SA solver output folder.")
+        if not os.path.exists(self.paths['SA solver']):
+            self.logger.error(f"Could not find the path to RMG's SA solver output folder:\n{self.paths['SA solver']}.")
             return None
         sa_files = list()
-        for file_ in os.listdir(solver_path):
+        for file_ in os.listdir(self.paths['SA solver']):
             if 'sensitivity' in file_ and file_.endswith(".csv"):
                 sa_files.append(file_)
         sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
         for sa_file in sa_files:
-            df = pd.read_csv(os.path.join(solver_path, sa_file))
+            df = pd.read_csv(os.path.join(self.paths['SA solver'], sa_file))
             for header in df.columns:
                 sa_type = None
                 if 'Time' in header:
