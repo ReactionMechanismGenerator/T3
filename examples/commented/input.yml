@@ -67,6 +67,7 @@ rmg:
   # general
   rmg_execution_type: incore  # optional, determines how to execute RMG. Currently, `incore` (running in the same process) and `local` (submitting to the local server queue, not via SSH) are supported. This argument is set from T3's settings.py file unless explicitly given here, default: ``None``
   memory: 15  # optional, specifies the RMG memory to be used when executing on a server, units are GB. This argument is set from T3's settings.py file unless explicitly given here, default: ``None``
+  cpus: 16  # optional, specifies the number of processes to use for an RMG job. Could also be set from T3's settings.py file if not explicitly given here, default: 16
 
   # database (a required block)
   database:
