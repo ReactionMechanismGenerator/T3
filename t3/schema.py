@@ -526,6 +526,7 @@ class RMG(BaseModel):
     """
     rmg_execution_type: Optional[str] = None
     memory: Optional[conint(ge=0)] = None
+    cpus: Optional[conint(gt=0)] = None
     database: RMGDatabase
     reactors: List[RMGReactor]
     species: List[RMGSpecies]
