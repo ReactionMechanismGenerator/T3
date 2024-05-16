@@ -3,7 +3,7 @@ Submit scripts
 """
 
 # Submission scripts stored as a dictionary with software as the primary key.
-submit_scripts = {
+#submit_scripts = {
 #     'rmg': """#!/bin/bash -l
 # #SBATCH -J {name}
 # #SBATCH -t 05-00:00:00
@@ -57,11 +57,41 @@ submit_scripts = {
 # touch final_time
 # 
 # """,
-    'rmg': """#!/bin/bash -l
 
+submit_scripts = {
+    'rmg': {
+        'Slurm': """#!/bin/bash -l
+#SBATCH -p hpc
+#SBATCH -J {name}
+#SBATCH -N 1
+#SBATCH --cpus-per-task={cpus}
+#SBATCH --mem={memory}
+#SBATCH -o out.txt
+#SBATCH -e err.txt
+
+# Source 
+source /home/azureuser/.bashrc
+source /etc/profile.d/00-aliases.sh
+
+# Export
+export PATH=$PATH:/home/azureuser/Code/RMG-Py
+export PYTHONPATH=$PYTHONPATH:/home/azureuser/Code/RMG-Py
+
+# It appears this is needed to keep the julia files writable...
+sudo chmod 0777 -R /opt/mambaforge
+
+conda activate rmg_env
+
+touch initial_time
+
+python-jl /home/azureuser/Code/RMG-Py/rmg.py {max_iterations} -n {cpus} input.py 
+
+touch final_time
+
+""",
+        'PBS': """#!/bin/bash -l
 #PBS -N {name}
-#PBS -q zeus_long_q
-#PBS -l walltime=168:00:00
+#PBS -q zeus_combined_q
 #PBS -l select=1:ncpus={cpus}
 #PBS -o out.txt
 #PBS -e err.txt
@@ -73,9 +103,10 @@ conda activate rmg_env
 
 touch initial_time
 
-python-jl $rmgpy_path/rmg.py -n {cpus} input.py{max_iterations}
+python-jl ~/Code/RMG-Py/rmg.py -n {cpus} input.py {max_iterations}
 
 touch final_time
 
 """,
+    }
 }

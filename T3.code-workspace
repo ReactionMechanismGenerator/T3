@@ -1,13 +1,10 @@
 {
 	"folders": [
 		{
+			"path": "../../../../.t3"
+		},
+		{
 			"path": "."
-		},
-		{
-			"path": "../ARC"
-		},
-		{
-			"path": "../RMG-Py"
 		}
 	],
 	"settings": {}

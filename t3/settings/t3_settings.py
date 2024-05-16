@@ -10,12 +10,12 @@ Any definitions made to the local file will take precedence over this file.
 # or 'local', i.e., to be submitted to the server queue if running on a server.
 # If running on a local server, ARC's settings for ``local`` will be used.
 execution_type = {
-    'rmg': 'local',
+    'rmg': 'queue',
     'arc': 'incore',
 }
 
 servers = {
-    'local': {
+    'azure': {
         'cluster_soft': 'PBS',
         'cpus': 16,
         'max mem': 40,  # GB
