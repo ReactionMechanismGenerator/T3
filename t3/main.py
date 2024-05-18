@@ -382,12 +382,12 @@ class T3(object):
             'ARC thermo lib': os.path.join(iteration_path, 'ARC', 'output', 'RMG libraries', 'thermo',
                                            f"{self.qm['project'] if 'project' in self.qm else self.project}.py"),
             'ARC kinetics lib': os.path.join(iteration_path, 'ARC', 'output', 'RMG libraries', 'kinetics'),
-            'RMG T3 thermo lib': os.path.join(RMG_THERMO_LIB_BASE_PATH, f"{self.t3['options']['library_name']}.py") \
-                if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-                else os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}.py"),
-            'RMG T3 kinetics lib': os.path.join(RMG_KINETICS_LIB_BASE_PATH, f"{self.t3['options']['library_name']}") \
-                if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-                else os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}"),
+            'RMG T3 thermo lib': os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}.py"),
+            'RMG T3 kinetics lib': os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}"),
+            'shared RMG T3 thermo lib': os.path.join(RMG_THERMO_LIB_BASE_PATH, f"{self.t3['options']['shared_library_name']}.py")
+                if self.t3['options']['shared_library_name'] is not None else None,
+            'shared RMG T3 kinetics lib': os.path.join(RMG_KINETICS_LIB_BASE_PATH, f"{self.t3['options']['shared_library_name']}")
+                if self.t3['options']['shared_library_name'] is not None else None,
         }
 
     def restart(self) -> Tuple[int, bool]:
@@ -594,29 +594,16 @@ class T3(object):
         Run RMG.
 
         Raises:
-            Various RMG Exceptions: if RMG crushed too many times.
+            Various RMG Exceptions if RMG crushed too many times.
         """
         self.logger.info(f'Running RMG (tolerance = {self.get_current_rmg_tol()}, iteration {self.iteration})...')
 
         # Use the RMG T3 libraries only if they exist and not already in use.
-        # 1. thermo
-        t3_thermo_lib = self.t3['options']['library_name'] if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-            else self.paths['RMG T3 thermo lib']
-        if t3_thermo_lib not in self.rmg['database']['thermo_libraries'] \
-                and os.path.isfile(self.paths['RMG T3 thermo lib']):
-            self.rmg['database']['thermo_libraries'] = [t3_thermo_lib] + self.rmg['database']['thermo_libraries']
-        elif t3_thermo_lib in self.rmg['database']['thermo_libraries'] \
-                and not os.path.isfile(self.paths['RMG T3 thermo lib']):
-            self.rmg['database']['thermo_libraries'].pop(self.rmg['database']['thermo_libraries'].index(t3_thermo_lib))
-        # 2. kinetics
-        t3_kinetics_lib = self.t3['options']['library_name'] if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-            else self.paths['RMG T3 kinetics lib']
-        if t3_kinetics_lib not in self.rmg['database']['kinetics_libraries'] \
-                and os.path.isdir(self.paths['RMG T3 kinetics lib']):
-            self.rmg['database']['kinetics_libraries'] = [t3_kinetics_lib] + self.rmg['database']['kinetics_libraries']
-        elif t3_kinetics_lib in self.rmg['database']['kinetics_libraries'] \
-                and not os.path.isdir(self.paths['RMG T3 kinetics lib']):
-            self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(t3_kinetics_lib))
+        for token in ['thermo', 'kinetics']:
+            t3_lib, shared_rmg_lib = self.paths[f'RMG T3 {token} lib'], self.paths[f'shared RMG T3 {token} lib']
+            if shared_rmg_lib is not None:
+                self.add_library_to_rmg_run(library_name=shared_rmg_lib, library_type=token)
+            self.add_library_to_rmg_run(library_name=t3_lib, library_type=token)
 
         write_rmg_input_file(
             rmg=self.rmg,
@@ -1500,6 +1487,24 @@ class T3(object):
                                                             if key in mod_rxn_dict['product_keys']],
                                                   )
                 self.reactions[key] = mod_rxn_dict
+
+    def add_library_to_rmg_run(self,
+                               library_name: str,
+                               library_type: str,
+                               ) -> None:
+        """
+        Add a library to the RMG run.
+
+        Args:
+            library_name (str): The library name.
+            library_type (str): The library type, either 'thermo' or 'kinetics'.
+        """
+        library_type = 'thermo_libraries' if library_type == 'thermo' else 'kinetics_libraries'
+        exists_function = os.path.isfile if library_type == 'thermo_libraries' else os.path.isdir
+        if library_name not in self.rmg['database'][library_type] and exists_function(library_name):
+            self.rmg['database'][library_type] = [library_name] + self.rmg['database'][library_type]
+        elif library_name in self.rmg['database'][library_type] and not os.path.isfile(library_name):
+            self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
 
     def check_overtime(self) -> bool:
         """
