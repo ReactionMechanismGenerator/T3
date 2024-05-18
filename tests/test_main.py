@@ -2,7 +2,7 @@
 # encoding: utf-8
 
 """
-t3 tests test_tandem module
+t3 tests test_main module
 """
 
 import datetime
@@ -10,12 +10,10 @@ import os
 import shutil
 import re
 
-from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.reaction import Reaction
 from rmgpy.rmg.pdep import PDepNetwork, PDepReaction
 from rmgpy.species import Species
 from rmgpy.thermo import NASA, ThermoData
-from rmgpy.statmech import Conformer, IdealGasTranslation, NonlinearRotor, HarmonicOscillator
 
 from arc.common import read_yaml_file
 from arc.species import ARCSpecies
@@ -51,8 +49,9 @@ t3_minimal = {'options': {'all_core_reactions': False,
                           'num_sa_per_pressure_range': 3,
                           'num_sa_per_temperature_range': 3,
                           'num_sa_per_volume_range': 3,
-                          'save_libraries_directly_in_rmgdb': False,
-                          'profiles_adapter': 'RMG'},
+                          'profiles_adapter': 'RMG',
+                          'shared_library_name': None,
+                          },
               'sensitivity': {'ME_methods': ['CSE', 'MSC'],
                               'SA_threshold': 0.01,
                               'adapter': 'RMGConstantTP',
@@ -289,11 +288,16 @@ def test_set_paths():
              'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
              'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
                              'species_dictionary.txt',
-             'RMG T3 thermo lib': 'test_minimal_delete_after_usage/Libraries/T3lib.py',
-             'RMG T3 kinetics lib': 'test_minimal_delete_after_usage/Libraries/T3',
+             'T3 thermo lib': 'test_minimal_delete_after_usage/Libraries/T3lib.py',
+             'T3 kinetics lib': 'test_minimal_delete_after_usage/Libraries/T3',
+             'shared T3 thermo lib': None,
+             'shared T3 kinetics lib': None,
              }
     for key, path in t3.paths.items():
-        assert paths[key] in path
+        if path is None:
+            assert paths[key] is None
+        else:
+            assert paths[key] in path
 
 
 def test_restart():
@@ -467,15 +471,15 @@ def test_process_arc_run():
     t3.process_arc_run()
     assert t3.species[0]['converged'] is True
     assert t3.species[1]['converged'] is False
-    assert os.path.isfile(t3.paths['RMG T3 thermo lib'])
-    with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
+    assert os.path.isfile(t3.paths['T3 thermo lib'])
+    with open(t3.paths['T3 thermo lib'], 'r') as f:
         lines = f.readlines()
     for line in ['name = "T3"\n',
                  "Species imipramine_ol_2_ket_4 (run time: 1 day, 8:24:38)\n",
                  '    label = "imipramine_ol_2_ket_4",\n',
                  "        E0 = (-171.078,'kJ/mol'),\n"]:
         assert line in lines
-    os.remove(t3.paths['RMG T3 thermo lib'])
+    os.remove(t3.paths['T3 thermo lib'])
 
 
 def test_get_current_rmg_tol():
@@ -922,133 +926,6 @@ def test_add_reaction():
     assert rmg_rxn_1.products[1].label == 's12_NO'
 
 
-def test_add_to_rmg_library():
-    """Test adding thermo calculations to an existing thermo library"""
-    libraries_path = os.path.join(DATA_BASE_PATH, 'libraries')
-    if not os.path.isdir(libraries_path):
-        os.makedirs(libraries_path)
-
-    spc_1 = Species(
-        index=1,
-        label='C2H4',
-        thermo=ThermoData(
-            Tdata=([300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0], 'K'),
-            Cpdata=([3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0], 'cal/(mol*K)'),
-            H298=(-20.0, 'kcal/mol'),
-            S298=(50.0, 'cal/(mol*K)'),
-            Tmin=(300.0, 'K'),
-            Tmax=(2000.0, 'K'),
-        ),
-        conformer=Conformer(
-            E0=(0.0, 'kJ/mol'),
-            modes=[
-                IdealGasTranslation(mass=(28.03, 'amu')),
-                NonlinearRotor(inertia=([5.6952e-47, 2.7758e-46, 3.3454e-46], 'kg*m^2'), symmetry=1),
-                HarmonicOscillator(frequencies=([834.50, 973.31, 975.37, 1067.1, 1238.5, 1379.5, 1472.3, 1691.3,
-                                                 3121.6, 3136.7, 3192.5, 3221.0], 'cm^-1')),
-            ],
-            spin_multiplicity=1,
-            optical_isomers=1,
-        ),
-        smiles='C=C',
-    )
-
-    spc_2 = Species(
-        index=2,
-        label='CH4',
-        thermo=ThermoData(
-            Tdata=([300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0], 'K'),
-            Cpdata=([3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0], 'cal/(mol*K)'),
-            H298=(-50.0, 'kcal/mol'),
-            S298=(100.0, 'cal/(mol*K)'),
-            Tmin=(300.0, 'K'),
-            Tmax=(2000.0, 'K'),
-        ),
-        conformer=Conformer(
-            E0=(0.0, 'kJ/mol'),
-            modes=[
-                IdealGasTranslation(mass=(28.03, 'amu')),
-                NonlinearRotor(inertia=([5.6952e-47, 2.7758e-46, 3.3454e-46], 'kg*m^2'), symmetry=1),
-            ],
-            spin_multiplicity=1,
-            optical_isomers=1,
-        ),
-        smiles='C',
-    )
-
-    spc_3 = Species(
-        index=2,
-        label='C3H7',
-        thermo=ThermoData(
-            Tdata=([300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0], 'K'),
-            Cpdata=([3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0], 'cal/(mol*K)'),
-            H298=(-92.0, 'kcal/mol'),  # this is different
-            S298=(12.0, 'cal/(mol*K)'),  # this is different
-            Tmin=(300.0, 'K'),
-            Tmax=(2000.0, 'K'),
-        ),
-        conformer=Conformer(
-            E0=(0.0, 'kJ/mol'),
-            modes=[
-                IdealGasTranslation(mass=(28.03, 'amu')),
-                NonlinearRotor(inertia=([5.6952e-47, 2.7758e-46, 3.3454e-46], 'kg*m^2'), symmetry=1),
-            ],
-            spin_multiplicity=1,
-            optical_isomers=1,
-        ),
-        smiles='[CH2]CC',
-    )
-
-    # 1. Test adding one species to an existing library.
-    for lib_name, spc_list in [('RMG_library', [spc_1, spc_2]), ('ARC_library', [spc_3])]:
-        thermo_library = ThermoLibrary(name=lib_name, long_desc=lib_name)
-        for i, spc in enumerate(spc_list):
-            thermo_library.load_entry(index=i,
-                                      label=spc.label,
-                                      molecule=spc.to_adjacency_list(),
-                                      thermo=spc.thermo,
-                                      shortDesc=spc.label,
-                                      longDesc=spc.label)
-        thermo_library.save(os.path.join(libraries_path, f'{lib_name}.py'))
-
-    t3 = run_minimal()
-    t3.set_paths()
-    t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
-    t3.paths['RMG T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
-    t3.add_to_rmg_libraries()
-    with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
-        lines = f.readlines()
-    for line in ["        H298 = (-92,'kcal/mol'),\n",
-                 "        S298 = (12,'cal/(mol*K)'),\n",
-                 ]:
-        assert line in lines
-
-    # 2. Test adding one species to an existing library when the new library has a species that also exists.
-    for lib_name, spc_list in [('RMG_library', [spc_1, spc_2]), ('ARC_library', [spc_1, spc_3])]:
-        thermo_library = ThermoLibrary(name=lib_name, long_desc=lib_name)
-        for i, spc in enumerate(spc_list):
-            thermo_library.load_entry(index=i,
-                                      label=spc.label,
-                                      molecule=spc.to_adjacency_list(),
-                                      thermo=spc.thermo,
-                                      shortDesc=spc.label,
-                                      longDesc=spc.label)
-        thermo_library.save(os.path.join(libraries_path, f'{lib_name}.py'))
-
-    t3 = run_minimal()
-    t3.set_paths()
-    t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
-    t3.paths['RMG T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
-    t3.add_to_rmg_libraries()
-    with open(t3.paths['RMG T3 thermo lib'], 'r') as f:
-        lines = f.readlines()
-    count = 0
-    for line in lines:
-        if 'entry(' in line:
-            count += 1
-    assert count == 3
-
-
 def test_dump_species():
     """Test dump species for restart purposes"""
     # create an empty `iteration_5` directory
@@ -1167,7 +1044,7 @@ def test_check_overtime():
 
 
 def teardown_module():
-    """teardown any state that was previously setup with a setup_module method."""
+    """teardown any state that was previously set up."""
 
     # delete log files
     for i in range(10):
@@ -1197,7 +1074,6 @@ def teardown_module():
                       os.path.join(DATA_BASE_PATH, 'determine_species', 'log_archive'),
                       os.path.join(DATA_BASE_PATH, 'pdep_network', 'log_archive'),
                       os.path.join(DATA_BASE_PATH, 'process_arc', 'log_archive'),
-                      os.path.join(DATA_BASE_PATH, 'libraries'),
                       os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'output'),
                       os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'log_and_restart_archive'),
                       ]:
