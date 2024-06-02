@@ -1055,21 +1055,22 @@ class T3(object):
                 self.logger.info(f'Regenerating the RMG model with a tolerance move to core '
                                  f'of {factor * core_tolerance[self.iteration]}.')
 
-    def species_requires_refinement(self, species: Optional[Species]) -> bool:
+    def species_requires_refinement(self, species: Optional[Union[Species, ARCSpecies]]) -> bool:
         """
         Determine whether a species thermochemical properties
         should be calculated based on the data uncertainty.
         First check that this species was not previously considered.
 
         Args:
-            species (Species): The species for which the query is performed.
+            species (Union[Species, ARCSpecies]): The species for which the query is performed.
 
         Returns:
             bool: Whether the species thermochemical properties should be calculated. ``True`` if they should be.
         """
         if species is None:
             return False
-        thermo_comment = species.thermo.comment.split('Solvation')[0]
+        thermo = species.thermo if isinstance(species, Species) else species.rmg_species.thermo
+        thermo_comment = thermo.comment.split('Solvation')[0]
         if (self.get_species_key(species=species) is None
             or self.species[self.get_species_key(species=species)]['converged'] is None) \
                 and ('group additivity' in thermo_comment or '+ radical(' in thermo_comment):
@@ -1238,7 +1239,7 @@ class T3(object):
         key = self.get_species_key(species=species)
         if key is None:
             key = len(list(self.species.keys()))
-            qm_species = get_species_with_qm_label(species=species, key=key)
+            qm_species = get_species_with_qm_label(species=species, key=key, arc_species=True)
             self.species[key] = {'RMG label': species.label,
                                  'Chemkin label': species.to_chemkin(),
                                  'QM label': qm_species.label,
@@ -1264,15 +1265,15 @@ class T3(object):
                             xyzs.append(xyz_dict)
                     if len(xyzs):
                         if self.qm['adapter'] == 'ARC':
-                            # Make qm_species and ARCSpecies instance to consider the xyz information
+                            # Make qm_species an ARCSpecies instance to consider the xyz information
                             qm_species = ARCSpecies(label=qm_species.label,
-                                                    rmg_species=qm_species,
+                                                    rmg_species=species,
                                                     xyz=xyzs,
-                                                    include_in_thermo_lib=self.species_requires_refinement(qm_species),
                                                     )
                         else:
                             raise NotImplementedError(f"Passing XYZ information to {self.qm['adapter']} "
                                                       f"is not yet implemented.")
+            qm_species.include_in_thermo_lib = self.species_requires_refinement(qm_species)
             self.qm['species'].append(qm_species)
             return key
 
@@ -1512,6 +1513,7 @@ def get_species_label_by_structure(adj: str,
 
 def get_species_with_qm_label(species: Species,
                               key: int,
+                              arc_species: bool = False,
                               ) -> Species:
     """
     Get a copy of the species with an updated QM label.
@@ -1520,9 +1522,10 @@ def get_species_with_qm_label(species: Species,
     Args:
          species (Species): The species to consider.
          key (int): The respective species key, if exists.
+         arc_species (bool, optional): Whether to return an ARCSpecies object instance.
 
     Returns:
-        Species: A copy of the original species with a formatted QM species label.
+        Union[Species, ARCSpecies]: A copy of the original species with a formatted QM species label.
 
     Todo:
         Add tests.
@@ -1530,4 +1533,8 @@ def get_species_with_qm_label(species: Species,
     qm_species = species.copy(deep=False)
     legalize_species_label(species=qm_species)
     qm_species.label = f's{key}_{qm_species.label}'
+    if isinstance(qm_species, Species) and arc_species:
+        qm_species = ARCSpecies(label=qm_species.label,
+                                rmg_species=qm_species,
+                                )
     return qm_species
