@@ -255,3 +255,49 @@ def get_chem_to_rmg_rxn_index_map(chem_annotated_path: str) -> Dict[int, int]:
                 splits = line.split()
                 rxn_map[int(splits[4].split('#')[1].split(';')[0])] = int(splits[-1].split('#')[1])
     return rxn_map
+
+
+def get_observable_label_from_header(header: str) -> str:
+    """
+    Get the observable label from a header in an RMG SA csv file.
+
+    Args:
+        header (str): The header from an RMG SA csv file.
+
+    Returns:
+        str: The observable label.
+    """
+    return header.split('[')[1].split(']')[0]
+
+
+def get_parameter_from_header(header: str) -> Optional[str]:
+    """
+    Get the parameter label from a header in an RMG SA csv file.
+    parameter extraction examples:
+    for species get 'C2H4(8)' from `dln[ethane(1)]/dG[C2H4(8)]`
+    for reaction, get k8 from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)`
+
+    Args:
+        header (str): The header from an RMG SA csv file.
+
+    Returns:
+        Optional[str]: The parameter label.
+    """
+    start_pos = header.find('/dG[')
+    if start_pos == -1:
+        start_pos = header.find('/dln[')
+        if start_pos == -1:
+            return None
+    start_pos += len('/dG[') if '/dG[' in header else len('/dln[')
+    bracket_count = 1
+    text = []
+    for i in range(start_pos, len(header)):
+        if header[i] == '[':
+            bracket_count += 1
+        elif header[i] == ']':
+            bracket_count -= 1
+            if bracket_count == 0:
+                break
+        text.append(header[i])
+    return ''.join(text)
+
