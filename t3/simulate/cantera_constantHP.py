@@ -10,6 +10,7 @@ from typing import List, Optional
 from rmgpy.tools.canteramodel import generate_cantera_conditions
 from rmgpy.tools.data import GenericData
 
+from t3.common import get_observable_label_from_header, get_parameter_from_header
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
@@ -400,23 +401,19 @@ class CanteraConstantHP(SimulateAdapter):
 
             # extract kinetic SA
             for rxn in reaction_sensitivity_data:
-                # for kinetics, get `ethane(1)` from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)`
-                observable_label = rxn.label.split('[')[1].split(']')[0]
+                observable_label = get_observable_label_from_header(rxn)
                 if observable_label not in sa_dict['kinetics']:
                     sa_dict['kinetics'][observable_label] = dict()
-                # for kinetics, get k8 from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)` then only extract 8
-                parameter = rxn.label.split('[')[2].split(']')[0]
+                parameter = get_parameter_from_header(rxn)
                 parameter = int(parameter[1:])
                 sa_dict['kinetics'][observable_label][parameter] = rxn.data
 
             # extract thermo SA
             for spc in thermodynamic_sensitivity_data:
-                # for thermo get 'C2H4(8)' from `dln[ethane(1)]/dH[C2H4(8)]`
-                observable_label = spc.label.split('[')[1].split(']')[0]
+                observable_label = get_observable_label_from_header(spc)
                 if observable_label not in sa_dict['thermo']:
                     sa_dict['thermo'][observable_label] = dict()
-                # for thermo get 'C2H4(8)' from `dln[ethane(1)]/dH[C2H4(8)]`
-                parameter = spc.label.split('[')[2].split(']')[0]
+                parameter = get_parameter_from_header(spc)
                 sa_dict['thermo'][observable_label][parameter] = spc.data
 
         return sa_dict
