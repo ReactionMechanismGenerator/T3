@@ -3,17 +3,14 @@ Cantera Simulator Adapter module for ignition delay time (IDT) calculations.
 Used to run mechanism analysis with Cantera for IDT.
 """
 
+import math
+import os
 from typing import List, Optional, Tuple
 
-import matplotlib.pyplot as plt
-import os
-
 import cantera as ct
-import math
+import matplotlib.pyplot as plt
 import numpy as np
-
 from arc.common import save_yaml_file
-
 from rmgpy.chemkin import load_chemkin_file
 
 from t3.common import determine_concentrations_by_equivalence_ratios
@@ -249,16 +246,56 @@ class CanteraIDT(SimulateAdapter):
             concentration_combinations.append(concentration_dict)
         return equivalence_ratios, concentration_combinations
 
-    def get_sa_coefficients(self):
+    def get_sa_coefficients(self, 
+                            T: float, 
+                            P: float,
+                            dk: float = 1e-2,
+                             ):
         """
         Obtain the SA coefficients.
 
+        Arguments:
+        dk (float): is the value of the perturbation
+
         Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
+            sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
+            As follows:
+            sa_dict = {
+            'thermo': {
+                <str: SA observable>: {
+                    <str: RMG species label>: <array: 1D array with one entry per time point. Each entry is
+                                     dLn(observable_1) / dG_species_1 in mol / kcal at the respective time>,
+                }
+            }
+            'kinetics': {
+                <str: SA observable>: {
+                    <int: reaction number>: <array: 1D array with one entry per time point. Each entry is
+                                             dLn(observable_1) / dLn(k_1) at the respective time>,
+                }
+            }
+            'time': <array: 1D array of time points in seconds>
+        }
         """
-        pass
-        # sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
-        #
+        sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
+        
+        obsr = self.radical_label
+        self.model.TP = T, P
+        self.model.set_multiplier(1.0)
+        idt_dict = self.simulate()
+        idt_dict = self.idt_dict
+        sa_dict['time'] = list(idt_dict.values()) #should be one value in array( since one T and p)
+        baseline_concentrations = self.model.mole_fraction_dict()
+        for rxn_str, i in self.rxn_identifier_lookup.items(): 
+            k_i0 = self.model.forward_rate_constants[i]
+            #Perturb the rate coefficient slightly
+            self.model.set_multiplier(1 + dk, i)
+            idt_dict = self.simulate()
+            sensitivity = (self.model.mole_fraction_dict()[obsr] - baseline_concentrations[obsr]) * (k_i0 / ((self.model.forward_rate_constants[i] - k_i0) * baseline_concentrations[obsr]))
+            sa_dict['kinetics'][obsr] = {i: sensitivity}
+            self.model.set_multiplier(1.0)
+            print(sensitivity)
+        return sa_dict 
+        #Alon's comments:
         # for condition_data in self.all_data:
         #     time, data_list, reaction_sensitivity_data, thermodynamic_sensitivity_data = condition_data
         #     sa_dict['time'] = time.data
