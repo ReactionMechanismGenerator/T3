@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from arc.common import save_yaml_file
 from rmgpy.chemkin import load_chemkin_file
-
 from t3.common import determine_concentrations_by_equivalence_ratios
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
@@ -283,8 +282,11 @@ class CanteraIDT(SimulateAdapter):
         self.model.set_multiplier(1.0)
         idt_dict = self.simulate()
         idt_dict = self.idt_dict
-        sa_dict['time'] = list(idt_dict.values()) #should be one value in array( since one T and p)
+        for v,k in idt_dict.items():
+            print("key", k,"value",v)
+        sa_dict['time'] = list(idt_dict.values()) #should be one value in array( since one phi,P,T)
         baseline_concentrations = self.model.mole_fraction_dict()
+        print(self.rxn_identifier_lookup.keys())
         for rxn_str, i in self.rxn_identifier_lookup.items(): 
             k_i0 = self.model.forward_rate_constants[i]
             #Perturb the rate coefficient slightly
@@ -293,7 +295,7 @@ class CanteraIDT(SimulateAdapter):
             sensitivity = (self.model.mole_fraction_dict()[obsr] - baseline_concentrations[obsr]) * (k_i0 / ((self.model.forward_rate_constants[i] - k_i0) * baseline_concentrations[obsr]))
             sa_dict['kinetics'][obsr] = {i: sensitivity}
             self.model.set_multiplier(1.0)
-            print(sensitivity)
+            print("sensitivity",sensitivity)
         return sa_dict 
         #Alon's comments:
         # for condition_data in self.all_data:
