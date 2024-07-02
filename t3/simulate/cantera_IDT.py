@@ -288,7 +288,7 @@ class CanteraIDT(SimulateAdapter):
         baseline_concentrations = self.model.mole_fraction_dict()
         print("lookup rxns:",self.rxn_identifier_lookup.keys())
         for rxn_str, i in self.rxn_identifier_lookup.items(): 
-            print(rxn_sr, i)
+            print(rxn_str, i)
             k_i0 = self.model.forward_rate_constants[i]
             #Perturb the rate coefficient slightly
             self.model.set_multiplier(1 + dk, i)
