@@ -286,8 +286,9 @@ class CanteraIDT(SimulateAdapter):
             print("key", k,"value",v)
         sa_dict['time'] = list(idt_dict.values()) #should be one value in array( since one phi,P,T)
         baseline_concentrations = self.model.mole_fraction_dict()
-        print(self.rxn_identifier_lookup.keys())
+        print("lookup rxns:",self.rxn_identifier_lookup.keys())
         for rxn_str, i in self.rxn_identifier_lookup.items(): 
+            print(rxn_sr, i)
             k_i0 = self.model.forward_rate_constants[i]
             #Perturb the rate coefficient slightly
             self.model.set_multiplier(1 + dk, i)
