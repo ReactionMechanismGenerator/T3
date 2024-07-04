@@ -294,7 +294,7 @@ class CanteraIDT(SimulateAdapter):
             self.model.set_multiplier(1 + dk, i)
             idt_dict = self.simulate()
             sensitivity = (self.model.mole_fraction_dict()[obsr] - baseline_concentrations[obsr]) * (k_i0 / ((self.model.forward_rate_constants[i] - k_i0) * baseline_concentrations[obsr]))
-            sa_dict['kinetics'][obsr] = {i: sensitivity}
+            sa_dict['kinetics'][obsr][i] = sensitivity
             self.model.set_multiplier(1.0)
             print("sensitivity",sensitivity)
         return sa_dict 
