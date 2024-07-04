@@ -278,6 +278,7 @@ class CanteraIDT(SimulateAdapter):
         sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
         
         obsr = self.radical_label
+        print("ctIDT obsr",obsr)
         self.model.TP = T, P
         self.model.set_multiplier(1.0)
         idt_dict = self.simulate()
