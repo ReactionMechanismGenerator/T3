@@ -71,7 +71,7 @@ class T3Sensitivity(BaseModel):
     adapter: constr(max_length=255) = 'RMGConstantTP'
     atol: confloat(gt=0, lt=1e-1) = 1e-6
     rtol: confloat(gt=0, lt=1e-1) = 1e-4
-    global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None
+    global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None  # ['IDT', 'ESR', 'SL']
     SA_threshold: confloat(gt=0, lt=0.5) = 0.01
     pdep_SA_threshold: Optional[confloat(gt=0, lt=0.5)] = 0.001
     ME_methods: List[constr(min_length=2, max_length=3)] = ['CSE', 'MSC']
@@ -98,8 +98,8 @@ class T3Sensitivity(BaseModel):
         """T3Sensitivity.global_observables validator"""
         if value is not None:
             for i, entry in enumerate(value):
-                if entry.lower() not in ['igd', 'esr', 'sl']:
-                    raise ValueError(f'The global observables list must contain a combination of "IgD", "ESR", and "SL", '
+                if entry.lower() not in ['idt', 'esr', 'sl']:
+                    raise ValueError(f'The global observables list must contain a combination of "IDT", "ESR", and "SL", '
                                      f'Got {entry} in {value}')
                 if entry.lower() in [value[j].lower() for j in range(i)]:
                     raise ValueError(f'The global observables list must not contain repetitions, got {value}')
@@ -170,6 +170,8 @@ class RMGSpecies(BaseModel):
     """
     label: str
     concentration: Union[confloat(ge=0), Tuple[confloat(ge=0), confloat(ge=0)]] = 0
+    equivalence_ratios: Optional[List[confloat(gt=0)]] = None
+    role: Optional[str] = None
     smiles: Optional[str] = None
     inchi: Optional[str] = None
     adjlist: Optional[str] = None
@@ -193,6 +195,15 @@ class RMGSpecies(BaseModel):
         if value and isinstance(values['concentration'], tuple):
             raise ValueError(f"A constant species cannot have a concentration range.\n"
                              f"Got{label}: {values['concentration']}.")
+        return value
+
+    @validator('role')
+    def check_species_role(cls, value, values):
+        """RMGSpecies.role validator"""
+        if value not in ['fuel', 'oxygen', 'nitrogen', None]:
+            raise ValueError(f'The species role must be either "fuel", "oxygen", or "nitrogen".\nGot: {value}')
+        if value == 'fuel' and value['equivalence_ratios'] is None:
+            raise ValueError(f'If the species role is "fuel", then the equivalence ratios must be specified.')
         return value
 
     @validator('concentration')

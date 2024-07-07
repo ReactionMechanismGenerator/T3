@@ -30,7 +30,6 @@ class CanteraConstantUV(SimulateAdapter):
         observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
         sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
         sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
 
     Attributes:
         all_data (list): List containing the following RMG GenericData objects grouped as a tuple:
@@ -39,7 +38,6 @@ class CanteraConstantUV(SimulateAdapter):
         cantera_reactor_type (str): String specifying the type of Cantera reactor to use.
         cantera_simulation (ct.ReactorNet): Cantera reactor net object.
         conditions (list): List whose entries are reaction conditions for simulation.
-        global_observables (List[str]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
         inert_list (list): List of possible inert species in the model
         inert_index_list (list): List of indices corresponding to the inert species present in the model.
         initialconds (dict): Key is the Cantera species. Value is the initial mol fraction.
@@ -69,7 +67,6 @@ class CanteraConstantUV(SimulateAdapter):
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None
                  ):
 
         self.t3 = t3
@@ -81,7 +78,6 @@ class CanteraConstantUV(SimulateAdapter):
         self.observable_list = observable_list or list()
         self.sa_atol = sa_atol
         self.sa_rtol = sa_rtol
-        self.global_observables = global_observables
 
         # initialize other attributes
         self.sensitive_species = list()

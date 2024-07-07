@@ -40,11 +40,9 @@ class RMGConstantTP(SimulateAdapter):
         observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
         sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
         sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
 
     Attributes:
         atol (float): The absolute tolerance used when integrating during an RMG iteration.
-        global_observables (List[str]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
         logger (Logger): Instance of T3's Logger class.
         observable_list (list): Species used for SA. Entries are species labels as strings. Example: ['OH']
         observable_species (list): Species object representations of the species used for SA.
@@ -67,7 +65,6 @@ class RMGConstantTP(SimulateAdapter):
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None,
                  ):
 
         self.t3 = t3
@@ -82,10 +79,6 @@ class RMGConstantTP(SimulateAdapter):
         self.sa_atol = sa_atol
         self.sa_rtol = sa_rtol
 
-        # cantera argument not used by this adapter
-        self.global_observables = global_observables
-
-        # initialize other attributes
         self.observable_species = list()
         self.rmg_model = None
         self.rmg_input_file = None
@@ -273,21 +266,6 @@ class RMGConstantTP(SimulateAdapter):
                             if all(c.isdigit() for c in parameter) else parameter
                     sa_dict[sa_type][observable_label][parameter] = df[header].values
         return sa_dict
-
-    def get_idt_by_T(self) -> dict:
-        """
-        Finds the ignition point by approximating dT/dt as a first order forward difference and then finds
-        the point of maximum slope. However, the RMG reactors only simulate at constant T, so this implementation
-        only returns a dictionary whose values are empty lists.
-
-        Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
-                             the ignition delay time in seconds and index at which idt occurs respectively.
-        """
-        idt_dict = {'idt': list(),
-                    'idt_index': list(),
-                    }
-        return idt_dict
 
     def generate_rmg_reactors_for_simulation(self) -> dict:
         """

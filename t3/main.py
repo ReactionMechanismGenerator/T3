@@ -49,7 +49,13 @@ from arc.main import ARC
 from arc.species.species import ARCSpecies, check_label
 from arc.species.converter import check_xyz_dict
 
-from t3.common import PROJECTS_BASE_PATH, VALID_CHARS, delete_root_rmg_log, get_species_by_label, time_lapse
+from t3.common import (PROJECTS_BASE_PATH,
+                       VALID_CHARS,
+                       delete_root_rmg_log,
+                       determine_concentrations_by_equivalence_ratios,
+                       get_species_by_label,
+                       time_lapse,
+                       )
 from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
@@ -182,6 +188,7 @@ class T3(object):
         self.rmg = self.schema['rmg']
         self.qm = self.schema['qm']
         self.verbose = self.schema['verbose']
+        self.update_species_concentrations()
 
         if clean_dir and os.path.isdir(self.project_directory):
             self.cleanup()
@@ -294,21 +301,35 @@ class T3(object):
                     for species in self.rmg['species']:
                         if species['observable'] or species['SA_observable']:
                             self.sa_observables.append(species['label'])
-
-                simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
-                                                    t3=self.t3,
-                                                    rmg=self.rmg,
-                                                    paths=self.paths,
-                                                    logger=self.logger,
-                                                    atol=self.rmg['model']['atol'],
-                                                    rtol=self.rmg['model']['rtol'],
-                                                    observable_list=self.sa_observables,
-                                                    sa_atol=self.t3['sensitivity']['atol'],
-                                                    sa_rtol=self.t3['sensitivity']['rtol'],
-                                                    global_observables=None,
-                                                    )
-                simulate_adapter.simulate()
-                self.sa_dict = simulate_adapter.get_sa_coefficients()
+                if self.sa_observables:
+                    simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        observable_list=self.sa_observables,
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict = simulate_adapter.get_sa_coefficients()
+                    save_yaml_file(path=self.paths['SA dict'], content=self.sa_dict)
+                if self.t3['sensitivity']['global_observables'] == 'IDT':
+                    simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict_idt = simulate_adapter.get_sa_coefficients()
+                    save_yaml_file(path=self.paths['SA idt dict'], content=self.sa_dict_idt)
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
@@ -366,12 +387,15 @@ class T3(object):
             'RMG job log': os.path.join(iteration_path, 'RMG', 'job.log'),
             'RMG coll vio': os.path.join(iteration_path, 'RMG', 'collision_rate_violators.log'),
             'RMS': os.path.join(iteration_path, 'RMG', 'rms'),
-            'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.cti'),
+            'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.yaml'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
+            'figs': os.path.join(iteration_path, 'Figures'),
             'SA': os.path.join(iteration_path, 'SA'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
+            'SA dict': os.path.join(iteration_path, 'SA', 'sa.yaml'),
+            'SA IDT dict': os.path.join(iteration_path, 'SA', 'sa_idt.yaml'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
             'ARC': os.path.join(iteration_path, 'ARC'),
             'ARC input': os.path.join(iteration_path, 'ARC', 'input.yml'),
@@ -1499,6 +1523,18 @@ class T3(object):
                                                             if key in mod_rxn_dict['product_keys']],
                                                   )
                 self.reactions[key] = mod_rxn_dict
+
+    def update_species_concentrations(self):
+        """
+        Update the species concentrations based on species roles and equivalence ratios.
+        """
+        objects = determine_concentrations_by_equivalence_ratios(species=self.rmg['species'])
+        for spc in self.rmg['species']:
+            if spc['role'] == 'fuel' and spc['concentration'] == 0 and objects['fuel'] is not None:
+                spc['concentration'] = objects['fuel']['concentration']
+            elif (spc['role'] == 'oxygen' or (spc['role'] == 'nitrogen' and spc['concentration'] == 0)) \
+                    and objects[spc['role']] is not None:
+                spc['concentration'] = [min(objects[spc['role']]['concentration']), max(objects[spc['role']]['concentration'])]
 
     def check_overtime(self) -> bool:
         """
