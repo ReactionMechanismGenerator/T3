@@ -750,16 +750,16 @@ class T3(object):
             return species_keys
 
         sa_dict_max = {'kinetics': dict(), 'thermo': dict()}
-        for key in ['kinetics', 'thermo']:
-            for observable_label in self.sa_dict[key].keys():
-                if observable_label not in sa_dict_max[key]:
-                    sa_dict_max[key][observable_label] = list()
-                for parameter in self.sa_dict[key][observable_label].keys():
+        for sa_dict_key in ['kinetics', 'thermo']:
+            for observable_label in self.sa_dict[sa_dict_key]:
+                if observable_label not in sa_dict_max[sa_dict_key]:
+                    sa_dict_max[sa_dict_key][observable_label] = list()
+                for parameter in self.sa_dict[sa_dict_key][observable_label]:
                     entry = dict()
                     entry['parameter'] = parameter  # rxn number (int) or spc label (str)
-                    entry['max_sa'] = max(self.sa_dict[key][observable_label][parameter].max(),
-                                          abs(self.sa_dict[key][observable_label][parameter].min()))
-                    sa_dict_max[key][observable_label].append(entry)
+                    entry['max_sa'] = max(self.sa_dict[sa_dict_key][observable_label][parameter].max(),
+                                          abs(self.sa_dict[sa_dict_key][observable_label][parameter].min()))
+                    sa_dict_max[sa_dict_key][observable_label].append(entry)
 
             for observable_label, sa_list in sa_dict_max['kinetics'].items():
                 sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)

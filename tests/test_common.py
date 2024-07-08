@@ -139,3 +139,45 @@ def test_get_chem_to_rmg_rxn_index_map():
                        39: 36, 40: 37, 41: 38, 42: 39, 43: 40, 44: 41, 45: 41, 46: 42, 47: 43, 48: 44, 49: 45, 50: 46,
                        51: 47, 52: 48, 53: 49, 54: 50, 55: 51, 56: 52, 57: 53, 58: 54, 59: 55, 60: 56, 61: 57, 62: 58,
                        63: 59, 64: 60, 65: 61}
+
+
+def test_get_observable_label_from_header():
+    """
+    Test that the `get_observable_label_from_header` function correctly parses the header of the RMG simulation csv file
+    to obtain the observable labels.
+    """
+    label = common.get_observable_label_from_header('dln[H(15)]/dln[k2]: O2(14)+H(15)(+M)<=>HO2(17)(+M)')
+    assert label == 'H(15)'
+
+    label = common.get_observable_label_from_header('dln[C2H4(12)]/dln[k16]: C8H17(11)<=>C8H17(5)')
+    assert label == 'C2H4(12)'
+
+    label = common.get_observable_label_from_header('dln[H(15)]/dG[CC(C)CO[O](237)]')
+    assert label == 'H(15)'
+
+    label = common.get_observable_label_from_header('dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)')
+    assert label == 'ethane(1)'
+
+
+def test_get_parameter_from_header():
+    """
+    Test that the `get_parameter_from_header` function correctly parses the header of the RMG simulation csv file
+    to obtain the parameter labels.
+    """
+    label = common.get_parameter_from_header('dln[H(15)]/dln[k2]: O2(14)+H(15)(+M)<=>HO2(17)(+M)')
+    assert label == 'k2'
+
+    label = common.get_parameter_from_header('dln[C2H4(12)]/dln[k16]: C8H17(11)<=>C8H17(5)')
+    assert label == 'k16'
+
+    label = common.get_parameter_from_header('dln[H(15)]/dG[t-C4H9(60)]')
+    assert label == 't-C4H9(60)'
+
+    label = common.get_parameter_from_header('dln[H(15)]/dG[CC(C)CO[O](237)]')
+    assert label == 'CC(C)CO[O](237)'
+
+    label = common.get_parameter_from_header('dln[ethane(1)]/dG[C2H4(8)]')
+    assert label == 'C2H4(8)'
+
+    label = common.get_parameter_from_header('dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)')
+    assert label == 'k8'
