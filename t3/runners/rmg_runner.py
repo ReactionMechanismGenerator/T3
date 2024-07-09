@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from t3.logger import Logger
 
 
-CPUS = 16  # A recommended value for RMG when running on a server (not incore)
 MEM = settings['rmg_initial_memory'] * 1000  # MB
 SLEEP_TIME = 6  # hours
 MAX_RMG_RUNS_PER_ITERATION = 5
@@ -33,7 +32,6 @@ else:
     SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME = LOCAL_CLUSTER_SOFTWARE = ''
 
 
-
 def write_submit_script(project_directory: str,
                         cpus: Optional[int] = None,
                         memory: Optional[int] = None,
@@ -46,15 +44,16 @@ def write_submit_script(project_directory: str,
 
     Args:
         project_directory (str): The full path to the project directory.
-        cpus (int, optional): The number of CPUs for an RMG parallelization, defaults to ``CPUS``.
+        cpus (int, optional): The number of CPUs for an RMG parallelization.
         memory (int, optional): The memory in MB for an RMG run, defaults to ``MEM``.
         verbose (str, optional): Level of verbosity, e.g., ``-v 10``.
         max_iterations (str, optional): Max RMG iterations, e.g., ``-m 100``.
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
     """
     global MEM
+    cpus = cpus or 16
     submit_scripts_content = submit_scripts['rmg'].format(name=f'{t3_project_name}_RMG' or 'T3_RMG',
-                                                          cpus=cpus or CPUS,
+                                                          cpus=cpus,
                                                           memory=memory or MEM,
                                                           workdir=project_directory,
                                                           max_iterations=max_iterations,
@@ -64,7 +63,7 @@ def write_submit_script(project_directory: str,
     if 'rmg_job' in submit_scripts.keys():
         # Write an aux submit script, e.g., as required for HTCondor.
         max_iterations = max_iterations or ''
-        aux_submit_scripts_content = submit_scripts['rmg_job'].format(cpus=cpus or CPUS,
+        aux_submit_scripts_content = submit_scripts['rmg_job'].format(cpus=cpus,
                                                                       max_iterations=max_iterations,
                                                                       )
         with open(os.path.join(project_directory, 'job.sh'), 'w') as f:
@@ -193,6 +192,7 @@ def run_rmg_incore(rmg_input_file_path: str,
 def run_rmg_in_local_queue(project_directory: str,
                            logger: 'Logger',
                            memory: Optional[int] = None,
+                           cpus: Optional[int] = None,
                            max_iterations: Optional[int] = None,
                            restart_rmg: bool = False,
                            verbose: Optional[int] = None,
@@ -205,6 +205,7 @@ def run_rmg_in_local_queue(project_directory: str,
         project_directory (str): The path to the RMG folder.
         logger (Logger): The T3 Logger object instance.
         memory (int, optional): The submit script memory in MB.
+        cpus (int, optional): The number of CPUs for an RMG parallelization.
         max_iterations (int, optional): Max RMG iterations.
         restart_rmg (bool, optional): Whether this RMG run should trigger a seed restart.
         verbose (int, optional): Level of verbosity.
@@ -216,7 +217,7 @@ def run_rmg_in_local_queue(project_directory: str,
     verbose = f' -v {verbose}' if verbose is not None else ''
     max_iterations = f' -m {max_iterations}' if max_iterations is not None else ''
     write_submit_script(project_directory=project_directory,
-                        cpus=settings['servers']['local']['cpus'],
+                        cpus=cpus or settings['servers']['local']['cpus'],
                         memory=memory,
                         verbose=verbose,
                         max_iterations=max_iterations,
@@ -252,6 +253,7 @@ def rmg_runner(rmg_input_file_path: str,
                job_log_path: str,
                logger: 'Logger',
                memory: Optional[int] = None,
+               cpus: Optional[int] = None,
                verbose: Optional[int] = None,
                max_iterations: Optional[int] = None,
                t3_project_name: Optional[str] = None,
@@ -266,6 +268,7 @@ def rmg_runner(rmg_input_file_path: str,
         job_log_path (str): The path to the ``job.log`` file created on an HTCondor scheduler.
         logger (Logger): The T3 Logger object instance.
         memory (int, optional): The submit script memory in MB.
+        cpus (int, optional): The number of CPUs for an RMG parallelization.
         max_iterations (int, optional): Max RMG iterations.
         verbose (int, optional): Level of verbosity.
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
@@ -296,6 +299,7 @@ def rmg_runner(rmg_input_file_path: str,
             job_id = run_rmg_in_local_queue(project_directory=project_directory,
                                             logger=logger,
                                             memory=new_memory,
+                                            cpus=cpus,
                                             verbose=verbose,
                                             max_iterations=max_iterations,
                                             restart_rmg=restart_rmg,

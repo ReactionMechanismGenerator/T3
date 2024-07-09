@@ -68,6 +68,7 @@ t3_minimal = {'options': {'all_core_reactions': False,
               }
 
 rmg_minimal = {'memory': None,
+               'cpus': None,
                'rmg_execution_type': None,
                'database': {'kinetics_depositories': 'default',
                             'kinetics_estimator': 'rate rules',

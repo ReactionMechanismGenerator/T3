@@ -634,6 +634,7 @@ class T3(object):
                                                job_log_path=self.paths['RMG job log'],
                                                logger=self.logger,
                                                memory=self.rmg['memory'] * 1000 if self.rmg['memory'] is not None else None,
+                                               cpus=self.rmg['cpus'],
                                                max_iterations=self.t3['options']['max_rmg_iterations'],
                                                verbose=self.verbose,
                                                t3_project_name=self.project,
