@@ -179,7 +179,7 @@ rmg:
   # options (optional block)
   options:
     seed_name: Seed  # optional, name for the generated seed, default: 'Seed'
-    save_edge: true  # optional, saves the Edge, default: ``True`` in T3 (``False`` in RMG) (saveEdgeSpecies)
+    save_edge: false  # optional, saves the Edge, default: ``False`` in T3 (``False`` in RMG) (saveEdgeSpecies)
     save_html: false  # optional, default: ``False`` (have T3 generate HTML for the core after the last T3 iteration))
     generate_seed_each_iteration: true  # optional, save a seed at each iteration, default: ``True``
     save_seed_to_database: false  # optional, save the seed to the database as well, default: ``False``
