@@ -180,7 +180,7 @@ rmg_minimal = {'memory': None,
                }
 rmg_minimal_defaults = rmg_minimal.copy()
 rmg_minimal_defaults['options'] = {'seed_name': 'Seed',
-                                   'save_edge': True,
+                                   'save_edge': False,
                                    'save_html': False,
                                    'generate_seed_each_iteration': True,
                                    'save_seed_to_database': False,

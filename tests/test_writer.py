@@ -115,7 +115,7 @@ options(
     generatePlots=False,
     saveSimulationProfiles=False,
     verboseComments=False,
-    saveEdgeSpecies=True,
+    saveEdgeSpecies=False,
     keepIrreversible=False,
     trimolecularProductReversible=True,
     wallTime='01:00:00:00',
