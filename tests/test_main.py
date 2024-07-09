@@ -10,6 +10,7 @@ import os
 import shutil
 import re
 
+from rmgpy.kinetics import Arrhenius
 from rmgpy.reaction import Reaction
 from rmgpy.rmg.pdep import PDepNetwork, PDepReaction
 from rmgpy.species import Species
@@ -34,6 +35,7 @@ t3_minimal = {'options': {'all_core_reactions': False,
                           'all_core_species': False,
                           'collision_violators_thermo': False,
                           'collision_violators_rates': False,
+                          'external_library_path': None,
                           'fit_missing_GAV': False,
                           'flux_adapter': 'RMG',
                           'library_name': 'T3lib',
@@ -906,14 +908,21 @@ def test_add_reaction():
 
     # check that reactant and product labels of an RMG reaction are set correctly when adding a reaction
     rmg_rxn_1 = Reaction(label='[N-]=[N+](N=O)[O] + HON <=> [O-][N+](=N)N=O + NO',
-                         reactants=[Species(label='[N-]=[N+](N=O)[O]', smiles='[N-]=[N+](N=O)[O]'),
-                                    Species(label='HON', smiles='[N-]=[OH+]')],
-                         products=[Species(label='[O-][N+](=N)N=O', smiles='[O-][N+](=N)N=O'),
-                                   Species(label='NO', smiles='[N]=O')])
+                         reactants=[Species(label='[N-]=[N+](N=O)[O]', smiles='[N-]=[N+](N=O)[O]',
+                                            thermo=ThermoData(comment='comment 1')),
+                                    Species(label='HON', smiles='[N-]=[OH+]',
+                                            thermo=ThermoData(comment='comment 2'))],
+                         products=[Species(label='[O-][N+](=N)N=O', smiles='[O-][N+](=N)N=O',
+                                           thermo=ThermoData(comment='comment 3')),
+                                   Species(label='NO', smiles='[N]=O',
+                                           thermo=ThermoData(comment='comment 4'))],
+                         kinetics=Arrhenius(A=(1, 'cm^3/(mol*s)'), n=0, Ea=(0, 'kJ/mol'), comment='kinetic comment 0'))
     t3.add_reaction(reaction=rmg_rxn_1, reasons='reason 4')
     assert t3.get_reaction_key(reaction=rmg_rxn_1) == 3
     assert t3.reactions[3]['RMG label'] == 's9_N3O2 + s10_HON <=> s11_HN3O2 + s12_NO'
-    assert t3.reactions[3]['Chemkin label'] == ''
+    assert t3.reactions[3]['Chemkin label'] == '! kinetic comment 0\n' + \
+           'N3O2+HON<=>HN3O2+NO                                 1.000000e+00 0.000     ' + \
+           '0.000    \n'
     assert t3.reactions[3]['QM label'] == 's9_N3O2 + s10_HON <=> s11_HN3O2 + s12_NO'
     assert t3.reactions[3]['SMILES label'] == '[N-]=[N+](N=O)[O] + [N-]=[OH+] <=> [O-][N+](=N)N=O + [N]=O'
     assert isinstance(t3.reactions[3]['object'], Reaction)
