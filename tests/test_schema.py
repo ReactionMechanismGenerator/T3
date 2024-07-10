@@ -56,6 +56,7 @@ def test_t3_options_schema():
     assert t3_options.max_RMG_walltime == '00:02:00:00'
     assert t3_options.max_T3_walltime == '01:00:00:00'
     assert t3_options.library_name == 'T3_library'
+    assert t3_options.shared_library_name is None
 
     with pytest.raises(ValidationError):
         # check that flux_adapter is constrained to at most 255 characters
@@ -84,6 +85,14 @@ def test_t3_options_schema():
     with pytest.raises(ValidationError):
         # check that library_name is constrained to at most 255 characters
         T3Options(library_name=quote)
+
+    with pytest.raises(ValidationError):
+        # check that library_name is constrained to valid characters
+        T3Options(library_name='lib name with spaces')
+
+    with pytest.raises(ValidationError):
+        # check that shared_library_name is constrained to valid characters
+        T3Options(shared_library_name='lib@name')
 
 
 def test_t3_sensitivity_schema():

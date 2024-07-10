@@ -24,19 +24,15 @@ from typing import List, Optional, Tuple, Union
 from arkane import Arkane
 from rmgpy import settings as rmg_settings
 from rmgpy.chemkin import load_chemkin_file
-from rmgpy.data.kinetics import KineticsLibrary
 from rmgpy.data.kinetics.library import LibraryReaction
-from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.exceptions import (ChemicallySignificantEigenvaluesError,
                               ChemkinError,
                               ModifiedStrongCollisionError,
                               NetworkError,
                               )
-from rmgpy.kinetics import Arrhenius, KineticsData
 from rmgpy.reaction import Reaction
 from rmgpy.rmg.pdep import PDepReaction
 from rmgpy.species import Species
-from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 
 from arc.common import (get_number_with_ordinal_indicator,
                         get_ordinal_indicator,
@@ -54,6 +50,7 @@ from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
+from t3.utils.libraries import add_to_rmg_libraries
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 
 RMG_THERMO_LIB_BASE_PATH = os.path.join(rmg_settings['database.directory'], 'thermo', 'libraries')
@@ -382,12 +379,14 @@ class T3(object):
             'ARC thermo lib': os.path.join(iteration_path, 'ARC', 'output', 'RMG libraries', 'thermo',
                                            f"{self.qm['project'] if 'project' in self.qm else self.project}.py"),
             'ARC kinetics lib': os.path.join(iteration_path, 'ARC', 'output', 'RMG libraries', 'kinetics'),
-            'RMG T3 thermo lib': os.path.join(RMG_THERMO_LIB_BASE_PATH, f"{self.t3['options']['library_name']}.py") \
-                if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-                else os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}.py"),
-            'RMG T3 kinetics lib': os.path.join(RMG_KINETICS_LIB_BASE_PATH, f"{self.t3['options']['library_name']}") \
-                if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-                else os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}"),
+            'T3 thermo lib': os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}.py"),
+            'T3 kinetics lib': os.path.join(project_directory, 'Libraries', f"{self.t3['options']['library_name']}"),
+            'shared T3 thermo lib': os.path.join(self.t3['options']['external_library_path'] or RMG_THERMO_LIB_BASE_PATH,
+                                                 f"{self.t3['options']['shared_library_name']}.py")
+                if self.t3['options']['shared_library_name'] is not None else None,
+            'shared T3 kinetics lib': os.path.join(self.t3['options']['external_library_path'] or RMG_KINETICS_LIB_BASE_PATH,
+                                                   f"{self.t3['options']['shared_library_name']}")
+                if self.t3['options']['shared_library_name'] is not None else None,
         }
 
     def restart(self) -> Tuple[int, bool]:
@@ -572,7 +571,10 @@ class T3(object):
         )
         if len(converged_spc_keys) or len(converged_rxn_keys):
             # we calculated something, add to thermo/kinetic library
-            self.add_to_rmg_libraries()
+            add_to_rmg_libraries(library_name=self.t3['options']['library_name'],
+                                 shared_library_name=self.t3['options']['shared_library_name'],
+                                 paths=self.paths,
+                                 logger=self.logger)
         # clear the calculated objects from self.qm:
         self.qm['species'], self.qm['reactions'] = list(), list()
         self.dump_species_and_reactions()
@@ -594,29 +596,16 @@ class T3(object):
         Run RMG.
 
         Raises:
-            Various RMG Exceptions: if RMG crushed too many times.
+            Various RMG Exceptions if RMG crushed too many times.
         """
         self.logger.info(f'Running RMG (tolerance = {self.get_current_rmg_tol()}, iteration {self.iteration})...')
 
-        # Use the RMG T3 libraries only if they exist and not already in use.
-        # 1. thermo
-        t3_thermo_lib = self.t3['options']['library_name'] if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-            else self.paths['RMG T3 thermo lib']
-        if t3_thermo_lib not in self.rmg['database']['thermo_libraries'] \
-                and os.path.isfile(self.paths['RMG T3 thermo lib']):
-            self.rmg['database']['thermo_libraries'] = [t3_thermo_lib] + self.rmg['database']['thermo_libraries']
-        elif t3_thermo_lib in self.rmg['database']['thermo_libraries'] \
-                and not os.path.isfile(self.paths['RMG T3 thermo lib']):
-            self.rmg['database']['thermo_libraries'].pop(self.rmg['database']['thermo_libraries'].index(t3_thermo_lib))
-        # 2. kinetics
-        t3_kinetics_lib = self.t3['options']['library_name'] if self.t3['options']['save_libraries_directly_in_rmgdb'] \
-            else self.paths['RMG T3 kinetics lib']
-        if t3_kinetics_lib not in self.rmg['database']['kinetics_libraries'] \
-                and os.path.isdir(self.paths['RMG T3 kinetics lib']):
-            self.rmg['database']['kinetics_libraries'] = [t3_kinetics_lib] + self.rmg['database']['kinetics_libraries']
-        elif t3_kinetics_lib in self.rmg['database']['kinetics_libraries'] \
-                and not os.path.isdir(self.paths['RMG T3 kinetics lib']):
-            self.rmg['database']['kinetics_libraries'].pop(self.rmg['database']['kinetics_libraries'].index(t3_kinetics_lib))
+        # Use the T3 libraries only if they exist and not already in use.
+        for token in ['thermo', 'kinetics']:
+            t3_lib, shared_rmg_lib = self.paths[f'T3 {token} lib'], self.paths[f'shared T3 {token} lib']
+            if shared_rmg_lib is not None:
+                self.add_library_to_rmg_run(library_name=shared_rmg_lib, library_type=token)
+            self.add_library_to_rmg_run(library_name=t3_lib, library_type=token)
 
         write_rmg_input_file(
             rmg=self.rmg,
@@ -1066,21 +1055,22 @@ class T3(object):
                 self.logger.info(f'Regenerating the RMG model with a tolerance move to core '
                                  f'of {factor * core_tolerance[self.iteration]}.')
 
-    def species_requires_refinement(self, species: Optional[Species]) -> bool:
+    def species_requires_refinement(self, species: Optional[Union[Species, ARCSpecies]]) -> bool:
         """
         Determine whether a species thermochemical properties
         should be calculated based on the data uncertainty.
         First check that this species was not previously considered.
 
         Args:
-            species (Species): The species for which the query is performed.
+            species (Union[Species, ARCSpecies]): The species for which the query is performed.
 
         Returns:
             bool: Whether the species thermochemical properties should be calculated. ``True`` if they should be.
         """
         if species is None:
             return False
-        thermo_comment = species.thermo.comment.split('Solvation')[0]
+        thermo = species.thermo if isinstance(species, Species) else species.rmg_species.thermo
+        thermo_comment = thermo.comment.split('Solvation')[0]
         if (self.get_species_key(species=species) is None
             or self.species[self.get_species_key(species=species)]['converged'] is None) \
                 and ('group additivity' in thermo_comment or '+ radical(' in thermo_comment):
@@ -1249,7 +1239,7 @@ class T3(object):
         key = self.get_species_key(species=species)
         if key is None:
             key = len(list(self.species.keys()))
-            qm_species = get_species_with_qm_label(species=species, key=key)
+            qm_species = get_species_with_qm_label(species=species, key=key, arc_species=True)
             self.species[key] = {'RMG label': species.label,
                                  'Chemkin label': species.to_chemkin(),
                                  'QM label': qm_species.label,
@@ -1275,15 +1265,15 @@ class T3(object):
                             xyzs.append(xyz_dict)
                     if len(xyzs):
                         if self.qm['adapter'] == 'ARC':
-                            # Make qm_species and ARCSpecies instance to consider the xyz information
+                            # Make qm_species an ARCSpecies instance to consider the xyz information
                             qm_species = ARCSpecies(label=qm_species.label,
-                                                    rmg_species=qm_species,
+                                                    rmg_species=species,
                                                     xyz=xyzs,
-                                                    include_in_thermo_lib=self.species_requires_refinement(qm_species),
                                                     )
                         else:
                             raise NotImplementedError(f"Passing XYZ information to {self.qm['adapter']} "
                                                       f"is not yet implemented.")
+            qm_species.include_in_thermo_lib = self.species_requires_refinement(qm_species)
             self.qm['species'].append(qm_species)
             return key
 
@@ -1360,108 +1350,6 @@ class T3(object):
                 self.reactions[rxn_key]['reasons'].append(reason)
         return None
 
-    def add_to_rmg_libraries(self):
-        """
-        Creates RMG libraries in the RMG database repository if they don't already exist,
-        and appends with the respective entries from the libraries generated by ARC.
-
-        Todo:
-            Tests kinetics libraries.
-        """
-        # 1. Thermo:
-        arc_thermo_lib_path = self.paths['ARC thermo lib']
-        rmg_t3_thermo_lib_path = self.paths['RMG T3 thermo lib']
-        local_context = {
-            'ThermoData': ThermoData,
-            'Wilhoit': Wilhoit,
-            'NASAPolynomial': NASAPolynomial,
-            'NASA': NASA,
-        }
-        if os.path.isfile(arc_thermo_lib_path) and os.path.isfile(rmg_t3_thermo_lib_path):
-            # This thermo library already exists in the RMG database: Load it, append new entries, and save.
-            rmg_thermo_lib, arc_thermo_lib = ThermoLibrary(), ThermoLibrary()
-            rmg_thermo_lib.load(path=rmg_t3_thermo_lib_path, local_context=local_context, global_context=dict())
-            arc_thermo_lib.load(path=arc_thermo_lib_path, local_context=local_context, global_context=dict())
-            arc_description = arc_thermo_lib.long_desc
-            description_to_append = '\n'
-            append = False
-            for line in arc_description.splitlines():
-                if 'Overall time since project initiation' in line:
-                    append = False
-                if append:
-                    description_to_append += line + '\n'
-                if 'Considered the following' in line:
-                    append = True
-            rmg_thermo_lib.long_desc += description_to_append
-            for entry in arc_thermo_lib.entries.values():
-                entry_species = Species(molecule=[entry.item])
-                entry_species.generate_resonance_structures(keep_isomorphic=False, filter_structures=True)
-                for existing_entry in rmg_thermo_lib.entries.values():
-                    if entry_species.is_isomorphic(existing_entry.item):
-                        if entry.label != existing_entry.label:
-                            self.logger.warning(f"Not adding species {entry.label} to the "
-                                                f"{self.t3['options']['library_name']} thermo library, "
-                                                f"the species seems to already exist under the label "
-                                                f"{existing_entry.label}.")
-                        break
-                rmg_thermo_lib.entries[entry.label] = entry
-            rmg_thermo_lib.save(path=rmg_t3_thermo_lib_path)
-        else:
-            # This thermo library doesn't exist in the RMG database: Just copy the library generated by ARC.
-            if os.path.isfile(arc_thermo_lib_path):
-                if not os.path.isdir(os.path.dirname(rmg_t3_thermo_lib_path)):
-                    os.makedirs(os.path.dirname(rmg_t3_thermo_lib_path))
-                shutil.copy(arc_thermo_lib_path, rmg_t3_thermo_lib_path)
-
-        # 2. Kinetics:
-        arc_kinetics_lib_path = self.paths['ARC kinetics lib']
-        rmg_t3_kinetics_lib_path = self.paths['RMG T3 kinetics lib']
-        local_context = {
-            'KineticsData': KineticsData,
-            'Arrhenius': Arrhenius,
-        }
-        if os.path.isdir(arc_kinetics_lib_path) and os.path.isdir(rmg_t3_kinetics_lib_path):
-            # This kinetics library already exists (in the RMG database or locally): Load it, append entries, and save.
-            rmg_kinetics_lib, arc_kinetics_lib = KineticsLibrary(), KineticsLibrary()
-            rmg_kinetics_lib.load(path=rmg_t3_kinetics_lib_path, local_context=local_context, global_context=dict())
-            arc_kinetics_lib.load(path=arc_kinetics_lib_path, local_context=local_context, global_context=dict())
-            arc_description = arc_kinetics_lib.long_desc
-            description_to_append = '\n'
-            append = False
-            for line in arc_description.splitlines():
-                if 'Overall time since project initiation' in line:
-                    append = False
-                if append:
-                    description_to_append += line + '\n'
-                if 'Considered the following' in line:
-                    append = True
-            rmg_kinetics_lib.long_desc += description_to_append
-            for entry in arc_kinetics_lib.entries.values():
-                entry_reaction = Reaction(reactants=entry.item.reactants[:],
-                                          products=entry.item.products[:],
-                                          specific_collider=entry.item.specific_collider,
-                                          kinetics=entry.data,
-                                          duplicate=entry.item.duplicate,
-                                          reversible=entry.item.reversible,
-                                          allow_pdep_route=entry.item.allow_pdep_route,
-                                          elementary_high_p=entry.item.elementary_high_p,
-                                          )
-                for existing_entry in rmg_kinetics_lib.entries.values():
-                    if entry_reaction.is_isomorphic(existing_entry.item):
-                        self.logger.warning(f"Not adding reaction {entry.label} to the "
-                                            f"{self.t3['options']['library_name']} kinetics library, "
-                                            f"the reaction seems to already exist under the label "
-                                            f"{existing_entry.label}.")
-                        break
-                rmg_kinetics_lib.entries[entry.label] = entry
-            rmg_kinetics_lib.save(path=rmg_t3_kinetics_lib_path)
-        else:
-            # This kinetics library doesn't exist in the RMG database: Just copy the library generated by ARC.
-            if os.path.isfile(arc_kinetics_lib_path):
-                if not os.path.isdir(os.path.dirname(rmg_t3_kinetics_lib_path)):
-                    os.makedirs(rmg_t3_kinetics_lib_path)
-                shutil.copy(arc_kinetics_lib_path, rmg_t3_kinetics_lib_path)
-
     def dump_species_and_reactions(self):
         """
         Dump self.species and self.reactions in case T3 needs to be restarted.
@@ -1500,6 +1388,24 @@ class T3(object):
                                                             if key in mod_rxn_dict['product_keys']],
                                                   )
                 self.reactions[key] = mod_rxn_dict
+
+    def add_library_to_rmg_run(self,
+                               library_name: str,
+                               library_type: str,
+                               ) -> None:
+        """
+        Add a T3-generated library to the RMG run.
+
+        Args:
+            library_name (str): The library name.
+            library_type (str): The library type, either 'thermo' or 'kinetics'.
+        """
+        library_type = 'thermo_libraries' if library_type == 'thermo' else 'kinetics_libraries'
+        exists_function = os.path.isfile if library_type == 'thermo_libraries' else os.path.isdir
+        if library_name not in self.rmg['database'][library_type] and exists_function(library_name):
+            self.rmg['database'][library_type] = [library_name] + self.rmg['database'][library_type]
+        elif library_name in self.rmg['database'][library_type] and not os.path.isfile(library_name):
+            self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
 
     def check_overtime(self) -> bool:
         """
@@ -1607,6 +1513,7 @@ def get_species_label_by_structure(adj: str,
 
 def get_species_with_qm_label(species: Species,
                               key: int,
+                              arc_species: bool = False,
                               ) -> Species:
     """
     Get a copy of the species with an updated QM label.
@@ -1615,9 +1522,10 @@ def get_species_with_qm_label(species: Species,
     Args:
          species (Species): The species to consider.
          key (int): The respective species key, if exists.
+         arc_species (bool, optional): Whether to return an ARCSpecies object instance.
 
     Returns:
-        Species: A copy of the original species with a formatted QM species label.
+        Union[Species, ARCSpecies]: A copy of the original species with a formatted QM species label.
 
     Todo:
         Add tests.
@@ -1625,4 +1533,8 @@ def get_species_with_qm_label(species: Species,
     qm_species = species.copy(deep=False)
     legalize_species_label(species=qm_species)
     qm_species.label = f's{key}_{qm_species.label}'
+    if isinstance(qm_species, Species) and arc_species:
+        qm_species = ARCSpecies(label=qm_species.label,
+                                rmg_species=qm_species,
+                                )
     return qm_species

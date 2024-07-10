@@ -21,8 +21,9 @@ t3:
     max_RMG_exceptions_allowed: 10  # optional, maximum number of times RMG is allowed to crash, default: 10
     max_RMG_walltime: '00:02:00:00'  # optional, default: ``None``
     max_T3_walltime: '01:00:00:00'  # optional, default: ``None``
-    library_name: T3  # optional, default: 'T3'
-    save_libraries_directly_in_rmgdb: False  # optional, whether to save the RMG kinetics and thermo libraries directly in the RMG-database repository, default: ``False``
+    library_name: T3  # optional, this is the name of the RMG libraries T3 creates as saves as output. default: 'T3'
+    shared_library_name: T3_shared  # optional, this is the name of RMG libraries (kinetics and thermo) created inside the respective RMG database paths that several T3 concurrent projects may share. default: ``None``
+    external_library_path: None  # optional, path to an external RMG library to use for saving shared libraries, default: ``None`` (i.e., use the RMG database path)
     num_sa_per_temperature_range: 3  # optional, if a range of temperatures is given this argument specifies how many equally distributed points to generate for local SA runs, default: 3
     num_sa_per_pressure_range: 3  # optional, if a range of pressures is given this argument specifies how many equally distributed points to generate for local SA runs, default: 3
     num_sa_per_volume_range: 3  # optional, if a range of volumes is given this argument specifies how many equally distributed points to generate for local SA runs, default: 3

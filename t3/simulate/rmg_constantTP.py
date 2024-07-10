@@ -7,9 +7,8 @@ import datetime
 import itertools
 import os
 import pandas as pd
-import re
 import shutil
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from rmgpy.kinetics.diffusionLimited import diffusion_limiter
 from rmgpy.rmg.listener import SimulationProfilePlotter, SimulationProfileWriter
@@ -21,10 +20,12 @@ from rmgpy.tools.plot import plot_sensitivity
 
 from t3.common import get_chem_to_rmg_rxn_index_map, get_species_by_label, get_values_within_range, \
     get_observable_label_from_header, get_parameter_from_header, time_lapse
-from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
 from t3.utils.writer import write_rmg_input_file
+
+if TYPE_CHECKING:
+    from t3.logger import Logger
 
 
 class RMGConstantTP(SimulateAdapter):
@@ -63,7 +64,7 @@ class RMGConstantTP(SimulateAdapter):
                  t3: dict,
                  rmg: dict,
                  paths: dict,
-                 logger: Logger,
+                 logger: 'Logger',
                  atol: float = 1e-16,
                  rtol: float = 1e-8,
                  observable_list: Optional[list] = None,

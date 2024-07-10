@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
 
+from t3.common import VALID_CHARS
 from t3.simulate.factory import _registered_simulate_adapters
 
 
@@ -43,7 +44,8 @@ class T3Options(BaseModel):
     max_rmg_processes: Optional[conint(ge=1)] = None
     max_rmg_iterations: Optional[conint(ge=1)] = None
     library_name: constr(max_length=255) = 'T3lib'
-    save_libraries_directly_in_rmgdb: bool = False
+    shared_library_name: Optional[constr(max_length=255)] = None
+    external_library_path: Optional[constr(max_length=255)] = None
     num_sa_per_temperature_range: conint(ge=1) = 3
     num_sa_per_pressure_range: conint(ge=1) = 3
     num_sa_per_volume_range: conint(ge=1) = 3
@@ -61,6 +63,35 @@ class T3Options(BaseModel):
         # if computations of the respective rate coefficients were requested.
         if 'collision_violators_thermo' in values and value:
             values['collision_violators_thermo'] = True
+        return value
+
+    @validator('library_name')
+    def check_library_name(cls, value):
+        """T3Options.library_name validator"""
+        for char in value:
+            if char not in VALID_CHARS:
+                raise ValueError(f'The library name "{value}" contains an invalid character: {char}.\n'
+                                 f'Only the following characters are allowed:\n{VALID_CHARS}')
+        return value
+
+    @validator('shared_library_name')
+    def check_shared_library_name(cls, value):
+        """T3Options.shared_library_name validator"""
+        if value is not None:
+            for char in value:
+                if char not in VALID_CHARS + '/':
+                    raise ValueError(f'The shared library name "{value}" contains an invalid character: {char}.\n'
+                                     f'Only the following characters are allowed:\n{VALID_CHARS}')
+        return value
+
+    @validator('external_library_path')
+    def check_external_library_path(cls, value):
+        """T3Options.external_library_path validator"""
+        if value is not None:
+            for char in value:
+                if char not in VALID_CHARS + '/':
+                    raise ValueError(f'The external library path "{value}" contains an invalid character: {char}.\n'
+                                     f'Only the following characters are allowed:\n{VALID_CHARS}')
         return value
 
 
