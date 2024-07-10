@@ -36,6 +36,7 @@ def generate_flux(model_path: str,
                   scaling: Optional[float] = None,
                   fix_cantera_model: bool = True,
                   allowed_nodes: Optional[List[str]] = None,
+                  max_chemical_generations: Optional[int] = None,
                   ):
     """
     Generate a flux diagram for a given model and composition.
@@ -71,6 +72,7 @@ def generate_flux(model_path: str,
         fix_cantera_model (bool, optional): Whether to fix the Cantera model before running the simulation.
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
                                                        any node outside this list will not appear in the flux diagram.
+        max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
 
     Structures:
         profiles: {<time in s>: {'P': <pressure in bar>,
@@ -115,6 +117,7 @@ def generate_flux(model_path: str,
                                    display_r_n_p=display_r_n_p,
                                    scaling=scaling,
                                    allowed_nodes=allowed_nodes,
+                                   max_chemical_generations=max_chemical_generations,
                                    )
     else:
         generate_flux_diagrams(profiles=profiles,
@@ -128,6 +131,7 @@ def generate_flux(model_path: str,
                                display_r_n_p=display_r_n_p,
                                scaling=scaling,
                                allowed_nodes=allowed_nodes,
+                               max_chemical_generations=max_chemical_generations,
                                )
 
 
@@ -493,6 +497,7 @@ def generate_flux_diagrams(profiles: dict,
                            display_r_n_p: bool = True,
                            scaling: Optional[float] = None,
                            allowed_nodes: Optional[List[str]] = None,
+                           max_chemical_generations: Optional[int] = None,
                            ):
     """
     Generate flux diagrams.
@@ -512,6 +517,7 @@ def generate_flux_diagrams(profiles: dict,
         scaling (Optional[float], optional): The scaling of the final image.
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
                                                        any node outside this list will not appear in the flux diagram.
+        max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
 
     Structures:
         graph: {<species1>: {'rxn1': [[<the species formed>], <rop_value>],
@@ -526,6 +532,7 @@ def generate_flux_diagrams(profiles: dict,
                                                                         observables=observables,
                                                                         explore_tol=explore_tol,
                                                                         dead_end_tol=dead_end_tol,
+                                                                        max_chemical_generations=max_chemical_generations,
                                                                         )
         create_digraph(flux_graph=flux_graph,
                        profile=profile,
@@ -817,6 +824,7 @@ def get_flux_graph(profile: dict,
                    observables: List[str],
                    explore_tol: float = 0.95,
                    dead_end_tol: float = 0.10,
+                   max_chemical_generations: Optional[int] = None,
                    ) -> Tuple[dict, Set[str], float, float]:
     """
     Explore the ROP profiles and get the flux graph.
@@ -829,6 +837,7 @@ def get_flux_graph(profile: dict,
         dead_end_tol (float, optional): A flux exploration termination criterion.
                                         Don't explore further consumption is lower than this tolerance
                                         times the net rate of production.
+        max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
 
     Returns:
         Tuple[dict, Set[str], float, float]: The flux graph and the maximal flux.
@@ -836,7 +845,8 @@ def get_flux_graph(profile: dict,
     normalized_fluxes, max_rop = get_normalized_flux_profile(profile=profile)
     min_rop = None
     graph, nodes_to_explore = dict(), set()
-    stack, visited = [o for o in observables], [o for o in observables]
+    stack, visited = [obs for obs in observables], [obs for obs in observables]
+    node_generation_dict = {obs: 0 for obs in observables}
     while len(stack):
         node = stack.pop(-1)
         node = node.split()[-1]
@@ -857,10 +867,14 @@ def get_flux_graph(profile: dict,
                 min_rop = abs(rop)
             opposite_rxn_species = get_opposite_rxn_species(rxn=rxn, spc=node)
             for spc in opposite_rxn_species:
-                if spc not in visited:
+                if spc not in visited \
+                        and (max_chemical_generations is None
+                             or node_generation_dict[node] < max_chemical_generations - 1):
                     if continue_exploring(rops=rxns_rop, dead_end_tol=dead_end_tol):
                         stack.append(spc)
                         nodes_to_explore.add(spc)
+                        if max_chemical_generations is not None:
+                            node_generation_dict[spc] = node_generation_dict[node] + 1
                     visited.append(spc)
             if node not in graph.keys():
                 graph[node] = dict()
