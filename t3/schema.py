@@ -406,7 +406,7 @@ class RMGOptions(BaseModel):
     A class for validating input.RMG.options arguments
     """
     seed_name: str = 'Seed'
-    save_edge: bool = True
+    save_edge: bool = False
     save_html: bool = False
     generate_seed_each_iteration: bool = True
     save_seed_to_database: bool = False
