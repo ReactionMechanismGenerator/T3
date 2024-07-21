@@ -1404,7 +1404,7 @@ class T3(object):
         exists_function = os.path.isfile if library_type == 'thermo_libraries' else os.path.isdir
         if library_name not in self.rmg['database'][library_type] and exists_function(library_name):
             self.rmg['database'][library_type] = [library_name] + self.rmg['database'][library_type]
-        elif library_name in self.rmg['database'][library_type] and not os.path.isfile(library_name):
+        elif library_name in self.rmg['database'][library_type] and not exists_function(library_name):
             self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
 
     def check_overtime(self) -> bool:
