@@ -6,20 +6,22 @@ Used to run mechanism analysis with RMG
 import datetime
 import itertools
 import os
-import pandas as pd
 import shutil
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
+import pandas as pd
 from rmgpy.kinetics.diffusionLimited import diffusion_limiter
-from rmgpy.rmg.listener import SimulationProfilePlotter, SimulationProfileWriter
+from rmgpy.rmg.listener import (SimulationProfilePlotter,
+                                SimulationProfileWriter)
 from rmgpy.rmg.settings import ModelSettings
 from rmgpy.solver.liquid import LiquidReactor
 from rmgpy.solver.simple import SimpleReactor
 from rmgpy.tools.loader import load_rmg_py_job
 from rmgpy.tools.plot import plot_sensitivity
-
-from t3.common import get_chem_to_rmg_rxn_index_map, get_species_by_label, get_values_within_range, \
-    get_observable_label_from_header, get_parameter_from_header, time_lapse
+from t3.common import (get_chem_to_rmg_rxn_index_map,
+                       get_observable_label_from_header,
+                       get_parameter_from_header, get_species_by_label,
+                       get_values_within_range, time_lapse)
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
 from t3.utils.writer import write_rmg_input_file
@@ -152,6 +154,8 @@ class RMGConstantTP(SimulateAdapter):
                 reaction_system.sens_conditions['T'] = reaction_system.T.value_si
                 if isinstance(reaction_system, SimpleReactor):
                     reaction_system.sens_conditions['P'] = reaction_system.P.value_si
+                    if reaction_system.sens_conditions['P'] == 1e+5:
+                        reaction_system.sens_conditions['P'] = 1.05e+5
                 elif isinstance(reaction_system, LiquidReactor):
                     reaction_system.sens_conditions['V'] = reaction_system.V
                 else:
