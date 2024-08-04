@@ -309,17 +309,40 @@ def set_batch_p(gas: ct.Solution,
     return network, reactor
 
 
+def closest_bigger_number(array: List[float],
+                          target: float,
+                          ) -> Tuple[Optional[float], Optional[int]]:
+    """
+    Find the min number in an array that is greater than the target number.
+
+    Args:
+        array (List[float]): List of numbers to search through.
+        target (float): The target number.
+    Returns:
+        Tuple[num[float], i[int]]: A tuple containing the min bigger number (num) and its index (i) in the original
+        array. If no number greater than the target is found, both elements in the tuple will be None.
+    """
+    candidates = [(num, i) for i, num in enumerate(array) if num > target]
+    if candidates:
+        num, i = min(candidates, key=lambda x: x[0])
+        return num, i
+    else:
+        return None, None
+
+
 def run_jsr(gas: ct.Solution,
             times: List[float],
             composition: Dict[str, float],
             T: float,
             P: float,
-            V: Optional[float] = None,
+            V: float = 100,
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
+            tau_tolerance: float = 0.005,
             ) -> Dict[float, dict]:
     """
     Run a JSR reactor with constant pressure, constant temperature, and constant volume.
+    This will address stiff equations in which small time steps are required.
 
     Args:
         gas (ct.Solution): The cantera Solution object.
@@ -330,22 +353,31 @@ def run_jsr(gas: ct.Solution,
         V (float, optional): The reactor volume in cm^3.
         a_tol (float, optional): The absolute tolerance for the simulation.
         r_tol (float, optional): The relative tolerance for the simulation.
+        tau_tolerance (float, optional): Cantera will solve JSR equations with step()
+                                         till tau * tolerance time, after that, it will 
+                                         solve them by advance(t_i).
 
     Returns:
         dict: The T, P, X, and ROP profiles (values) at a specific time.
     """
-    V = V or 100
+    num_steps = 500
     profiles = dict()
     stoichiometry = get_rxn_stoichiometry(gas)
     for tau in times:
-        network, reactor = set_jsr(gas=gas, time=tau, composition=composition, T=T, P=P, V=V, a_tol=a_tol, r_tol=r_tol)
         t = 0
-        while t < tau:
+        dt = tau / num_steps
+        time_steps_array = np.arange(t, tau + dt, dt)  # the last number is tau
+        network, reactor = set_jsr(gas=gas, time=tau, composition=composition, T=T, P=P, V=V, a_tol=a_tol, r_tol=r_tol)
+        while t <= tau * tau_tolerance:
+            network.step()
+            t = network.time
+        t = network.time
+        t, t_step_index = closest_bigger_number(time_steps_array, t)
+        while t_step_index < len(time_steps_array) - 1:  # till t =tau
             rops = {spc.name: dict() for spc in gas.species()}
-            t = network.step()
-            if t > tau:
-                network.advance(tau)
-                t = tau
+            network.advance(t)
+            t_step_index += 1
+            t = time_steps_array[t_step_index]
             cantera_reaction_rops = gas.net_rates_of_progress
             for spc in gas.species():
                 for i, rxn in enumerate(gas.reactions()):
