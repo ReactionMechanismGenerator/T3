@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import datetime
 import os
+import shutil
 import time
 
 from arc.job.local import _determine_job_id, change_mode, execute_command, parse_running_jobs_ids, submit_job
@@ -229,18 +230,20 @@ def run_rmg_in_local_queue(project_directory: str,
     with open(rmg_input_path, 'r') as f:
         content = f.read()
     seed_path = os.path.join(project_directory, 'seed')
-    if restart_rmg and restart_string not in content and os.path.isdir(seed_path) and os.listdir(seed_path):
-        if os.path.isfile(os.path.join(project_directory, 'restart_from_seed.py')):
-            if os.path.isfile(os.path.join(project_directory, 'input.py')):
-                os.rename(src=os.path.join(project_directory, 'input.py'),
-                          dst=os.path.join(project_directory, 'input.py.old'))
-            os.rename(src=os.path.join(project_directory, 'restart_from_seed.py'),
-                      dst=os.path.join(project_directory, 'input.py'))
-        elif os.path.isfile(os.path.join(project_directory, 'input.py')):
-            with open(os.path.join(project_directory, 'input.py'), 'r') as f:
-                content = f.read()
-            with open(os.path.join(project_directory, 'input.py'), 'w') as f:
-                f.write("restartFromSeed(path='seed')\n\n" + content)
+    if restart_rmg:
+        backup_rmg_files(project_directory=project_directory)
+        if restart_string not in content and os.path.isdir(seed_path) and os.listdir(seed_path):
+            if os.path.isfile(os.path.join(project_directory, 'restart_from_seed.py')):
+                if os.path.isfile(os.path.join(project_directory, 'input.py')):
+                    os.rename(src=os.path.join(project_directory, 'input.py'),
+                              dst=os.path.join(project_directory, 'input.py.old'))
+                os.rename(src=os.path.join(project_directory, 'restart_from_seed.py'),
+                          dst=os.path.join(project_directory, 'input.py'))
+            elif os.path.isfile(os.path.join(project_directory, 'input.py')):
+                with open(os.path.join(project_directory, 'input.py'), 'r') as f:
+                    content = f.read()
+                with open(os.path.join(project_directory, 'input.py'), 'w') as f:
+                    f.write("restartFromSeed(path='seed')\n\n" + content)
     job_status, job_id = submit_job(project_directory=project_directory,
                                     logger=logger,
                                     memory=memory,
@@ -378,6 +381,32 @@ def get_new_memory_for_an_rmg_run(job_log_path: str,
     new_mem = min(new_mem, settings['servers']['local']['max mem'] * 1000) if new_mem is not None else MEM
     logger.info(f'Setting RMG job memory to {new_mem / 1000:.2f} GB')
     return new_mem
+
+
+def backup_rmg_files(project_directory: str):
+    """
+    Backup the RMG files before restarting from seed.
+
+    Args:
+        project_directory (str): The path to the RMG folder.
+    """
+    restart_backup_dir = os.path.join(project_directory,
+                                      f'restart_backup_{datetime.datetime.now().strftime("%b%d_%Y_%H:%M:%S")}')
+    os.mkdir(restart_backup_dir)
+    os.mkdir(os.path.join(restart_backup_dir, 'chemkin'))
+    files = ['RMG.log',
+             os.path.join('chemkin', 'chem_annotated.inp'),
+             os.path.join('chemkin', 'chem_edge_annotated.inp'),
+             ]
+    folders = ['pdep']
+    for file in files:
+        if os.path.isfile(os.path.join(project_directory, file)):
+            shutil.copy(src=os.path.join(project_directory, file),
+                        dst=os.path.join(restart_backup_dir, file))
+    for folder in folders:
+        if os.path.isdir(os.path.join(project_directory, folder)):
+            shutil.copytree(src=os.path.join(project_directory, folder),
+                            dst=os.path.join(restart_backup_dir, folder))
 
 
 # def get_names_by_sub_folders(pwd: str) -> List[str]:
