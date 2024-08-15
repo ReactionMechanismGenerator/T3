@@ -3,14 +3,14 @@ A "keep alive" runner tool for RMG on a server.
 Should be executed locally on the head node using the t3 environment.
 """
 
-from typing import TYPE_CHECKING, List, Optional, Tuple
-
 import datetime
 import os
 import shutil
 import time
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from arc.job.local import _determine_job_id, change_mode, execute_command, parse_running_jobs_ids, submit_job
+from arc.job.local import (_determine_job_id, change_mode, execute_command,
+                           parse_running_jobs_ids, submit_job)
 
 from t3.imports import local_t3_path, settings, submit_scripts
 
@@ -391,7 +391,7 @@ def backup_rmg_files(project_directory: str):
         project_directory (str): The path to the RMG folder.
     """
     restart_backup_dir = os.path.join(project_directory,
-                                      f'restart_backup_{datetime.datetime.now().strftime("%b%d_%Y_%H:%M:%S")}')
+                                      f'restart_backup_{datetime.datetime.now().strftime("%b%d_%Y_%H-%M-%S")}')
     os.mkdir(restart_backup_dir)
     os.mkdir(os.path.join(restart_backup_dir, 'chemkin'))
     files = ['RMG.log',
@@ -400,11 +400,11 @@ def backup_rmg_files(project_directory: str):
              ]
     folders = ['pdep']
     for file in files:
-        if os.path.isfile(os.path.join(project_directory, file)):
+        if os.path.exists(os.path.join(project_directory, file)):
             shutil.copy(src=os.path.join(project_directory, file),
                         dst=os.path.join(restart_backup_dir, file))
     for folder in folders:
-        if os.path.isdir(os.path.join(project_directory, folder)):
+        if os.path.exists(os.path.join(project_directory, folder)):
             shutil.copytree(src=os.path.join(project_directory, folder),
                             dst=os.path.join(restart_backup_dir, folder))
 

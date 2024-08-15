@@ -1,0 +1,6 @@
+! Species         Shape    LJ-depth  LJ-diam   DiplMom   Polzblty  RotRelaxNum Data     
+! Name            Index    epsilon/k_B sigma     mu        alpha     Zrot      Source   
+Ar                  0     136.500     3.330     0.000     0.000     0.000    ! NOx2018
+Ne                  0     148.600     3.758     0.000     0.000     0.000    ! Epsilon & sigma estimated with fixed Lennard Jones Parameters. This is the fallback method! Try improving transport databases!
+furfuryl(1)         2     501.522     6.610     0.000     0.000     0.000    ! Epsilon & sigma estimated with Tc=651.33 K, Pc=32.77 bar (from Joback method)
+C2H2O(15133)        2     357.876     4.998     0.000     0.000     0.000    ! Epsilon & sigma estimated with Tc=464.77 K, Pc=54.07 bar (from Joback method)
