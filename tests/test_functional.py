@@ -13,6 +13,7 @@ from arc.common import read_yaml_file
 
 from t3 import T3
 from t3.common import DATA_BASE_PATH
+from t3.runners.rmg_runner import backup_rmg_files
 from t3.utils.dependencies import check_dependencies
 
 
@@ -102,6 +103,39 @@ def test_computing_thermo():
     for expected_line_dict in expected_lines:
         print(expected_line_dict['line'])  # assists in debugging this test, otherwise error messages aren't informative
         assert expected_line_dict['exists'] is True
+
+
+def test_rmg_files_backup_before_restart():
+    """
+    Test for backup key files and folder from an RMG run before restarting it
+    1.pdep folder
+    2.chem_annotated
+    3.chem_edge_annotated
+    4.RMG log files
+    """
+    backup_test_directory = os.path.join(DATA_BASE_PATH, 'backup_rmg_files_before_restart','iteration_1', 'RMG')
+    backup_rmg_files(backup_test_directory)
+    # Find the backup directory (there should only be one per restart)
+    backup_directories = [d for d in os.listdir(backup_test_directory) if d.startswith('restart_backup')]
+    assert len(backup_directories) == 1 ,"There should be one backup directory per restart"
+    
+    # Path to the backup directory
+    backup_directory = os.path.join(backup_test_directory, backup_directories[0])
+
+    # Check if the backup directory and the chemkin subdirectory were created
+    assert os.path.exists(backup_directory), "Backup directory was not created"
+    assert os.path.exists(os.path.join(backup_directory, 'chemkin')) , "chemkin directory was not created in backup"
+
+    # Check if the necessary files were copied
+    assert os.path.exists(os.path.join(backup_directory, 'RMG.log')) , "RMG.log was not backed up."
+    assert os.path.exists(os.path.join(backup_directory, 'chemkin', 'chem_annotated.inp')), "chem_annotated.inp was not backed up"
+    assert os.path.exists(os.path.join(backup_directory, 'chemkin', 'chem_edge_annotated.inp')), "chem_edge_annotated.inp was not backed up"
+
+    # Check if the pdep folder was copied
+    assert os.path.exists(os.path.join(backup_directory, 'pdep')), "pdep directory was not backed up"
+    assert os.path.exists(os.path.join(backup_directory, 'pdep', 'network1_2.py')), "pdep1_2.py was not backed up"
+
+    shutil.rmtree(backup_directory, ignore_errors=True)
 
 
 def delete_selective_content_from_test_dirs(test_dir: str):
