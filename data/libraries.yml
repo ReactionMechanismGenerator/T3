@@ -1,0 +1,153 @@
+# Recommended RMG libraries per application
+
+primary:
+  thermo:
+    - primaryThermoLibrary
+    - BurkeH2O2
+    - Spiekermann_refining_elementary_reactions
+    - thermo_DFT_CCSDTF12_BAC
+    - DFT_QCI_thermo
+    - CBS_QB3_1dHR
+  kinetics:
+    - primaryH2O2
+
+nitrogen:
+  thermo:
+    - NH3
+    - NitrogenCurran
+    - CHON_G4
+    - CN
+    - NOx2018
+    - name: primaryNS
+      credence: low
+    - name: CHN
+      credence: low
+    - name: CHON
+      credence: low
+    - name: BurcatNS
+      credence: low
+  kinetics:
+    - primaryNitrogenLibrary
+    - HydrazinePDep
+    - Ethylamine
+
+sulfur:
+  thermo:
+    - name: primaryNS
+      credence: low
+    - name: SulfurGlarborgH2S
+      credence: low
+    - name: SulfurGlarborgBozzeli
+      credence: low
+    - name: BurcatNS
+      credence: low
+  kinetics:
+    - primarySulfurLibrary
+    - Sulfur/DMDS
+    - Sulfur/DMS
+
+combustion:
+  thermo:
+    - FFCM1(-)
+    - NOx2018
+    - name: CHO
+      credence: low
+  kinetics:
+    - FFCM1(-)
+    - 2006_Joshi_OH_CO
+    - 2005_Senosiain_OH_C2H2
+    - NOx2018
+
+CH_pyrolysis:
+  thermo:
+    - NOx2018
+    - Butadiene_Dimerization
+    - C10H11
+    - s3_5_7_ane
+    - Fulvene_H
+    - naphthalene_H
+    - vinylCPD_H
+    - Lai_Hexylbenzene
+    - Narayanaswamy
+    - SABIC_aromatics_1dHR_extended
+    - SABIC_aromatics_1dHR
+    - SABIC_aromatics
+    - heavy_oil_ccsdtf12_1dHR
+    - bio_oil
+    - Chernov
+    - CurranPentane
+    - Klippenstein_Glarborg2016
+    - name: CH
+      credence: low
+  kinetics:
+    - 2001_Tokmakov_H_Toluene_to_CH3_Benzene
+    - 2003_Miller_Propargyl_Recomb_High_P
+    - 2009_Sharma_C5H5_CH3_highP
+    - 2015_Buras_C2H3_C4H6_highP
+    - Butadiene_Dimerization
+    - C10H11
+    - C12H11_pdep
+    - C2H2_init
+    - C6H5_C4H4_Mebel
+    - Fulvene_H
+    - Mebel_Naphthyl
+    - Mebel_C6H5_C2H2
+    - biCPD_H_shift
+    - c-C5H5_CH3_Sharma
+    - fascella
+    - kislovB
+    - naphthalene_H
+    - vinylCPD_H
+    - First_to_Second_Aromatic_Ring/2005_Ismail_C6H5_C4H6_highP
+    - First_to_Second_Aromatic_Ring/2012_Matsugi_C3H3_C7H7_highP
+    - First_to_Second_Aromatic_Ring/2016_Mebel_C10H9_highP
+    - First_to_Second_Aromatic_Ring/2016_Mebel_C9H9_highP
+    - First_to_Second_Aromatic_Ring/2016_Mebel_Indene_CH3_highP
+    - First_to_Second_Aromatic_Ring/2017_Buras_C6H5_C3H6_highP
+    - First_to_Second_Aromatic_Ring/2017_Mebel_C6H4C2H_C2H2_highP
+    - First_to_Second_Aromatic_Ring/2017_Mebel_C6H5C2H2_C2H2_highP
+    - First_to_Second_Aromatic_Ring/2017_Mebel_C6H5_C2H2_highP
+    - First_to_Second_Aromatic_Ring/2017_Mebel_C6H5_C4H4_highP
+    - First_to_Second_Aromatic_Ring/phenyl_diacetylene_effective
+    - Aromatics_high_pressure/C10H10_1
+    - Aromatics_high_pressure/C10H10_2
+    - Aromatics_high_pressure/C10H10_H_abstraction
+    - Aromatics_high_pressure/C10H11_1
+    - Aromatics_high_pressure/C10H11_2
+    - Aromatics_high_pressure/C10H11_3
+    - Aromatics_high_pressure/C10H11_4
+    - Aromatics_high_pressure/C10H7
+    - Aromatics_high_pressure/C10H8_H_abstraction_H_recomb
+    - Aromatics_high_pressure/C10H9_1
+    - Aromatics_high_pressure/C10H9_2
+    - Aromatics_high_pressure/C10H9_3
+    - Aromatics_high_pressure/C10H9_4
+    - Aromatics_high_pressure/C12H10_1
+    - Aromatics_high_pressure/C12H10_2
+    - Aromatics_high_pressure/C12H10_H_abstraction
+    - Aromatics_high_pressure/C12H11
+    - Aromatics_high_pressure/C12H8_H_abstraction
+    - Aromatics_high_pressure/C12H9
+    - Aromatics_high_pressure/C14H10_H_abstraction_H_recomb
+    - Aromatics_high_pressure/C14H11_1
+    - Aromatics_high_pressure/C14H11_2
+    - Aromatics_high_pressure/C14H11_3
+    - Aromatics_high_pressure/C14H11_4
+    - Aromatics_high_pressure/C14H9
+    - Aromatics_high_pressure/C16H11
+    - Aromatics_high_pressure/C7H8
+    - Aromatics_high_pressure/C7H8_H_abstraction
+    - Aromatics_high_pressure/C7H9
+    - Aromatics_high_pressure/C8H6_H_abstraction
+    - Aromatics_high_pressure/C8H7
+    - Aromatics_high_pressure/C8H8_H_abstraction
+    - Aromatics_high_pressure/C8H9
+    - Aromatics_high_pressure/C9H10_H_abstraction
+    - Aromatics_high_pressure/C9H11
+    - Aromatics_high_pressure/C9H7
+    - Aromatics_high_pressure/C9H8_1
+    - Aromatics_high_pressure/C9H8_2
+    - Aromatics_high_pressure/C9H8_H_abstraction
+    - Aromatics_high_pressure/C9H9_1
+    - Aromatics_high_pressure/C9H9_2
+
