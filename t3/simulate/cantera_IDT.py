@@ -14,8 +14,6 @@ import numpy as np
 
 from arc.common import save_yaml_file
 
-from rmgpy.chemkin import load_chemkin_file
-
 from t3.common import determine_concentrations_by_equivalence_ratios
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
@@ -117,7 +115,8 @@ class CanteraIDT(SimulateAdapter):
         """
         Simulate the mechanism and compute ignition delay times.
         """
-        self.logger.info('Running a simulation using CanteraIDT...')
+        if self.logger is not None:
+            self.logger.info('Running a simulation using CanteraIDT...')
 
         equivalence_ratios, concentration_combinations = self.get_concentration_combinations()
         reactor_idt_dict = dict()
@@ -127,6 +126,7 @@ class CanteraIDT(SimulateAdapter):
                 for i, X in enumerate(concentration_combinations):
                     for P in P_list:
                         for T in T_list:
+                            print(f'T: {T}, P: {P},\nX: {X}')
                             self.model.TPX = T, P * 1e5, X
                             self.idt_dict[(equivalence_ratios[i], P, T)] = \
                                 self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{round(P,2)}_bar_{round(T,2)}_K.png')
@@ -134,6 +134,7 @@ class CanteraIDT(SimulateAdapter):
                 X = {spc['label']: spc['concentration'] for spc in self.rmg['species'] if spc['concentration']}
                 for P in P_list:
                     for T in T_list:
+                        print(f'T: {T}, P: {P},\nX: {X}')
                         self.model.TPX = T, P * 1e5, X
                         if equivalence_ratios is None:
                             self.idt_dict[(0, P, T)] = \
