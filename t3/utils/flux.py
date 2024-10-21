@@ -244,7 +244,7 @@ def set_jsr(gas: ct.Solution,
         time (float): The residence time in s.
         composition (Dict[str, float]): The composition of the mixture.
         T (float): The temperature in K.
-        P (float): The pressure in Pa.
+        P (float): The pressure in bar.
         V (float): The reactor volume in cm^3.
         a_tol (float, optional): The absolute tolerance for the simulation.
         r_tol (float, optional): The relative tolerance for the simulation.
@@ -254,22 +254,22 @@ def set_jsr(gas: ct.Solution,
             - The reactor network (consisting of the JSR)
             - The JSR
     """
-    gas.TPX = T, P * 1e5, composition
+    gas.TPX = T, P * ct.one_atm, composition #K, atm, ratio
     inlet = ct.Reservoir(gas)
     exhaust = ct.Reservoir(gas)
-    stirred_reactor = ct.IdealGasReactor(gas, energy="off", volume=V * 1e-6)
+    stirred_reactor = ct.IdealGasReactor(gas, energy="off", volume=V * 1e-6) #volume in m^3
     mfc = ct.MassFlowController(
         upstream=inlet,
         downstream=stirred_reactor,
         mdot=stirred_reactor.mass / time,
     )
-    mfc.mass_flow_coeff = 1.0
+    #mfc.mass_flow_coeff = 1.0
     pr = ct.PressureController(
         upstream=stirred_reactor,
         downstream=exhaust,
         master=mfc,
     )
-    pr.pressure_coeff = 0.01
+    #pr.pressure_coeff = 0.01
     network = ct.ReactorNet([stirred_reactor])
     network.atol = a_tol
     network.rtol = r_tol
@@ -342,7 +342,6 @@ def run_jsr(gas: ct.Solution,
             ) -> Dict[float, dict]:
     """
     Run a JSR reactor with constant pressure, constant temperature, and constant volume.
-    This will address stiff equations in which small time steps are required.
 
     Args:
         gas (ct.Solution): The cantera Solution object.
@@ -360,24 +359,32 @@ def run_jsr(gas: ct.Solution,
     Returns:
         dict: The T, P, X, and ROP profiles (values) at a specific time.
     """
-    num_steps = 500
+    import time
     profiles = dict()
     stoichiometry = get_rxn_stoichiometry(gas)
     for tau in times:
-        t = 0
-        dt = tau / num_steps
-        time_steps_array = np.arange(t, tau + dt, dt)  # the last number is tau
+        #Create a SolutionArray to store the data
+        time_history = ct.SolutionArray(gas, extra=["t"])
         network, reactor = set_jsr(gas=gas, time=tau, composition=composition, T=T, P=P, V=V, a_tol=a_tol, r_tol=r_tol)
-        while t <= tau * tau_tolerance:
-            network.step()
-            t = network.time
-        t = network.time
-        t, t_step_index = closest_bigger_number(time_steps_array, t)
-        while t_step_index < len(time_steps_array) - 1:  # till t =tau
+        # Set the maximum simulation time
+        max_simulation_time = tau  #seconds
+        # Start the stopwatch
+        tic = time.time()
+        # Set simulation start time to zero
+        t = 0
+        counter = 1
+        while t < max_simulation_time:
             rops = {spc.name: dict() for spc in gas.species()}
-            network.advance(t)
-            t_step_index += 1
-            t = time_steps_array[t_step_index]
+            t = network.step()
+            if t >= max_simulation_time:
+                break
+            # We will store only every 10th value. Remember, we have 1200+ species, so there will be
+            # 1200+ columns for us to work with
+            # if counter % 10 == 0:
+            #     # Extract the state of the reactor
+            #     time_history.append(reactor.thermo.state, t=t)
+            time_history.append(reactor.thermo.state, t=t)
+            counter += 1
             cantera_reaction_rops = gas.net_rates_of_progress
             for spc in gas.species():
                 for i, rxn in enumerate(gas.reactions()):
@@ -386,10 +393,10 @@ def run_jsr(gas: ct.Solution,
                             rops[spc.name][rxn.equation] = 0
                         rops[spc.name][rxn.equation] += cantera_reaction_rops[i] * stoichiometry[spc.name][i]
             profile = {'P': gas.P, 'T': gas.T, 'X': {s.name: x for s, x in zip(gas.species(), gas.X)}, 'ROPs': rops}
-            if t == tau:
-                profiles[t] = profile
+        # Stop the stopwatch
+        toc = time.time()
+        profiles[t] = profile
     return profiles
-
 
 def run_batch_p(gas: ct.Solution,
                 times: List[float],
