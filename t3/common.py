@@ -4,6 +4,7 @@ t3 common module
 
 import datetime
 import os
+import re
 import string
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -373,3 +374,17 @@ def get_o2_stoichiometry(smiles: Optional[str] = None,
     if other:
         raise ValueError(f'Cannot calculate O2 stoichiometry for {fuel.label} with {other} atoms which are not C/H/N/O.')
     return 0.5 * (2 * c + 0.5 * h - o)
+
+
+def remove_numeric_parentheses(input_string: str) -> str:
+    """
+    Remove numeric parentheses from the end of a string.
+
+    Args:
+        input_string (str): The input string.
+
+    Returns:
+        str: The string without numeric parentheses.
+    """
+    result = re.sub(r'\(\d+\)$', '', input_string)
+    return result
