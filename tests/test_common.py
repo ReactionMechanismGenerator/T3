@@ -213,3 +213,14 @@ def test_get_o2_stoichiometry():
     assert common.get_o2_stoichiometry(smiles='CCCCCC') == 9.5  # 6 CO2 + 7 H2O
     assert common.get_o2_stoichiometry(smiles='CCO') == 3  # 2 CO2 + 3 H2O - O
     assert common.get_o2_stoichiometry(smiles='NCC') == 7.5 / 2  # 2 CO2 + 3.5 H2O
+
+
+def test_remove_numeric_parentheses():
+    """Test the remove_numeric_parentheses() function"""
+    assert common.remove_numeric_parentheses('C2H5(2)') == 'C2H5'
+    assert common.remove_numeric_parentheses('C2H5') == 'C2H5'
+    assert common.remove_numeric_parentheses('CH2(S)') == 'CH2(S)'
+    assert common.remove_numeric_parentheses('C2H5(547)') == 'C2H5'
+    assert common.remove_numeric_parentheses('C2H5(547)H') == 'C2H5(547)H'
+    assert common.remove_numeric_parentheses('HNO(T)(21)') == 'HNO(T)'
+
