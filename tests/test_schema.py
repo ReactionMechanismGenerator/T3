@@ -250,6 +250,8 @@ def test_rmg_database_schema():
     assert rmg_database.kinetics_depositories == 'default'
     assert rmg_database.kinetics_families == 'default'
     assert rmg_database.kinetics_estimator == 'rate rules'
+    assert rmg_database.chemistry_sets is None
+    assert rmg_database.use_low_credence_libraries is False
 
 
 def test_rmg_species_schema():
