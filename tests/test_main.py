@@ -22,6 +22,7 @@ from arc.species import ARCSpecies
 from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
 from tests.common import run_minimal
 from t3.main import (T3,
+                     auto_complete_rmg_libraries,
                      legalize_species_label,
                      get_reaction_by_index,
                      get_species_label_by_structure)
@@ -1052,9 +1053,45 @@ def test_check_overtime():
     assert t3.check_overtime() is True
 
 
+def test_auto_complete_rmg_libraries():
+    """Test auto completing RMG libraries"""
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    assert t3.rmg['database']['thermo_libraries'] == ['primaryThermoLibrary']
+    assert t3.rmg['database']['kinetics_libraries'] == []
+    database_1 = t3.rmg['database'].copy()
+    database_1['chemistry_sets'] = None  # auto_complete_rmg_libraries() is called upon initiation, these get deleted
+    database_1['use_low_credence_libraries'] = False
+    database_1 = auto_complete_rmg_libraries(database_1)
+    assert database_1['thermo_libraries'] == ['primaryThermoLibrary']
+    assert database_1['kinetics_libraries'] == []
+    assert 'chemistry_sets' not in database_1
+
+    database_2 = t3.rmg['database'].copy()
+    database_2['chemistry_sets'] = ['primary', 'nitrogen']
+    database_2['use_low_credence_libraries'] = False
+    database_2 = auto_complete_rmg_libraries(database_2)
+    assert database_2['thermo_libraries'] == ['primaryThermoLibrary', 'BurkeH2O2', 'Spiekermann_refining_elementary_reactions',
+                                              'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'CBS_QB3_1dHR', 'NH3', 'NitrogenCurran',
+                                              'CHON_G4', 'CN', 'NOx2018']
+    assert database_2['kinetics_libraries'] == ['primaryH2O2', 'primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert 'chemistry_sets' not in database_2
+
+    database_3 = t3.rmg['database'].copy()
+    database_3['chemistry_sets'] = ['primary', 'nitrogen']
+    database_3['use_low_credence_libraries'] = True
+    database_3 = auto_complete_rmg_libraries(database_3)
+    assert database_3['thermo_libraries'] == ['primaryThermoLibrary', 'BurkeH2O2', 'Spiekermann_refining_elementary_reactions',
+                                              'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'CBS_QB3_1dHR', 'NH3', 'NitrogenCurran',
+                                              'CHON_G4', 'CN', 'NOx2018', 'primaryNS', 'CHN', 'CHON', 'BurcatNS']
+    assert database_3['kinetics_libraries'] == ['primaryH2O2', 'primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert 'chemistry_sets' not in database_3
+
+
 def teardown_module():
     """teardown any state that was previously set up."""
-
     # delete log files
     for i in range(10):
         directory = os.path.join(restart_base_path, f'r{i}')
