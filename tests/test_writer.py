@@ -9,7 +9,7 @@ import os
 
 from arc.common import read_yaml_file
 
-from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH
 from t3.schema import InputBase, RMG, T3
 from t3.utils.writer import to_camel_case, write_rmg_input_file
 
@@ -31,9 +31,9 @@ def test_write_rmg_input_file():
     """Test writing an RMG input file"""
     minimal_input = os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'input.yml')
     input_dict = read_yaml_file(path=minimal_input)
-    minimal_input_file_path = os.path.join(DATA_BASE_PATH, 'minimal_input.py')
+    minimal_input_file_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_input.py')
     schema = InputBase(project=input_dict['project'],
-                       project_directory=DATA_BASE_PATH,
+                       project_directory=TEST_DATA_BASE_PATH,
                        t3=input_dict['t3'],
                        rmg=input_dict['rmg'],
                        qm=input_dict['qm'],
@@ -250,7 +250,7 @@ def test_write_rmg_input_file_liquid():
                }
           }
 
-    file_path = os.path.join(DATA_BASE_PATH, 'test_write_rmg_input_file_liquid.py')
+    file_path = os.path.join(TEST_DATA_BASE_PATH, 'test_write_rmg_input_file_liquid.py')
     rmg_schema = RMG(**rmg).dict()  # fill in defaults
     t3_schema = T3(**t3).dict()     # fill in defaults
 
@@ -315,7 +315,7 @@ def test_write_rmg_input_file_seed_all_radicals():
                }
           }
 
-    file_path = os.path.join(DATA_BASE_PATH, 'test_write_rmg_input_file_seed_rads.py')
+    file_path = os.path.join(TEST_DATA_BASE_PATH, 'test_write_rmg_input_file_seed_rads.py')
     rmg_schema = RMG(**rmg).dict()  # fill in defaults
     t3_schema = T3(**t3).dict()     # fill in defaults
 

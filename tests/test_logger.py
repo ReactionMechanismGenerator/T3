@@ -10,11 +10,11 @@ import os
 import shutil
 from typing import Optional
 
-from t3.common import DATA_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH
 import t3.logger as logger
 
 
-log_project_directory = os.path.join(DATA_BASE_PATH, 'log_file_testing_dir')
+log_project_directory = os.path.join(TEST_DATA_BASE_PATH, 'log_file_testing_dir')
 
 
 def init_logger(project: str = 'project_name',

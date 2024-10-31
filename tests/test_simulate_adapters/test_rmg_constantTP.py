@@ -8,12 +8,12 @@ t3 tests test_rmg_constantTP module
 import os
 import shutil
 
-from t3.common import SIMULATE_DATA_BASE_PATH
+from t3.common import SIMULATE_TEST_DATA_BASE_PATH
 from tests.common import run_minimal
 from t3.simulate.rmg_constantTP import RMGConstantTP
 
 
-TEST_DIR = os.path.join(SIMULATE_DATA_BASE_PATH, 'rmg_simulator_test')
+TEST_DIR = os.path.join(SIMULATE_TEST_DATA_BASE_PATH, 'rmg_simulator_test')
 
 
 def test_set_up_no_sa():
