@@ -284,7 +284,9 @@ def determine_concentrations_by_equivalence_ratios(species: List[dict]):
                                                 inchi=objects['fuel']['inchi'] if 'inchi' in objects['fuel'].keys() else None
                                                 )
         objects['oxygen']['concentration'] = [eq_ratio * o2_stoichiometry for eq_ratio in objects['fuel']['equivalence_ratios']]
-        if objects['nitrogen'] is not None and objects['nitrogen']['concentration'] == 0:
+        if objects['nitrogen'] is not None and not ('concentration' in objects['nitrogen']
+                and isinstance(objects['nitrogen']['concentration'], list)
+                and len(objects['nitrogen']['concentration']) > 1):
             objects['nitrogen']['concentration'] = [o2 * 3.76 for o2 in objects['oxygen']['concentration']]
     return objects
 
@@ -337,5 +339,6 @@ def remove_numeric_parentheses(input_string: str) -> str:
     Returns:
         str: The string without numeric parentheses.
     """
+    print(input_string, type(input_string))
     result = re.sub(r'\(\d+\)$', '', input_string)
     return result

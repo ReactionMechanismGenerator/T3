@@ -180,4 +180,5 @@ def test_remove_numeric_parentheses():
     assert common.remove_numeric_parentheses('CH2(S)') == 'CH2(S)'
     assert common.remove_numeric_parentheses('C2H5(547)') == 'C2H5'
     assert common.remove_numeric_parentheses('C2H5(547)H') == 'C2H5(547)H'
+    assert common.remove_numeric_parentheses('HNO(T)(21)') == 'HNO(T)'
 

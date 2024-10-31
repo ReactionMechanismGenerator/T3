@@ -14,7 +14,7 @@ import numpy as np
 
 from arc.common import save_yaml_file
 
-from t3.common import determine_concentrations_by_equivalence_ratios
+from t3.common import determine_concentrations_by_equivalence_ratios, remove_numeric_parentheses
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
@@ -84,12 +84,11 @@ class CanteraIDT(SimulateAdapter):
         self.spc_identifier_lookup, self.rxn_identifier_lookup = dict(), dict()
         self.num_ct_reactions = None
         self.num_ct_species = None
-        self.T_list, self.P_list, self.reaction_time_list = list(), list(), list()
+        self.T_list, self.P_list, self.reaction_time_list, self.species_names_without_indices = list(), list(), list(), list()
         self.idt_dict = dict()
 
         self.set_up()
         self.radical_label = self.determine_radical_label()
-        print(f'radical label: {self.radical_label}')
 
     def set_up(self):
         """
@@ -106,7 +105,8 @@ class CanteraIDT(SimulateAdapter):
             self.spc_identifier_lookup[spc.name] = i
         for i, rxn in enumerate(self.model.reactions()):
             self.rxn_identifier_lookup[rxn.equation] = i
-        self.species_names_without_indices = [self.model.species()[i].name.split('(')[0] for i in range(self.num_ct_species)]  # Todo: what about HNO(T)(21)? make more robust
+        self.species_names_without_indices = [remove_numeric_parentheses(self.model.species()[i].name)
+                                              for i in range(self.num_ct_species)]
 
         self.T_list = ([self.rmg['reactors'][0]['T']], 'K')
         self.P_list = ([self.rmg['reactors'][0]['P']], 'bar')
@@ -119,17 +119,22 @@ class CanteraIDT(SimulateAdapter):
             self.logger.info('Running a simulation using CanteraIDT...')
 
         equivalence_ratios, concentration_combinations = self.get_concentration_combinations()
+        print(f'equivalence_ratios: {equivalence_ratios}\nconcentration_combinations: {concentration_combinations}')
         reactor_idt_dict = dict()
         for r, reactor in enumerate(self.rmg['reactors']):
             T_list, P_list = get_t_and_p_lists(reactor)
             if equivalence_ratios is not None and concentration_combinations is not None:
                 for i, X in enumerate(concentration_combinations):
+                    if self.idt_dict.get(equivalence_ratios[i]) is None:
+                        self.idt_dict[equivalence_ratios[i]] = dict()
                     for P in P_list:
+                        if self.idt_dict[equivalence_ratios[i]].get(P) is None:
+                            self.idt_dict[equivalence_ratios[i]][P] = dict()
                         for T in T_list:
                             print(f'T: {T}, P: {P},\nX: {X}')
                             self.model.TPX = T, P * 1e5, X
-                            self.idt_dict[(equivalence_ratios[i], P, T)] = \
-                                self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{round(P,2)}_bar_{round(T,2)}_K.png')
+                            self.idt_dict[equivalence_ratios[i]][P][T] = \
+                                self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{P:.2f}_bar_{round(T,2)}_K.png')
             else:
                 X = {spc['label']: spc['concentration'] for spc in self.rmg['species'] if spc['concentration']}
                 for P in P_list:
@@ -137,11 +142,11 @@ class CanteraIDT(SimulateAdapter):
                         print(f'T: {T}, P: {P},\nX: {X}')
                         self.model.TPX = T, P * 1e5, X
                         if equivalence_ratios is None:
-                            self.idt_dict[(0, P, T)] = \
-                                self.simulate_idt(fig_name=f'R{r}_{round(P,2)}_bar_{round(T,2)}_K.png')
+                            self.idt_dict[0][P][T] = \
+                                self.simulate_idt(fig_name=f'R{r}_{round(P,2)}_bar_{T:.2f}_K.png')
                         else:
-                            self.idt_dict[(equivalence_ratios[i], P, T)] = \
-                                self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{round(P,2)}_bar_{round(T,2)}_K.png')
+                            self.idt_dict[equivalence_ratios[i]][P][T] = \
+                                self.simulate_idt(fig_name=f'R{r}_{equivalence_ratios[i]}_{P:.2f}_bar_{T:.2f}_K.png')
             if len(T_list) >= 3:
                 plot_idt_vs_temperature(self.idt_dict, figs_path=self.paths['figs'], reactor_index=r)
             reactor_idt_dict[r] = self.idt_dict
@@ -212,6 +217,8 @@ class CanteraIDT(SimulateAdapter):
         for i, label in enumerate(self.species_names_without_indices):
             if label == rmg_label:
                 return self.model.species()[i].name
+            if label == remove_numeric_parentheses(rmg_label):
+                return self.model.species()[i].name
         return None
 
     def get_concentration_combinations(self) -> Tuple[Optional[List[float]], Optional[List[dict]]]:
@@ -236,8 +243,8 @@ class CanteraIDT(SimulateAdapter):
             concentration_dict = dict()
             for spc in self.rmg['species']:
                 if spc['role'] is None:
-                    cantera_label = self.get_cantera_species_label(spc['label'])
-                    if cantera_label is not None:
+                    cantera_label = self.get_cantera_species_label(spc['label'])   # can take out of loop
+                    if cantera_label is not None and spc['concentration'] != 0:
                         concentration_dict[cantera_label] = spc['concentration']
                 if spc['role'] == 'fuel':
                     cantera_label = self.get_cantera_species_label(spc['label'])
@@ -307,7 +314,7 @@ def compute_idt(time_history: ct.SolutionArray,
         Optional[float]: The IDT in seconds.
 
     Todo:
-        - solve possible noice in dc/dt. ** add IDT(1000/T) figure.
+        - solve possible noise in dc/dt. ** add IDT(1000/T) figure.
     """
     figs_path = os.path.join(figs_path, 'IDTs')
     if not os.path.isdir(figs_path):
@@ -317,7 +324,7 @@ def compute_idt(time_history: ct.SolutionArray,
     dc_dt = np.diff(concentration) / np.diff(times)
     idt_index_dc_dt = np.argmax(dc_dt)
     idt_index_c = np.argmax(concentration)
-    idt = times[idt_index_dc_dt]
+    idt = float(times[idt_index_dc_dt])
     if idt_index_dc_dt > len(times) - 10 or idt < 1e-12 or max(concentration) < concentration[0] * 100:
         return None
     try:
@@ -354,80 +361,72 @@ def get_t_and_p_lists(reactor: dict) -> Tuple[List[float], List[float]]:
     """
     if isinstance(reactor['T'], (int, float)):
         T_list = [reactor['T']]
-    else:
+    elif len(reactor['T']) == 2:
         inverse_ts = np.linspace(1 / reactor['T'][1],
-                                 1 / reactor['T'][0], num=100)  # 15 inverse T points
+                                 1 / reactor['T'][0], num=min(int(abs(reactor['T'][1] - reactor['T'][0]) / 10), 50))
         T_list = [1 / inverse_t for inverse_t in inverse_ts[::-1]]
+    else:
+        T_list = [float(t) for t in reactor['T']]
     if isinstance(reactor['P'], (int, float)):
         P_list = [reactor['P']]
-    else:
+    elif len(reactor['P']) == 2:
         base = 10
         log_p = np.linspace(math.log(reactor['P'][0], base),
                             math.log(reactor['P'][1], base), num=3) # 3 pressure in log10 space
         P_list = [base ** p for p in log_p]
+    else:
+        P_list = [float(p) for p in reactor['P']]
+    T_list = [float(t) for t in T_list]
+    P_list = [float(p) for p in P_list]
     return T_list, P_list
 
 
 def plot_idt_vs_temperature(idt_dict: dict,
                             figs_path: str,
                             reactor_index: int = 0,
-                            exp_data: tuple = None,
+                            exp_data: dict = None,
                             ) -> None:
     """
     Plot IDT vs. 1000/T per phi and P condition combination.
+    If exp_data is provided, plot the experimental data as well and only consider phi and P values that appear in it.
 
-    idt_dict[(equivalence_ratios[i], P, T)]
+    idt_dict[equivalence_ratios[i]][P][T]
 
     Args:
         idt_dict (dict): A dictionary containing IDT values.
         figs_path (str): The path to the figures' directory.
         reactor_index (int, optional): The reactor index.
-        exp_data (tuple): Experimental data in lists for IDT [sec] and 1000/T [K] 
+        exp_data (dict): Experimental data in the same format as idt_dict, IDT units are in s.
     """
     figs_path = os.path.join(figs_path, 'IDT_vs_T')
     if not os.path.isdir(figs_path):
         os.makedirs(figs_path)
-    data = get_idt_per_phi_p_condition(idt_dict)
-    
-    for phi, phi_data in data.items():
+    for phi, phi_data in idt_dict.items():
+        print(f'phi: {phi}')
+        if exp_data is not None and phi not in exp_data:
+            print(f'phi {phi} not in exp_data')
+            continue
         for p, phi_p_data in phi_data.items():
-            fig_name = f'R{reactor_index}_{phi}_{round(p,2)}_bar.png'
+            if exp_data is not None and p not in exp_data[phi]:
+                print(f'p {p} not in exp_data')
+                continue
+            fig_name = f'R{reactor_index}_{phi}_{p:.2f}_bar.png'
+            print(f'fig_name: {fig_name}')
             try:
                 fig, ax = plt.subplots()
                 ax.set_xlabel('1000/T (1/K)')
                 ax.set_ylabel('IDT (s)')
-                ax.set_title(f'IDT vs. 1000/T, phi = {phi}, P = {p} bar')
-                ax.scatter(phi_p_data.keys(), phi_p_data.values(), label='simulation', color='blue', marker="o")
+                ax.set_title(f'IDT vs. 1000/T, phi = {phi}, P = {p:.2f} bar')
+                ax.scatter([1000 / t for t in phi_p_data.keys()], phi_p_data.values(), label='simulation', color='blue', marker='o', linestyle='-')
                 ax.set_yscale('log')
                 if exp_data is not None:
-                    ax.scatter(exp_data[0], exp_data[1], label='experiment', color='orange', marker="D")
+                    ax.scatter([1000 / t for t in exp_data[phi][p].keys()], [e * 1e-6 for e in exp_data[phi][p].values()], label='experiment', color='orange', marker="D")
                     ax.set_yscale('log')
                 ax.legend(loc='lower right')
                 fig.savefig(os.path.join(figs_path, fig_name))
             except (AttributeError, ValueError):
+                raise
                 pass
-
-
-def get_idt_per_phi_p_condition(idt_dict: dict) -> dict:
-    """
-    Get IDT values per phi, P, and 1000/T condition combination.
-
-    Args:
-        idt_dict (dict): A dictionary containing IDT values.
-
-    Returns:
-        dict: A dictionary containing IDT values per phi and P condition combination corresponding to the 1000/T list.
-    """
-    data = dict()
-    for triple_key in idt_dict.keys():
-        phi, p, _ = triple_key
-        if phi not in data.keys():
-            data[phi] = dict()
-        if p not in data[phi].keys():
-            data[phi][p] = dict()
-    for triple_key, value in idt_dict.items():
-        data[triple_key[0]][triple_key[1]][1000 / triple_key[2]] = value
-    return data
 
 
 register_simulate_adapter("CanteraIDT", CanteraIDT)
