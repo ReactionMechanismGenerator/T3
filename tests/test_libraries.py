@@ -13,14 +13,14 @@ from rmgpy.species import Species
 from rmgpy.thermo import ThermoData
 from rmgpy.statmech import Conformer, IdealGasTranslation, NonlinearRotor, HarmonicOscillator
 
-from t3.common import DATA_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH
 from tests.common import run_minimal
 from t3.utils.libraries import add_to_rmg_libraries
 
 
 def test_add_to_rmg_library():
     """Test adding thermo calculations to an existing thermo library"""
-    libraries_path = os.path.join(DATA_BASE_PATH, 'libraries')
+    libraries_path = os.path.join(TEST_DATA_BASE_PATH, 'libraries')
     if not os.path.isdir(libraries_path):
         os.makedirs(libraries_path)
 
@@ -153,6 +153,6 @@ def test_add_to_rmg_library():
 
 def teardown_module():
     """teardown any state that was previously set up."""
-    path = os.path.join(DATA_BASE_PATH, 'libraries')
+    path = os.path.join(TEST_DATA_BASE_PATH, 'libraries')
     if os.path.isdir(path):
         shutil.rmtree(path, ignore_errors=True)

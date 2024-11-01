@@ -11,7 +11,7 @@ import pytest
 from rmgpy.species import Species
 
 import t3.common as common
-from t3.common import DATA_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH
 from t3.schema import RMGSpecies
 from tests.common import run_minimal
 
@@ -33,7 +33,7 @@ label2:
 
 def test_get_species_by_label():
     """Test getting species by label"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -131,7 +131,7 @@ def test_get_interval():
 
 def test_get_chem_to_rmg_rxn_index_map():
     """Test the get_chem_to_rmg_rxn_index_map() function"""
-    chemkin_path = os.path.join(DATA_BASE_PATH, 'chem_annotated_1.inp')
+    chemkin_path = os.path.join(TEST_DATA_BASE_PATH, 'chem_annotated_1.inp')
     rxn_map = common.get_chem_to_rmg_rxn_index_map(chem_annotated_path=chemkin_path)
     assert rxn_map == {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9, 11: 9, 12: 10, 13: 11, 14: 12,
                        15: 13, 16: 14, 17: 15, 18: 16, 19: 17, 20: 18, 21: 19, 22: 20, 23: 21, 24: 22, 25: 23, 26: 24,

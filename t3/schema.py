@@ -1,16 +1,17 @@
 """
 t3 schema module
 used for input validation
-
-Todo: add "live" validators for actually implemented adapters, need to access the respective factory register dicts
 """
 
+import os
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
 
-from t3.common import VALID_CHARS
+from arc.common import read_yaml_file
+
+from t3.common import DATA_BASE_PATH, VALID_CHARS
 from t3.simulate.factory import _registered_simulate_adapters
 
 
@@ -174,8 +175,10 @@ class RMGDatabase(BaseModel):
     """
     A class for validating input.RMG.database arguments
     """
-    thermo_libraries: List[str]
-    kinetics_libraries: List[str]
+    thermo_libraries: Optional[List[str]] = None
+    kinetics_libraries: Optional[List[str]] = None
+    chemistry_sets: Optional[List[str]] = None
+    use_low_credence_libraries: bool = False
     transport_libraries: List[str] = ['OneDMinN2', 'PrimaryTransportLibrary', 'NOx2018', 'GRI-Mech']
     seed_mechanisms: List[str] = list()
     kinetics_depositories: Union[List[str], str] = 'default'
@@ -184,6 +187,17 @@ class RMGDatabase(BaseModel):
 
     class Config:
         extra = "forbid"
+
+    @validator('chemistry_sets')
+    def check_chemistry_sets(cls, value, values):
+        """RMGDatabase.chemistry_sets validator"""
+        libraries_dict = read_yaml_file(path=os.path.join(DATA_BASE_PATH, 'libraries.yml'))
+        allowed_values = libraries_dict.keys()
+        if value and any(v not in allowed_values for v in value):
+            raise ValueError(f'The chemistry sets must be within of the following:\n{allowed_values}\nGot: {value}')
+        if value is None and (values['thermo_libraries'] is None or values['kinetics_libraries'] is None):
+            raise ValueError('The chemistry set must be specified if thermo or kinetics libraries are not specified.')
+        return value
 
 
 class RadicalTypeEnum(str, Enum):

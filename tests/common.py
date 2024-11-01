@@ -19,7 +19,18 @@ def run_minimal(project: Optional[str] = None,
                 iteration: Optional[int] = None,
                 set_paths: bool = False,
                 ) -> T3:
-    """A helper function for running the minimal example"""
+    """
+    A helper function for running the minimal example.
+
+    Args:
+        project (str, optional): The project name.
+        project_directory (str, optional): The project directory.
+        iteration (int, optional): The iteration number.
+        set_paths (bool, optional): Whether to set the paths.
+
+    Returns:
+        T3: The T3 object.
+    """
     minimal_input = os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'input.yml')
     input_dict = read_yaml_file(path=minimal_input)
     input_dict['verbose'] = 10

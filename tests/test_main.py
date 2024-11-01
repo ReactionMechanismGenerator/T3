@@ -19,9 +19,10 @@ from rmgpy.thermo import NASA, ThermoData
 from arc.common import read_yaml_file
 from arc.species import ARCSpecies
 
-from t3.common import DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
 from tests.common import run_minimal
 from t3.main import (T3,
+                     auto_complete_rmg_libraries,
                      legalize_species_label,
                      get_reaction_by_index,
                      get_species_label_by_structure)
@@ -204,8 +205,8 @@ qm_minimal = {'adapter': 'ARC',
               'species': [],
               }
 
-restart_base_path = os.path.join(DATA_BASE_PATH, 'restart')
-dump_species_path = os.path.join(DATA_BASE_PATH, 'test_dump_species')
+restart_base_path = os.path.join(TEST_DATA_BASE_PATH, 'restart')
+dump_species_path = os.path.join(TEST_DATA_BASE_PATH, 'test_dump_species')
 
 
 def setup_module():
@@ -451,7 +452,7 @@ def test_run_arc():
 def test_process_arc_run():
     """Tests processing an ARC run and copying over a thermo library to the RMG-database repository"""
     t3 = run_minimal(project='T3',
-                     project_directory=os.path.join(DATA_BASE_PATH, 'process_arc'),
+                     project_directory=os.path.join(TEST_DATA_BASE_PATH, 'process_arc'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -539,7 +540,7 @@ def test_run_rmg():
 def test_determine_species_to_calculate():
     """Test determining the species to be calculated"""
 
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'))
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'))
 
     # 1. no calculations required
     t3.iteration = 1
@@ -586,7 +587,7 @@ def test_determine_species_to_calculate():
 
 def test_species_requires_refinement():
     """Test properly identifying the thermo comment of a species to determine whether it requires refinement"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'))
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'))
     spc_1 = Species(smiles='C')
     spc_1.thermo = NASA()
     spc_1.thermo.comment = 'Thermo group additivity estimation: group(O2s-(Cds-Cd)H) + missing(O2d-CO) + ' \
@@ -646,7 +647,7 @@ def test_species_requires_refinement():
 
 def test_reaction_requires_refinement():
     """Test properly identifying the kinetic comment of a reaction to determine whether it requires refinement"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_reactions'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -660,7 +661,7 @@ family: H_Abstraction"""
 
 def test_determine_species_based_on_sa():
     """Test determining species to calculate based on sensitivity analysis"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -687,14 +688,14 @@ def test_determine_species_based_on_sa():
     for dir_ in dirs:
         if os.path.isdir(dir_):
             shutil.rmtree(dir_, ignore_errors=True)
-    t3_log = os.path.join(DATA_BASE_PATH, 'minimal_data', 't3.log')
+    t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
     if os.path.isfile(t3_log):
         os.remove(t3_log)
 
 
 def test_determine_species_from_pdep_network():
     """Test determining species from pdep network"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'pdep_network'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'pdep_network'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -716,9 +717,9 @@ def test_determine_species_from_pdep_network():
 def test_determine_species_based_on_collision_violators():
     """Test determining species to calculate based on collision rate violating reactions"""
     t3 = run_minimal()
-    t3.paths['RMG coll vio'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'collision_rate_violators.log')
-    t3.paths['chem annotated'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'chem_annotated.inp')
-    t3.paths['species dict'] = os.path.join(DATA_BASE_PATH, 'collision_rate_violators', 'species_dictionary.txt')
+    t3.paths['RMG coll vio'] = os.path.join(TEST_DATA_BASE_PATH, 'collision_rate_violators', 'collision_rate_violators.log')
+    t3.paths['chem annotated'] = os.path.join(TEST_DATA_BASE_PATH, 'collision_rate_violators', 'chem_annotated.inp')
+    t3.paths['species dict'] = os.path.join(TEST_DATA_BASE_PATH, 'collision_rate_violators', 'species_dictionary.txt')
     t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
     species_to_calc = t3.determine_species_and_reactions_based_on_collision_violators()[0]
     assert len(species_to_calc) == 18
@@ -778,7 +779,7 @@ def test_trsh_rmg_tol():
 
 def test_get_species_key():
     """Test checking whether a species already exists in self.species and getting its key"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -799,7 +800,7 @@ def test_get_species_key():
 
 def test_load_species_and_reactions_from_chemkin_file():
     """Test loading RMG species and reactions from a Chemkin file"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -814,7 +815,7 @@ def test_load_species_and_reactions_from_chemkin_file():
 
 def test_add_species():
     """Test adding a species to self.species and to self.qm['species']"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -867,7 +868,7 @@ H  0.0000000  0.0000000 -0.3736550"""
 
 def test_add_reaction():
     """Test adding a reaction to self.reactions and to self.qm['reactions']"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'determine_reactions'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -978,7 +979,7 @@ def test_load_species():
 
 def test_get_reaction_by_index():
     """Test getting reaction by index"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1007,7 +1008,7 @@ def test_legalize_species_label():
 
 def test_get_species_label_by_structure():
     """Test getting the species label from a list by its structure"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1041,7 +1042,7 @@ multiplicity 1
 
 def test_check_overtime():
     """Test checking overtime"""
-    t3 = run_minimal(project_directory=os.path.join(DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1052,9 +1053,45 @@ def test_check_overtime():
     assert t3.check_overtime() is True
 
 
+def test_auto_complete_rmg_libraries():
+    """Test auto completing RMG libraries"""
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    assert t3.rmg['database']['thermo_libraries'] == ['primaryThermoLibrary']
+    assert t3.rmg['database']['kinetics_libraries'] == []
+    database_1 = t3.rmg['database'].copy()
+    database_1['chemistry_sets'] = None  # auto_complete_rmg_libraries() is called upon initiation, these get deleted
+    database_1['use_low_credence_libraries'] = False
+    database_1 = auto_complete_rmg_libraries(database_1)
+    assert database_1['thermo_libraries'] == ['primaryThermoLibrary']
+    assert database_1['kinetics_libraries'] == []
+    assert 'chemistry_sets' not in database_1
+
+    database_2 = t3.rmg['database'].copy()
+    database_2['chemistry_sets'] = ['primary', 'nitrogen']
+    database_2['use_low_credence_libraries'] = False
+    database_2 = auto_complete_rmg_libraries(database_2)
+    assert database_2['thermo_libraries'] == ['primaryThermoLibrary', 'BurkeH2O2', 'Spiekermann_refining_elementary_reactions',
+                                              'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'CBS_QB3_1dHR', 'NH3', 'NitrogenCurran',
+                                              'CHON_G4', 'CN', 'NOx2018']
+    assert database_2['kinetics_libraries'] == ['primaryH2O2', 'primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert 'chemistry_sets' not in database_2
+
+    database_3 = t3.rmg['database'].copy()
+    database_3['chemistry_sets'] = ['primary', 'nitrogen']
+    database_3['use_low_credence_libraries'] = True
+    database_3 = auto_complete_rmg_libraries(database_3)
+    assert database_3['thermo_libraries'] == ['primaryThermoLibrary', 'BurkeH2O2', 'Spiekermann_refining_elementary_reactions',
+                                              'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'CBS_QB3_1dHR', 'NH3', 'NitrogenCurran',
+                                              'CHON_G4', 'CN', 'NOx2018', 'primaryNS', 'CHN', 'CHON', 'BurcatNS']
+    assert database_3['kinetics_libraries'] == ['primaryH2O2', 'primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert 'chemistry_sets' not in database_3
+
+
 def teardown_module():
     """teardown any state that was previously set up."""
-
     # delete log files
     for i in range(10):
         directory = os.path.join(restart_base_path, f'r{i}')
@@ -1070,7 +1107,7 @@ def teardown_module():
     files = [os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'T3_ARC_restart_test.info'),
              os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'input.yml'),
              os.path.join(restart_base_path, 'r6', 'species.yml'),
-             os.path.join(DATA_BASE_PATH, 'process_arc', 'species.yml'),
+             os.path.join(TEST_DATA_BASE_PATH, 'process_arc', 'species.yml'),
              ]
     for file in files:
         if os.path.isfile(file):
@@ -1079,10 +1116,10 @@ def teardown_module():
     # delete folders
     for directory in [test_minimal_project_directory,
                       dump_species_path,
-                      os.path.join(DATA_BASE_PATH, 'minimal_data', 'log_archive'),
-                      os.path.join(DATA_BASE_PATH, 'determine_species', 'log_archive'),
-                      os.path.join(DATA_BASE_PATH, 'pdep_network', 'log_archive'),
-                      os.path.join(DATA_BASE_PATH, 'process_arc', 'log_archive'),
+                      os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'log_archive'),
+                      os.path.join(TEST_DATA_BASE_PATH, 'determine_species', 'log_archive'),
+                      os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'log_archive'),
+                      os.path.join(TEST_DATA_BASE_PATH, 'process_arc', 'log_archive'),
                       os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'output'),
                       os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'log_and_restart_archive'),
                       ]:

@@ -14,8 +14,9 @@ from arc.species.converter import molecules_from_xyz
 VERSION = '0.1.0'
 
 t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolute path to the T3 folder
-DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'data')
-SIMULATE_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'test_simulate_adapters', 'data')
+DATA_BASE_PATH = os.path.join(t3_path, 'data')
+TEST_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'data')
+SIMULATE_TEST_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'test_simulate_adapters', 'data')
 EXAMPLES_BASE_PATH = os.path.join(t3_path, 'examples')
 SCRATCH_BASE_PATH = os.path.join(t3_path, 'tests', 'scratch')
 IPYTHON_SIMULATOR_EXAMPLES_PATH = os.path.join(t3_path, 'ipython', 'simulator_adapter_examples')

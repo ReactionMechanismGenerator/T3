@@ -12,7 +12,7 @@ import shutil
 from arc.common import read_yaml_file
 
 from t3 import T3
-from t3.common import DATA_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH
 from t3.runners.rmg_runner import backup_rmg_files
 from t3.utils.dependencies import check_dependencies
 
@@ -58,7 +58,7 @@ def test_computing_thermo():
     Tests computing thermo for two species and running RMG with the updated data
     Need xtb installed
     """
-    functional_test_directory = os.path.join(DATA_BASE_PATH, 'functional_2_thermo')
+    functional_test_directory = os.path.join(TEST_DATA_BASE_PATH, 'functional_2_thermo')
     #delete_selective_content_from_test_dirs(test_dir=functional_test_directory)
     input_file = os.path.join(functional_test_directory, 'input.yml')
     input_dict = read_yaml_file(path=input_file)
@@ -113,7 +113,7 @@ def test_rmg_files_backup_before_restart():
     3.chem_edge_annotated
     4.RMG log files
     """
-    backup_test_directory = os.path.join(DATA_BASE_PATH, 'backup_rmg_files_before_restart','iteration_1', 'RMG')
+    backup_test_directory = os.path.join(TEST_DATA_BASE_PATH, 'backup_rmg_files_before_restart','iteration_1', 'RMG')
     backup_rmg_files(backup_test_directory)
     # Find the backup directory (there should only be one per restart)
     backup_directories = [d for d in os.listdir(backup_test_directory) if d.startswith('restart_backup')]
@@ -152,11 +152,11 @@ def delete_selective_content_from_test_dirs(test_dir: str):
 
 def teardown_module():
     """teardown any state that was previously setup with a setup_module method."""
-    test_dirs_to_selectively_delete = [os.path.join(DATA_BASE_PATH, 'functional_2_thermo'),
+    test_dirs_to_selectively_delete = [os.path.join(TEST_DATA_BASE_PATH, 'functional_2_thermo'),
                                        ]
     for test_dir in test_dirs_to_selectively_delete:
         delete_selective_content_from_test_dirs(test_dir)
-    test_dirs = [os.path.join(DATA_BASE_PATH, 'T3_functional_test_1'),
+    test_dirs = [os.path.join(TEST_DATA_BASE_PATH, 'T3_functional_test_1'),
                  ]
     for test_dir in test_dirs:
         shutil.rmtree(test_dir, ignore_errors=True)
