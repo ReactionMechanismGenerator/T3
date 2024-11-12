@@ -100,6 +100,7 @@ def main() -> None:
         sys.stderr.write(f'\n\n********\n'
                          f'RMG threw an exception and did not converge.\n'  # Keep this text unchanged.
                          f'Exception type: {e.__class__}\n'
+                         f'Exception message:\n{e}\n'
                          f'********\n')
         print(f'RMG Errored with {e.__class__}. Got the following trace:')
         print(traceback.format_exc())
