@@ -1076,7 +1076,8 @@ def test_auto_complete_rmg_libraries():
     assert database_2['thermo_libraries'] == ['primaryThermoLibrary', 'BurkeH2O2', 'Spiekermann_refining_elementary_reactions',
                                               'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'CBS_QB3_1dHR', 'NH3', 'NitrogenCurran',
                                               'CHON_G4', 'CN', 'NOx2018']
-    assert database_2['kinetics_libraries'] == ['primaryH2O2', 'primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert database_2['kinetics_libraries'] == ['primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert database_2['seed_mechanisms'] == ['primaryH2O2']
     assert 'chemistry_sets' not in database_2
 
     database_3 = t3.rmg['database'].copy()
@@ -1086,7 +1087,8 @@ def test_auto_complete_rmg_libraries():
     assert database_3['thermo_libraries'] == ['primaryThermoLibrary', 'BurkeH2O2', 'Spiekermann_refining_elementary_reactions',
                                               'thermo_DFT_CCSDTF12_BAC', 'DFT_QCI_thermo', 'CBS_QB3_1dHR', 'NH3', 'NitrogenCurran',
                                               'CHON_G4', 'CN', 'NOx2018', 'primaryNS', 'CHN', 'CHON', 'BurcatNS']
-    assert database_3['kinetics_libraries'] == ['primaryH2O2', 'primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert database_3['kinetics_libraries'] == ['primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
+    assert database_2['seed_mechanisms'] == ['primaryH2O2']
     assert 'chemistry_sets' not in database_3
 
 
