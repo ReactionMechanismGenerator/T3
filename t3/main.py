@@ -1558,6 +1558,7 @@ def auto_complete_rmg_libraries(database: dict) -> dict:
     """
     database['thermo_libraries'] = database['thermo_libraries'] or list()
     database['kinetics_libraries'] = database['kinetics_libraries'] or list()
+    database['seed_mechanisms'] = database['seed_mechanisms'] or list()
     if database['chemistry_sets'] is not None:
         libraries_dict = read_yaml_file(path=os.path.join(DATA_BASE_PATH, 'libraries.yml'))
         low_credence = database['use_low_credence_libraries']
@@ -1571,10 +1572,15 @@ def auto_complete_rmg_libraries(database: dict) -> dict:
                         if isinstance(entry, str) and entry not in libraries:
                             libraries.append(entry)
                         elif isinstance(entry, dict):
-                            if entry['credence'] != 'low' and entry['name'] not in libraries:
+                            if 'credence' in entry and entry['credence'] != 'low' and entry['name'] not in libraries:
                                 libraries.append(entry['name'])
-                            if entry['credence'] == 'low' and low_credence and entry['name'] not in libraries:
+                            if 'credence' in entry and entry['credence'] == 'low' and low_credence and entry['name'] not in libraries:
                                 low_credence_libraries.append(entry['name'])
+                            if 'seed' in entry and entry['seed'] and entry['name'] not in libraries \
+                                    and entry['name'] not in database['seed_mechanisms']:
+                                database['seed_mechanisms'].append(entry['name'])
+                            if 'seed' in entry and not entry['seed'] and entry['name'] not in libraries:
+                                libraries.append(entry['name'])
                 libraries.extend(low_credence_libraries)
     del database['chemistry_sets']
     del database['use_low_credence_libraries']
