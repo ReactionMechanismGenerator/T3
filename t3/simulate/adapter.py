@@ -5,6 +5,7 @@ RMG, RMS, or Cantera.
 """
 
 from abc import ABC, abstractmethod
+from typing import Optional
 
 
 class SimulateAdapter(ABC):
@@ -27,7 +28,12 @@ class SimulateAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_sa_coefficients(self):
+    def get_sa_coefficients(self,
+                            top_SA_species: int = 10,
+                            top_SA_reactions: int = 10,
+                            max_workers: int = 24,
+                            save_yaml: bool = True,
+                            ) -> Optional[dict]:
         """
         Obtain the sensitivity analysis coefficients.
 

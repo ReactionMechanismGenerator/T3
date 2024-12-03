@@ -18,6 +18,8 @@ from rmgpy.solver.simple import SimpleReactor
 from rmgpy.tools.loader import load_rmg_py_job
 from rmgpy.tools.plot import plot_sensitivity
 
+from arc.common import save_yaml_file
+
 from t3.common import get_chem_to_rmg_rxn_index_map, get_species_by_label, get_values_within_range, \
     get_observable_label_from_header, get_parameter_from_header, time_lapse
 from t3.simulate.adapter import SimulateAdapter
@@ -224,9 +226,20 @@ class RMGConstantTP(SimulateAdapter):
 
         self.logger.info(f'Simulation via RMG completed, execution time: {time_lapse(tic)}')
 
-    def get_sa_coefficients(self) -> Optional[dict]:
+    def get_sa_coefficients(self,
+                            top_SA_species: int = 10,
+                            top_SA_reactions: int = 10,
+                            max_workers: int = 24,
+                            save_yaml: bool = True,
+                            ) -> Optional[dict]:
         """
         Obtain the SA coefficients.
+
+        Args:
+            top_SA_species (int, optional): The number of top sensitive species to return.
+            top_SA_reactions (int, optional): The number of top sensitive reactions to return.
+            max_workers (int, optional): The maximal number of workers to use for parallel processing.
+            save_yaml (bool, optional): Save the SA dictionary to a YAML file.
 
         Returns:
              sa_dict (Optional[dict]): An SA dictionary, structure is given in the docstring for T3/t3/main.py
@@ -265,6 +278,8 @@ class RMGConstantTP(SimulateAdapter):
                         parameter = chem_to_rmg_rxn_index_map[int(parameter)] \
                             if all(c.isdigit() for c in parameter) else parameter
                     sa_dict[sa_type][observable_label][parameter] = df[header].values
+        if save_yaml:
+            save_yaml_file(path=self.paths['SA dict'], content=sa_dict)
         return sa_dict
 
     def generate_rmg_reactors_for_simulation(self) -> dict:
