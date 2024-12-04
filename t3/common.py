@@ -3,6 +3,7 @@ t3 common module
 """
 
 import datetime
+import numpy as np
 import os
 import re
 import string
@@ -389,3 +390,19 @@ def remove_numeric_parentheses(input_string: str) -> str:
     """
     result = re.sub(r'\(\d+\)$', '', input_string)
     return result
+
+
+def numpy_to_list(data) -> list:
+    """
+    A helper function to convert NumPy arrays to lists.
+
+    Args:
+        data: The data to convert.
+
+    Returns:
+        list: The converted data.
+    """
+    if isinstance(data, np.ndarray):
+        return data.tolist()
+    return data
+
