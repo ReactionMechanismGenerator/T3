@@ -100,7 +100,7 @@ class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
     """
-    adapter: constr(max_length=255) = 'RMGConstantTP'
+    adapter: Optional[constr(max_length=255)] = 'RMGConstantTP'
     atol: confloat(gt=0, lt=1e-1) = 1e-6
     rtol: confloat(gt=0, lt=1e-1) = 1e-4
     global_observables: Optional[List[str]] = None  # ['IDT', 'ESR', 'SL']
@@ -117,9 +117,9 @@ class T3Sensitivity(BaseModel):
     @validator('adapter')
     def check_adapter(cls, value):
         """T3Sensitivity.adapter validator"""
-        if value not in _registered_simulate_adapters.keys():
+        if value not in _registered_simulate_adapters.keys() and value is not None:
             raise ValueError(
-                f'The "T3 sensitivity adapter" argument of {value} was not present in the keys for the '
+                f'The sensitivity adapter argument "{value}" was not present in the keys for the '
                 f'_registered_simulate_adapters dictionary: {list(_registered_simulate_adapters.keys())}'
                 f'\nPlease check that the simulate adapter was registered properly.')
         return value
