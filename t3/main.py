@@ -318,7 +318,7 @@ class T3(object):
                         top_SA_reactions=self.t3['sensitivity']['top_SA_reactions'],
                         max_workers=self.t3['sensitivity']['max_sa_workers'],
                         save_yaml=True)
-                if self.t3['sensitivity']['global_observables'].lower() == 'idt':
+                if any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
                     simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
                                                         t3=self.t3,
                                                         rmg=self.rmg,
@@ -734,7 +734,7 @@ class T3(object):
             # 1.2. SA
             if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
-            if self.t3['sensitivity'] is not None and self.t3['sensitivity']['global_observables'].lower() == 'idt':
+            if self.t3['sensitivity'] is not None and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
                 species_idt_keys, rxn_idt_keys = self.determine_params_based_on_sa_idt()
                 species_keys.extend(species_idt_keys)
             # 1.3. collision violators
@@ -745,7 +745,7 @@ class T3(object):
         # 2.1. SA
         if sa_observables_exist:
             reaction_keys.extend(self.determine_reactions_based_on_sa())
-        if self.t3['sensitivity'] is not None and self.t3['sensitivity']['global_observables'].lower() == 'idt':
+        if self.t3['sensitivity'] is not None and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
             if rxn_idt_keys is None:
                 species_idt_keys, rxn_idt_keys = self.determine_params_based_on_sa_idt()
             reaction_keys.extend(rxn_idt_keys)
@@ -1538,8 +1538,7 @@ class T3(object):
         for spc in self.rmg['species']:
             if spc['role'] == 'fuel' and spc['concentration'] == 0 and objects['fuel'] is not None:
                 spc['concentration'] = objects['fuel']['concentration']
-            elif (spc['role'] == 'oxygen' or (spc['role'] == 'nitrogen' and spc['concentration'] == 0)) \
-                    and objects[spc['role']] is not None:
+            elif (spc['role'] == 'oxygen' or spc['role'] == 'nitrogen') and spc['concentration'] == 0:
                 spc['concentration'] = [min(objects[spc['role']]['concentration']), max(objects[spc['role']]['concentration'])]
 
     def check_overtime(self) -> bool:
