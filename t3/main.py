@@ -300,7 +300,7 @@ class T3(object):
                     for species in self.rmg['species']:
                         if species['observable'] or species['SA_observable']:
                             self.sa_observables.append(species['label'])
-                if self.sa_observables:
+                if self.t3['sensitivity']['adapter'] is not None and self.sa_observables:
                     simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
                                                         t3=self.t3,
                                                         rmg=self.rmg,
