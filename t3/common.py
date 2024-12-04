@@ -325,7 +325,8 @@ def determine_concentrations_by_equivalence_ratios(species: List[dict]):
     if objects['fuel'] is None or 'equivalence_ratios' not in objects['fuel'] or objects['fuel']['equivalence_ratios'] is None:
         return objects
     if objects['fuel'] is not None and objects['oxygen'] is not None:
-        objects['fuel']['concentration'] = objects['fuel']['concentration'] or 1
+        objects['fuel']['concentration'] = objects['fuel']['concentration'] if 'concentration' in objects['fuel'] \
+                                               and objects['fuel']['concentration'] else 1
         o2_stoichiometry = get_o2_stoichiometry(smiles=objects['fuel']['smiles'],
                                                 adjlist=objects['fuel']['adjlist'] if 'adjlist' in objects['fuel'].keys() else None,
                                                 inchi=objects['fuel']['inchi'] if 'inchi' in objects['fuel'].keys() else None
