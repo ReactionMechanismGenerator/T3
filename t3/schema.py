@@ -110,8 +110,6 @@ class T3Sensitivity(BaseModel):
     ME_methods: List[constr(min_length=2, max_length=3)] = ['CSE', 'MSC']
     top_SA_species: conint(ge=0) = 10
     top_SA_reactions: conint(ge=0) = 10
-    T_list: Optional[List[confloat(gt=0)]] = None
-    P_list: Optional[List[confloat(gt=0)]] = None
 
     class Config:
         extra = "forbid"
@@ -244,11 +242,11 @@ class RMGSpecies(BaseModel):
         return value
 
     @validator('role')
-    def check_species_role(cls, value):
+    def check_species_role(cls, value, values):
         """RMGSpecies.role validator"""
         if value not in ['fuel', 'oxygen', 'nitrogen', None]:
             raise ValueError(f'The species role must be either "fuel", "oxygen", or "nitrogen".\nGot: {value}')
-        if value == 'fuel' and value['equivalence_ratios'] is None:
+        if value == 'fuel' and values['equivalence_ratios'] is None:
             raise ValueError(f'If the species role is "fuel", then the equivalence ratios must be specified.')
         return value
 
