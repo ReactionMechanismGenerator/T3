@@ -21,7 +21,7 @@ from rmgpy.tools.plot import plot_sensitivity
 from arc.common import save_yaml_file
 
 from t3.common import get_chem_to_rmg_rxn_index_map, get_species_by_label, get_values_within_range, \
-    get_observable_label_from_header, get_parameter_from_header, time_lapse
+    get_observable_label_from_header, get_parameter_from_header, numpy_to_list, time_lapse
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
 from t3.utils.writer import write_rmg_input_file
@@ -249,17 +249,14 @@ class RMGConstantTP(SimulateAdapter):
         if not os.path.exists(solver_path):
             self.logger.error("Could not find the path to RMG's SA solver output folder.")
             return None
-        sa_files = list()
-        for file_ in os.listdir(solver_path):
-            if 'sensitivity' in file_ and file_.endswith(".csv"):
-                sa_files.append(file_)
+        sa_files = [file_ for file_ in os.listdir(solver_path) if 'sensitivity' in file_ and file_.endswith(".csv")]
         sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
         for sa_file in sa_files:
             df = pd.read_csv(os.path.join(solver_path, sa_file))
             for header in df.columns:
                 sa_type = None
                 if 'Time' in header:
-                    sa_dict['time'] = df[header].values
+                    sa_dict['time'] = numpy_to_list(df[header].values)
                 elif '/dln[k' in header:
                     sa_type = 'kinetics'
                 elif '/dG[' in header:
@@ -277,7 +274,7 @@ class RMGConstantTP(SimulateAdapter):
                         parameter = parameter[1:]
                         parameter = chem_to_rmg_rxn_index_map[int(parameter)] \
                             if all(c.isdigit() for c in parameter) else parameter
-                    sa_dict[sa_type][observable_label][parameter] = df[header].values
+                    sa_dict[sa_type][observable_label][parameter] = numpy_to_list(df[header].values)
         if save_yaml:
             save_yaml_file(path=self.paths['SA dict'], content=sa_dict)
         return sa_dict
