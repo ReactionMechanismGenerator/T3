@@ -397,11 +397,11 @@ def backup_rmg_files(project_directory: str):
     """
     restart_backup_dir = os.path.join(project_directory,
                                       f'restart_backup_{datetime.datetime.now().strftime("%b%d_%Y_%H-%M-%S")}')
-    os.mkdir(restart_backup_dir)
-    os.mkdir(os.path.join(restart_backup_dir, 'chemkin'))
+    chemkin_folder_path = os.path.join(restart_backup_dir, 'chemkin')
+    os.makedirs(chemkin_folder_path, exist_ok=True)
     files = ['RMG.log',
-             os.path.join('chemkin', 'chem_annotated.inp'),
-             os.path.join('chemkin', 'chem_edge_annotated.inp'),
+             os.path.join(chemkin_folder_path, 'chem_annotated.inp'),
+             os.path.join(chemkin_folder_path, 'chem_edge_annotated.inp'),
              ]
     folders = ['pdep']
     for file in files:
