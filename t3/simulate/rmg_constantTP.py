@@ -361,11 +361,13 @@ class RMGConstantTP(SimulateAdapter):
 
         # 3. No combinations, modify_concentration_ranges_together is True
         elif self.t3['options']['modify_concentration_ranges_together']:
-                for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
-                    new_species_list = species_list
-                    for i, spc_index in enumerate(spc_indices_w_ranges):
-                        new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
-                                                'concentration': species_vals[i][point_number]})
+            new_species_list = None
+            for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
+                new_species_list = species_list
+                for i, spc_index in enumerate(spc_indices_w_ranges):
+                    new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
+                                            'concentration': species_vals[i][point_number]})
+            if new_species_list is not None:
                 species_lists.append(new_species_list)
 
         # 4. Combinations (products)
