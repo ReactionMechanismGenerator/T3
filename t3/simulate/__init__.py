@@ -7,4 +7,5 @@ from t3.simulate.factory import simulate_factory, _registered_simulate_adapters
 from t3.simulate.cantera_constantTP import CanteraConstantTP
 from t3.simulate.cantera_constantHP import CanteraConstantHP
 from t3.simulate.cantera_constantUV import CanteraConstantUV
+from t3.simulate.cantera_IDT import CanteraIDT
 from t3.simulate.rmg_constantTP import RMGConstantTP
