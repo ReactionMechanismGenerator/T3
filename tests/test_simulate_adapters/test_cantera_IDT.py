@@ -527,7 +527,7 @@ def test_calculate_chebyshev_rate_coefficient():
 
 def test_get_top_sa_coefficients():
     """Test the get_top_sa_coefficients() function"""
-    data_path = os.path.join(TEST_DATA_BASE_PATH, 'sa_idt.yaml')
+    data_path = os.path.join(TEST_DATA_BASE_PATH, 'sa_idt_1.yaml')
     top_sa_dict = get_top_sa_coefficients(idt_sa_dict=read_yaml_file(data_path),
                                           top_species=10,
                                           top_reactions=10)
@@ -572,6 +572,30 @@ def test_get_top_sa_coefficients():
                                                                   24: -0.001310798627769729,
                                                                   27: -0.0008972909873407294}
 
+    data_path = os.path.join(TEST_DATA_BASE_PATH, 'sa_idt_2.yaml')
+    top_sa_dict = get_top_sa_coefficients(idt_sa_dict=read_yaml_file(data_path),
+                                          top_species=10,
+                                          top_reactions=10)
+    assert top_sa_dict['kinetics']['IDT'][0][1.0][10.0][1200.0] == {0: -0.1753106434982762,
+                                                                    15: 0.12127708624343236,
+                                                                    62: -0.1253435501225756,
+                                                                    65: -0.1845257082104551,
+                                                                    66: -0.1334340281883038,
+                                                                    85: -0.10664923956319464,
+                                                                    90: 0.12718281741288295,
+                                                                    108: -0.15507533285747638,
+                                                                    165: -0.11471694565718685,
+                                                                    245: -0.11446478011585266}
+    assert top_sa_dict['thermo']['IDT'][0][1.0][10.0][1200.0] == {2: -0.005988036940960675,
+                                                                  3: -0.09572951383236826,
+                                                                  4: 0.0210129385535655,
+                                                                  5: -0.04500208755278678,
+                                                                  9: 0.08203778520740615,
+                                                                  10: 0.005072337466243485,
+                                                                  12: -0.01147549061238161,
+                                                                  24: 0.011809516976394461,
+                                                                  34: 0.005113408917627866,
+                                                                  35: 0.005070908258511206}
 
 def teardown_module():
     """
