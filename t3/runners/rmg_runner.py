@@ -298,7 +298,7 @@ def rmg_runner(rmg_input_file_path: str,
     elif rmg_execution_type == 'local':
         runner_counter = 0
         rmg_errors = list()
-        converged, restart_rmg, run_rmg = False, restart_rmg, True
+        converged, run_rmg = False, True
         while run_rmg:
             runner_counter += 1
             project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
