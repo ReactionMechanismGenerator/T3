@@ -315,6 +315,8 @@ class CanteraIDT(SimulateAdapter):
         Returns:
              sa_dict (Optional[dict]): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
         """
+        if self.logger is not None:
+            self.logger.info(f'Running IDT SA using {max_workers} workers...')
         if not self.reactor_idt_dict:
             self.simulate()
         sa_dict = {'thermo': {'IDT': dict()}, 'kinetics': {'IDT': dict()}}
@@ -339,14 +341,14 @@ class CanteraIDT(SimulateAdapter):
                 except Exception as e:
                     self.logger.error(f"Task {task} generated an exception:\n{e}\n{traceback.format_exc()}")
 
-        idt_sa_dict = compute_idt_sa(reactor_idt_dict=self.reactor_idt_dict,
+        idt_sa_dict_all = compute_idt_sa(reactor_idt_dict=self.reactor_idt_dict,
                                      perturbed_idt_dict=sa_dict,
                                      )
-        self.idt_sa_dict = get_top_sa_coefficients(idt_sa_dict=idt_sa_dict,
+        self.idt_sa_dict = get_top_sa_coefficients(idt_sa_dict=idt_sa_dict_all,
                                                    top_species=top_SA_species,
                                                    top_reactions=top_SA_reactions)
         if save_yaml:
-            save_yaml_file(path=self.paths['SA IDT dict'], content=idt_sa_dict)
+            save_yaml_file(path=self.paths['SA IDT dict'], content=idt_sa_dict_all)
             save_yaml_file(path=self.paths['SA IDT dict top X'], content=self.idt_sa_dict)
         return self.idt_sa_dict
 
