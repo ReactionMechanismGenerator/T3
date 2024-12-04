@@ -296,6 +296,16 @@ def test_rmg_species_schema():
                              )
     assert rmg_species.concentration == (0.203, 0.502)
 
+    rmg_species = RMGSpecies(label='C3H8',
+                             smiles='CCC',
+                             role='fuel',
+                             equivalence_ratios=[0.5, 1.0, 2.0],
+                             )
+    assert rmg_species.label == 'C3H8'
+    assert rmg_species.smiles == 'CCC'
+    assert rmg_species.role == 'fuel'
+    assert rmg_species.equivalence_ratios == [0.5, 1.0, 2.0]
+
     with pytest.raises(ValidationError):
         # check that concentration is constrained to >= 0
         RMGSpecies(concentration=-1)
@@ -362,6 +372,13 @@ def test_rmg_species_schema():
                    concentration=[0.203, 0.502],
                    smiles='O',
                    constant=True,
+                   )
+
+    with pytest.raises(ValidationError):
+        # check that species defined with a fuel role without phi is invalid range cannot be constant
+        RMGSpecies(label='C3H8',
+                   smiles='CCC',
+                   role='fuel',
                    )
 
 
