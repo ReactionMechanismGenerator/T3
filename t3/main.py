@@ -264,7 +264,7 @@ class T3(object):
         """
         Execute T3.
         """
-        iteration_start, run_rmg_at_start = self.restart()
+        iteration_start, run_rmg_at_start, restart_rmg = self.restart()
 
         if iteration_start == 0 \
                 and self.qm \
@@ -291,7 +291,7 @@ class T3(object):
 
             # RMG
             if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
-                self.run_rmg(restart_rmg=run_rmg_at_start)
+                self.run_rmg(restart_rmg=restart_rmg)
 
             # SA
             if self.t3['sensitivity'] is not None:
@@ -347,12 +347,14 @@ class T3(object):
                     self.run_arc(arc_kwargs=self.qm)
                     self.process_arc_run()
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
-                # T3 iterated through all of the user requested tolerances, and there are no more calculations required
+                # T3 iterated through all the user requested tolerances, and there are no more calculations required
                 break
 
             if self.check_overtime():
                 self.logger.log_max_time_reached(max_time=self.t3['options']['max_T3_walltime'])
                 break
+
+            restart_rmg = False
 
         if additional_calcs_required:
             # The main T3 loop terminated, but the latest calculations were not included in the model.
@@ -361,7 +363,7 @@ class T3(object):
             self.logger.info(f'\n\n\nT3 iteration {self.iteration} (just generating a model using RMG):\n'
                              f'------------------------------------------------------\n')
             self.set_paths()
-            self.run_rmg(restart_rmg=run_rmg_at_start)
+            self.run_rmg(restart_rmg=restart_rmg)
 
         self.logger.log_species_summary(species_dict=self.species)
         self.logger.log_reactions_summary(reactions_dict=self.reactions)
@@ -422,62 +424,116 @@ class T3(object):
                 if self.t3['options']['shared_library_name'] is not None else None,
         }
 
-    def restart(self) -> Tuple[int, bool]:
+    def restart(self) -> Tuple[int, bool, bool]:
         """
         Restart T3 by looking for existing iteration folders.
         Restarts ARC if it ran and did not terminate.
 
         Returns:
-            Tuple[int, bool]:
+            Tuple[int, bool, bool]:
                 - The current iteration number.
                 - Whether to run RMG for this iteration.
+                - Whether to restart RMG for this iteration.
         """
-        # set default values
+        i_max = self.identify_iterations()
+        if i_max == 0:
+            self.logger.info("No existing iteration folders were found. Starting T3 from scratch.")
+            return i_max, True, False
+
+        rmg_began, rmg_terminated = self.check_rmg_status()
+        arc_began, arc_terminated = self.check_arc_status()
+
+        run_rmg = not rmg_began
+        run_arc = rmg_terminated and not arc_began
+        restart_rmg = rmg_began and not rmg_terminated
+        restart_arc = not run_rmg and not restart_rmg and arc_began and not arc_terminated
+
+        if run_rmg:
+            self.logger.info(f"RMG has not run for iteration {i_max}. Preparing to start RMG.")
+        elif restart_rmg:
+            self.logger.info(f"RMG did not terminate successfully for iteration {i_max}. Preparing to restart RMG.")
+        elif run_arc:
+            self.logger.info(f"ARC has not run for iteration {i_max}. Preparing to start ARC.")
+        elif restart_arc:
+            self.logger.info(f"ARC did not terminate successfully for iteration {i_max}. Preparing to restart ARC.")
+
+        text = 'restarting RMG' if restart_rmg else 'running RMG' if run_rmg else 'restarting ARC' if restart_arc else 'skipping RMG'
+        self.logger.info(f"\nRestarting T3 from iteration {i_max}: {text}.")
+
+        if restart_arc:
+            i_max = self.handle_arc_restart(i_max)
+            run_rmg, restart_rmg = True, False
+
+        return i_max, run_rmg, restart_rmg
+
+    def identify_iterations(self) -> int:
+        """
+        Identify the latest iteration number and set paths.
+
+        Returns:
+            int: The latest iteration number.
+        """
         i_max = 0
-        run_rmg_i, restart_arc_i = True, False
-
         folders = tuple(os.walk(self.project_directory))[0][1]  # returns a 3-tuple: (dirpath, dirnames, filenames)
-        iteration_folders = [folder for folder in folders if 'iteration_' in folder]
+        iteration_folders = [folder for folder in folders
+                             if folder.startswith('iteration_') and len(folder.split('_')) == 2
+                             and folder.split('_')[1].isdigit()]
+        if iteration_folders:
+            self.logger.info(f"Identified {len(iteration_folders)} existing iteration folders.")
+            i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])
+        self.set_paths(iteration=i_max)
+        return i_max
 
-        if len(iteration_folders):
-            self.load_species_and_reactions()
-            i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])  # get the latest iteration number
-            self.set_paths(iteration=i_max)
-            if i_max != 0 and os.path.isfile(self.paths['RMG log']):
-                # iteration 0 is reserved for ARC only if needed
-                with open(self.paths['RMG log'], 'r') as f:
-                    lines = f.readlines()
-                    for line in lines[::-1]:
-                        if 'MODEL GENERATION COMPLETED' in line:
-                            # RMG terminated, no need to regenerate the model
-                            run_rmg_i = False
-                            break
-            if os.path.isfile(self.paths['ARC log']) and (not run_rmg_i or i_max == 0):
-                # The ARC log file exists, and no need to run RMG (converged) or this is iteration 0
-                with open(self.paths['ARC log'], 'r') as f:
-                    lines = f.readlines()
-                    for line in lines[::-1]:
-                        if 'ARC execution terminated on' in line:
-                            # ARC terminated as well, continue to the next iteration
-                            i_max += 1
-                            run_rmg_i = True
-                            break
-                    else:
-                        # ARC did not terminate, see if the restart file was generated
-                        if os.path.isfile(self.paths['ARC restart']):
-                            restart_arc_i = True
-            if i_max or not run_rmg_i or restart_arc_i:
-                rmg_text = ', using the completed RMG run from this iteration' if not run_rmg_i \
-                    else ', re-running RMG for this iteration'
-                arc_text = ', restarting the previous ARC run in this iteration' if restart_arc_i else ''
-                self.logger.log(f'\nRestarting T3 from iteration {i_max}{rmg_text}{arc_text}.\n')
-            if restart_arc_i:
-                self.run_arc(input_file_path=self.paths['ARC restart'])
-                self.process_arc_run()
-                i_max += 1
-                run_rmg_i = True
+    def check_rmg_status(self) -> Tuple[bool, bool]:
+        """
+        Check if RMG has successfully terminated.
 
-        return i_max, run_rmg_i
+        Returns:
+            Tuple[bool, bool]:
+                - Whether RMG already began running.
+                - Whether RMG terminated successfully.
+        """
+        if os.path.isfile(self.paths['RMG log']):
+            with open(self.paths['RMG log'], 'r') as f:
+                for line in reversed(f.readlines()):
+                    if 'MODEL GENERATION COMPLETED' in line:
+                        return True, True
+            return True, False
+        return False, False
+
+    def check_arc_status(self) -> Tuple[bool, bool]:
+        """
+        Check if ARC has successfully terminated.
+
+        Returns:
+            Tuple[bool, bool]:
+                - Whether ARC already began running.
+                - Whether ARC terminated successfully.
+        """
+        if os.path.isfile(self.paths['ARC log']):
+            with open(self.paths['ARC log'], 'r') as f:
+                for line in reversed(f.readlines()):
+                    if 'ARC execution terminated on' in line:
+                        return True, True
+        if os.path.isfile(self.paths['ARC restart']):
+            return True, False
+        return False, False
+
+    def handle_arc_restart(self, i_max: int) -> int:
+        """
+        Handle an ARC restart.
+
+        Args:
+            i_max (int): The current iteration number.
+
+        Returns:
+            int: The updated iteration number.
+        """
+        self.run_arc(input_file_path=self.paths['ARC restart'])
+        self.process_arc_run()
+        i_max += 1
+        self.set_paths(iteration=i_max)
+        return i_max
 
     def check_arc_args(self):
         """
