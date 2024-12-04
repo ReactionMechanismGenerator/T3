@@ -44,6 +44,8 @@ def fix_cantera(model_path: str):
     Returns:
         bool: Whether the model was fixed.
     """
+    if not os.path.isfile(model_path):
+        return False
     shutil.copyfile(model_path, model_path + '.bak')
     done, fixed = False, False
     counter = 0
