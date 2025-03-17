@@ -9,7 +9,8 @@ primary:
     - DFT_QCI_thermo
     - CBS_QB3_1dHR
   kinetics:
-    - primaryH2O2
+    - name: primaryH2O2
+      seed: true
 
 nitrogen:
   thermo:
