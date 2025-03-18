@@ -373,6 +373,7 @@ class T3(object):
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
             'SA': os.path.join(iteration_path, 'SA'),
+            'SA yaml': os.path.join(iteration_path, 'SA', 'SA.yml'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
@@ -725,10 +726,9 @@ class T3(object):
             or any(spc['converged'] is None for spc in self.species.values())
 
         self.logger.info(f'Additional calculations required: {additional_calcs_required}\n')
-        if len(species_keys):
-            self.logger.log_species_to_calculate(species_keys, self.species)
-        if len(reaction_keys):
-            self.logger.log_reactions_to_calculate(reaction_keys, self.reactions)
+        spc_yml = self.logger.log_species_to_calculate(species_keys, self.species) if len(species_keys) else dict()
+        rxn_yml = self.logger.log_reactions_to_calculate(reaction_keys, self.reactions) if len(reaction_keys) else dict()
+        save_yaml_file(path=self.paths['SA yaml'], content={'Species': spc_yml, 'Reactions': rxn_yml})
         return additional_calcs_required
 
     def determine_species_based_on_sa(self) -> List[int]:

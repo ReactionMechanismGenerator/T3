@@ -166,7 +166,7 @@ class Logger(object):
 
     def log_species_to_calculate(self,
                                  species_keys: List[int],
-                                 species_dict: Dict[int, dict]):
+                                 species_dict: Dict[int, dict]) -> Dict:
         """
         Report the species to be calculated in the next iteration.
         The 'QM label' is used for reporting, it is principally the
@@ -178,9 +178,10 @@ class Logger(object):
             species_keys (List[int]): Entries are T3 species indices.
             species_dict (dict): The T3 species dictionary.
 
-        Todo:
-            Log the reasons one by one with line breaks and enumerate
+        Returns:
+            Dict: SA content for the YAML file.
         """
+        yml_content = dict()
         if len(species_keys):
             self.info('\n\nSpecies to calculate thermodynamic data for:')
             max_label_length = max([len(spc_dict['QM label'])
@@ -201,10 +202,15 @@ class Logger(object):
                 for j, reason in enumerate(spc_dict['reasons']):
                     if j:
                         self.info(f"{' ' * (max_label_length + max_smiles_length + 4)}{j + 1}. {spc_dict['reasons'][j]}")
+                yml_content[key] = {'SMILES': smiles,
+                                    'QM label': spc_dict['QM label'],
+                                    'reasons': spc_dict['reasons'],
+                                    }
+        return yml_content
 
     def log_reactions_to_calculate(self,
                                    reaction_keys: List[int],
-                                   reaction_dict: Dict[int, dict]):
+                                   reaction_dict: Dict[int, dict]) -> Dict:
         """
         Report reaction rate coefficients to be calculated in the next iteration.
         The reaction 'QM label' is used for reporting.
@@ -212,7 +218,11 @@ class Logger(object):
         Args:
             reaction_keys (List[int]): Entries are T3 reaction indices.
             reaction_dict (dict): The T3 reaction dictionary.
+
+        Returns:
+            Dict: SA content for the YAML file.
         """
+        yml_content = dict()
         if len(reaction_keys):
             self.info('\n\nReactions to calculate high-pressure limit rate coefficients for:')
             max_label_length = max([len(rxn_dict['QM label'])
@@ -228,10 +238,16 @@ class Logger(object):
                 space1 = ' ' * (max_label_length - len(rxn_dict['QM label']) + 1)
                 self.info(f"\n{rxn_dict['QM label']}{space1} {rxn_dict['reasons']}")
                 self.info(f"{rxn_dict['SMILES label']}\n")
+                yml_content[key] = {'SMILES label': rxn_dict['SMILES label'],
+                                    'QM label': rxn_dict['QM label'],
+                                    'reasons': rxn_dict['reasons'],
+                                    }
                 if hasattr(rxn_dict['object'], 'family') and rxn_dict['object'].family is not None:
                     label = rxn_dict['object'].family if isinstance(rxn_dict['object'].family, str) \
                         else rxn_dict['object'].family.label
                     self.info(f'RMG family: {label}\n')
+                    yml_content[key]['RMG family'] = label
+        return yml_content
 
     def log_species_summary(self, species_dict: Dict[int, dict]):
         """
