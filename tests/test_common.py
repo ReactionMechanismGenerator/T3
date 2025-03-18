@@ -181,3 +181,57 @@ def test_get_parameter_from_header():
 
     label = common.get_parameter_from_header('dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)')
     assert label == 'k8'
+
+
+def test_determine_concentrations_by_equivalence_ratios():
+    """Test determining the concentrations of fuel/oxygen/nitrogen species using the equivalence ratio."""
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'))
+    t3.rmg['species'] = [{'label': 'propane', 'smiles': 'CCC', 'adjlist': None, 'inchi': None, 'role': 'fuel',
+                          'equivalence_ratios': [0.5, 1.0, 1.5]},
+                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+    objects = common.determine_concentrations_by_equivalence_ratios(species=t3.rmg['species'])
+    assert objects['fuel']['label'] == 'propane'
+    assert objects['fuel']['role'] == 'fuel'
+    assert objects['fuel']['concentration'] == 1
+    assert objects['oxygen']['label'] == 'O2'
+    assert objects['oxygen']['concentration'] == [2.5, 5.0, 7.5]
+    assert objects['nitrogen']['label'] == 'N2'
+    assert objects['nitrogen']['concentration'] == [2.5 * 3.76, 5.0 * 3.76, 7.5 * 3.76]
+
+
+def test_get_o2_stoichiometry():
+    """Test the get_o2_stoichiometry() function"""
+    assert common.get_o2_stoichiometry(smiles='C') == 2  # 1 CO2 + 2 H2O
+    assert common.get_o2_stoichiometry(adjlist="""1 C u0 p0 c0 {2,S} {3,S} {4,S} {5,S}
+                                                  2 H u0 p0 c0 {1,S}
+                                                  3 H u0 p0 c0 {1,S}
+                                                  4 H u0 p0 c0 {1,S}
+                                                  5 H u0 p0 c0 {1,S}""") == 2
+    assert common.get_o2_stoichiometry(inchi='InChI=1S/CH4/h1H4') == 2
+    assert common.get_o2_stoichiometry(smiles='CCCCC') == 8  # 5 CO2 + 6 H2O
+    assert common.get_o2_stoichiometry(smiles='CCCCCC') == 9.5  # 6 CO2 + 7 H2O
+    assert common.get_o2_stoichiometry(smiles='CCO') == 3  # 2 CO2 + 3 H2O - O
+    assert common.get_o2_stoichiometry(smiles='NCC') == 7.5 / 2  # 2 CO2 + 3.5 H2O
+
+
+def test_remove_numeric_parentheses():
+    """Test the remove_numeric_parentheses() function"""
+    assert common.remove_numeric_parentheses('C2H5(2)') == 'C2H5'
+    assert common.remove_numeric_parentheses('C2H5') == 'C2H5'
+    assert common.remove_numeric_parentheses('CH2(S)') == 'CH2(S)'
+    assert common.remove_numeric_parentheses('C2H5(547)') == 'C2H5'
+    assert common.remove_numeric_parentheses('C2H5(547)H') == 'C2H5(547)H'
+    assert common.remove_numeric_parentheses('HNO(T)(21)') == 'HNO(T)'
+
+
+def test_numpy_to_list():
+    """Test the numpy_to_list() function"""
+    import numpy as np
+    assert common.numpy_to_list(np.array([1, 2, 3])) == [1, 2, 3]
+    assert common.numpy_to_list(np.array([1.0, 2.0, 3.0])) == [1.0, 2.0, 3.0]
+    assert common.numpy_to_list(np.array([1.0, 2.0, 3.0], dtype=np.float32)) == [1.0, 2.0, 3.0]
+    assert common.numpy_to_list(np.array([1.0, 2.0, 3.0], dtype=np.float64)) == [1.0, 2.0, 3.0]
+    assert common.numpy_to_list(np.array([1, 2, 3], dtype=np.int32)) == [1, 2, 3]
+    assert common.numpy_to_list(np.array([1, 2, 3], dtype=np.int64)) == [1, 2, 3]
+    assert common.numpy_to_list(np.array([1, 2, 3], dtype=np.bool_)) == [True, True, True]

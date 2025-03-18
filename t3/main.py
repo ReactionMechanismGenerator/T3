@@ -49,8 +49,10 @@ from t3.common import (DATA_BASE_PATH,
                        PROJECTS_BASE_PATH,
                        VALID_CHARS,
                        delete_root_rmg_log,
+                       determine_concentrations_by_equivalence_ratios,
                        get_species_by_label,
-                       time_lapse)
+                       time_lapse,
+                       )
 from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
@@ -156,7 +158,7 @@ class T3(object):
                  clean_dir: bool = False,
                  ):
 
-        self.sa_dict = None
+        self.sa_dict, self.sa_dict_idt = None, None
         self.sa_observables = list()
         self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
 
@@ -185,6 +187,7 @@ class T3(object):
         self.rmg['database'] = auto_complete_rmg_libraries(database=self.rmg['database'])
         self.qm = self.schema['qm']
         self.verbose = self.schema['verbose']
+        self.update_species_concentrations()
 
         if clean_dir and os.path.isdir(self.project_directory):
             self.cleanup()
@@ -261,7 +264,7 @@ class T3(object):
         """
         Execute T3.
         """
-        iteration_start, run_rmg_at_start = self.restart()
+        iteration_start, run_rmg_at_start, restart_rmg = self.restart()
 
         if iteration_start == 0 \
                 and self.qm \
@@ -288,7 +291,7 @@ class T3(object):
 
             # RMG
             if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
-                self.run_rmg(restart_rmg=run_rmg_at_start)
+                self.run_rmg(restart_rmg=restart_rmg)
 
             # SA
             if self.t3['sensitivity'] is not None:
@@ -297,21 +300,41 @@ class T3(object):
                     for species in self.rmg['species']:
                         if species['observable'] or species['SA_observable']:
                             self.sa_observables.append(species['label'])
-
-                simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
-                                                    t3=self.t3,
-                                                    rmg=self.rmg,
-                                                    paths=self.paths,
-                                                    logger=self.logger,
-                                                    atol=self.rmg['model']['atol'],
-                                                    rtol=self.rmg['model']['rtol'],
-                                                    observable_list=self.sa_observables,
-                                                    sa_atol=self.t3['sensitivity']['atol'],
-                                                    sa_rtol=self.t3['sensitivity']['rtol'],
-                                                    global_observables=None,
-                                                    )
-                simulate_adapter.simulate()
-                self.sa_dict = simulate_adapter.get_sa_coefficients()
+                if self.t3['sensitivity']['adapter'] is not None and self.sa_observables:
+                    simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        observable_list=self.sa_observables,
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict = simulate_adapter.get_sa_coefficients(
+                        top_SA_species=self.t3['sensitivity']['top_SA_species'],
+                        top_SA_reactions=self.t3['sensitivity']['top_SA_reactions'],
+                        max_workers=self.t3['sensitivity']['max_sa_workers'],
+                        save_yaml=True)
+                if any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
+                    simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict_idt = simulate_adapter.get_sa_coefficients(
+                        top_SA_species=self.t3['sensitivity']['top_SA_species'],
+                        top_SA_reactions=self.t3['sensitivity']['top_SA_reactions'],
+                        max_workers=self.t3['sensitivity']['max_sa_workers'],
+                        save_yaml=True)
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
@@ -324,12 +347,14 @@ class T3(object):
                     self.run_arc(arc_kwargs=self.qm)
                     self.process_arc_run()
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
-                # T3 iterated through all of the user requested tolerances, and there are no more calculations required
+                # T3 iterated through all the user requested tolerances, and there are no more calculations required
                 break
 
             if self.check_overtime():
                 self.logger.log_max_time_reached(max_time=self.t3['options']['max_T3_walltime'])
                 break
+
+            restart_rmg = False
 
         if additional_calcs_required:
             # The main T3 loop terminated, but the latest calculations were not included in the model.
@@ -338,7 +363,7 @@ class T3(object):
             self.logger.info(f'\n\n\nT3 iteration {self.iteration} (just generating a model using RMG):\n'
                              f'------------------------------------------------------\n')
             self.set_paths()
-            self.run_rmg(restart_rmg=run_rmg_at_start)
+            self.run_rmg(restart_rmg=restart_rmg)
 
         self.logger.log_species_summary(species_dict=self.species)
         self.logger.log_reactions_summary(reactions_dict=self.reactions)
@@ -369,12 +394,16 @@ class T3(object):
             'RMG job log': os.path.join(iteration_path, 'RMG', 'job.log'),
             'RMG coll vio': os.path.join(iteration_path, 'RMG', 'collision_rate_violators.log'),
             'RMS': os.path.join(iteration_path, 'RMG', 'rms'),
-            'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.cti'),
+            'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera', 'chem_annotated.yaml'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
+            'figs': os.path.join(iteration_path, 'Figures'),
             'SA': os.path.join(iteration_path, 'SA'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
+            'SA dict': os.path.join(iteration_path, 'SA', 'sa.yaml'),
+            'SA IDT dict': os.path.join(iteration_path, 'SA', 'sa_idt.yaml'),
+            'SA IDT dict top X': os.path.join(iteration_path, 'SA', 'sa_idt_top_x.yaml'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
             'ARC': os.path.join(iteration_path, 'ARC'),
             'ARC input': os.path.join(iteration_path, 'ARC', 'input.yml'),
@@ -395,62 +424,116 @@ class T3(object):
                 if self.t3['options']['shared_library_name'] is not None else None,
         }
 
-    def restart(self) -> Tuple[int, bool]:
+    def restart(self) -> Tuple[int, bool, bool]:
         """
         Restart T3 by looking for existing iteration folders.
         Restarts ARC if it ran and did not terminate.
 
         Returns:
-            Tuple[int, bool]:
+            Tuple[int, bool, bool]:
                 - The current iteration number.
                 - Whether to run RMG for this iteration.
+                - Whether to restart RMG for this iteration.
         """
-        # set default values
+        i_max = self.identify_iterations()
+        if i_max == 0:
+            self.logger.info("No existing iteration folders were found. Starting T3 from scratch.")
+            return i_max, True, False
+
+        rmg_began, rmg_terminated = self.check_rmg_status()
+        arc_began, arc_terminated = self.check_arc_status()
+
+        run_rmg = not rmg_began
+        run_arc = rmg_terminated and not arc_began
+        restart_rmg = rmg_began and not rmg_terminated
+        restart_arc = not run_rmg and not restart_rmg and arc_began and not arc_terminated
+
+        if run_rmg:
+            self.logger.info(f"RMG has not run for iteration {i_max}. Preparing to start RMG.")
+        elif restart_rmg:
+            self.logger.info(f"RMG did not terminate successfully for iteration {i_max}. Preparing to restart RMG.")
+        elif run_arc:
+            self.logger.info(f"ARC has not run for iteration {i_max}. Preparing to start ARC.")
+        elif restart_arc:
+            self.logger.info(f"ARC did not terminate successfully for iteration {i_max}. Preparing to restart ARC.")
+
+        text = 'restarting RMG' if restart_rmg else 'running RMG' if run_rmg else 'restarting ARC' if restart_arc else 'skipping RMG'
+        self.logger.info(f"\nRestarting T3 from iteration {i_max}: {text}.")
+
+        if restart_arc:
+            i_max = self.handle_arc_restart(i_max)
+            run_rmg, restart_rmg = True, False
+
+        return i_max, run_rmg, restart_rmg
+
+    def identify_iterations(self) -> int:
+        """
+        Identify the latest iteration number and set paths.
+
+        Returns:
+            int: The latest iteration number.
+        """
         i_max = 0
-        run_rmg_i, restart_arc_i = True, False
-
         folders = tuple(os.walk(self.project_directory))[0][1]  # returns a 3-tuple: (dirpath, dirnames, filenames)
-        iteration_folders = [folder for folder in folders if 'iteration_' in folder]
+        iteration_folders = [folder for folder in folders
+                             if folder.startswith('iteration_') and len(folder.split('_')) == 2
+                             and folder.split('_')[1].isdigit()]
+        if iteration_folders:
+            self.logger.info(f"Identified {len(iteration_folders)} existing iteration folders.")
+            i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])
+        self.set_paths(iteration=i_max)
+        return i_max
 
-        if len(iteration_folders):
-            self.load_species_and_reactions()
-            i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])  # get the latest iteration number
-            self.set_paths(iteration=i_max)
-            if i_max != 0 and os.path.isfile(self.paths['RMG log']):
-                # iteration 0 is reserved for ARC only if needed
-                with open(self.paths['RMG log'], 'r') as f:
-                    lines = f.readlines()
-                    for line in lines[::-1]:
-                        if 'MODEL GENERATION COMPLETED' in line:
-                            # RMG terminated, no need to regenerate the model
-                            run_rmg_i = False
-                            break
-            if os.path.isfile(self.paths['ARC log']) and (not run_rmg_i or i_max == 0):
-                # The ARC log file exists, and no need to run RMG (converged) or this is iteration 0
-                with open(self.paths['ARC log'], 'r') as f:
-                    lines = f.readlines()
-                    for line in lines[::-1]:
-                        if 'ARC execution terminated on' in line:
-                            # ARC terminated as well, continue to the next iteration
-                            i_max += 1
-                            run_rmg_i = True
-                            break
-                    else:
-                        # ARC did not terminate, see if the restart file was generated
-                        if os.path.isfile(self.paths['ARC restart']):
-                            restart_arc_i = True
-            if i_max or not run_rmg_i or restart_arc_i:
-                rmg_text = ', using the completed RMG run from this iteration' if not run_rmg_i \
-                    else ', re-running RMG for this iteration'
-                arc_text = ', restarting the previous ARC run in this iteration' if restart_arc_i else ''
-                self.logger.log(f'\nRestarting T3 from iteration {i_max}{rmg_text}{arc_text}.\n')
-            if restart_arc_i:
-                self.run_arc(input_file_path=self.paths['ARC restart'])
-                self.process_arc_run()
-                i_max += 1
-                run_rmg_i = True
+    def check_rmg_status(self) -> Tuple[bool, bool]:
+        """
+        Check if RMG has successfully terminated.
 
-        return i_max, run_rmg_i
+        Returns:
+            Tuple[bool, bool]:
+                - Whether RMG already began running.
+                - Whether RMG terminated successfully.
+        """
+        if os.path.isfile(self.paths['RMG log']):
+            with open(self.paths['RMG log'], 'r') as f:
+                for line in reversed(f.readlines()):
+                    if 'MODEL GENERATION COMPLETED' in line:
+                        return True, True
+            return True, False
+        return False, False
+
+    def check_arc_status(self) -> Tuple[bool, bool]:
+        """
+        Check if ARC has successfully terminated.
+
+        Returns:
+            Tuple[bool, bool]:
+                - Whether ARC already began running.
+                - Whether ARC terminated successfully.
+        """
+        if os.path.isfile(self.paths['ARC log']):
+            with open(self.paths['ARC log'], 'r') as f:
+                for line in reversed(f.readlines()):
+                    if 'ARC execution terminated on' in line:
+                        return True, True
+        if os.path.isfile(self.paths['ARC restart']):
+            return True, False
+        return False, False
+
+    def handle_arc_restart(self, i_max: int) -> int:
+        """
+        Handle an ARC restart.
+
+        Args:
+            i_max (int): The current iteration number.
+
+        Returns:
+            int: The updated iteration number.
+        """
+        self.run_arc(input_file_path=self.paths['ARC restart'])
+        self.process_arc_run()
+        i_max += 1
+        self.set_paths(iteration=i_max)
+        return i_max
 
     def check_arc_args(self):
         """
@@ -671,6 +754,7 @@ class T3(object):
             bool: Whether additional calculations are required.
         """
         species_keys, reaction_keys, coll_vio_spc_keys, coll_vio_rxn_keys = list(), list(), list(), list()
+        rxn_idt_keys = None
 
         self.rmg_species, self.rmg_reactions = self.load_species_and_reactions_from_chemkin_file()
         self.logger.info(f'This RMG model has {len(self.rmg_species)} species '
@@ -706,6 +790,9 @@ class T3(object):
             # 1.2. SA
             if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
+            if self.t3['sensitivity'] is not None and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
+                species_idt_keys, rxn_idt_keys = self.determine_params_based_on_sa_idt()
+                species_keys.extend(species_idt_keys)
             # 1.3. collision violators
             if self.t3['options']['collision_violators_thermo']:
                 species_keys.extend(coll_vio_spc_keys)
@@ -714,6 +801,10 @@ class T3(object):
         # 2.1. SA
         if sa_observables_exist:
             reaction_keys.extend(self.determine_reactions_based_on_sa())
+        if self.t3['sensitivity'] is not None and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
+            if rxn_idt_keys is None:
+                species_idt_keys, rxn_idt_keys = self.determine_params_based_on_sa_idt()
+            reaction_keys.extend(rxn_idt_keys)
         # 2.2. collision violators
         if self.t3['options']['collision_violators_rates']:
             reaction_keys.extend(coll_vio_rxn_keys)
@@ -791,6 +882,58 @@ class T3(object):
         species_keys.extend(self.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore))
 
         return species_keys
+
+    def determine_params_based_on_sa_idt(self) -> Tuple[List[int], List[int]]:
+        """
+        Determine species or reactions to calculate based on sensitivity analysis of IDT.
+
+        Returns:
+            List[int]: Entries are T3 species indices of species determined to be calculated based on IDT SA.
+        """
+        visited_species, species_keys = list(), list()
+        visited_rxns, rxn_keys = list(), list()
+        if self.sa_dict_idt is None:
+            self.logger.error(f"T3's sa_dict_idt was None. Please check that the input file contains a proper "
+                              f"'sensitivity' block, that 'IDT' was defined in the global_observables list, "
+                              f"and/or that SA was run successfully.\n"
+                              f"Not performing refinement based on IDT sensitivity analysis!")
+            return species_keys, rxn_keys
+        for token in ['thermo', 'kinetics']:
+            for r, reactor_idt_data in self.sa_dict_idt[token]['IDT'].items():
+                for phi, phi_data in reactor_idt_data.items():
+                    for p, p_data in phi_data.items():
+                        for t, idt_data in p_data.items():
+                            for index, sa in idt_data.items():
+                                if token == 'thermo':
+                                    if index not in visited_species:
+                                        visited_species.append(index)
+                                        species = self.get_species_by_index(index)
+                                        if self.species_requires_refinement(species=species):
+                                            reason = f'(i {self.iteration}) IDT is sensitive to this species.'
+                                            key = self.add_species(species=species, reasons=reason)
+                                            if key is not None:
+                                                species_keys.append(key)
+                                elif token == 'kinetics':
+                                    if index not in visited_rxns:
+                                        visited_rxns.append(index)
+                                        reaction = self.get_reaction_by_index(index)
+                                        if self.reaction_requires_refinement(reaction):
+                                            reason = f'(i {self.iteration}) IDT is sensitive to this reaction.'
+                                            key = self.add_reaction(reaction=reaction, reasons=reason)
+                                            if key is not None:
+                                                rxn_keys.append(key)
+                                        for spc in reaction.reactants + reaction.products:
+                                            spc_index = self.get_species_key(spc)
+                                            if spc_index not in visited_species:
+                                                visited_species.append(spc_index)
+                                                if self.species_requires_refinement(species=spc):
+                                                    reason = f'(i {self.iteration}) IDT is sensitive to a reaction ' \
+                                                             f'({reaction}) in which this species participates.'
+                                                    key = self.add_species(species=spc, reasons=reason)
+                                                    if key is not None:
+                                                        species_keys.append(key)
+        return species_keys, rxn_keys
+
 
     def determine_reactions_based_on_sa(self) -> List[int]:
         """
@@ -1158,6 +1301,21 @@ class T3(object):
                 return key
         return None
 
+    def get_species_by_index(self, index) -> Optional[Species]:
+        """
+        Get a species object by its T3 index.
+
+        Args:
+            index (int): The species index.
+
+        Returns:
+            Optional[Species]: The species object if it exists, ``None`` if it does not.
+        """
+        for key, species_dict in self.species.items():
+            if key == index:
+                return species_dict['object']
+        return None
+
     def get_reaction_key(self,
                          reaction: Optional[Reaction] = None,
                          label: Optional[str] = None,
@@ -1184,6 +1342,21 @@ class T3(object):
                 return key
             if label is not None and label == reaction_dict[f'{label_type} label']:
                 return key
+        return None
+
+    def get_reaction_by_index(self, index) -> Optional[Reaction]:
+        """
+        Get a reaction object by its T3 index.
+
+        Args:
+            index (int): The reaction index.
+
+        Returns:
+            Optional[Reaction]: The reaction object if it exists, ``None`` if it does not.
+        """
+        for key, reaction_dict in self.reactions.items():
+            if key == index:
+                return reaction_dict['object']
         return None
 
     def load_species_and_reactions_from_chemkin_file(self) -> Tuple[List[Species], List[Reaction]]:
@@ -1231,7 +1404,7 @@ class T3(object):
                     ) -> Optional[int]:
         """
         Add a species to self.species and to self.qm['species'].
-        If the species already exists in self.species, only the reasons to compute will be appended.
+        If the species already exists in self.species, only the reasons to compute it will be appended.
 
         Args:
             species (Species): The species to consider.
@@ -1412,6 +1585,17 @@ class T3(object):
             self.rmg['database'][library_type] = [library_name] + self.rmg['database'][library_type]
         elif library_name in self.rmg['database'][library_type] and not exists_function(library_name):
             self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
+
+    def update_species_concentrations(self):
+        """
+        Update the species concentrations based on species roles and equivalence ratios.
+        """
+        objects = determine_concentrations_by_equivalence_ratios(species=self.rmg['species'])
+        for spc in self.rmg['species']:
+            if spc['role'] == 'fuel' and spc['concentration'] == 0 and objects['fuel'] is not None:
+                spc['concentration'] = objects['fuel']['concentration']
+            elif (spc['role'] == 'oxygen' or spc['role'] == 'nitrogen') and spc['concentration'] == 0:
+                spc['concentration'] = [min(objects[spc['role']]['concentration']), max(objects[spc['role']]['concentration'])]
 
     def check_overtime(self) -> bool:
         """

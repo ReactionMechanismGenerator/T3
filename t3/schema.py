@@ -100,17 +100,16 @@ class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
     """
-    adapter: constr(max_length=255) = 'RMGConstantTP'
+    adapter: Optional[constr(max_length=255)] = 'RMGConstantTP'
     atol: confloat(gt=0, lt=1e-1) = 1e-6
     rtol: confloat(gt=0, lt=1e-1) = 1e-4
-    global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None
+    global_observables: Optional[List[str]] = None  # ['IDT', 'ESR', 'SL']
     SA_threshold: confloat(gt=0, lt=0.5) = 0.01
+    max_sa_workers: conint(ge=1) = 24
     pdep_SA_threshold: Optional[confloat(gt=0, lt=0.5)] = 0.001
     ME_methods: List[constr(min_length=2, max_length=3)] = ['CSE', 'MSC']
     top_SA_species: conint(ge=0) = 10
     top_SA_reactions: conint(ge=0) = 10
-    T_list: Optional[List[confloat(gt=0)]] = None
-    P_list: Optional[List[confloat(gt=0)]] = None
 
     class Config:
         extra = "forbid"
@@ -118,9 +117,9 @@ class T3Sensitivity(BaseModel):
     @validator('adapter')
     def check_adapter(cls, value):
         """T3Sensitivity.adapter validator"""
-        if value not in _registered_simulate_adapters.keys():
+        if value not in _registered_simulate_adapters.keys() and value is not None:
             raise ValueError(
-                f'The "T3 sensitivity adapter" argument of {value} was not present in the keys for the '
+                f'The sensitivity adapter argument "{value}" was not present in the keys for the '
                 f'_registered_simulate_adapters dictionary: {list(_registered_simulate_adapters.keys())}'
                 f'\nPlease check that the simulate adapter was registered properly.')
         return value
@@ -130,8 +129,8 @@ class T3Sensitivity(BaseModel):
         """T3Sensitivity.global_observables validator"""
         if value is not None:
             for i, entry in enumerate(value):
-                if entry.lower() not in ['igd', 'esr', 'sl']:
-                    raise ValueError(f'The global observables list must contain a combination of "IgD", "ESR", and "SL", '
+                if entry.lower() not in ['idt', 'esr', 'sl']:
+                    raise ValueError(f'The global observables list must contain a combination of "IDT", "ESR", and "SL", '
                                      f'Got {entry} in {value}')
                 if entry.lower() in [value[j].lower() for j in range(i)]:
                     raise ValueError(f'The global observables list must not contain repetitions, got {value}')
@@ -215,6 +214,8 @@ class RMGSpecies(BaseModel):
     """
     label: str
     concentration: Union[confloat(ge=0), Tuple[confloat(ge=0), confloat(ge=0)]] = 0
+    equivalence_ratios: Optional[List[confloat(gt=0)]] = None
+    role: Optional[str] = None
     smiles: Optional[str] = None
     inchi: Optional[str] = None
     adjlist: Optional[str] = None
@@ -238,6 +239,15 @@ class RMGSpecies(BaseModel):
         if value and isinstance(values['concentration'], tuple):
             raise ValueError(f"A constant species cannot have a concentration range.\n"
                              f"Got{label}: {values['concentration']}.")
+        return value
+
+    @validator('role')
+    def check_species_role(cls, value, values):
+        """RMGSpecies.role validator"""
+        if value not in ['fuel', 'oxygen', 'nitrogen', None]:
+            raise ValueError(f'The species role must be either "fuel", "oxygen", or "nitrogen".\nGot: {value}')
+        if value == 'fuel' and values['equivalence_ratios'] is None and values['concentration'] == 0:
+            raise ValueError(f'If the species role is "fuel", then the equivalence ratios must be specified.')
         return value
 
     @validator('concentration')

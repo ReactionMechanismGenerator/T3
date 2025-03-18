@@ -62,8 +62,6 @@ t3_minimal = {'options': {'all_core_reactions': False,
                               'global_observables': None,
                               'pdep_SA_threshold': 0.001,
                               'rtol': 0.0001,
-                              'P_list': None,
-                              'T_list': None,
                               'top_SA_reactions': 10,
                               'top_SA_species': 10},
               'uncertainty': None,
@@ -123,10 +121,12 @@ rmg_minimal = {'memory': None,
                             'balance': False,
                             'concentration': 0.67,
                             'constant': False,
+                            'equivalence_ratios': None,
                             'inchi': None,
                             'label': 'H2',
                             'observable': False,
                             'reactive': True,
+                            'role': None,
                             'smiles': '[H][H]',
                             'xyz': None,
                             'seed_all_rads': None,
@@ -138,10 +138,12 @@ rmg_minimal = {'memory': None,
                             'balance': False,
                             'concentration': 0.33,
                             'constant': False,
+                            'equivalence_ratios': None,
                             'inchi': None,
                             'label': 'O2',
                             'observable': False,
                             'reactive': True,
+                            'role': None,
                             'smiles': '[O][O]',
                             'xyz': None,
                             'seed_all_rads': None,
@@ -153,10 +155,12 @@ rmg_minimal = {'memory': None,
                             'balance': False,
                             'concentration': 0,
                             'constant': False,
+                            'equivalence_ratios': None,
                             'inchi': None,
                             'label': 'H',
                             'observable': False,
                             'reactive': True,
+                            'role': None,
                             'smiles': '[H]',
                             'xyz': None,
                             'seed_all_rads': None,
@@ -168,10 +172,12 @@ rmg_minimal = {'memory': None,
                             'balance': False,
                             'concentration': 0,
                             'constant': False,
+                            'equivalence_ratios': None,
                             'inchi': None,
                             'label': 'OH',
                             'observable': False,
                             'reactive': True,
+                            'role': None,
                             'smiles': '[OH]',
                             'xyz': None,
                             'seed_all_rads': None,
@@ -286,11 +292,14 @@ def test_set_paths():
              'SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA',
              'SA input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
              'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
-             'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera/chem_annotated.cti',
+             'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera/chem_annotated.yaml',
              'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
              'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
-             'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
-                             'species_dictionary.txt',
+             'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/species_dictionary.txt',
+             'figs': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/Figures',
+             'SA dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
+             'SA IDT dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
+             'SA IDT dict top X': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
              'T3 thermo lib': 'test_minimal_delete_after_usage/Libraries/T3lib.py',
              'T3 kinetics lib': 'test_minimal_delete_after_usage/Libraries/T3',
              'shared T3 thermo lib': None,
@@ -1038,6 +1047,38 @@ multiplicity 1
     assert label_1 == 'CH2'
     label_2 = get_species_label_by_structure(adj_2, species_list)
     assert label_2 == 'CH2(S)'
+
+
+def test_update_species_concentrations():
+    """Test the update_species_concentrations() function"""
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    t3.rmg['species'] = [{'label': 'propane', 'smiles': 'CCC', 'adjlist': None, 'inchi': None, 'role': 'fuel',
+                          'concentration': 0, 'equivalence_ratios': [0.5, 1.0, 1.5]},
+                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'nitrogen'}]
+    t3.update_species_concentrations()
+    assert t3.rmg['species'][0]['label'] == 'propane'
+    assert t3.rmg['species'][0]['role'] == 'fuel'
+    assert t3.rmg['species'][0]['concentration'] == 1
+    assert t3.rmg['species'][1]['label'] == 'O2'
+    assert t3.rmg['species'][1]['concentration'] == [2.5, 7.5]
+    assert t3.rmg['species'][2]['label'] == 'N2'
+    assert t3.rmg['species'][2]['concentration'] == [2.5 * 3.76, 7.5 * 3.76]
+
+    t3.rmg['species'] = [{'label': 'propane', 'smiles': 'CCC', 'adjlist': None, 'inchi': None, 'role': 'fuel',
+                          'concentration': 0, 'equivalence_ratios': [0.5, 1.0, 1.5]},
+                         {'label': 'O2', 'smiles': '[O][O]', 'adjlist': None, 'inchi': None, 'concentration': 0, 'role': 'oxygen'},
+                         {'label': 'N2', 'smiles': 'N#N', 'adjlist': None, 'inchi': None, 'concentration': [30, 50], 'role': 'nitrogen'}]
+    t3.update_species_concentrations()
+    assert t3.rmg['species'][0]['label'] == 'propane'
+    assert t3.rmg['species'][0]['concentration'] == 1
+    assert t3.rmg['species'][1]['label'] == 'O2'
+    assert t3.rmg['species'][1]['concentration'] == [2.5, 7.5]
+    assert t3.rmg['species'][2]['label'] == 'N2'
+    assert t3.rmg['species'][2]['concentration'] == [30, 50]
 
 
 def test_check_overtime():

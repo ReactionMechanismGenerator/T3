@@ -3,9 +3,11 @@ t3 common module
 """
 
 import datetime
+import numpy as np
 import os
+import re
 import string
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from rmgpy.species import Species
 
@@ -301,4 +303,106 @@ def get_parameter_from_header(header: str) -> Optional[str]:
                 break
         text.append(header[i])
     return ''.join(text)
+
+
+def determine_concentrations_by_equivalence_ratios(species: List[dict]):
+    """
+    Determine species concentrations based on the equivalence ratios if given.
+
+    Args:
+        species (list): Entries are species dictionaries following the schema format for RMG species.
+
+    Returns:
+        dict: A species dictionary with the concentrations as a list (not a range).
+    """
+    objects = {'fuel': None, 'oxygen': None, 'nitrogen': None}
+    for spc in species:
+        if spc['role'] == 'fuel':
+            objects['fuel'] = spc.copy()
+        elif spc['role'] == 'oxygen':
+            objects['oxygen'] = spc.copy()
+        elif spc['role'] == 'nitrogen':
+            objects['nitrogen'] = spc.copy()
+    if objects['fuel'] is None or 'equivalence_ratios' not in objects['fuel'] or objects['fuel']['equivalence_ratios'] is None:
+        return objects
+    if objects['fuel'] is not None and objects['oxygen'] is not None:
+        objects['fuel']['concentration'] = objects['fuel']['concentration'] if 'concentration' in objects['fuel'] \
+                                               and objects['fuel']['concentration'] else 1
+        o2_stoichiometry = get_o2_stoichiometry(smiles=objects['fuel']['smiles'],
+                                                adjlist=objects['fuel']['adjlist'] if 'adjlist' in objects['fuel'].keys() else None,
+                                                inchi=objects['fuel']['inchi'] if 'inchi' in objects['fuel'].keys() else None
+                                                )
+        objects['oxygen']['concentration'] = [eq_ratio * o2_stoichiometry for eq_ratio in objects['fuel']['equivalence_ratios']]
+        if objects['nitrogen'] is not None and not ('concentration' in objects['nitrogen']
+                and isinstance(objects['nitrogen']['concentration'], list)
+                and len(objects['nitrogen']['concentration']) > 1):
+            objects['nitrogen']['concentration'] = [o2 * 3.76 for o2 in objects['oxygen']['concentration']]
+    return objects
+
+
+def get_o2_stoichiometry(smiles: Optional[str] = None,
+                         adjlist: Optional[str] = None,
+                         inchi: Optional[str] = None,
+                         ) -> float:
+    """
+    Get the stoichiometry number of O2 for complete combustion of the ``fuel`` molecule.
+
+    Args:
+        smiles (Optional[str]): A SMILES string for the fuel molecule.
+        adjlist (Optional[str]): An adjacency list string for the fuel molecule.
+        inchi (Optional[str]): An InChI string for the fuel molecule.
+
+    Returns:
+        float: The stoichiometry of O2 for complete combustion.
+    """
+    if smiles is None and adjlist is None and inchi is None:
+        raise ValueError('Must provide either a SMILES, an adjacency list, or an InChI string for the fuel molecule.')
+    if adjlist is None:
+        fuel = Species(smiles=smiles, inchi=inchi)
+    else:
+        fuel = Species().from_adjacency_list(adjlist)
+    c, h, n, o, other = 0, 0, 0, 0, 0
+    for atom in fuel.molecule[0].atoms:
+        if atom.is_carbon():
+            c += 1
+        elif atom.is_hydrogen():
+            h += 1
+        elif atom.is_nitrogen():
+            n += 1
+        elif atom.is_oxygen():
+            o += 1
+        else:
+            other += 1
+    if other:
+        raise ValueError(f'Cannot calculate O2 stoichiometry for {fuel.label} with {other} atoms which are not C/H/N/O.')
+    return 0.5 * (2 * c + 0.5 * h - o)
+
+
+def remove_numeric_parentheses(input_string: str) -> str:
+    """
+    Remove numeric parentheses from the end of a string.
+
+    Args:
+        input_string (str): The input string.
+
+    Returns:
+        str: The string without numeric parentheses.
+    """
+    result = re.sub(r'\(\d+\)$', '', input_string)
+    return result
+
+
+def numpy_to_list(data) -> list:
+    """
+    A helper function to convert NumPy arrays to lists.
+
+    Args:
+        data: The data to convert.
+
+    Returns:
+        list: The converted data.
+    """
+    if isinstance(data, np.ndarray):
+        return data.tolist()
+    return data
 

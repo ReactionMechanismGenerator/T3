@@ -10,6 +10,8 @@ from typing import List, Optional
 from rmgpy.tools.canteramodel import generate_cantera_conditions
 from rmgpy.tools.data import GenericData
 
+from arc.common import save_yaml_file
+
 from t3.common import get_observable_label_from_header, get_parameter_from_header
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
@@ -31,7 +33,6 @@ class CanteraConstantHP(SimulateAdapter):
         observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
         sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
         sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
 
     Attributes:
         all_data (list): List containing the following RMG GenericData objects grouped as a tuple:
@@ -40,7 +41,6 @@ class CanteraConstantHP(SimulateAdapter):
         cantera_reactor_type (str): String specifying the type of Cantera reactor to use.
         cantera_simulation (ct.ReactorNet): Cantera reactor net object.
         conditions (list): List whose entries are reaction conditions for simulation.
-        global_observables (List[str]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
         inert_list (list): List of possible inert species in the model
         inert_index_list (list): List of indices corresponding to the inert species present in the model.
         initialconds (dict): Key is the Cantera species. Value is the initial mol fraction.
@@ -70,7 +70,6 @@ class CanteraConstantHP(SimulateAdapter):
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None
                  ):
 
         self.t3 = t3
@@ -82,7 +81,6 @@ class CanteraConstantHP(SimulateAdapter):
         self.observable_list = observable_list or list()
         self.sa_atol = sa_atol
         self.sa_rtol = sa_rtol
-        self.global_observables = global_observables
 
         # initialize other attributes
         self.sensitive_species = list()
@@ -386,12 +384,23 @@ class CanteraConstantHP(SimulateAdapter):
 
             self.all_data.append((time, condition_data, reaction_sensitivity_data, thermodynamic_sensitivity_data))
 
-    def get_sa_coefficients(self):
+    def get_sa_coefficients(self,
+                            top_SA_species: int = 10,
+                            top_SA_reactions: int = 10,
+                            max_workers: int = 24,
+                            save_yaml: bool = True,
+                            ) -> Optional[dict]:
         """
         Obtain the SA coefficients.
 
+        Args:
+            top_SA_species (int, optional): The number of top sensitive species to return.
+            top_SA_reactions (int, optional): The number of top sensitive reactions to return.
+            max_workers (int, optional): The maximal number of workers to use for parallel processing.
+            save_yaml (bool, optional): Save the SA dictionary to a YAML file.
+
         Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
+             sa_dict (Optional[dict]): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
         """
         sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
 
@@ -415,7 +424,8 @@ class CanteraConstantHP(SimulateAdapter):
                     sa_dict['thermo'][observable_label] = dict()
                 parameter = get_parameter_from_header(spc)
                 sa_dict['thermo'][observable_label][parameter] = spc.data
-
+        if save_yaml:
+            save_yaml_file(path=self.paths['SA dict'], content=sa_dict)
         return sa_dict
 
     def get_idt_by_T(self):
