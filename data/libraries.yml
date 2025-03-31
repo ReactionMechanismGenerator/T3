@@ -8,6 +8,7 @@ primary:
     - thermo_DFT_CCSDTF12_BAC
     - DFT_QCI_thermo
     - CBS_QB3_1dHR
+    - NH3
   kinetics:
     - name: primaryH2O2
       seed: true
@@ -55,8 +56,6 @@ combustion:
       credence: low
   kinetics:
     - FFCM1(-)
-    - 2006_Joshi_OH_CO
-    - 2005_Senosiain_OH_C2H2
     - NOx2018
 
 CH_pyrolysis:
