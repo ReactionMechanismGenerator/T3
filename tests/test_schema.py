@@ -116,6 +116,8 @@ def test_t3_sensitivity_schema():
     assert t3_sensitivity.ME_methods == ['CSE', 'MSC']
     assert t3_sensitivity.top_SA_species == 10
     assert t3_sensitivity.top_SA_reactions == 10
+    assert t3_sensitivity.compute_thermo is True
+    assert t3_sensitivity.compute_kinetics is True
 
     with pytest.raises(ValidationError):
         # check that adapter is constrained to at most 255 characters

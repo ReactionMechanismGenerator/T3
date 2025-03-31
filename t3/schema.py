@@ -109,6 +109,8 @@ class T3Sensitivity(BaseModel):
     ME_methods: List[constr(min_length=2, max_length=3)] = ['CSE', 'MSC']
     top_SA_species: conint(ge=0) = 10
     top_SA_reactions: conint(ge=0) = 10
+    compute_thermo: bool = True
+    compute_kinetics: bool = True
     T_list: Optional[List[confloat(gt=0)]] = None
     P_list: Optional[List[confloat(gt=0)]] = None
 

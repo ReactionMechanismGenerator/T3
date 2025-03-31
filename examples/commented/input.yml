@@ -44,8 +44,11 @@ t3:
     ME_methods: ['CSE', 'MSC']  # master equation methods, used to conduct a PES SA,
                                 # could be any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC']
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
-    top_SA_reactions: 10  # optional, used per observable to determine rates to calculate (to be implemented) as well as
+    top_SA_reactions: 10  # optional, used per observable to determine rates to calculate as well as
                           # thermo of species participating in these reactions, default: 10
+    compute_thermo: True  # Compute thermodynamic properties for species if needed
+    compute_kinetics: True  # Compute reaction rate coefficients if needed
+
 
   # uncertainty analysis for a predicted species concentration (optional block, T3 can ran w/o UA)
   # either local or global UA type must be specified to execute an UA
