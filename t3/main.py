@@ -969,8 +969,8 @@ class T3(object):
                                         f'{reaction_tuple[2]}, at {conditions}.'
                                     if self.t3['sensitivity']['compute_thermo']:
                                         key = self.add_species(species=species, reasons=reason)
-                                    if key is not None:
-                                        species_keys.append(key)
+                                        if key is not None:
+                                            species_keys.append(key)
 
         return species_keys
 
