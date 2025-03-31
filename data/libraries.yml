@@ -57,6 +57,34 @@ combustion:
   kinetics:
     - FFCM1(-)
     - NOx2018
+    - C2H4+O_Klipp2017
+    - name: Methylformate
+      credence: low
+
+CH_pyrolysis_light:
+  thermo:
+    - NOx2018
+    - Butadiene_Dimerization
+    - s3_5_7_ane
+    - Fulvene_H
+    - vinylCPD_H
+    - Klippenstein_Glarborg2016
+    - name: CH
+      credence: low
+  kinetics:
+    - 2001_Tokmakov_H_Toluene_to_CH3_Benzene
+    - 2003_Miller_Propargyl_Recomb_High_P
+    - 2009_Sharma_C5H5_CH3_highP
+    - 2015_Buras_C2H3_C4H6_highP
+    - Butadiene_Dimerization
+    - C2H2_init
+    - C6H5_C4H4_Mebel
+    - Fulvene_H
+    - Mebel_Naphthyl
+    - Mebel_C6H5_C2H2
+    - biCPD_H_shift
+    - c-C5H5_CH3_Sharma
+    - vinylCPD_H
 
 CH_pyrolysis:
   thermo:

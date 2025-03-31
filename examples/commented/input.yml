@@ -77,7 +77,7 @@ rmg:
   database:
     thermo_libraries: ['BurkeH2O2', 'DFT_QCI_thermo', 'primaryThermoLibrary', 'CBS_QB3_1dHR']  # Can be None for auto-completion
     kinetics_libraries: ['BurkeH2O2inN2', 'NOx2018', 'Klippenstein_Glarborg2016']  # Can be None for auto-completion
-    chemistry_sets: ['primary', 'nitrogen', 'combustion']  # The chemistry systems for which thermo and kinetics libraries will be loaded. Can be None to avoid auto-completion
+    chemistry_sets: ['primary', 'nitrogen', 'combustion', 'CH_pyrolysis_light']  # The chemistry systems for which thermo and kinetics libraries will be loaded. Can be None to avoid auto-completion
     use_low_credence_libraries: False # Whether to use low credence libraries during auto-completion, default: ``False``
     transport_libraries: ['PrimaryTransportLibrary', 'OneDMinN2', 'NOx2018', 'GRI-Mech']  # optional, default: ['PrimaryTransportLibrary', 'OneDMinN2', 'NOx2018', 'GRI-Mech']
     seed_mechanisms: []  # optional, default: []
