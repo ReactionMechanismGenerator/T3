@@ -671,6 +671,7 @@ class T3(object):
             bool: Whether additional calculations are required.
         """
         species_keys, reaction_keys, coll_vio_spc_keys, coll_vio_rxn_keys = list(), list(), list(), list()
+        compute_thermo = self.t3['sensitivity']['compute_thermo']
 
         self.rmg_species, self.rmg_reactions = self.load_species_and_reactions_from_chemkin_file()
         self.logger.info(f'This RMG model has {len(self.rmg_species)} species '
@@ -687,7 +688,7 @@ class T3(object):
 
         if self.t3['options']['all_core_species']:
             for species in self.rmg_species:
-                if self.species_requires_refinement(species=species):
+                if self.species_requires_refinement(species=species) and compute_thermo:
                     key = self.add_species(species=species, reasons=[f'(i {self.iteration}) All core species'])
                     if key is not None:
                         species_keys.append(key)
@@ -697,17 +698,17 @@ class T3(object):
             # 1.1. SA observables
             for input_species in self.rmg['species']:
                 if (input_species['observable'] or input_species['SA_observable']) and \
-                        self.species_requires_refinement(species=get_species_by_label(input_species['label'],
-                                                                                      self.rmg_species)):
+                        self.species_requires_refinement(species=get_species_by_label(
+                            input_species['label'], self.rmg_species)) and compute_thermo:
                     key = self.add_species(species=get_species_by_label(input_species['label'], self.rmg_species),
                                            reasons=['SA observable'])
                     if key is not None:
                         species_keys.append(key)
             # 1.2. SA
-            if sa_observables_exist:
+            if sa_observables_exist and compute_thermo:
                 species_keys.extend(self.determine_species_based_on_sa())
             # 1.3. collision violators
-            if self.t3['options']['collision_violators_thermo']:
+            if self.t3['options']['collision_violators_thermo'] and compute_thermo:
                 species_keys.extend(coll_vio_spc_keys)
 
         # 2. Reactions
@@ -823,9 +824,10 @@ class T3(object):
                 if self.reaction_requires_refinement(reaction):
                     num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
                     reason = f'(i {self.iteration}) the {num}most sensitive reaction for {observable_label}'
-                    key = self.add_reaction(reaction=reaction, reasons=reason)
-                    if key is not None:
-                        reaction_keys.append(key)
+                    if self.t3['sensitivity']['compute_kinetics']:
+                        key = self.add_reaction(reaction=reaction, reasons=reason)
+                        if key is not None:
+                            reaction_keys.append(key)
 
         return reaction_keys
 
@@ -965,7 +967,8 @@ class T3(object):
                                         f'network {network_name} from which {chemkin_reaction_str} was ' \
                                         f'derived, which is the {num}most sensitive reaction for observable ' \
                                         f'{reaction_tuple[2]}, at {conditions}.'
-                                    key = self.add_species(species=species, reasons=reason)
+                                    if self.t3['sensitivity']['compute_thermo']:
+                                        key = self.add_species(species=species, reasons=reason)
                                     if key is not None:
                                         species_keys.append(key)
 
@@ -1019,9 +1022,10 @@ class T3(object):
                     if self.species_requires_refinement(species=species):
                         reason = f'(i {self.iteration}) Species participates in collision rate violating ' \
                                  f'reaction: {rxn_to_log}'
-                        key = self.add_species(species=species, reasons=reason)
-                        if key is not None:
-                            species_keys.append(key)
+                        if self.t3['sensitivity']['compute_thermo']:
+                            key = self.add_species(species=species, reasons=reason)
+                            if key is not None:
+                                species_keys.append(key)
 
                 # 2. Reactions (not considering colliders for now)
                 reactants = [get_species_by_label(label, self.rmg_species) for label in reactant_labels]
@@ -1033,9 +1037,10 @@ class T3(object):
                         and not any(self.species_requires_refinement(species=spc) for spc in reactants + products):
                     # only consider a rate violating reaction if all the thermo was first fixed
                     reason = f'(i {self.iteration}) Reaction rate coefficient violates the collision rate.'
-                    key = self.add_reaction(reaction=reaction, reasons=reason)
-                    if key is not None:
-                        reaction_keys.append(key)
+                    if self.t3['sensitivity']['compute_kinetics']:
+                        key = self.add_reaction(reaction=reaction, reasons=reason)
+                        if key is not None:
+                            reaction_keys.append(key)
 
         return species_keys, reaction_keys
 
