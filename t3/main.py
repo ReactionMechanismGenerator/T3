@@ -498,8 +498,6 @@ class T3(object):
         if input_file_path is not None:
             arc_kwargs = read_yaml_file(input_file_path)
 
-        self.dump_species_and_reactions()
-
         arc_kwargs = arc_kwargs.copy()
         if 'adapter' in arc_kwargs:
             del arc_kwargs['adapter']
@@ -514,13 +512,14 @@ class T3(object):
             species = list()
             for spc_ in arc_kwargs['species']:
                 spc = ARCSpecies(species_dict=spc_) if isinstance(spc_, dict) else spc_
-                key = self.get_species_key(species=spc)
-                if key is not None \
-                        and all('no need to compute thermo' in reason for reason in self.species[key]['reasons']):
-                    species.append(ARCSpecies(rmg_species=spc, compute_thermo=False) if isinstance(spc, Species) else spc)
-                else:
-                    species.append(spc)
+                if isinstance(spc_, Species):
+                    spc = ARCSpecies(rmg_species=spc_)
+                if not self.species_requires_refinement(species=spc):
+                    spc.compute_thermo = False
+                species.append(spc)
             arc_kwargs['species'] = species
+
+        self.dump_species_and_reactions()
 
         tic = datetime.datetime.now()
         arc = ARC(**arc_kwargs)
