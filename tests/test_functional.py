@@ -59,7 +59,6 @@ def test_computing_thermo():
     Need xtb installed
     """
     functional_test_directory = os.path.join(TEST_DATA_BASE_PATH, 'functional_2_thermo')
-    #delete_selective_content_from_test_dirs(test_dir=functional_test_directory)
     input_file = os.path.join(functional_test_directory, 'input.yml')
     input_dict = read_yaml_file(path=input_file)
     input_dict['verbose'] = 20
@@ -68,7 +67,6 @@ def test_computing_thermo():
     # check that RMG and ARC are available
     check_dependencies()
 
-    # run the minimal example
     t3_object = T3(**input_dict)
     t3_object.execute()
     assert os.path.isfile(os.path.join(functional_test_directory, 't3.log'))
@@ -104,6 +102,41 @@ def test_computing_thermo():
         print(expected_line_dict['line'])  # assists in debugging this test, otherwise error messages aren't informative
         assert expected_line_dict['exists'] is True
 
+def test_computing_thermo_using_mock():
+    """
+    Tests computing thermo for a species using the "mock" LOT in ARC
+    """
+    functional_test_directory = os.path.join(TEST_DATA_BASE_PATH, 'functional_3_thermo')
+    input_file = os.path.join(functional_test_directory, 'input.yml')
+    input_dict = read_yaml_file(path=input_file)
+    input_dict['verbose'] = 20
+    input_dict['project_directory'] = functional_test_directory
+    t3_object = T3(**input_dict)
+    t3_object.execute()
+    assert os.path.isfile(os.path.join(functional_test_directory, 't3.log'))
+    species_yaml_path = os.path.join(functional_test_directory, 'species.yml')
+    content = read_yaml_file(path=species_yaml_path)
+    assert content[0]['QM label'] == 's0_2-propyl'
+    assert content[0]['converged'] is True
+
+def test_computing_a_rate_using_mock():
+    """
+    Tests computing a reaction rate using the "mock" LOT in ARC
+    Pay attention to cases where a species is being computed because it participates in a reaction,
+    but its thermo is well-known, so don't add it to the T3 (or ARC) thermo library.
+    Since we're only allowing H_abstraction family, and we start with CCC, CjCC and CCjC,
+    we expect only one reaction in the core. We use DFT_QCI_thermo as the thermo library,
+    so all species should have known thermo.
+    Test that a kinetic library was generated for the reaction, but that no thermo libraries were generated.
+    """
+    functional_test_directory = os.path.join(TEST_DATA_BASE_PATH, 'functional_4_rates')
+    input_file = os.path.join(functional_test_directory, 'input.yml')
+    input_dict = read_yaml_file(path=input_file)
+    input_dict['verbose'] = 20
+    input_dict['project_directory'] = functional_test_directory
+    t3_object = T3(**input_dict)
+    t3_object.execute()
+    assert os.path.isfile(os.path.join(functional_test_directory, 't3.log'))
 
 def test_rmg_files_backup_before_restart():
     """
@@ -150,13 +183,15 @@ def delete_selective_content_from_test_dirs(test_dir: str):
         break
 
 
-def teardown_module():
-    """teardown any state that was previously setup with a setup_module method."""
-    test_dirs_to_selectively_delete = [os.path.join(TEST_DATA_BASE_PATH, 'functional_2_thermo'),
-                                       ]
-    for test_dir in test_dirs_to_selectively_delete:
-        delete_selective_content_from_test_dirs(test_dir)
-    test_dirs = [os.path.join(TEST_DATA_BASE_PATH, 'T3_functional_test_1'),
-                 ]
-    for test_dir in test_dirs:
-        shutil.rmtree(test_dir, ignore_errors=True)
+# def teardown_module():
+#     """teardown any state that was previously setup with a setup_module method."""
+#     test_dirs_to_selectively_delete = [os.path.join(TEST_DATA_BASE_PATH, 'functional_2_thermo'),
+#                                        os.path.join(TEST_DATA_BASE_PATH, 'functional_3_thermo'),
+#                                        os.path.join(TEST_DATA_BASE_PATH, 'functional_4_thermo'),
+#                                        ]
+#     for test_dir in test_dirs_to_selectively_delete:
+#         delete_selective_content_from_test_dirs(test_dir)
+#     test_dirs = [os.path.join(TEST_DATA_BASE_PATH, 'T3_functional_test_1'),
+#                  ]
+#     for test_dir in test_dirs:
+#         shutil.rmtree(test_dir, ignore_errors=True)
