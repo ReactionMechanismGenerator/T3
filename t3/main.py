@@ -515,7 +515,7 @@ class T3(object):
                 if isinstance(spc_, Species):
                     spc = ARCSpecies(rmg_species=spc_)
                 if not self.species_requires_refinement(species=spc):
-                    spc.compute_thermo = False
+                    spc.include_in_thermo_lib = False
                 species.append(spc)
             arc_kwargs['species'] = species
 
