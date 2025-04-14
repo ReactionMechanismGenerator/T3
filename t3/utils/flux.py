@@ -37,6 +37,7 @@ def generate_flux(model_path: str,
                   fix_cantera_model: bool = True,
                   allowed_nodes: Optional[List[str]] = None,
                   max_chemical_generations: Optional[int] = None,
+                  surface_names: Optional[List[str]] = None,
                   ):
     """
     Generate a flux diagram for a given model and composition.
@@ -73,6 +74,7 @@ def generate_flux(model_path: str,
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
                                                        any node outside this list will not appear in the flux diagram.
         max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
+        surface_names (Optional[List[str]], optional): List of surface names to consider.
 
     Structures:
         profiles: {<time in s>: {'P': <pressure in bar>,
@@ -93,6 +95,7 @@ def generate_flux(model_path: str,
                                             T=T,
                                             P=P,
                                             V=V,
+                                            surface_names=surface_names,
                                             a_tol=a_tol,
                                             r_tol=r_tol,
                                             energy=energy,
@@ -144,6 +147,7 @@ def get_profiles_from_simulation(model_path: str,
                                  T: float,
                                  P: float,
                                  V: Optional[float] = None,
+                                 surface_names: Optional[List[str]] = None,
                                  a_tol: float = 1e-16,
                                  r_tol: float = 1e-10,
                                  energy: bool = False,
@@ -160,6 +164,8 @@ def get_profiles_from_simulation(model_path: str,
         T (float): The temperature of the mixture, in Kelvin.
         P (float): The pressure of the mixture, in bar.
         V (Optional[float], optional): The reactor volume in cm^3, if relevant.
+        surface_names (Optional[List[str]], optional): List of surface names to consider.
+                                                       Pass an empty list if there are no surfaces.
         reactor_type (str, optional): The reactor type. Supported reactor types are:
                                       'JSR': Jet stirred reactor, which is a CSTR with constant T/P/V
                                       'BatchP': An ideal gas constant pressure and constant volume batch reactor
@@ -203,6 +209,7 @@ def get_profiles_from_simulation(model_path: str,
                            length=V * 1e-6 / 1.0,
                            area=1.0,  # m^2
                            n_cells=10,
+                           surface_names=surface_names,
                            a_tol=a_tol,
                            r_tol=r_tol,
                            )
@@ -251,6 +258,7 @@ def set_pfr(gas: ct.Solution,
             T: float,
             P: float,
             flow_rate: float,
+            surfaces: List[ct.Interface],
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
             ) -> Tuple[ct.ReactorNet, List[ct.IdealGasReactor]]:
@@ -267,6 +275,8 @@ def set_pfr(gas: ct.Solution,
         T (float): Inlet temperature in K.
         P (float): Inlet pressure in Pa.
         flow_rate (float): Mass flow rate in kg/s.
+        surfaces (List[ct.Interface]): List of surface names to consider.
+                                       Pass an empty list if there are no surfaces.
         a_tol (float): Absolute tolerance.
         r_tol (float): Relative tolerance.
 
@@ -280,7 +290,7 @@ def set_pfr(gas: ct.Solution,
     outlet = ct.Reservoir(gas)
     total_volume = length * area
     cell_volume = total_volume / n_cells
-    reactors = []
+    reactors = list()
     upstream = inlet
 
     for _ in range(n_cells):
@@ -288,6 +298,9 @@ def set_pfr(gas: ct.Solution,
         gas_cell.TPX = gas.TPX
         reactor = ct.IdealGasReactor(gas_cell, energy="off", volume=cell_volume)
         mfc = ct.MassFlowController(upstream, reactor, mdot=flow_rate)
+        for surface in surfaces:
+            surface_instance = ct.Interface(model_path, name=surface.name, phases=[gas_cell])
+            ct.ReactorSurface(surface_instance, reactor)
         reactors.append(reactor)
         upstream = reactor
 
@@ -412,6 +425,7 @@ def run_pfr(model_path: str,
             length: float,
             area: float,
             n_cells: int = 10,
+            surface_names: Optional[List[str]] = None,
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
             ) -> Dict[float, dict]:
@@ -427,14 +441,18 @@ def run_pfr(model_path: str,
         length (float): Reactor length in meters.
         area (float): Reactor cross-sectional area in m^2.
         n_cells (int): Number of CSTRs to discretize the PFR.
+        surface_names (Optional[List[str]]): List of surface names to consider.
         a_tol (float): Absolute tolerance.
         r_tol (float): Relative tolerance.
 
     Returns:
         dict: Outlet profiles (T, P, X, ROPs) for each residence time.
     """
-    gas = ct.Solution(model_path)
-    profiles = {}
+    gas = ct.Solution(model_path, name='gas')
+    surfaces = list()
+    if surface_names:
+        surfaces = [ct.Interface(model_path, name=surface_name, phases=[gas]) for surface_name in surface_names]
+    profiles = dict()
     stoichiometry = get_rxn_stoichiometry(gas)
     for tau in times:
         V_total = length * area
@@ -452,6 +470,7 @@ def run_pfr(model_path: str,
             T=T,
             P=P,
             flow_rate=flow_rate,
+            surfaces=surfaces,
             a_tol=a_tol,
             r_tol=r_tol,
         )
@@ -467,6 +486,21 @@ def run_pfr(model_path: str,
                     if rxn.equation not in rops[spc.name]:
                         rops[spc.name][rxn.equation] = 0
                     rops[spc.name][rxn.equation] += cantera_reaction_rops[i] * stoichiometry[spc.name][i]
+        if surface_names:
+            for surface in surfaces:
+                surface_reactions = surface.reactions()
+                surface_phase = surface(surface_names.index(surface.name)).thermo
+                surface_rops = surface_phase.net_rates_of_progress
+                for i, rxn in enumerate(surface_reactions):
+                    eqn = rxn.equation
+                    for spc in gas.species():
+                        coeff = rxn.products.get(spc.name, 0) - rxn.reactants.get(spc.name, 0)
+                        if coeff != 0:
+                            if spc.name not in rops:
+                                rops[spc.name] = {}
+                            if eqn not in rops[spc.name]:
+                                rops[spc.name][eqn] = 0
+                            rops[spc.name][eqn] += surface_rops[i] * coeff
         profile = {'T': gas_out.T,
                    'P': gas_out.P,
                    'X': {s.name: x for s, x in zip(gas_out.species(), gas_out.X)},
