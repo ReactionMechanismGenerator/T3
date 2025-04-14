@@ -208,6 +208,7 @@ def test_create_digraph_HOCHO_pyrolysis(hocho_simulation_data):
                             min_rop=min_rop,
                             max_rop=max_rop,
                             folder_path=folder_path,
+                            reactor_type='JSR',
                             )
         assert os.path.isfile(os.path.join(folder_path, f'flux_diagram_{times[i]}_s.dot'))
         assert os.path.isfile(os.path.join(folder_path, f'flux_diagram_{times[i]}_s.png'))
@@ -234,6 +235,7 @@ def test_create_digraph_NH3():
                         min_rop=min_rop,
                         max_rop=max_rop,
                         folder_path=folder_path,
+                        reactor_type='JSR',
                         display_concentrations=False,
                         report_flux_ratio=False,
                         display_r_n_p=True,
@@ -262,6 +264,7 @@ def test_create_digraph_N2H4():
                         min_rop=min_rop,
                         max_rop=max_rop,
                         folder_path=folder_path,
+                        reactor_type='JSR',
                         display_concentrations=True,
                         report_flux_ratio=True,
                         display_r_n_p=True,
