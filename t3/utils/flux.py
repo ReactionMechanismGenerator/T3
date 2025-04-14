@@ -40,6 +40,7 @@ def generate_flux(model_path: str,
                   allowed_nodes: list[str] | None = None,
                   max_chemical_generations: int | None = None,
                   surface_names: list[str] | None = None,
+                  n_cells: int = 100,
                   draw_molecule_images: bool = True,
                   species_dictionary_path: str | None = None,
                   logger=None,
@@ -82,6 +83,7 @@ def generate_flux(model_path: str,
                                                        any node outside this list will not appear in the flux diagram.
         max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
         surface_names (Optional[List[str]], optional): List of surface names to consider.
+        n_cells (int, optional): The number of discrete CSTRs to simulate the PFR. Default: 100.
         draw_molecule_images (bool, optional): Whether to render species as molecule images instead of text labels.
         species_dictionary_path (Optional[str], optional): Path to an RMG species_dictionary.txt used to render images.
         logger: Optional logger with ``.warning``; falls back to ``print``.
@@ -106,6 +108,7 @@ def generate_flux(model_path: str,
                                             P=P,
                                             V=V,
                                             surface_names=surface_names,
+                                            n_cells=n_cells,
                                             a_tol=a_tol,
                                             r_tol=r_tol,
                                             energy=energy,
@@ -167,6 +170,7 @@ def get_profiles_from_simulation(model_path: str,
                                  P: float,
                                  V: float | None = 100,
                                  surface_names: list[str] | None = None,
+                                 n_cells: int = 100,
                                  a_tol: float = 1e-16,
                                  r_tol: float = 1e-10,
                                  energy: bool = False,
@@ -185,6 +189,7 @@ def get_profiles_from_simulation(model_path: str,
         V (Optional[float], optional): The reactor volume in cm^3, if relevant.
         surface_names (Optional[List[str]], optional): List of surface names to consider.
                                                        Pass an empty list if there are no surfaces.
+        n_cells (int, optional): The number of discrete CSTRs to simulate the PFR.
         reactor_type (str, optional): The reactor type. Supported reactor types are:
                                       'JSR': Jet stirred reactor, which is a CSTR with constant T/P/V
                                       'BatchP': An ideal gas constant pressure and constant volume batch reactor
@@ -231,7 +236,7 @@ def get_profiles_from_simulation(model_path: str,
                            P=P,
                            length=V * 1e-6 / 1.0,
                            area=1.0,  # m^2
-                           n_cells=10,
+                           n_cells=n_cells,
                            surface_names=surface_names,
                            a_tol=a_tol,
                            r_tol=r_tol,
@@ -329,11 +334,9 @@ def set_pfr(gas: ct.Solution,
 
     # Last reactor connects to outlet reservoir
     ct.PressureController(upstream=reactors[-1], downstream=outlet, master=mfc)
-
     network = ct.ReactorNet(reactors)
     network.atol = a_tol
     network.rtol = r_tol
-
     return network, reactors
 
 
@@ -447,7 +450,7 @@ def run_pfr(model_path: str,
             P: float,
             length: float,
             area: float,
-            n_cells: int = 10,
+            n_cells: int = 100,
             surface_names: list[str] | None = None,
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
