@@ -525,6 +525,8 @@ class T3(object):
                     species.append(spc)
             arc_kwargs['species'] = species
 
+        arc_kwargs = self.process_candidate_qm_objects(arc_kwargs=arc_kwargs)
+
         tic = datetime.datetime.now()
         arc = ARC(**arc_kwargs)
         if not os.path.isfile(self.paths['ARC input']):
@@ -538,6 +540,50 @@ class T3(object):
 
         elapsed_time = time_lapse(tic)
         self.logger.info(f'ARC terminated, execution time: {elapsed_time}')
+
+    def process_candidate_qm_objects(self, arc_kwargs: dict) -> dict:
+        """
+        Check whether any of the species and reactions in the ARC input file
+        are already included in the candidate thermo/kinetic libraries.
+        If so, add only them to the T3 libraries, and remove them from the ARC input file.
+
+        Args:
+            arc_kwargs (dict): The ARC arguments dictionary.
+
+        Returns:
+            dict: The updated ARC arguments dictionary.
+        """
+        if self.candidate_thermo_libraries and 'species' in arc_kwargs and arc_kwargs['species']:
+            species_to_remove = []
+            for spc in arc_kwargs['species']:
+                for candidate_lib in self.candidate_thermo_libraries:
+                    added = add_species_from_candidate_lib_to_t3_lib(species=spc,
+                                                                     source_library_path=candidate_lib,
+                                                                     shared_library_name=self.t3['options']['shared_library_name'],
+                                                                     paths=self.paths,
+                                                                     logger=self.logger)
+                    if added:
+                        label = spc['label'] if isinstance(spc, dict) else spc.label
+                        self.logger.info(f'Candidate Species {label} was directly added to the T3 thermo library from {candidate_lib}.')
+                        species_to_remove.append(spc)
+            arc_kwargs['species'] = [spc for spc in arc_kwargs['species'] if spc not in species_to_remove]
+
+        if self.candidate_kinetics_libraries and 'reactions' in arc_kwargs and arc_kwargs['reactions']:
+            reactions_to_remove = []
+            for rxn in arc_kwargs['reactions']:
+                for candidate_lib in self.candidate_kinetics_libraries:
+                    added = add_reaction_from_candidate_lib_to_t3_lib(reaction=rxn,
+                                                                      source_library_path=candidate_lib,
+                                                                      shared_library_name=self.t3['options']['shared_library_name'],
+                                                                      paths=self.paths,
+                                                                      logger=self.logger)
+                    if added:
+                        label = rxn['label'] if isinstance(rxn, dict) else rxn.label
+                        self.logger.info(f'Candidate Reaction {label} was directly added to the T3 kinetics library from {candidate_lib}.')
+                        reactions_to_remove.append(rxn)
+            arc_kwargs['reactions'] = [rxn for rxn in arc_kwargs['reactions'] if rxn not in reactions_to_remove]
+
+        return arc_kwargs
 
     def process_arc_run(self):
         """
