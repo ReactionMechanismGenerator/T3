@@ -55,7 +55,8 @@ from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
-from t3.utils.libraries import add_to_rmg_libraries
+from t3.utils.libraries import (add_species_from_candidate_lib_to_t3_lib, add_reaction_from_candidate_lib_to_t3_lib,
+                                add_to_rmg_libraries)
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 
 RMG_THERMO_LIB_BASE_PATH = os.path.join(rmg_settings['database.directory'], 'thermo', 'libraries')
@@ -182,6 +183,8 @@ class T3(object):
         self.project_directory = self.schema['project_directory']
         self.t3 = self.schema['t3']
         self.rmg = self.schema['rmg']
+        self.candidate_thermo_libraries= self.rmg['database']['candidate_thermo_libraries']
+        self.candidate_kinetics_libraries= self.rmg['database']['candidate_kinetics_libraries']
         self.rmg['database'] = auto_complete_rmg_libraries(database=self.rmg['database'])
         self.qm = self.schema['qm']
         self.verbose = self.schema['verbose']
@@ -1584,4 +1587,6 @@ def auto_complete_rmg_libraries(database: dict) -> dict:
                 libraries.extend(low_credence_libraries)
     del database['chemistry_sets']
     del database['use_low_credence_libraries']
+    del database['candidate_thermo_libraries']
+    del database['candidate_kinetics_libraries']
     return database
