@@ -7,8 +7,9 @@ import datetime
 import os
 import shutil
 import time
+from collections import Counter
 
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Union
 
 from rmgpy.data.kinetics import KineticsLibrary
 from rmgpy.data.thermo import ThermoLibrary
@@ -18,7 +19,21 @@ from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 from rmgpy.species import Species
 
 if TYPE_CHECKING:
+    from arc.reaction import ARCReaction
+    from arc.species import ARCSpecies
     from t3.logger import Logger
+
+
+THERMO_LOCAL_CONTEXT = {
+    'ThermoData': ThermoData,
+    'Wilhoit': Wilhoit,
+    'NASAPolynomial': NASAPolynomial,
+    'NASA': NASA,
+}
+KINETICS_LOCAL_CONTEXT = {
+    'KineticsData': KineticsData,
+    'Arrhenius': Arrhenius,
+}
 
 
 def add_to_rmg_libraries(library_name: str,
@@ -40,17 +55,9 @@ def add_to_rmg_libraries(library_name: str,
         arc_lib_path, t3_lib_path, shared_lib_path = \
             paths[f'ARC {token} lib'], paths[f'T3 {token} lib'], paths[f'shared T3 {token} lib']
         if token == 'thermo':
-            local_context = {
-                'ThermoData': ThermoData,
-                'Wilhoit': Wilhoit,
-                'NASAPolynomial': NASAPolynomial,
-                'NASA': NASA,
-            }
+            local_context = THERMO_LOCAL_CONTEXT
         else:
-            local_context = {
-                'KineticsData': KineticsData,
-                'Arrhenius': Arrhenius,
-            }
+            local_context = KINETICS_LOCAL_CONTEXT
         for to_lib_path, lib_name, race in zip([shared_lib_path, t3_lib_path],
                                                [library_name, shared_library_name],
                                                [True, False]):
@@ -114,37 +121,64 @@ def append_to_rmg_library(library_name: str,
             append = True
     to_lib.long_desc += description_to_append
     for entry in from_lib.entries.values():
-        skip_entry = False
-        if lib_type == 'thermo':
-            entry_species = Species(molecule=[entry.item])
-            entry_species.generate_resonance_structures(keep_isomorphic=False, filter_structures=True)
-            for existing_entry in to_lib.entries.values():
-                if entry_species.is_isomorphic(existing_entry.item):
-                    if entry.label != existing_entry.label:
-                        logger.warning(f"Not adding species {entry.label} to the {library_name} thermo library, "
-                                       f"the species seems to already exist under the label {existing_entry.label}.")
-                    skip_entry = True
-                    break
-        elif lib_type == 'kinetics':
-            entry_reaction = Reaction(reactants=entry.item.reactants[:],
-                                      products=entry.item.products[:],
-                                      specific_collider=entry.item.specific_collider,
-                                      kinetics=entry.data,
-                                      duplicate=entry.item.duplicate,
-                                      reversible=entry.item.reversible,
-                                      allow_pdep_route=entry.item.allow_pdep_route,
-                                      elementary_high_p=entry.item.elementary_high_p,
+        to_lib = add_entry_to_library(entry=entry,
+                                      to_lib=to_lib,
+                                      lib_type=lib_type,
+                                      library_name=library_name,
+                                      logger=logger,
                                       )
-            for existing_entry in to_lib.entries.values():
-                if entry_reaction.is_isomorphic(existing_entry.item):
-                    logger.warning(f"Not adding reaction {entry.label} to the {library_name} kinetics library, "
-                                   f"the reaction seems to already exist under the label {existing_entry.label}.")
-                    skip_entry = True
-                    break
-        if not skip_entry:
-            to_lib.entries[entry.label] = entry
     to_lib.save(path=to_lib_path)
     lift_race_condition(race_path)
+
+
+def add_entry_to_library(entry,
+                         to_lib: Union[ThermoLibrary, KineticsLibrary],
+                         lib_type: str,
+                         library_name: str,
+                         logger: 'Logger',
+                         ) -> Union[ThermoLibrary, KineticsLibrary]:
+    """
+    Add an entry to the RMG library if it's not already present.
+
+    Args:
+        entry: Entry object from the ARC-generated library.
+        to_lib (Union[ThermoLibrary, KineticsLibrary]): RMG library object to append to.
+        lib_type (str): Type of library ('thermo' or 'kinetics').
+        library_name (str): Name of the target RMG library.
+        logger (Logger): Logger instance.
+
+    Returns:
+        Union[ThermoLibrary, KineticsLibrary]: The updated RMG library with the new entry added.
+    """
+    skip_entry = False
+    if lib_type == 'thermo':
+        entry_species = Species(molecule=[entry.item])
+        entry_species.generate_resonance_structures(keep_isomorphic=False, filter_structures=True)
+        for existing_entry in to_lib.entries.values():
+            if entry_species.is_isomorphic(existing_entry.item):
+                if entry.label != existing_entry.label:
+                    logger.warning(f"Not adding species {entry.label} to the {library_name} thermo library, "
+                                   f"the species seems to already exist under the label {existing_entry.label}.")
+                skip_entry = True
+                break
+    elif lib_type == 'kinetics':
+        entry_reaction = Reaction(reactants=entry.item.reactants[:],
+                                  products=entry.item.products[:],
+                                  specific_collider=entry.item.specific_collider,
+                                  kinetics=entry.data,
+                                  duplicate=entry.item.duplicate,
+                                  reversible=entry.item.reversible,
+                                  allow_pdep_route=entry.item.allow_pdep_route,
+                                  elementary_high_p=entry.item.elementary_high_p)
+        for existing_entry in to_lib.entries.values():
+            if entry_reaction.is_isomorphic(existing_entry.item):
+                logger.warning(f"Not adding reaction {entry.label} to the {library_name} kinetics library, "
+                               f"the reaction seems to already exist under the label {existing_entry.label}.")
+                skip_entry = True
+                break
+    if not skip_entry:
+        to_lib.entries[entry.label] = entry
+    return to_lib
 
 
 def check_race_condition(race_path: str,
@@ -187,3 +221,152 @@ def lift_race_condition(race_path: str) -> None:
     """
     if os.path.isfile(race_path):
         os.remove(race_path)
+
+
+def add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
+                                             source_library_path: str,
+                                             shared_library_name: str,
+                                             paths: Dict[str, str],
+                                             logger: 'Logger',
+                                             race: bool = True,
+                                             ) -> bool:
+    """
+    Add a species to the T3 thermo library.
+
+    Args:
+        species ('ARCSpecies'): The species oto add to the T3 library.
+        source_library_path (str): The path to the source library from which the species is added.
+        shared_library_name (str): The name of an RMG database library shared between T3 projects.
+        paths (Dict[str, str]): T3's dictionary of paths.
+        logger (Logger): Instance of T3's Logger class.
+        race (bool, optional): Whether to take measures to avoid a race condition when appending to the library.
+
+    Returns:
+        bool: True if the species was added successfully, False otherwise.
+    """
+    added = False
+    to_lib_path = paths[f'shared T3 thermo lib']
+    race_path = os.path.join(os.path.dirname(to_lib_path), f'{shared_library_name}.race')
+    if race:
+        race_free = check_race_condition(race_path)
+        if not race_free:
+            logger.error(f'Could not write to library {to_lib_path} due to a race condition.\n'
+                         f'Check whether it is safe to delete the {race_path} file to continue.')
+            return False
+    from_lib, to_lib = ThermoLibrary(), ThermoLibrary()
+    from_lib.load(path=source_library_path, local_context=THERMO_LOCAL_CONTEXT, global_context=dict())
+    if os.path.isfile(to_lib_path):
+        to_lib.load(path=to_lib_path, local_context=THERMO_LOCAL_CONTEXT, global_context=dict())
+    for entry in from_lib.entries.values():
+        if species.is_isomorphic(entry.item):
+            to_lib = add_entry_to_library(entry=entry,
+                         to_lib=to_lib,
+                         lib_type='thermo',
+                         library_name=shared_library_name,
+                         logger=logger,
+                         )
+            added = True
+            break
+    to_lib.save(path=to_lib_path)
+    lift_race_condition(race_path)
+    return added
+
+
+def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
+                                            source_library_path: str,
+                                            shared_library_name: str,
+                                            paths: Dict[str, str],
+                                            logger: 'Logger',
+                                            race: bool = True,
+                                            ) -> bool:
+    """
+    Add a reaction to the T3 kinetics library.
+
+    Args:
+        reaction ('ARCReaction'): The reaction to add to the T3 library.
+        source_library_path (str): The path to the source library from which the species is added.
+        shared_library_name (str): The name of an RMG database library shared between T3 projects.
+        paths (Dict[str, str]): T3's dictionary of paths.
+        logger (Logger): Instance of T3's Logger class.
+        race (bool, optional): Whether to take measures to avoid a race condition when appending to the library.
+
+    Returns:
+        bool: True if the reaction was added successfully, False otherwise.
+    """
+    added = False
+    to_lib_path = paths[f'shared T3 kinetics lib']
+    race_path = os.path.join(os.path.dirname(to_lib_path), f'{shared_library_name}.race')
+    if race:
+        race_free = check_race_condition(race_path)
+        if not race_free:
+            logger.error(f'Could not write to library {to_lib_path} due to a race condition.\n'
+                         f'Check whether it is safe to delete the {race_path} file to continue.')
+            return False
+    from_lib, to_lib = KineticsLibrary(), KineticsLibrary()
+    from_lib.load(path=source_library_path, local_context=THERMO_LOCAL_CONTEXT, global_context=dict())
+    if os.path.isfile(to_lib_path):
+        to_lib.load(path=to_lib_path, local_context=THERMO_LOCAL_CONTEXT, global_context=dict())
+    copied_rxn = None
+    for entry in from_lib.entries.values():
+        if is_reaction_isomorphic(reaction, entry.item):
+            to_lib = add_entry_to_library(entry=entry,
+                                          to_lib=to_lib,
+                                          lib_type='kinetics',
+                                          library_name=shared_library_name,
+                                          logger=logger,
+                                          )
+            copied_rxn = entry.item
+            added = True
+            break
+    # If the copied reaction is PDep, add the entire PES to the library.
+    if copied_rxn.kinetics.is_pdep() or copied_rxn.elementary_high_p:
+        pes_formula = get_rxn_composition(copied_rxn)
+        for entry in from_lib.entries.values():
+            if entry.item is not copied_rxn and \
+                get_rxn_composition(entry.item) == pes_formula and \
+                    (entry.item.kinetics.is_pdep() or copied_rxn.elementary_high_p):
+                to_lib = add_entry_to_library(entry=entry,
+                                              to_lib=to_lib,
+                                              lib_type='kinetics',
+                                              library_name=shared_library_name,
+                                              logger=logger,
+                                              )
+    to_lib.save(path=to_lib_path)
+    lift_race_condition(race_path)
+    return added
+
+
+def is_reaction_isomorphic(reaction: 'ARCReaction',
+                           rmg_reaction: Reaction,
+                           ) -> bool:
+    """
+    Check if an ARC reaction is isomorphic to an RMG reaction.
+
+    Args:
+        reaction ('ARCReaction'): The ARC reaction to check.
+        rmg_reaction (Reaction): The RMG reaction to check against.
+
+    Returns:
+        bool: True if the reactions are isomorphic, False otherwise.
+    """
+    rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.molecule[0].copy(deep=True)])
+                                                   for spc in reaction.reactants],
+                                        products=[Species(molecule=[spc.molecule[0].copy(deep=True)])
+                                                  for spc in reaction.products])
+    return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn)
+
+
+def get_rxn_composition(reaction: Reaction) -> Dict[str: int]:
+    """
+    Get the composition (molecular formula) of the PES for a reaction.
+
+    Args:
+        reaction (Reaction): The reaction to get the PES molecular weight from.
+
+    Returns:
+        float: The molecular weight of the PES.
+    """
+    pes_composition = Counter(atom.element.symbol
+                              for reactant in reaction.reactants
+                              for atom in reactant.molecule[0].get_atoms())
+    return dict(pes_composition)
