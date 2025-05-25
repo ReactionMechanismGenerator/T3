@@ -238,7 +238,6 @@ def test_rmg_database_schema():
     rmg_database = RMGDatabase(thermo_libraries=['BurkeH2O2', 'DFT_QCI_thermo', 'primaryThermoLibrary', 'CBS_QB3_1dHR'],
                                kinetics_libraries=['BurkeH2O2inN2', 'NOx2018', 'Klippenstein_Glarborg2016'],
                                transport_libraries=['PrimaryTransportLibrary', 'OneDMinN2', 'NOx2018', 'GRI-Mech'],
-                               seed_mechanisms=list(),
                                kinetics_depositories='default',
                                kinetics_families='default',
                                kinetics_estimator='rate rules'
@@ -246,7 +245,9 @@ def test_rmg_database_schema():
     assert rmg_database.thermo_libraries == ['BurkeH2O2', 'DFT_QCI_thermo', 'primaryThermoLibrary', 'CBS_QB3_1dHR']
     assert rmg_database.kinetics_libraries == ['BurkeH2O2inN2', 'NOx2018', 'Klippenstein_Glarborg2016']
     assert rmg_database.transport_libraries == ['PrimaryTransportLibrary', 'OneDMinN2', 'NOx2018', 'GRI-Mech']
-    assert rmg_database.seed_mechanisms == list()
+    assert rmg_database.seed_mechanisms is None
+    assert rmg_database.candidate_thermo_libraries is None
+    assert rmg_database.candidate_kinetics_libraries is None
     assert rmg_database.kinetics_depositories == 'default'
     assert rmg_database.kinetics_families == 'default'
     assert rmg_database.kinetics_estimator == 'rate rules'

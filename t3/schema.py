@@ -180,7 +180,9 @@ class RMGDatabase(BaseModel):
     chemistry_sets: Optional[List[str]] = None
     use_low_credence_libraries: bool = False
     transport_libraries: List[str] = ['OneDMinN2', 'PrimaryTransportLibrary', 'NOx2018', 'GRI-Mech']
-    seed_mechanisms: List[str] = list()
+    seed_mechanisms: Optional[List[str]] = None
+    candidate_thermo_libraries: Optional[List[str]] = None
+    candidate_kinetics_libraries: Optional[List[str]] = None
     kinetics_depositories: Union[List[str], str] = 'default'
     kinetics_families: Union[str, List[str]] = 'default'
     kinetics_estimator: str = 'rate rules'
