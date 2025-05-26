@@ -356,7 +356,7 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
     return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn)
 
 
-def get_rxn_composition(reaction: Reaction) -> Dict[str: int]:
+def get_rxn_composition(reaction: Reaction) -> Dict[str, int]:
     """
     Get the composition (molecular formula) of the PES for a reaction.
 
