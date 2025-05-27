@@ -323,18 +323,19 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
             added = True
             break
     # If the copied reaction is PDep, add the entire PES to the library.
-    if copied_rxn.kinetics.is_pdep() or copied_rxn.elementary_high_p:
-        pes_formula = get_rxn_composition(copied_rxn)
-        for entry in from_lib.entries.values():
-            if entry.item is not copied_rxn and \
-                get_rxn_composition(entry.item) == pes_formula and \
-                    (entry.item.kinetics.is_pdep() or copied_rxn.elementary_high_p):
-                to_lib = add_entry_to_library(entry=entry,
-                                              to_lib=to_lib,
-                                              lib_type='kinetics',
-                                              library_name=shared_library_name,
-                                              logger=logger,
-                                              )
+    if copied_rxn is not None and copied_rxn.kinetics is not None:
+        if copied_rxn.kinetics.is_pdep() or copied_rxn.elementary_high_p:
+            pes_formula = get_rxn_composition(copied_rxn)
+            for entry in from_lib.entries.values():
+                if entry.item is not copied_rxn and \
+                    get_rxn_composition(entry.item) == pes_formula and \
+                        (entry.item.kinetics.is_pdep() or copied_rxn.elementary_high_p):
+                    to_lib = add_entry_to_library(entry=entry,
+                                                to_lib=to_lib,
+                                                lib_type='kinetics',
+                                                library_name=shared_library_name,
+                                                logger=logger,
+                                                )
     to_lib.save(path=to_lib_path)
     lift_race_condition(race_path)
     return added
