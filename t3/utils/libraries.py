@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Dict, Union
 from rmgpy.data.kinetics import KineticsLibrary
 from rmgpy.data.thermo import ThermoLibrary
 from rmgpy.kinetics import Arrhenius, KineticsData
+from rmgpy.kinetics.chebyshev import Chebyshev
 from rmgpy.reaction import Reaction
 from rmgpy.thermo import NASAPolynomial, NASA, ThermoData, Wilhoit
 from rmgpy.species import Species
@@ -33,6 +34,7 @@ THERMO_LOCAL_CONTEXT = {
 KINETICS_LOCAL_CONTEXT = {
     'KineticsData': KineticsData,
     'Arrhenius': Arrhenius,
+    'Chebyshev': Chebyshev, 
 }
 
 
