@@ -337,7 +337,7 @@ class RMGConstantTP(SimulateAdapter):
         Returns:
             List[List[dict]]: Entries are lists of dictionaries describing an RMG species concentration by label.
         """
-        species_lists = list()
+        new_species_list, species_lists = list(), list()
         spc_indices_w_ranges = [i for i, spc in enumerate(self.rmg['species'])
                                 if isinstance(spc['concentration'], (list, tuple))]
         species_list = [{'label': spc['label'], 'concentration': spc['concentration']} for spc in self.rmg['species']
@@ -371,8 +371,9 @@ class RMGConstantTP(SimulateAdapter):
                 for point_number in range(self.t3['options']['num_sa_per_concentration_range']):
                     new_species_list = species_list
                     for i, spc_index in enumerate(spc_indices_w_ranges):
-                        new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
-                                                'concentration': species_vals[i][point_number]})
+                        if i in species_vals and point_number in species_vals[i]:  # needs a more permanent fix
+                            new_species_list.append({'label': self.rmg['species'][spc_index]['label'],
+                                                     'concentration': species_vals[i][point_number]})
                 species_lists.append(new_species_list)
 
         # 4. Combinations (products)
@@ -380,8 +381,9 @@ class RMGConstantTP(SimulateAdapter):
             for vals in itertools.product(*species_vals):
                 new_species_list = species_list
                 for i, val in enumerate(vals):
-                    new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[i]]['label'],
-                                             'concentration': val})
+                    if i in spc_indices_w_ranges:
+                        new_species_list.append({'label': self.rmg['species'][spc_indices_w_ranges[i]]['label'],
+                                                 'concentration': val})
                 species_lists.append(new_species_list)
 
         for species_list in species_lists:
