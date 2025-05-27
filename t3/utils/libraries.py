@@ -293,6 +293,8 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
     Returns:
         bool: True if the reaction was added successfully, False otherwise.
     """
+    if os.path.isdir(source_library_path):
+        source_library_path = os.path.join(source_library_path, 'reactions.py')
     added = False
     to_lib_path = paths[f'shared T3 kinetics lib']
     race_path = os.path.join(os.path.dirname(to_lib_path), f'{shared_library_name}.race')
@@ -303,9 +305,9 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                          f'Check whether it is safe to delete the {race_path} file to continue.')
             return False
     from_lib, to_lib = KineticsLibrary(), KineticsLibrary()
-    from_lib.load(path=source_library_path, local_context=THERMO_LOCAL_CONTEXT, global_context=dict())
+    from_lib.load(path=source_library_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     if os.path.isfile(to_lib_path):
-        to_lib.load(path=to_lib_path, local_context=THERMO_LOCAL_CONTEXT, global_context=dict())
+        to_lib.load(path=to_lib_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     copied_rxn = None
     for entry in from_lib.entries.values():
         if is_reaction_isomorphic(reaction, entry.item):
