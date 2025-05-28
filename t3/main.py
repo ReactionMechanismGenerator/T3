@@ -42,6 +42,7 @@ from arc.common import (get_number_with_ordinal_indicator,
                         )
 from arc.exceptions import ConverterError
 from arc.main import ARC
+from arc.reaction import ARCReaction
 from arc.species.species import ARCSpecies, check_label
 from arc.species.converter import check_xyz_dict
 
@@ -88,6 +89,7 @@ class T3(object):
                 'QM label': <str: The label used for the QM calc>,
                 'SMILES label': <str: A reaction label that consists of the reactants/products SMILES>,
                 'object': <Reaction: RMG Reaction object>,
+                'arc_rxn': <ARCReaction: ARC Reaction object>,
                 'reactant_keys': <List[int]: Keys of species that participate in this reaction as reactants>,
                 'product_keys': <List[int]: Keys of species that participate in this reaction as products>,
                 'reasons': <List[str]: Reasons for calculating the rate coefficient for this reaction>,
@@ -1388,20 +1390,23 @@ class T3(object):
                                          for species_list in [reaction.reactants, reaction.products]])
             reaction.label = qm_label
 
+            arc_rxn = ARCReaction(r_species=[ARCSpecies(label=spc.label, mol=spc.molecule[0]) for spc in reaction.reactants],
+                                  p_species=[ARCSpecies(label=spc.label, mol=spc.molecule[0]) for spc in reaction.products],
+                                  label=qm_label,
+                                  )
             self.reactions[rxn_key] = {'RMG label': reaction.label or str(reaction),
                                        'Chemkin label': chemkin_label,
                                        'QM label': qm_label,
                                        'SMILES label': smiles_label,
                                        'object': reaction,
+                                       'arc_rxn': arc_rxn,
                                        'reasons': reasons,
                                        'converged': None,
                                        'iteration': self.iteration,
                                        'reactant_keys': [self.get_species_key(species=spc) for spc in reaction.reactants],
                                        'product_keys': [self.get_species_key(species=spc) for spc in reaction.products],
                                        }
-            qm_reaction = reaction.copy()
-            qm_reaction.label = qm_label
-            self.qm['reactions'].append(qm_reaction)
+            self.qm['reactions'].append(arc_rxn.copy())
             return rxn_key
 
         # The reaction already exists, extend reasons.
