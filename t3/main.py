@@ -1390,10 +1390,7 @@ class T3(object):
                                          for species_list in [reaction.reactants, reaction.products]])
             reaction.label = qm_label
 
-            arc_rxn = ARCReaction(r_species=[ARCSpecies(label=spc.label, mol=spc.molecule[0]) for spc in reaction.reactants],
-                                  p_species=[ARCSpecies(label=spc.label, mol=spc.molecule[0]) for spc in reaction.products],
-                                  label=qm_label,
-                                  )
+            arc_rxn = ARCReaction(label=qm_label)
             self.reactions[rxn_key] = {'RMG label': reaction.label or str(reaction),
                                        'Chemkin label': chemkin_label,
                                        'QM label': qm_label,
