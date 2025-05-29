@@ -355,9 +355,9 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
         bool: True if the reactions are isomorphic, False otherwise.
     """
     rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.molecule[0].copy(deep=True)])
-                                                   for spc in reaction.reactants],
+                                                   for spc in reaction.r_species],
                                         products=[Species(molecule=[spc.molecule[0].copy(deep=True)])
-                                                  for spc in reaction.products])
+                                                  for spc in reaction.p_species])
     return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn)
 
 
