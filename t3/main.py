@@ -529,6 +529,9 @@ class T3(object):
 
         arc_kwargs = self.process_candidate_qm_objects(arc_kwargs=arc_kwargs)
 
+        self.logger.info(f'\nRunning ARC for Reactions:\n{[r.label for r in arc_kwargs["reactions"]]}\n\n'
+                         f'and species:\n{[spc.label for spc in arc_kwargs["species"]]}\n')
+
         tic = datetime.datetime.now()
         arc = ARC(**arc_kwargs)
         if not os.path.isfile(self.paths['ARC input']):
@@ -1183,6 +1186,7 @@ class T3(object):
                      or ('Estimated using average of templates' in kinetics_comment
                          and 'for rate rule' in kinetics_comment)
                      or kinetics_comment == ""):
+            self.logger.info(f'Reaction {reaction.label} requires refinement. kinetic comment: {kinetics_comment}')
             return True
         return False
 
