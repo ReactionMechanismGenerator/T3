@@ -1159,22 +1159,29 @@ class T3(object):
             PDep reactions: need to check whether the reaction is elementary, then a high pressure limit of it could be
             computed by ARC. But if it's a network reaction, then don't send it directly into ARC, make sure to check the wells and path reactions
             via Arkane SA.
+            #
+            also consider a better analysis of a PDep network if this is a well-skipping reaction and other reactions should be computed
+            consider computing rxns with a high sensitivity coefficient of their TS
+            consider computing reactions with a negative TS relative to R or P
         """
         if reaction is None:
             return None
         if isinstance(reaction, LibraryReaction):
             return False
-        self.logger.info(f'\n\noriginal rxn kinetics: {reaction.kinetics}')
         reaction_kinetics = get_reaction_kinetics(reaction=reaction.copy(),
                                                   chemkin_path=self.paths['chem annotated'],
                                                   species_dict_path=self.paths['species dict'])
         kinetics_comment = reaction_kinetics.comment if reaction_kinetics is not None else ''
-        self.logger.info(f'reaction kinetics: {kinetics_comment}')
 
-        if self.get_reaction_key(reaction=reaction) is None \
-                and 'Estimated' in kinetics_comment and 'Exact match found' not in kinetics_comment:
-            self.logger.info(f'\n\nReaction {reaction} requires refinement. kinetics: {reaction_kinetics}. Kinetics comment: {kinetics_comment}')
-            return True
+        if self.get_reaction_key(reaction=reaction) is None:
+            if 'Estimated' in kinetics_comment and 'Exact match found' not in kinetics_comment:
+                self.logger.info(f'\n\nReaction {reaction.label} requires refinement.')
+                return True
+            if reaction_kinetics is not None and reaction_kinetics.is_pressure_dependent():
+                network_name = self.get_pdep_reaction_network_name(reaction=reaction)
+                self.logger.info(f'identified pdep rxn {reaction.label}. network is: {network_name}.\n')
+                if self.is_reaction_elementary_and_estimated(reaction=reaction, network_name=network_name):
+                    return True
         return False
 
     def get_species_key(self,
