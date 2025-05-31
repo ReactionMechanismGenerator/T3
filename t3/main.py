@@ -1175,11 +1175,10 @@ class T3(object):
 
         if self.get_reaction_key(reaction=reaction) is None:
             if 'Estimated' in kinetics_comment and 'Exact match found' not in kinetics_comment:
-                self.logger.info(f'\n\nReaction {reaction.label} requires refinement.')
                 return True
             if reaction_kinetics is not None and reaction_kinetics.is_pressure_dependent():
                 network_name = self.get_pdep_reaction_network_name(reaction=reaction)
-                self.logger.info(f'identified pdep rxn {reaction.label}. network is: {network_name}.\n')
+                self.logger.info(f'identified pdep rxn {reaction}. network is: {network_name}.\n')
                 if self.is_reaction_elementary_and_estimated(reaction=reaction, network_name=network_name):
                     return True
         return False
