@@ -877,7 +877,7 @@ class T3(object):
             for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
                 reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
                 if self.reaction_requires_refinement(reaction):
-                    self.logger.info(f'\n\n+++ reaction: {reaction} requires refinement')
+                    self.logger.info(f'\n\n+++ 880 reaction: {reaction} requires refinement')
                     num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
                     reason = f'(i {self.iteration}) the {num}most sensitive reaction for {observable_label}'
                     if self.t3['sensitivity']['compute_kinetics']:
@@ -1078,6 +1078,7 @@ class T3(object):
                 if self.reaction_requires_refinement(reaction) \
                         and not any(self.species_requires_refinement(species=spc) for spc in reactants + products):
                     # only consider a rate violating reaction if all the thermo was first fixed
+                    self.logger.info(f'\n\n+++ 1081 reaction: {reaction} requires refinement due to collision rate violation')
                     reason = f'(i {self.iteration}) Reaction rate coefficient violates the collision rate.'
                     if self.t3['sensitivity']['compute_kinetics']:
                         key = self.add_reaction(reaction=reaction, reasons=reason)
