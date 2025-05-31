@@ -58,6 +58,7 @@ from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
 from t3.utils.libraries import (add_species_from_candidate_lib_to_t3_lib, add_reaction_from_candidate_lib_to_t3_lib,
                                 add_to_rmg_libraries)
+from t3.utils.rmg import get_reaction_kinetics
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 
 RMG_THERMO_LIB_BASE_PATH = os.path.join(rmg_settings['database.directory'], 'thermo', 'libraries')
@@ -1178,7 +1179,10 @@ class T3(object):
             return None
         if isinstance(reaction, LibraryReaction):
             return False
-        kinetics_comment = reaction.kinetics.comment if reaction.kinetics is not None else ''
+        reaction_kinetics = get_reaction_kinetics(reaction=reaction,
+                                                  chemkin_path=self.paths['chem annotated'],
+                                                  species_dict_path=self.paths['species dict'])
+        kinetics_comment = reaction_kinetics.comment if reaction.kinetics is not None else ''
         if self.get_reaction_key(reaction=reaction) is None \
                 and 'Exact match found for rate rule' not in kinetics_comment \
                 and ('Estimated using an average for rate rule' in kinetics_comment
