@@ -1183,6 +1183,9 @@ class T3(object):
                                                   chemkin_path=self.paths['chem annotated'],
                                                   species_dict_path=self.paths['species dict'])
         kinetics_comment = reaction_kinetics.comment if reaction.kinetics is not None else ''
+        rxn_comment = reaction.comment
+        self.logger.info(f'\nkinetics comment: {kinetics_comment}, rxn comment: {rxn_comment}')
+        kinetics_comment = kinetics_comment or rxn_comment
         if self.get_reaction_key(reaction=reaction) is None \
                 and 'Exact match found for rate rule' not in kinetics_comment \
                 and ('Estimated using an average for rate rule' in kinetics_comment
@@ -1438,7 +1441,6 @@ class T3(object):
             mod_rxn_dict = {k: v for k, v in rxn_dict.items() if k != 'object'}
             reactions[key] = mod_rxn_dict
         for reaction in reactions.values():
-            self.logger.error(f'*** {reaction}')
             reaction['arc_rxn'] = reaction['arc_rxn'].label
         save_yaml_file(path=os.path.join(self.project_directory, 'reactions.yml'), content=reactions)
 
