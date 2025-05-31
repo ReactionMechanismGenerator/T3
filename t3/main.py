@@ -1190,7 +1190,11 @@ class T3(object):
                      or ('Estimated using average of templates' in kinetics_comment
                          and 'for rate rule' in kinetics_comment)
                      or kinetics_comment == ""):
-            self.logger.info(f'Reaction {type(reaction)} {reaction} requires refinement. kinetics: {reaction_kinetics}. Kinetics comment: {kinetics_comment}')
+            self.logger.info(f'\n\nReaction {reaction} requires refinement. kinetics: {reaction_kinetics}. Kinetics comment: {kinetics_comment}')
+            if hasattr(reaction, 'family') and reaction.family is not None:
+                self.logger.info(f'Reaction {reaction} belongs to family {reaction.family}.')
+            elif hasattr(reaction, 'library') and reaction.library is not None:
+                self.logger.info(f'Reaction {reaction} belongs to library {reaction.library}.')
             return True
         return False
 
