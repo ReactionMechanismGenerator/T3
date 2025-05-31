@@ -1480,6 +1480,8 @@ class T3(object):
         Returns:
             Optional[str]: The PDep reaction network name.
         """
+        if not hasattr(reaction, 'network'):
+            return None
         network_file_names = list()
         for (_, _, files) in os.walk(self.paths['RMG PDep']):
             network_file_names.extend(files)
