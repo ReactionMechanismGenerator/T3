@@ -1186,7 +1186,7 @@ class T3(object):
                      or ('Estimated using average of templates' in kinetics_comment
                          and 'for rate rule' in kinetics_comment)
                      or kinetics_comment == ""):
-            self.logger.info(f'Reaction {reaction.label} requires refinement. kinetic comment: {kinetics_comment}')
+            self.logger.info(f'Reaction {reaction} requires refinement. kinetic comment: {kinetics_comment}')
             return True
         return False
 
