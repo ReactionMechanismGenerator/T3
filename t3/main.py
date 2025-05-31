@@ -1179,20 +1179,16 @@ class T3(object):
             return None
         if isinstance(reaction, LibraryReaction):
             return False
-        reaction_kinetics = get_reaction_kinetics(reaction=reaction,
+        self.logger.info(f'\n\noriginal rxn kinetics: {reaction.kinetics}')
+        reaction_kinetics = get_reaction_kinetics(reaction=reaction.copy(),
                                                   chemkin_path=self.paths['chem annotated'],
                                                   species_dict_path=self.paths['species dict'])
         kinetics_comment = reaction_kinetics.comment if reaction_kinetics is not None else ''
-        # rxn_comment = reaction.comment
-        # self.logger.info(f'\nreaction_kinetics: {reaction_kinetics}, kinetics.comment: {reaction_kinetics.comment}, kinetics comment: {kinetics_comment}, rxn comment: {rxn_comment}')
-        # kinetics_comment = kinetics_comment or rxn_comment
+        self.logger.info(f'reaction kinetics: {kinetics_comment}')
+
         if self.get_reaction_key(reaction=reaction) is None \
-                and 'Estimated' in kinetics_comment or kinetics_comment == "":
+                and 'Estimated' in kinetics_comment and 'Exact match found' not in kinetics_comment:
             self.logger.info(f'\n\nReaction {reaction} requires refinement. kinetics: {reaction_kinetics}. Kinetics comment: {kinetics_comment}')
-            # if hasattr(reaction, 'family') and reaction.family is not None:
-            #     self.logger.info(f'Reaction {reaction} belongs to family {reaction.family}.')
-            # elif hasattr(reaction, 'library') and reaction.library is not None:
-            #     self.logger.info(f'Reaction {reaction} belongs to library {reaction.library}.')
             return True
         return False
 
