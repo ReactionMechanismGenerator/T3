@@ -912,24 +912,9 @@ class T3(object):
             if not isinstance(reaction, PDepReaction):
                 continue
 
-            # identify the network name and file name
-            network_file_names = list()
-            for (_, _, files) in os.walk(self.paths['RMG PDep']):
-                network_file_names.extend(files)
-                break  # don't continue to explore subdirectories
-            network_file_names = [network_file_name for network_file_name in network_file_names
-                                  if f'network{reaction.network.index}_' in network_file_name]
-            if not network_file_names:
-                # this PDepReaction did not stem from a network file, it is probably a library reaction
-                if hasattr(reaction, 'library'):
-                    self.logger.info(f'Not exploring library reaction {reaction} with PES SA.')
-                else:
-                    self.logger.warning(f'Not exploring reaction {reaction} with PES SA '
-                                        f'since it does not have a `network` attribute.')
+            network_name = self.get_pdep_reaction_network_name(reaction=reaction)
+            if network_name is None:
                 continue
-            network_version = max([int(network_file_name.split('.')[0].split('_')[1])
-                                   for network_file_name in network_file_names])
-            network_name = f'network{reaction.network.index}_{network_version}'  # w/o the '.py' extension
 
             # Try running this network using user-specified methods by order.
             sa_coefficients_path, arkane = None, None
@@ -1476,6 +1461,80 @@ class T3(object):
             self.rmg['database'][library_type] = [library_name] + self.rmg['database'][library_type]
         elif library_name in self.rmg['database'][library_type] and not exists_function(library_name):
             self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
+
+    def get_pdep_reaction_network_name(self, reaction: Reaction) -> Optional[str]:
+        """
+        Get the PDep reaction network name based on the reaction object.
+        This is used to identify the network file name in the RMG PDep directory.
+
+        Args:
+            reaction (Reaction): The PDep reaction object.
+
+        Returns:
+            Optional[str]: The PDep reaction network name.
+        """
+        network_file_names = list()
+        for (_, _, files) in os.walk(self.paths['RMG PDep']):
+            network_file_names.extend(files)
+            break  # don't continue to explore subdirectories
+        network_file_names = [network_file_name for network_file_name in network_file_names
+                              if f'network{reaction.network.index}_' in network_file_name]
+        if not network_file_names:
+            # this PDepReaction did not stem from a network file, it is probably a library reaction
+            if hasattr(reaction, 'library'):
+                self.logger.info(f'Not exploring library reaction {reaction} with PES SA.')
+            else:
+                self.logger.warning(f'Not exploring reaction {reaction} with PES SA '
+                                    f'since it does not have a `network` attribute.')
+            return None
+        network_version = max([int(network_file_name.split('.')[0].split('_')[1])
+                               for network_file_name in network_file_names])
+        network_name = f'network{reaction.network.index}_{network_version}'  # w/o the '.py' extension
+        return network_name
+
+    def is_reaction_elementary_and_estimated(self, reaction: Reaction, network_name: str) -> bool:
+        """
+        Check whether a reaction is elementary and estimated based on the RMG PDep network file.
+
+        Args:
+            reaction (Reaction): The reaction to check.
+            network_name (str): The PDep network name.
+
+        Returns:
+            bool: Whether the reaction is elementary and estimated.
+        """
+        if not hasattr(reaction, 'network'):
+            return False
+        if not os.path.isfile(os.path.join(self.paths['RMG PDep'], f'{network_name}.py')):
+            self.logger.error(f'Could not find the PDep network file {network_name}.py in {self.paths["RMG PDep"]}.')
+            return False
+        with open(os.path.join(self.paths['RMG PDep'], f'{network_name}.py'), 'r') as f:
+            lines = f.readlines()
+        reading_rxn, r_correct, p_correct = False, False, False
+        for i in range(len(lines)):
+            line = lines[i]
+            if 'reaction' in line and reaction.is_isomorphic(Reaction.from_chemkin(line)):
+                reading_rxn = True
+            if not line:
+                reading_rxn, r_correct, p_correct = False, False, False
+            if reading_rxn:
+                if 'reactants = [' in line or 'products = [' in line:
+                    tokens = line.split('[')[1].split(']')[0].split(',')
+                    tokens = [token.strip().strip("'").strip('"') for token in tokens if token.strip()]
+                    if 'reactants = [' in line:
+                        r_correct = all([token in [spc.to_chemkin() for spc in reaction.reactants] for token in tokens])
+                    if 'products = [' in line:
+                        p_correct = all([token in [spc.to_chemkin() for spc in reaction.products] for token in tokens])
+                if 'kinetics =' in line and r_correct and p_correct:
+                    comment = line.split('comment=')[-1]
+                    j = i
+                    while '"""),' not in line:
+                        j += 1
+                        comment += lines[j]
+                    if 'Estimated' in comment and 'Exact match found' not in comment:
+                        self.logger.info(f'Reaction {reaction} is elementary and estimated in the PDep network {network_name}.')
+                        return True
+        return False
 
     def check_overtime(self) -> bool:
         """
