@@ -1184,7 +1184,7 @@ class T3(object):
                                                   species_dict_path=self.paths['species dict'])
         kinetics_comment = reaction_kinetics.comment if reaction.kinetics is not None else ''
         rxn_comment = reaction.comment
-        self.logger.info(f'\nkinetics comment: {kinetics_comment}, rxn comment: {rxn_comment}')
+        self.logger.info(f'\nreaction_kinetics: {reaction_kinetics}, kinetics.comment: {reaction_kinetics.comment}, kinetics comment: {kinetics_comment}, rxn comment: {rxn_comment}')
         kinetics_comment = kinetics_comment or rxn_comment
         if self.get_reaction_key(reaction=reaction) is None \
                 and 'Exact match found for rate rule' not in kinetics_comment \
