@@ -1441,7 +1441,7 @@ class T3(object):
             mod_rxn_dict = {k: v for k, v in rxn_dict.items() if k != 'object'}
             reactions[key] = mod_rxn_dict
         for reaction in reactions.values():
-            reaction['arc_rxn'] = reaction['arc_rxn'].label
+            reaction['arc_rxn'] = reaction['arc_rxn'].label if not isinstance(reaction['arc_rxn'], str) else reaction['arc_rxn']
         save_yaml_file(path=os.path.join(self.project_directory, 'reactions.yml'), content=reactions)
 
     def load_species_and_reactions(self):
