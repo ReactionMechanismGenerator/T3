@@ -1433,6 +1433,8 @@ class T3(object):
         for key, rxn_dict in self.reactions.items():
             mod_rxn_dict = {k: v for k, v in rxn_dict.items() if k != 'object'}
             reactions[key] = mod_rxn_dict
+        for reaction in reactions:
+            reaction['arc_rxn'] = reaction['arc_rxn']['label']
         save_yaml_file(path=os.path.join(self.project_directory, 'reactions.yml'), content=reactions)
 
     def load_species_and_reactions(self):
