@@ -1522,7 +1522,7 @@ class T3(object):
         reading_rxn, r_correct, p_correct = False, False, False
         for i in range(len(lines)):
             line = lines[i]
-            if 'reaction' in line and reaction.is_isomorphic(Reaction.from_chemkin(line)):
+            if 'reaction' in line:
                 reading_rxn = True
             if not line:
                 reading_rxn, r_correct, p_correct = False, False, False
