@@ -36,6 +36,6 @@ def get_reaction_kinetics(
     chemkin_species_list, chemkin_reaction_list = load_chemkin_file(chemkin_path, species_dict_path)
 
     for chemkin_reaction in chemkin_reaction_list:
-        if reaction.is_isomorphic(chemkin_reaction):
+        if reaction.is_isomorphic(other=chemkin_reaction, save_order=True):
             return chemkin_reaction.kinetics
     return None
