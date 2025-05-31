@@ -1439,7 +1439,7 @@ class T3(object):
             reactions[key] = mod_rxn_dict
         for reaction in reactions.values():
             self.logger.error(f'*** {reaction}')
-            reaction['arc_rxn'] = reaction['arc_rxn']['label']
+            reaction['arc_rxn'] = reaction['arc_rxn'].label
         save_yaml_file(path=os.path.join(self.project_directory, 'reactions.yml'), content=reactions)
 
     def load_species_and_reactions(self):
