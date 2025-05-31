@@ -1182,22 +1182,17 @@ class T3(object):
         reaction_kinetics = get_reaction_kinetics(reaction=reaction,
                                                   chemkin_path=self.paths['chem annotated'],
                                                   species_dict_path=self.paths['species dict'])
-        kinetics_comment = reaction_kinetics.comment if reaction.kinetics is not None else ''
-        rxn_comment = reaction.comment
-        self.logger.info(f'\nreaction_kinetics: {reaction_kinetics}, kinetics.comment: {reaction_kinetics.comment}, kinetics comment: {kinetics_comment}, rxn comment: {rxn_comment}')
-        kinetics_comment = kinetics_comment or rxn_comment
+        kinetics_comment = reaction_kinetics.comment if reaction_kinetics is not None else ''
+        # rxn_comment = reaction.comment
+        # self.logger.info(f'\nreaction_kinetics: {reaction_kinetics}, kinetics.comment: {reaction_kinetics.comment}, kinetics comment: {kinetics_comment}, rxn comment: {rxn_comment}')
+        # kinetics_comment = kinetics_comment or rxn_comment
         if self.get_reaction_key(reaction=reaction) is None \
-                and 'Exact match found for rate rule' not in kinetics_comment \
-                and ('Estimated using an average for rate rule' in kinetics_comment
-                     or ('Estimated using template' in kinetics_comment and 'for rate rule' in kinetics_comment)
-                     or ('Estimated using average of templates' in kinetics_comment
-                         and 'for rate rule' in kinetics_comment)
-                     or kinetics_comment == ""):
+                and 'Estimated' in kinetics_comment or kinetics_comment == "":
             self.logger.info(f'\n\nReaction {reaction} requires refinement. kinetics: {reaction_kinetics}. Kinetics comment: {kinetics_comment}')
-            if hasattr(reaction, 'family') and reaction.family is not None:
-                self.logger.info(f'Reaction {reaction} belongs to family {reaction.family}.')
-            elif hasattr(reaction, 'library') and reaction.library is not None:
-                self.logger.info(f'Reaction {reaction} belongs to library {reaction.library}.')
+            # if hasattr(reaction, 'family') and reaction.family is not None:
+            #     self.logger.info(f'Reaction {reaction} belongs to family {reaction.family}.')
+            # elif hasattr(reaction, 'library') and reaction.library is not None:
+            #     self.logger.info(f'Reaction {reaction} belongs to library {reaction.library}.')
             return True
         return False
 
