@@ -276,12 +276,12 @@ def add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
 
 
 def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
-                                            source_library_path: str,
-                                            shared_library_name: str,
-                                            paths: Dict[str, str],
-                                            logger: 'Logger',
-                                            race: bool = True,
-                                            ) -> bool:
+                                              source_library_path: str,
+                                              shared_library_name: str,
+                                              paths: Dict[str, str],
+                                              logger: 'Logger',
+                                              race: bool = True,
+                                              ) -> bool:
     """
     Add a reaction to the T3 kinetics library.
 
@@ -300,6 +300,9 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
         source_library_path = os.path.join(source_library_path, 'reactions.py')
     added = False
     to_lib_path = paths[f'shared T3 kinetics lib']
+    to_lib_rxns_path = os.path.join(to_lib_path, 'reactions.py')
+    if not os.path.isdir(to_lib_path):
+        os.makedirs(to_lib_path, exist_ok=True)
     race_path = os.path.join(os.path.dirname(to_lib_path), f'{shared_library_name}.race')
     if race:
         race_free = check_race_condition(race_path)
@@ -309,8 +312,8 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
             return False
     from_lib, to_lib = KineticsLibrary(), KineticsLibrary()
     from_lib.load(path=source_library_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
-    if os.path.isfile(to_lib_path):
-        to_lib.load(path=to_lib_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
+    if os.path.isfile(to_lib_rxns_path):
+        to_lib.load(path=to_lib_rxns_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     copied_rxn = None
     for entry in from_lib.entries.values():
         if is_reaction_isomorphic(reaction, entry.item):
@@ -337,7 +340,7 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                                                 library_name=shared_library_name,
                                                 logger=logger,
                                                 )
-    to_lib.save(path=to_lib_path)
+    to_lib.save(path=to_lib_rxns_path)
     lift_race_condition(race_path)
     logger.warning(f'Added reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}.')
     return added
