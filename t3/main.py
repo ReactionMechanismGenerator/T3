@@ -574,7 +574,7 @@ class T3(object):
                         self.logger.info(f'Candidate Species {spc.label} was directly added to the T3 thermo library from {candidate_lib}.')
                         species_to_remove.append(spc)
             self.logger.warning(f'Removed species: {species_to_remove}')
-            self.logger.warning(f'Species sent to ARC: {arc_kwargs["species"]}')
+            self.logger.warning(f'Species sent to ARC: {[s.label for s in arc_kwargs["species"]]}')
 
         if self.candidate_kinetics_libraries and 'reactions' in arc_kwargs and arc_kwargs['reactions']:
             self.logger.warning(f'Found candidate libs: {self.candidate_kinetics_libraries}')
