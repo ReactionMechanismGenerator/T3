@@ -9,7 +9,7 @@ import shutil
 import time
 from collections import Counter
 
-from typing import TYPE_CHECKING, Dict, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from rmgpy.data.kinetics import KineticsLibrary
 from rmgpy.data.thermo import ThermoLibrary
@@ -436,31 +436,96 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
     return added
 
 
-def is_reaction_isomorphic(reaction: 'ARCReaction',
+def is_species_list_isomorphic(arc_species_list: List[ARCSpecies],
+                               rmg_species_list: List[Species],
+                               ) -> bool:
+    """
+    Check if two lists of species are isomorphic as multisets.
+
+    This function checks whether each species in the ARC species list has a unique
+    isomorphic match in the RMG species list, regardless of order.
+
+    Args:
+        arc_species_list (List[ARCSpecies]): A list of ARCSpecies.
+        rmg_species_list (List[RMGSpecies]): A list of RMGSpecies.
+
+    Returns:
+        bool: True if the two lists are isomorphic as multisets, False otherwise.
+    """
+    if len(arc_species_list) != len(rmg_species_list):
+        return False
+
+    used = [False] * len(rmg_species_list)
+
+    def backtrack(i):
+        if i == len(arc_species_list):
+            return True
+        for j, rmg_species in enumerate(rmg_species_list):
+            if not used[j] and arc_species_list[i].is_isomorphic(rmg_species):
+                used[j] = True
+                if backtrack(i + 1):
+                    return True
+                used[j] = False
+        return False
+
+    return backtrack(0)
+
+
+def is_reaction_isomorphic(reaction: ARCReaction,
                            rmg_reaction: Reaction,
                            ) -> bool:
     """
     Check if an ARC reaction is isomorphic to an RMG reaction.
 
+    A reaction is considered isomorphic if either:
+    - The reactants of the ARC reaction are isomorphic to the reactants of the RMG reaction,
+      and the products are isomorphic to the products (in any order), or
+    - The reactants of the ARC reaction are isomorphic to the products of the RMG reaction,
+      and the products are isomorphic to the reactants (in any order).
+
     Args:
-        reaction ('ARCReaction'): The ARC reaction to check.
+        reaction (ARCReaction): The ARC reaction to check.
         rmg_reaction (Reaction): The RMG reaction to check against.
 
     Returns:
         bool: True if the reactions are isomorphic, False otherwise.
     """
-    rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.mol.copy(deep=True)])
-                                                   for spc in reaction.r_species],
-                                        products=[Species(molecule=[spc.mol.copy(deep=True)])
-                                                  for spc in reaction.p_species])
-    flipped_rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.mol.copy(deep=True)])
-                                                           for spc in reaction.p_species],
-                                                products=[Species(molecule=[spc.mol.copy(deep=True)])
-                                                          for spc in reaction.r_species])
-    print(f'rxn: {rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True)}')
-    print(f'rxn: {flipped_rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)}')
-    return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True) or \
-              rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)
+    if is_species_list_isomorphic(reaction.r_species, rmg_reaction.reactants) and \
+       is_species_list_isomorphic(reaction.p_species, rmg_reaction.products):
+        print(f'ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} ')
+        return True
+    if is_species_list_isomorphic(reaction.r_species, rmg_reaction.products) and \
+       is_species_list_isomorphic(reaction.p_species, rmg_reaction.reactants):
+        print(f'ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
+        return True
+    return False
+
+
+# def is_reaction_isomorphic(reaction: 'ARCReaction',
+#                            rmg_reaction: Reaction,
+#                            ) -> bool:
+#     """
+#     Check if an ARC reaction is isomorphic to an RMG reaction.
+#
+#     Args:
+#         reaction ('ARCReaction'): The ARC reaction to check.
+#         rmg_reaction (Reaction): The RMG reaction to check against.
+#
+#     Returns:
+#         bool: True if the reactions are isomorphic, False otherwise.
+#     """
+#     rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.mol.copy(deep=True)])
+#                                                    for spc in reaction.r_species],
+#                                         products=[Species(molecule=[spc.mol.copy(deep=True)])
+#                                                   for spc in reaction.p_species])
+#     flipped_rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.mol.copy(deep=True)])
+#                                                            for spc in reaction.p_species],
+#                                                 products=[Species(molecule=[spc.mol.copy(deep=True)])
+#                                                           for spc in reaction.r_species])
+#     print(f'rxn: {rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True)}')
+#     print(f'rxn: {flipped_rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)}')
+#     return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True) or \
+#               rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)
 
 
 def get_rxn_composition(reaction: Reaction) -> Dict[str, int]:
