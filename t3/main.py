@@ -570,9 +570,8 @@ class T3(object):
                                                                      shared_library_name=self.t3['options']['shared_library_name'],
                                                                      paths=self.paths,
                                                                      logger=self.logger)
-                    if added:
-                        label = spc['label'] if isinstance(spc, dict) else spc.label
-                        self.logger.info(f'Candidate Species {label} was directly added to the T3 thermo library from {candidate_lib}.')
+                    if added and not species_participates_in_arc_reactions(species=spc, reactions=arc_kwargs['reactions']):
+                        self.logger.info(f'Candidate Species {spc.label} was directly added to the T3 thermo library from {candidate_lib}.')
                         species_to_remove.append(spc)
             arc_kwargs['species'] = [spc for spc in arc_kwargs['species'] if spc not in species_to_remove]
             self.logger.warning(f'Removed species: {species_to_remove}')
@@ -1085,7 +1084,7 @@ class T3(object):
                 if self.reaction_requires_refinement(reaction) \
                         and not any(self.species_requires_refinement(species=spc) for spc in reactants + products):
                     # only consider a rate violating reaction if all the thermo was first fixed
-                    self.logger.info(f'\n\n+++ 1081 reaction: {reaction} requires refinement due to collision rate violation')
+                    self.logger.info(f'\n\n+++ 1081 reaction: {reaction} requires refinement due to collision rate violation')   # unclear why the pdep rxn FA = HOCO + H isn't being added
                     reason = f'(i {self.iteration}) Reaction rate coefficient violates the collision rate.'
                     if self.t3['sensitivity']['compute_kinetics']:
                         key = self.add_reaction(reaction=reaction, reasons=reason)
@@ -1188,7 +1187,7 @@ class T3(object):
                 return True
             if reaction_kinetics is not None and reaction_kinetics.is_pressure_dependent():
                 network_name = self.get_pdep_reaction_network_name(reaction=reaction)
-                self.logger.info(f'identified pdep rxn {reaction}. network is: {network_name}.\n')
+                self.logger.info(f'identified pdep rxn {reaction}. network is: {network_name}.\n')  # todo: remove
                 if self.is_reaction_elementary_and_estimated(reaction=reaction, network_name=network_name):
                     return True
         return False
@@ -1727,3 +1726,22 @@ def auto_complete_rmg_libraries(database: dict) -> dict:
     del database['candidate_thermo_libraries']
     del database['candidate_kinetics_libraries']
     return database
+
+
+def species_participates_in_arc_reactions(species: ARCSpecies,
+                                          reactions=List[ARCReaction],
+                                          ) -> bool:
+    """
+    Check whether a species participates in any ARC reaction.
+
+    Args:
+        species (ARCSpecies): The species to check.
+        reactions (List[ARCReaction]): The list of ARC reactions.
+
+    Returns:
+        bool: Whether the species participates in any ARC reaction.
+    """
+    for reaction in reactions:
+        if species.label in reaction.reactants + reaction.products:
+            return True
+    return False
