@@ -591,7 +591,7 @@ class T3(object):
                         reactions_to_remove.append(rxn)
             arc_kwargs['reactions'] = [rxn for rxn in arc_kwargs['reactions'] if rxn not in reactions_to_remove]
             self.logger.warning(f'Removed reactions: {reactions_to_remove}')
-            self.logger.warning(f'Reactions sent to ARC: {arc_kwargs["reactions"]}')
+            self.logger.warning(f'Reactions sent to ARC: {[r.label for r in arc_kwargs["reactions"]]}')
             for spc in arc_kwargs['species']:
                 if not species_participates_in_arc_reactions(species=spc, reactions=arc_kwargs['reactions']) and not spc.compute_thermo:
                     self.logger.info(f'Removing {spc.label} from ARC input file, no need to compute thermo for it.')
