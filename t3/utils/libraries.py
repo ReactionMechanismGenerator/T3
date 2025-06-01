@@ -451,7 +451,12 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
                                                    for spc in reaction.r_species],
                                         products=[Species(molecule=[spc.mol.copy(deep=True)])
                                                   for spc in reaction.p_species])
-    return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn)
+    flipped_rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.mol.copy(deep=True)])
+                                                           for spc in reaction.p_species],
+                                                products=[Species(molecule=[spc.mol.copy(deep=True)])
+                                                          for spc in reaction.r_species])
+    return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True) or \
+              rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)
 
 
 def get_rxn_composition(reaction: Reaction) -> Dict[str, int]:
