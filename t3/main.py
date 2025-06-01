@@ -1375,9 +1375,8 @@ class T3(object):
 
             rxn_key = len(list(self.reactions.keys()))
             for spc in reaction.reactants + reaction.products:
-                if self.get_species_key(species=spc) is None:
-                    self.add_species(species=spc, reasons=f'(i {self.iteration}) Participates in a reaction for which '
-                                                          f'a rate coefficient is computed.')
+                self.add_species(species=spc, reasons=f'(i {self.iteration}) Participates in a reaction for which '
+                                                      f'a rate coefficient is computed.')
 
             reaction.reactants = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
                                   for spc in reaction.reactants]
