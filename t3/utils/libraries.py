@@ -271,6 +271,7 @@ def add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
             break
     to_lib.save(path=to_lib_path)
     lift_race_condition(race_path)
+    logger.warning(f'Added species {species.label} to the shared T3 thermo library {shared_library_name}.')
     return added
 
 
@@ -338,6 +339,7 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                                                 )
     to_lib.save(path=to_lib_path)
     lift_race_condition(race_path)
+    logger.warning(f'Added reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}.')
     return added
 
 
