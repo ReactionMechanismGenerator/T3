@@ -559,7 +559,9 @@ class T3(object):
         Returns:
             dict: The updated ARC arguments dictionary.
         """
+        self.logger.warning('++++ Processing candidate thermo and kinetics libraries')
         if self.candidate_thermo_libraries and 'species' in arc_kwargs and arc_kwargs['species']:
+            self.logger.warning(f'Found candidate libs: {self.candidate_thermo_libraries}')
             species_to_remove = []
             for spc in arc_kwargs['species']:
                 for candidate_lib in self.candidate_thermo_libraries:
@@ -573,8 +575,11 @@ class T3(object):
                         self.logger.info(f'Candidate Species {label} was directly added to the T3 thermo library from {candidate_lib}.')
                         species_to_remove.append(spc)
             arc_kwargs['species'] = [spc for spc in arc_kwargs['species'] if spc not in species_to_remove]
+            self.logger.warning(f'Removed species: {species_to_remove}')
+            self.logger.warning(f'Species sent to ARC: {arc_kwargs["species"]}')
 
         if self.candidate_kinetics_libraries and 'reactions' in arc_kwargs and arc_kwargs['reactions']:
+            self.logger.warning(f'Found candidate libs: {self.candidate_kinetics_libraries}')
             reactions_to_remove = []
             for rxn in arc_kwargs['reactions']:
                 for candidate_lib in self.candidate_kinetics_libraries:
@@ -588,6 +593,8 @@ class T3(object):
                         self.logger.info(f'Candidate Reaction {label} was directly added to the T3 kinetics library from {candidate_lib}.')
                         reactions_to_remove.append(rxn)
             arc_kwargs['reactions'] = [rxn for rxn in arc_kwargs['reactions'] if rxn not in reactions_to_remove]
+            self.logger.warning(f'Removed reactions: {reactions_to_remove}')
+            self.logger.warning(f'Reactions sent to ARC: {arc_kwargs["reactions"]}')
 
         return arc_kwargs
 
