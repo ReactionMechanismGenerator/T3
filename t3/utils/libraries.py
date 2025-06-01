@@ -9,7 +9,7 @@ import shutil
 import time
 from collections import Counter
 
-from typing import TYPE_CHECKING, Dict, Union
+from typing import TYPE_CHECKING, Dict, Optional, Union
 
 from rmgpy.data.kinetics import KineticsLibrary
 from rmgpy.data.thermo import ThermoLibrary
@@ -246,6 +246,48 @@ def add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
     Returns:
         bool: True if the species was added successfully, False otherwise.
     """
+    counter = 10
+    sleep_time = 10
+    while counter > 0:
+        added = _add_species_from_candidate_lib_to_t3_lib(species=species,
+                                                          source_library_path=source_library_path,
+                                                          shared_library_name=shared_library_name,
+                                                          paths=paths,
+                                                          logger=logger,
+                                                          race=race,
+                                                          )
+        if added is not None:
+            return added
+        logger.warning(f'Failed to add species {species.label} to the shared T3 thermo library {shared_library_name}. '
+                       f'Retrying in {sleep_time} seconds...')
+        time.sleep(sleep_time)
+        counter -= 1
+    logger.error(f'Failed to add species {species.label} to the shared T3 thermo library {shared_library_name} '
+                 f'after multiple attempts.')
+    return False
+
+
+def _add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
+                                             source_library_path: str,
+                                             shared_library_name: str,
+                                             paths: Dict[str, str],
+                                             logger: 'Logger',
+                                             race: bool = True,
+                                             ) -> Optional[bool]:
+    """
+    Add a species to the T3 thermo library.
+
+    Args:
+        species ('ARCSpecies'): The species oto add to the T3 library.
+        source_library_path (str): The path to the source library from which the species is added.
+        shared_library_name (str): The name of an RMG database library shared between T3 projects.
+        paths (Dict[str, str]): T3's dictionary of paths.
+        logger (Logger): Instance of T3's Logger class.
+        race (bool, optional): Whether to take measures to avoid a race condition when appending to the library.
+
+    Returns:
+        bool: True if the species was added successfully, False if not. None if a race condition was met.
+    """
     added = False
     to_lib_path = paths[f'shared T3 thermo lib']
     race_path = os.path.join(os.path.dirname(to_lib_path), f'{shared_library_name}.race')
@@ -296,6 +338,48 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
     Returns:
         bool: True if the reaction was added successfully, False otherwise.
     """
+    counter = 10
+    sleep_time = 10
+    while counter > 0:
+        added = _add_reaction_from_candidate_lib_to_t3_lib(reaction=reaction,
+                                                           source_library_path=source_library_path,
+                                                           shared_library_name=shared_library_name,
+                                                           paths=paths,
+                                                           logger=logger,
+                                                           race=race,
+                                                           )
+        if added is not None:
+            return added
+        logger.warning(f'Failed to add reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}. '
+                       f'Retrying in {sleep_time} seconds...')
+        time.sleep(sleep_time)
+        counter -= 1
+    logger.error(f'Failed to add reaction {reaction.label} to the shared T3 kinetics library {shared_library_name} '
+                 f'after multiple attempts.')
+    return False
+
+
+def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
+                                               source_library_path: str,
+                                               shared_library_name: str,
+                                               paths: Dict[str, str],
+                                               logger: 'Logger',
+                                               race: bool = True,
+                                               ) -> Optional[bool]:
+    """
+    Add a reaction to the T3 kinetics library.
+
+    Args:
+        reaction ('ARCReaction'): The reaction to add to the T3 library.
+        source_library_path (str): The path to the source library from which the species is added.
+        shared_library_name (str): The name of an RMG database library shared between T3 projects.
+        paths (Dict[str, str]): T3's dictionary of paths.
+        logger (Logger): Instance of T3's Logger class.
+        race (bool, optional): Whether to take measures to avoid a race condition when appending to the library.
+
+    Returns:
+        bool: True if the reaction was added successfully, False if not. None if a race condition was met.
+    """
     if os.path.isdir(source_library_path):
         source_library_path = os.path.join(source_library_path, 'reactions.py')
     added = False
@@ -311,12 +395,16 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                          f'Check whether it is safe to delete the {race_path} file to continue.')
             return False
     from_lib, to_lib = KineticsLibrary(), KineticsLibrary()
+    logger.error(f'loading from_lib from {source_library_path}')
     from_lib.load(path=source_library_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     if os.path.isfile(to_lib_rxns_path):
+        logger.error(f'loading to_lib from {to_lib_rxns_path}')
         to_lib.load(path=to_lib_rxns_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     copied_rxn = None
     for entry in from_lib.entries.values():
+        logger.error(f'Checking if {reaction.label} is isomorphic to {entry.label}')
         if is_reaction_isomorphic(reaction, entry.item):
+            logger.error(f'Reaction isomorphic to {reaction.label}.')
             to_lib = add_entry_to_library(entry=entry,
                                           to_lib=to_lib,
                                           lib_type='kinetics',
@@ -335,11 +423,11 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                     get_rxn_composition(entry.item) == pes_formula and \
                         (entry.item.kinetics.is_pdep() or copied_rxn.elementary_high_p):
                     to_lib = add_entry_to_library(entry=entry,
-                                                to_lib=to_lib,
-                                                lib_type='kinetics',
-                                                library_name=shared_library_name,
-                                                logger=logger,
-                                                )
+                                                  to_lib=to_lib,
+                                                  lib_type='kinetics',
+                                                  library_name=shared_library_name,
+                                                  logger=logger,
+                                                  )
     to_lib.save(path=to_lib_rxns_path)
     lift_race_condition(race_path)
     logger.warning(f'Added reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}.')
