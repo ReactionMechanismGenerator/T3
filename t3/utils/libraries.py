@@ -311,9 +311,10 @@ def _add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
                          )
             added = True
             break
-    to_lib.save(path=to_lib_path)
+    if added:
+        to_lib.save(path=to_lib_path)
+        logger.warning(f'Added species {species.label} to the shared T3 thermo library {shared_library_name}.')
     lift_race_condition(race_path)
-    logger.warning(f'Added species {species.label} to the shared T3 thermo library {shared_library_name}.')
     return added
 
 
@@ -428,9 +429,10 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                                                   library_name=shared_library_name,
                                                   logger=logger,
                                                   )
-    to_lib.save(path=to_lib_rxns_path)
+    if added:
+        to_lib.save(path=to_lib_rxns_path)
+        logger.warning(f'Added reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}.')
     lift_race_condition(race_path)
-    logger.warning(f'Added reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}.')
     return added
 
 
@@ -455,6 +457,8 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
                                                            for spc in reaction.p_species],
                                                 products=[Species(molecule=[spc.mol.copy(deep=True)])
                                                           for spc in reaction.r_species])
+    print(f'rxn: {rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True)}')
+    print(f'rxn: {flipped_rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)}')
     return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True) or \
               rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)
 
