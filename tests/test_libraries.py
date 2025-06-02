@@ -157,11 +157,7 @@ def test_get_rxn_composition():
     rxn = Reaction(reactants=[Species(label='C2H4', smiles='C=C'), Species(label='OH', smiles='[OH]')],
                    products=[Species(label='C2H3', smiles='C=[CH]'), Species(label='H2O', smiles='O')])
     pes_composition = libraries.get_rxn_composition(reaction=rxn)
-    print(pes_composition)
-    assert pes_composition == {
-        'reactants': {'C2H4': 1, 'OH': 1},
-        'products': {'C2H3': 1, 'H2O': 1}
-    }
+    assert pes_composition == {'C': 2, 'H': 5, 'O': 1}
 
 
 
