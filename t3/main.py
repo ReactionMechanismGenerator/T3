@@ -883,12 +883,10 @@ class T3(object):
             for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
                 reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
                 if self.reaction_requires_refinement(reaction):
-                    self.logger.info(f'\n\n+++ 880 reaction: {reaction} requires refinement')
                     num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
                     reason = f'(i {self.iteration}) the {num}most sensitive reaction for {observable_label}'
                     if self.t3['sensitivity']['compute_kinetics']:
                         key = self.add_reaction(reaction=reaction, reasons=reason)
-                        self.logger.info(f'+Adding reaction {reaction} with key {key} to reactions.')
                         if key is not None:
                             reaction_keys.append(key)
 
