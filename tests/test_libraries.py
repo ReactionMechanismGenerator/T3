@@ -165,7 +165,7 @@ def test_is_reaction_isomorphic():
 
     rmg_rxn_2 = Reaction(reactants=[Species(label='C2H4', smiles='C=C'), Species(label='H', smiles='[H]')],
                     products=[Species(label='C2H3', smiles='C=[CH]'), Species(label='H2', smiles='[H][H]')])
-    assert not libraries.is_reaction_isomorphic(reaction=arc_rxn_1, rmg_reaction=rmg_rxn_2)
+    assert libraries.is_reaction_isomorphic(reaction=arc_rxn_1, rmg_reaction=rmg_rxn_2)
 
 
 def test_get_rxn_composition():
