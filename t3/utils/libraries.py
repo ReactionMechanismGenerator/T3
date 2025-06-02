@@ -496,15 +496,16 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
     """
     if logger:
         logger.info(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label}')
-    if is_species_list_isomorphic(reaction.r_species, rmg_reaction.reactants) and \
-       is_species_list_isomorphic(reaction.p_species, rmg_reaction.products):
+    reactants, products = reaction.get_reactants_and_products(arc=True, return_copies=True)
+    if is_species_list_isomorphic(reactants, rmg_reaction.reactants) and \
+       is_species_list_isomorphic(products, rmg_reaction.products):
         if logger:
             logger.info(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} ')
         return True
     if logger:
         logger.info(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
-    if is_species_list_isomorphic(reaction.r_species, rmg_reaction.products) and \
-       is_species_list_isomorphic(reaction.p_species, rmg_reaction.reactants):
+    if is_species_list_isomorphic(reactants, rmg_reaction.products) and \
+       is_species_list_isomorphic(products, rmg_reaction.reactants):
         if logger:
             logger.info(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
         return True

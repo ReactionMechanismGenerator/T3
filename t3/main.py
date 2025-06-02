@@ -51,7 +51,9 @@ from t3.common import (DATA_BASE_PATH,
                        VALID_CHARS,
                        delete_root_rmg_log,
                        get_species_by_label,
-                       time_lapse)
+                       populate_r_p_species_in_arc_reaction,
+                       time_lapse,
+                       )
 from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner
 from t3.schema import InputBase
@@ -579,8 +581,9 @@ class T3(object):
         if self.candidate_kinetics_libraries and 'reactions' in arc_kwargs and arc_kwargs['reactions']:
             self.logger.warning(f'Found candidate libs: {self.candidate_kinetics_libraries}')
             for rxn in arc_kwargs['reactions']:
+                full_arc_rxn = populate_r_p_species_in_arc_reaction(reaction=rxn, species=arc_kwargs['species'])
                 for candidate_lib in self.candidate_kinetics_libraries:
-                    added = add_reaction_from_candidate_lib_to_t3_lib(reaction=rxn,
+                    added = add_reaction_from_candidate_lib_to_t3_lib(reaction=full_arc_rxn,
                                                                       source_library_path=candidate_lib,
                                                                       shared_library_name=self.t3['options']['shared_library_name'],
                                                                       paths=self.paths,
