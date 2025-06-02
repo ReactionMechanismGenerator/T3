@@ -412,13 +412,18 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
             added = True
             break
     # If the copied reaction is PDep, add the entire PES to the library.
+    logger.warning(f'copied_rxn: {copied_rxn}, kinetics: {copied_rxn.kinetics if copied_rxn else None}, ')
     if copied_rxn is not None and copied_rxn.kinetics is not None:
+        logger.info(f'pdep: {copied_rxn.kinetics.is_pdep()}, elementary_high_p: {copied_rxn.elementary_high_p}')
         if copied_rxn.kinetics.is_pdep() or copied_rxn.elementary_high_p:
             pes_formula = get_rxn_composition(copied_rxn)
+            logger.info(f'pes: {pes_formula}')
             for entry in from_lib.entries.values():
                 if entry.item is not copied_rxn and \
                     get_rxn_composition(entry.item) == pes_formula and \
                         (entry.item.kinetics.is_pdep() or copied_rxn.elementary_high_p):
+                    logger.error(f'Adding reaction {entry.label} to the shared T3 kinetics library '
+                                f'because it is part of the same PES as {reaction.label}.')
                     to_lib = add_entry_to_library(entry=entry,
                                                   to_lib=to_lib,
                                                   lib_type='kinetics',
