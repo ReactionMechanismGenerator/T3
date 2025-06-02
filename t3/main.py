@@ -562,9 +562,7 @@ class T3(object):
             dict: The updated ARC arguments dictionary.
         """
         species_to_remove, reactions_to_remove = list(), list()
-        self.logger.warning('++++ Processing candidate thermo and kinetics libraries')
         if self.candidate_thermo_libraries and 'species' in arc_kwargs and arc_kwargs['species']:
-            self.logger.warning(f'Found candidate libs: {self.candidate_thermo_libraries}')
             for spc in arc_kwargs['species']:
                 for candidate_lib in self.candidate_thermo_libraries:
                     added = add_species_from_candidate_lib_to_t3_lib(species=spc,
@@ -575,11 +573,8 @@ class T3(object):
                     if added and not species_participates_in_arc_reactions(species=spc, reactions=arc_kwargs['reactions']):
                         self.logger.info(f'Candidate Species {spc.label} was directly added to the T3 thermo library from {candidate_lib}.')
                         species_to_remove.append(spc)
-            self.logger.warning(f'Removed species: {species_to_remove}')
-            self.logger.warning(f'Species sent to ARC: {[s.label for s in arc_kwargs["species"]]}')
 
         if self.candidate_kinetics_libraries and 'reactions' in arc_kwargs and arc_kwargs['reactions']:
-            self.logger.warning(f'Found candidate libs: {self.candidate_kinetics_libraries}')
             for rxn in arc_kwargs['reactions']:
                 full_arc_rxn = populate_r_p_species_in_arc_reaction(reaction=rxn, species=arc_kwargs['species'])
                 for candidate_lib in self.candidate_kinetics_libraries:
@@ -593,11 +588,8 @@ class T3(object):
                         self.logger.info(f'Candidate Reaction {label} was directly added to the T3 kinetics library from {candidate_lib}.')
                         reactions_to_remove.append(rxn)
             arc_kwargs['reactions'] = [rxn for rxn in arc_kwargs['reactions'] if rxn not in reactions_to_remove]
-            self.logger.warning(f'Removed reactions: {reactions_to_remove}')
-            self.logger.warning(f'Reactions sent to ARC: {[r.label for r in arc_kwargs["reactions"]]}')
             for spc in arc_kwargs['species']:
                 if not species_participates_in_arc_reactions(species=spc, reactions=arc_kwargs['reactions']) and not spc.compute_thermo:
-                    self.logger.info(f'Removing {spc.label} from ARC input file, no need to compute thermo for it.')
                     species_to_remove.append(spc)
 
         if len(species_to_remove):

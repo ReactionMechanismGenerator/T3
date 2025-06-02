@@ -413,6 +413,7 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
             break
     # If the copied reaction is PDep, add the entire PES to the library.
     logger.warning(f'copied_rxn: {copied_rxn}, kinetics: {copied_rxn.kinetics if copied_rxn else None}, ')
+    logger.info(f'*** copied rxn index: {copied_rxn.index}, label: {copied_rxn.label}, degeneracy: {copied_rxn.degeneracy}, kinetics: {copied_rxn.kinetics}')
     if copied_rxn is not None and copied_rxn.kinetics is not None:
         logger.info(f'pdep: {copied_rxn.kinetics.is_pdep()}, elementary_high_p: {copied_rxn.elementary_high_p}')
         if copied_rxn.kinetics.is_pdep() or copied_rxn.elementary_high_p:
