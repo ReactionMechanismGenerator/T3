@@ -169,9 +169,12 @@ def test_is_reaction_isomorphic():
 
     arc_rxn_3 = ARCReaction(r_species=[ARCSpecies(label='s2_H', smiles='[H]'), ARCSpecies(label='s3_OCHO', smiles='O=C[O]')],
                             p_species=[ARCSpecies(label='s4_H2', smiles='[H][H]'), ARCSpecies(label='s5_CO2', smiles='O=C=O')])
-    rmg_rxn_3 = Reaction(reactants=[Species(smiles='[H][H]'), Species(smiles='O=C=O')],
-                         products=[Species(smiles='[H]'), Species(smiles='O=C[O]')])
-    assert libraries.is_reaction_isomorphic(reaction=arc_rxn_3, rmg_reaction=rmg_rxn_3)
+    rmg_rxn_3a = Reaction(reactants=[Species(smiles='[H]'), Species(smiles='O=C[O]')],
+                          products=[Species(smiles='[H][H]'), Species(smiles='O=C=O')])
+    rmg_rxn_3b = Reaction(reactants=[Species(smiles='[H][H]'), Species(smiles='O=C=O')],
+                          products=[Species(smiles='[H]'), Species(smiles='O=C[O]')])
+    assert libraries.is_reaction_isomorphic(reaction=arc_rxn_3, rmg_reaction=rmg_rxn_3a)
+    assert libraries.is_reaction_isomorphic(reaction=arc_rxn_3, rmg_reaction=rmg_rxn_3b)
 
 def test_get_rxn_composition():
     """Test getting the reaction composition from a Chemkin file."""
