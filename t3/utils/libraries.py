@@ -403,8 +403,10 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
         to_lib.load(path=to_lib_rxns_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     copied_rxn = None
     for entry in from_lib.entries.values():
-        logger.error(f'Checking if {reaction.label} is isomorphic to {entry.label}')
-        if is_reaction_isomorphic(reaction, entry.item, logger):
+        logger.error(f'Checking if {reaction.label} is isomorphic to {entry.label} (calling iso!!)')
+        iso = is_reaction_isomorphic(reaction, entry.item, logger)
+        print(f'iso = {iso}')
+        if iso:
             logger.error(f'Reaction isomorphic to {reaction.label}.')
             to_lib = add_entry_to_library(entry=entry,
                                           to_lib=to_lib,
