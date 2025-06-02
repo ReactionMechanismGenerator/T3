@@ -1378,7 +1378,9 @@ class T3(object):
                 self.logger.debug(f'Could not generate a Chemkin label for reaction {reaction}. Got:\n{e}')
 
             rxn_key = len(list(self.reactions.keys()))
+            self.logger.warning(f'\n\n+++ 1381 reaction: {reaction} requires refinement due to uncertainty in kinetics.\n')
             for spc in reaction.reactants + reaction.products:
+                self.logger.info(f'Adding species {spc.label} to T3 species list for reaction {reaction}.')
                 self.add_species(species=spc, reasons=f'(i {self.iteration}) Participates in a reaction for which '
                                                       f'a rate coefficient is computed.')
 
