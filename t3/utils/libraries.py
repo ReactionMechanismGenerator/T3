@@ -544,5 +544,5 @@ def get_rxn_composition(reaction: Reaction) -> Dict[str, int]:
     """
     pes_composition = Counter(atom.element.symbol
                               for reactant in reaction.reactants
-                              for atom in reactant.molecule[0].get_atoms())
+                              for atom in reactant.molecule[0].atoms())
     return dict(pes_composition)
