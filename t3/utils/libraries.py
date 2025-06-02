@@ -436,7 +436,7 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
     return added
 
 
-def is_species_list_isomorphic(arc_species_list: List[ARCSpecies],
+def is_species_list_isomorphic(arc_species_list: List['ARCSpecies'],
                                rmg_species_list: List[Species],
                                ) -> bool:
     """
@@ -471,7 +471,7 @@ def is_species_list_isomorphic(arc_species_list: List[ARCSpecies],
     return backtrack(0)
 
 
-def is_reaction_isomorphic(reaction: ARCReaction,
+def is_reaction_isomorphic(reaction: 'ARCReaction',
                            rmg_reaction: Reaction,
                            ) -> bool:
     """
