@@ -9,13 +9,14 @@ import os
 import shutil
 
 from rmgpy.data.thermo import ThermoLibrary
+from rmgpy.reaction import Reaction
 from rmgpy.species import Species
 from rmgpy.thermo import ThermoData
 from rmgpy.statmech import Conformer, IdealGasTranslation, NonlinearRotor, HarmonicOscillator
 
 from t3.common import TEST_DATA_BASE_PATH
 from tests.common import run_minimal
-from t3.utils.libraries import add_to_rmg_libraries
+import t3.utils.libraries as libraries
 
 
 def test_add_to_rmg_library():
@@ -111,10 +112,10 @@ def test_add_to_rmg_library():
     t3.set_paths()
     t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
     t3.paths['T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
-    add_to_rmg_libraries(library_name=t3.t3['options']['library_name'],
-                         shared_library_name=t3.t3['options']['shared_library_name'],
-                         paths=t3.paths,
-                         logger=t3.logger)
+    libraries.add_to_rmg_libraries(library_name=t3.t3['options']['library_name'],
+                                   shared_library_name=t3.t3['options']['shared_library_name'],
+                                   paths=t3.paths,
+                                   logger=t3.logger)
     with open(t3.paths['T3 thermo lib'], 'r') as f:
         lines = f.readlines()
     for line in ["        H298 = (-92,'kcal/mol'),\n",
@@ -138,10 +139,10 @@ def test_add_to_rmg_library():
     t3.set_paths()
     t3.paths['ARC thermo lib'] = os.path.join(libraries_path, 'ARC_library.py')
     t3.paths['T3 thermo lib'] = os.path.join(libraries_path, 'RMG_library.py')
-    add_to_rmg_libraries(library_name=t3.t3['options']['library_name'],
-                         shared_library_name=t3.t3['options']['shared_library_name'],
-                         paths=t3.paths,
-                         logger=t3.logger)
+    libraries.add_to_rmg_libraries(library_name=t3.t3['options']['library_name'],
+                                   shared_library_name=t3.t3['options']['shared_library_name'],
+                                   paths=t3.paths,
+                                   logger=t3.logger)
     with open(t3.paths['T3 thermo lib'], 'r') as f:
         lines = f.readlines()
     count = 0
@@ -149,6 +150,19 @@ def test_add_to_rmg_library():
         if 'entry(' in line:
             count += 1
     assert count == 3
+
+
+def test_get_rxn_composition():
+    """Test getting the reaction composition from a Chemkin file."""
+    rxn = Reaction(reactants=[Species(label='C2H4', smiles='C=C'), Species(label='OH', smiles='[OH]')],
+                   products=[Species(label='C2H3', smiles='C=[CH]'), Species(label='H2O', smiles='O')])
+    pes_composition = libraries.get_rxn_composition(reaction=rxn)
+    print(pes_composition)
+    assert pes_composition == {
+        'reactants': {'C2H4': 1, 'OH': 1},
+        'products': {'C2H3': 1, 'H2O': 1}
+    }
+
 
 
 def teardown_module():
