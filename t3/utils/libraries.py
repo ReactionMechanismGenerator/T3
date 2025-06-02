@@ -492,7 +492,6 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
     Returns:
         bool: True if the reactions are isomorphic, False otherwise.
     """
-    raise ValueError
     logger.info(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label}')
     if is_species_list_isomorphic(reaction.r_species, rmg_reaction.reactants) and \
        is_species_list_isomorphic(reaction.p_species, rmg_reaction.products):
