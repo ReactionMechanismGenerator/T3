@@ -404,7 +404,7 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
     copied_rxn = None
     for entry in from_lib.entries.values():
         logger.error(f'Checking if {reaction.label} is isomorphic to {entry.label}')
-        if is_reaction_isomorphic(reaction, entry.item):
+        if is_reaction_isomorphic(reaction, entry.item, logger):
             logger.error(f'Reaction isomorphic to {reaction.label}.')
             to_lib = add_entry_to_library(entry=entry,
                                           to_lib=to_lib,
@@ -472,7 +472,7 @@ def is_species_list_isomorphic(arc_species_list: List['ARCSpecies'],
 
 
 def is_reaction_isomorphic(reaction: 'ARCReaction',
-                           rmg_reaction: Reaction,
+                           rmg_reaction: Reaction, logger,
                            ) -> bool:
     """
     Check if an ARC reaction is isomorphic to an RMG reaction.
@@ -490,15 +490,15 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
     Returns:
         bool: True if the reactions are isomorphic, False otherwise.
     """
-    print(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label}')
+    logger.info(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label}')
     if is_species_list_isomorphic(reaction.r_species, rmg_reaction.reactants) and \
        is_species_list_isomorphic(reaction.p_species, rmg_reaction.products):
-        print(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} ')
+        logger.info(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} ')
         return True
-    print(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
+    logger.info(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
     if is_species_list_isomorphic(reaction.r_species, rmg_reaction.products) and \
        is_species_list_isomorphic(reaction.p_species, rmg_reaction.reactants):
-        print(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
+        logger.info(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
         return True
     return False
 
