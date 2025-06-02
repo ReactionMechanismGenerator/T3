@@ -258,7 +258,7 @@ def add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
                                                           )
         if added is not None:
             return added
-        logger.warning(f'Failed to add species {species.label} to the shared T3 thermo library {shared_library_name}. '
+        logger.debug(f'Failed to add species {species.label} to the shared T3 thermo library {shared_library_name}. '
                        f'Retrying in {sleep_time} seconds...')
         time.sleep(sleep_time)
         counter -= 1
@@ -313,7 +313,7 @@ def _add_species_from_candidate_lib_to_t3_lib(species: 'ARCSpecies',
             break
     if added:
         to_lib.save(path=to_lib_path)
-        logger.warning(f'Added species {species.label} to the shared T3 thermo library {shared_library_name}.')
+        logger.info(f'Added species {species.label} from candidate library to the shared T3 thermo library.')
     lift_race_condition(race_path)
     return added
 
@@ -351,7 +351,7 @@ def add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                                                            )
         if added is not None:
             return added
-        logger.warning(f'Failed to add reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}. '
+        logger.debug(f'Failed to add reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}. '
                        f'Retrying in {sleep_time} seconds...')
         time.sleep(sleep_time)
         counter -= 1
@@ -396,20 +396,12 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                          f'Check whether it is safe to delete the {race_path} file to continue.')
             return False
     from_lib, to_lib = KineticsLibrary(), KineticsLibrary()
-    logger.error(f'loading from_lib from {source_library_path}')
     from_lib.load(path=source_library_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     if os.path.isfile(to_lib_rxns_path):
-        logger.error(f'loading to_lib from {to_lib_rxns_path}')
         to_lib.load(path=to_lib_rxns_path, local_context=KINETICS_LOCAL_CONTEXT, global_context=dict())
     copied_rxn = None
     for entry in from_lib.entries.values():
-        logger.error(f'Checking if {reaction.label} is isomorphic to {entry.label} (calling iso!!)')
-        logger.info(f'ARCReaction: {reaction.as_dict()}')
-        logger.info(f'RMG reaction: {entry.item.__repr__()}')
-        iso = is_reaction_isomorphic(reaction, entry.item, logger)
-        logger.info(f'iso = {iso}')
-        if iso:
-            logger.error(f'Reaction isomorphic to {reaction.label}.')
+        if is_reaction_isomorphic(reaction, entry.item):
             to_lib = add_entry_to_library(entry=entry,
                                           to_lib=to_lib,
                                           lib_type='kinetics',
@@ -435,7 +427,7 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
                                                   )
     if added:
         to_lib.save(path=to_lib_rxns_path)
-        logger.warning(f'Added reaction {reaction.label} to the shared T3 kinetics library {shared_library_name}.')
+        logger.info(f'Added reaction {reaction.label} from candidate library to the shared T3 kinetics library.')
     lift_race_condition(race_path)
     return added
 
@@ -476,7 +468,7 @@ def is_species_list_isomorphic(arc_species_list: List['ARCSpecies'],
 
 
 def is_reaction_isomorphic(reaction: 'ARCReaction',
-                           rmg_reaction: Reaction, logger=None,
+                           rmg_reaction: Reaction,
                            ) -> bool:
     """
     Check if an ARC reaction is isomorphic to an RMG reaction.
@@ -494,49 +486,14 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
     Returns:
         bool: True if the reactions are isomorphic, False otherwise.
     """
-    if logger:
-        logger.info(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label}')
     reactants, products = reaction.get_reactants_and_products(arc=True, return_copies=True)
     if is_species_list_isomorphic(reactants, rmg_reaction.reactants) and \
        is_species_list_isomorphic(products, rmg_reaction.products):
-        if logger:
-            logger.info(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} ')
         return True
-    if logger:
-        logger.info(f'- Checking if ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
     if is_species_list_isomorphic(reactants, rmg_reaction.products) and \
        is_species_list_isomorphic(products, rmg_reaction.reactants):
-        if logger:
-            logger.info(f'VVV ARC reaction {reaction.label} is isomorphic to RMG reaction {rmg_reaction.label} (flipped)')
         return True
     return False
-
-
-# def is_reaction_isomorphic(reaction: 'ARCReaction',
-#                            rmg_reaction: Reaction,
-#                            ) -> bool:
-#     """
-#     Check if an ARC reaction is isomorphic to an RMG reaction.
-#
-#     Args:
-#         reaction ('ARCReaction'): The ARC reaction to check.
-#         rmg_reaction (Reaction): The RMG reaction to check against.
-#
-#     Returns:
-#         bool: True if the reactions are isomorphic, False otherwise.
-#     """
-#     rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.mol.copy(deep=True)])
-#                                                    for spc in reaction.r_species],
-#                                         products=[Species(molecule=[spc.mol.copy(deep=True)])
-#                                                   for spc in reaction.p_species])
-#     flipped_rmg_rxn_based_on_arc_rxn = Reaction(reactants=[Species(molecule=[spc.mol.copy(deep=True)])
-#                                                            for spc in reaction.p_species],
-#                                                 products=[Species(molecule=[spc.mol.copy(deep=True)])
-#                                                           for spc in reaction.r_species])
-#     print(f'rxn: {rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True)}')
-#     print(f'rxn: {flipped_rmg_rxn_based_on_arc_rxn}, iso: {rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)}')
-#     return rmg_reaction.is_isomorphic(rmg_rxn_based_on_arc_rxn, save_order=True) or \
-#               rmg_reaction.is_isomorphic(flipped_rmg_rxn_based_on_arc_rxn, save_order=True)
 
 
 def get_rxn_composition(reaction: Reaction) -> Dict[str, int]:
