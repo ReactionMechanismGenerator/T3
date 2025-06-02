@@ -412,9 +412,11 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
             added = True
             break
     # If the copied reaction is PDep, add the entire PES to the library.
-    logger.warning(f'copied_rxn: {copied_rxn}, kinetics: {copied_rxn.kinetics if copied_rxn else None}, ')
-    logger.info(f'!!! copied rxn type: {type(copied_rxn.index)}')
-    logger.info(f'*** copied rxn index: {copied_rxn.index}, label: {copied_rxn.label}, degeneracy: {copied_rxn.degeneracy}, kinetics: {copied_rxn.kinetics}')
+    if copied_rxn is not None:
+        logger.warning(f'copied_rxn: {copied_rxn}, kinetics: {copied_rxn.kinetics if copied_rxn else None}, ')
+        logger.info(f'!!! copied rxn type: {type(copied_rxn.index)}')
+        logger.info(f'*** copied rxn index: {copied_rxn.index}, label: {copied_rxn.label}, degeneracy: {copied_rxn.degeneracy}, kinetics: {copied_rxn.kinetics}')
+        logger.info(f'entry: {entry}, entry label: {entry.label}, entry item: {entry.item}, entry kinetics: {entry.kinetics}')
     if copied_rxn is not None and copied_rxn.kinetics is not None:
         logger.info(f'pdep: {copied_rxn.kinetics.is_pdep()}, elementary_high_p: {copied_rxn.elementary_high_p}')
         if copied_rxn.kinetics.is_pdep() or copied_rxn.elementary_high_p:
@@ -493,6 +495,7 @@ def is_reaction_isomorphic(reaction: 'ARCReaction',
     Returns:
         bool: True if the reactions are isomorphic, False otherwise.
     """
+    rmg_reaction = rmg_reaction.copy()
     reactants, products = reaction.get_reactants_and_products(arc=True, return_copies=True)
     if is_species_list_isomorphic(reactants, rmg_reaction.reactants) and \
        is_species_list_isomorphic(products, rmg_reaction.products):
