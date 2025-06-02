@@ -439,7 +439,7 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
 
 
 def is_species_list_isomorphic(arc_species_list: List['ARCSpecies'],
-                               rmg_species_list: List[Species],
+                               rmg_species_list: List[Union[Species, 'ARCSpecies']],
                                ) -> bool:
     """
     Check if two lists of species are isomorphic as multisets.
@@ -449,7 +449,7 @@ def is_species_list_isomorphic(arc_species_list: List['ARCSpecies'],
 
     Args:
         arc_species_list (List[ARCSpecies]): A list of ARCSpecies.
-        rmg_species_list (List[RMGSpecies]): A list of RMGSpecies.
+        rmg_species_list (List[Union[Species, 'ARCSpecies']]): A list of RMG Species or ARCSpecies.
 
     Returns:
         bool: True if the two lists are isomorphic as multisets, False otherwise.

@@ -155,6 +155,16 @@ def test_add_to_rmg_library():
     assert count == 3
 
 
+def test_is_species_list_isomorphic():
+    """Test if two species lists are isomorphic."""
+    arc_species_list = [ARCSpecies(label='C2H4', smiles='C=C'), ARCSpecies(label='OH', smiles='[OH]')]
+    rmg_species_list = [Species(label='C2H4', smiles='C=C'), Species(label='OH', smiles='[OH]')]
+    assert libraries.is_species_list_isomorphic(arc_species_list, rmg_species_list)
+
+    rmg_species_list_2 = [Species(label='C2H4', smiles='C=C'), Species(label='H', smiles='[H]')]
+    assert not libraries.is_species_list_isomorphic(arc_species_list, rmg_species_list_2)
+
+
 def test_is_reaction_isomorphic():
     """Test if two reactions are isomorphic."""
     arc_rxn_1 = ARCReaction(r_species=[ARCSpecies(label='C2H4', smiles='C=C'), ARCSpecies(label='OH', smiles='[OH]')],
