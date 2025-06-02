@@ -14,6 +14,9 @@ from rmgpy.species import Species
 from rmgpy.thermo import ThermoData
 from rmgpy.statmech import Conformer, IdealGasTranslation, NonlinearRotor, HarmonicOscillator
 
+from arc.reaction import ARCReaction
+from arc.species import ARCSpecies
+
 from t3.common import TEST_DATA_BASE_PATH
 from tests.common import run_minimal
 import t3.utils.libraries as libraries
@@ -150,6 +153,19 @@ def test_add_to_rmg_library():
         if 'entry(' in line:
             count += 1
     assert count == 3
+
+
+def test_is_reaction_isomorphic():
+    """Test if two reactions are isomorphic."""
+    arc_rxn_1 = ARCReaction(r_species=[ARCSpecies(label='C2H4', smiles='C=C'), ARCSpecies(label='OH', smiles='[OH]')],
+                            p_species=[ARCSpecies(label='C2H3', smiles='C=[CH]'), ARCSpecies(label='H2O', smiles='O')])
+    rmg_rxn_1 = Reaction(reactants=[Species(label='C2H4', smiles='C=C'), Species(label='OH', smiles='[OH]')],
+                         products=[Species(label='C2H3', smiles='C=[CH]'), Species(label='H2O', smiles='O')])
+    assert libraries.is_reaction_isomorphic(reaction=arc_rxn_1, rmg_reaction=rmg_rxn_1)
+
+    rmg_rxn_2 = Reaction(reactants=[Species(label='C2H4', smiles='C=C'), Species(label='H', smiles='[H]')],
+                    products=[Species(label='C2H3', smiles='C=[CH]'), Species(label='H2', smiles='[H][H]')])
+    assert not libraries.is_reaction_isomorphic(reaction=arc_rxn_1, rmg_reaction=rmg_rxn_2)
 
 
 def test_get_rxn_composition():
