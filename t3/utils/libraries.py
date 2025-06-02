@@ -404,8 +404,10 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
     copied_rxn = None
     for entry in from_lib.entries.values():
         logger.error(f'Checking if {reaction.label} is isomorphic to {entry.label} (calling iso!!)')
+        logger.info(f'ARCReaction: {reaction.as_dict()}')
+        logger.info(f'RMG reaction: {entry.item.__repr__()}')
         iso = is_reaction_isomorphic(reaction, entry.item, logger)
-        print(f'iso = {iso}')
+        logger.info(f'iso = {iso}')
         if iso:
             logger.error(f'Reaction isomorphic to {reaction.label}.')
             to_lib = add_entry_to_library(entry=entry,
