@@ -5,11 +5,17 @@ t3 common module
 import datetime
 import os
 import string
-from typing import Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from rmgpy.species import Species
 
 from arc.species.converter import molecules_from_xyz
+
+
+if TYPE_CHECKING:
+    from arc.species import ARCSpecies
+    from arc.reaction import ARCReaction
+
 
 VERSION = '0.1.0'
 
@@ -301,4 +307,26 @@ def get_parameter_from_header(header: str) -> Optional[str]:
                 break
         text.append(header[i])
     return ''.join(text)
+
+def populate_r_p_species_in_arc_reaction(reaction: 'ARCReaction',
+                                         species: List['ARCSpecies'],
+                                         ) -> 'ARCReaction':
+    """
+    Populate the reactants and products of an ARCReaction with ARCSpecies objects.
+
+    Args:
+        reaction (ARCReaction): The ARCReaction object to populate.
+        species (List[ARCSpecies]): A list of ARCSpecies objects.
+
+    Returns:
+        ARCReaction: The populated ARCReaction object.
+    """
+    if len(reaction.r_species) and len(reaction.p_species):
+        return reaction
+    for arc_species in species:
+        if arc_species.label in reaction.reactants and arc_species not in reaction.r_species:
+            reaction.r_species.append(arc_species)
+        if arc_species.label in reaction.products and arc_species not in reaction.p_species:
+            reaction.p_species.append(arc_species)
+    return reaction
 
