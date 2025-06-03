@@ -33,7 +33,7 @@ def get_reaction_kinetics(
     if not os.path.exists(species_dict_path):
         raise FileNotFoundError(f"Species dictionary file not found: {species_dict_path}")
 
-    chemkin_species_list, chemkin_reaction_list = load_chemkin_file(chemkin_path, species_dict_path)
+    chemkin_species_list, chemkin_reaction_list = load_chemkin_file(chemkin_path, species_dict_path, check_duplicates=False)
 
     for chemkin_reaction in chemkin_reaction_list:
         if reaction.is_isomorphic(other=chemkin_reaction, save_order=True):
