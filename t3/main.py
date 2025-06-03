@@ -588,10 +588,11 @@ class T3(object):
                         label = rxn['label'] if isinstance(rxn, dict) else rxn.label
                         self.logger.info(f'Candidate Reaction {label} was directly added to the T3 kinetics library from {candidate_lib}.')
                         reactions_to_remove.append(rxn)
+                for spc in rxn.r_species + rxn.p_species:
+                    if not species_participates_in_arc_reactions(species=spc, reactions=arc_kwargs['reactions']) \
+                            and not spc.compute_thermo:
+                        species_to_remove.append(spc)
             arc_kwargs['reactions'] = [rxn for rxn in arc_kwargs['reactions'] if rxn not in reactions_to_remove]
-            for spc in arc_kwargs['species']:
-                if not species_participates_in_arc_reactions(species=spc, reactions=arc_kwargs['reactions']) and not spc.compute_thermo:
-                    species_to_remove.append(spc)
 
         if len(species_to_remove):
             arc_kwargs['species'] = [spc for spc in arc_kwargs['species'] if spc not in species_to_remove]
