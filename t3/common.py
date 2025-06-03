@@ -328,5 +328,10 @@ def populate_r_p_species_in_arc_reaction(reaction: 'ARCReaction',
             reaction.r_species.append(arc_species)
         if arc_species.label in reaction.products and arc_species not in reaction.p_species:
             reaction.p_species.append(arc_species)
+    if not len(reaction.r_species) or not len(reaction.p_species):
+        raise ValueError(f"Failed to populate the reactants and products of the reaction {reaction.label}.\n"
+                         f"Reactants: {reaction.reactants}, Products: {reaction.products}.\n"
+                         f"r_species: {[spc.label for spc in reaction.r_species]}, p_species: {[spc.label for spc in reaction.p_species]}\n"
+                         f"Species list: {[spc.label for spc in species]}")
     return reaction
 
