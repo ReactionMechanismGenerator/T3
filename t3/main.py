@@ -530,7 +530,7 @@ class T3(object):
                     species.append(spc)
             arc_kwargs['species'] = species
 
-        arc_kwargs = self.process_candidate_qm_objects(arc_kwargs=arc_kwargs)
+        arc_kwargs = self.process_qm_objects(arc_kwargs=arc_kwargs)
 
         self.logger.info(f'\nRunning ARC for Reactions:\n{[r.label for r in arc_kwargs["reactions"]]}\n\n'
                          f'and species:\n{[spc.label for spc in arc_kwargs["species"]]}\n')
@@ -549,11 +549,12 @@ class T3(object):
         elapsed_time = time_lapse(tic)
         self.logger.info(f'ARC terminated, execution time: {elapsed_time}')
 
-    def process_candidate_qm_objects(self, arc_kwargs: dict) -> dict:
+    def process_qm_objects(self, arc_kwargs: dict) -> dict:
         """
         Check whether any of the species and reactions in the ARC input file
         are already included in the candidate thermo/kinetic libraries.
         If so, add only them to the T3 libraries, and remove them from the ARC input file.
+        Also check that all species in each reaction appear in ARC's species list.
 
         Args:
             arc_kwargs (dict): The ARC arguments dictionary.
@@ -562,7 +563,7 @@ class T3(object):
             dict: The updated ARC arguments dictionary.
         """
         species_to_remove, reactions_to_remove = list(), list()
-        if self.candidate_thermo_libraries and 'species' in arc_kwargs and arc_kwargs['species']:
+        if self.candidate_thermo_libraries and 'species' in arc_kwargs and len(arc_kwargs['species']):
             for spc in arc_kwargs['species']:
                 for candidate_lib in self.candidate_thermo_libraries:
                     added = add_species_from_candidate_lib_to_t3_lib(species=spc,
@@ -1742,6 +1743,7 @@ def species_participates_in_arc_reactions(species: ARCSpecies,
         bool: Whether the species participates in any ARC reaction.
     """
     for reaction in reactions:
-        if species.label in reaction.reactants + reaction.products:
-            return True
+        for rxn_spc in reaction.r_species + reaction.p_species:
+            if species.is_isomorphic(rxn_spc):
+                return True
     return False
