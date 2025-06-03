@@ -79,12 +79,11 @@ def add_to_rmg_libraries(library_name: str,
                         if not os.path.isdir(os.path.dirname(to_lib_path)):
                             os.makedirs(os.path.dirname(to_lib_path))
                         shutil.copy(arc_lib_path, to_lib_path)
-                else:
-                    if arc_lib_path and to_lib_path is not None:
+                elif token == 'kinetics':
+                    if os.path.isdir(arc_lib_path) and to_lib_path is not None:
                         if not os.path.isdir(to_lib_path):
                             os.makedirs(to_lib_path, exist_ok=True)
-
-                        for file_name in os.listdir(arc_lib_path):
+                        for file_name in ['reactions.py', 'dictionary.txt']:
                             src = os.path.join(arc_lib_path, file_name)
                             if os.path.isfile(src):
                                 shutil.copy(src, os.path.join(to_lib_path, file_name))
