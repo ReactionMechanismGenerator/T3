@@ -421,28 +421,27 @@ def _add_reaction_from_candidate_lib_to_t3_lib(reaction: 'ARCReaction',
             added = True
             break
     # If the copied reaction is PDep, add the entire PES to the library.
+    logger.info(f'++ Check for additional rxns on the same PES as {reaction.label} ++')
     if copied_rxn is not None:
         logger.warning(f'copied_rxn: {copied_rxn}, kinetics: {copied_rxn.kinetics if copied_rxn else None}, ')
         logger.info(f'!!! copied rxn type: {type(copied_rxn)}')
         logger.info(f'*** copied rxn index: {copied_rxn.index}, label: {copied_rxn.label}, degeneracy: {copied_rxn.degeneracy}, kinetics: {copied_rxn.kinetics}')
         logger.info(f'entry: {entry}, entry label: {entry.label}, entry item: {entry.item}')
-    if copied_rxn is not None and copied_rxn.kinetics is not None:
-        logger.info(f'pdep: {copied_rxn.kinetics.is_pdep()}, elementary_high_p: {copied_rxn.elementary_high_p}')
-        if copied_rxn.kinetics.is_pdep() or copied_rxn.elementary_high_p:
-            pes_formula = get_rxn_composition(copied_rxn)
-            logger.info(f'pes: {pes_formula}')
-            for entry in from_lib.entries.values():
-                if entry.item is not copied_rxn and \
-                    get_rxn_composition(entry.item) == pes_formula and \
-                        (entry.item.kinetics.is_pdep() or copied_rxn.elementary_high_p):
-                    logger.error(f'Adding reaction {entry.label} to the shared T3 kinetics library '
-                                f'because it is part of the same PES as {reaction.label}.')
-                    to_lib = add_entry_to_library(entry=entry,
-                                                  to_lib=to_lib,
-                                                  lib_type='kinetics',
-                                                  library_name=shared_library_name,
-                                                  logger=logger,
-                                                  )
+    if copied_rxn is not None:
+        pes_formula = get_rxn_composition(copied_rxn)
+        logger.info(f'pes: {pes_formula}')
+        for entry in from_lib.entries.values():
+            if entry.item is not copied_rxn and \
+                get_rxn_composition(entry.item) == pes_formula and \
+                    (entry.item.kinetics.is_pdep() or copied_rxn.elementary_high_p):
+                logger.error(f'Adding reaction {entry.label} to the shared T3 kinetics library '
+                             f'because it is part of the same PES as {reaction.label}.')
+                to_lib = add_entry_to_library(entry=entry,
+                                              to_lib=to_lib,
+                                              lib_type='kinetics',
+                                              library_name=shared_library_name,
+                                              logger=logger,
+                                              )
     if added:
         to_lib.save(path=to_lib_rxns_path)
         logger.info(f'Added reaction {reaction.label} from candidate library to the shared T3 kinetics library.')
