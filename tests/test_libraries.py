@@ -194,7 +194,6 @@ def test_get_rxn_composition():
     assert pes_composition == {'C': 2, 'H': 5, 'O': 1}
 
 
-
 def teardown_module():
     """teardown any state that was previously set up."""
     path = os.path.join(TEST_DATA_BASE_PATH, 'libraries')
