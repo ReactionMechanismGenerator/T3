@@ -577,7 +577,7 @@ class T3(object):
 
         if self.candidate_kinetics_libraries and 'reactions' in arc_kwargs and arc_kwargs['reactions']:
             for rxn in arc_kwargs['reactions']:
-                full_arc_rxn = populate_r_p_species_in_arc_reaction(reaction=rxn, species=arc_kwargs['species'])
+                full_arc_rxn = populate_r_p_species_in_arc_reaction(reaction=rxn, t3_species=self.species)
                 for candidate_lib in self.candidate_kinetics_libraries:
                     added = add_reaction_from_candidate_lib_to_t3_lib(reaction=full_arc_rxn,
                                                                       source_library_path=candidate_lib,
@@ -1307,11 +1307,12 @@ class T3(object):
         key = self.get_species_key(species=species)
         if key is None:
             key = len(list(self.species.keys()))
-            qm_species = get_species_with_qm_label(species=species, key=key, arc_species=True)
+            arc_species = get_species_with_qm_label(species=species, key=key, arc_species=True)
             self.species[key] = {'RMG label': species.label,
                                  'Chemkin label': species.to_chemkin(),
-                                 'QM label': qm_species.label,
+                                 'QM label': arc_species.label,
                                  'object': species,
+                                 'ARCSpecies': arc_species,
                                  'reasons': reasons,
                                  'converged': None,
                                  'iteration': self.iteration,

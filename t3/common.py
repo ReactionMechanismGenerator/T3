@@ -309,21 +309,22 @@ def get_parameter_from_header(header: str) -> Optional[str]:
     return ''.join(text)
 
 def populate_r_p_species_in_arc_reaction(reaction: 'ARCReaction',
-                                         species: List['ARCSpecies'],
+                                         t3_species: Dict[int, dict],
                                          ) -> 'ARCReaction':
     """
     Populate the reactants and products of an ARCReaction with ARCSpecies objects.
 
     Args:
         reaction (ARCReaction): The ARCReaction object to populate.
-        species (List[ARCSpecies]): A list of ARCSpecies objects.
+        t3_species (List[dict]): The t3.species dictionary.
 
     Returns:
         ARCReaction: The populated ARCReaction object.
     """
     if len(reaction.r_species) and len(reaction.p_species):
         return reaction
-    for arc_species in species:
+    for species_dict in t3_species.values():
+        arc_species = species_dict['ARCSpecies']
         if arc_species.label in reaction.reactants and arc_species not in reaction.r_species:
             reaction.r_species.append(arc_species)
         if arc_species.label in reaction.products and arc_species not in reaction.p_species:
@@ -332,6 +333,6 @@ def populate_r_p_species_in_arc_reaction(reaction: 'ARCReaction',
         raise ValueError(f"Failed to populate the reactants and products of the reaction {reaction.label}.\n"
                          f"Reactants: {reaction.reactants}, Products: {reaction.products}.\n"
                          f"r_species: {[spc.label for spc in reaction.r_species]}, p_species: {[spc.label for spc in reaction.p_species]}\n"
-                         f"Species list: {[spc.label for spc in species]}")
+                         f"Species list: {[spc['ARCSpecies'].label for spc in t3_species.values()]}")
     return reaction
 
