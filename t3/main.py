@@ -1546,7 +1546,7 @@ class T3(object):
                 if 'kinetics =' in line and r_correct and p_correct:
                     comment = line.split('comment=')[-1]
                     j = i
-                    while '"""),' not in line:
+                    while 'reaction' not in line and 'network' not in line and j + 1 < len(lines):
                         j += 1
                         comment += lines[j]
                     if 'Estimated' in comment and 'Exact match found' not in comment:
