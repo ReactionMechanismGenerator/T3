@@ -11,7 +11,7 @@ from rmgpy.species import Species
 
 from arc.species.converter import molecules_from_xyz
 
-VERSION = '0.1.0'
+VERSION = '0.2.0'
 
 t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolute path to the T3 folder
 DATA_BASE_PATH = os.path.join(t3_path, 'data')
