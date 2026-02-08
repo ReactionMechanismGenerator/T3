@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "T3"
+dynamic = ["version"]
+description = "The Tandem Tool (T3) for automated chemical kinetic model development"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "pydantic",
+    "pyyaml",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "t3.common.VERSION"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["t3*"]
