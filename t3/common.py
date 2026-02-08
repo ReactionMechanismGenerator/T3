@@ -2,21 +2,23 @@
 t3 common module
 """
 
+import re
 import datetime
 import os
 import string
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Tuple, Union
 
-from rmgpy.species import Species
+from arc.species.perceive import perceive_molecule_from_xyz
 
-from arc.species.converter import molecules_from_xyz
+from t3.chem import T3Species
+
 
 VERSION = '0.2.0'
 
 t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolute path to the T3 folder
 DATA_BASE_PATH = os.path.join(t3_path, 'data')
 TEST_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'data')
-SIMULATE_TEST_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'test_simulate_adapters', 'data')
+SIMULATE_TEST_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'test_simulate', 'data')
 EXAMPLES_BASE_PATH = os.path.join(t3_path, 'examples')
 SCRATCH_BASE_PATH = os.path.join(t3_path, 'tests', 'scratch')
 IPYTHON_SIMULATOR_EXAMPLES_PATH = os.path.join(t3_path, 'ipython', 'simulator_adapter_examples')
@@ -25,21 +27,21 @@ VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 
 def get_species_by_label(label: str,
-                         species_list: list,
-                         ) -> Optional[Species]:
+                         species_list: list[T3Species],
+                         ) -> T3Species | None:
     """
     Get a species from a list of species by its label.
 
     Args:
         label (str): A species label.
-        species_list (list): Entries are RMG Species objects.
+        species_list (list): Entries are T3 Species objects.
 
     Returns:
-        Optional[Species]: The corresponding species object instance from the species_list.
-                           Returns ``None`` if no species was found.
+        Optional[T3Species]: The corresponding species object instance from the species_list.
+                              Returns ``None`` if no species was found.
     """
     for species in species_list:
-        if species.label == label or species.to_chemkin() == label:
+        if species.label == label or to_chemkin_label(species) == label:
             return species
     if '(' in label and ')' in label:
         # try by the RMG species index
@@ -47,6 +49,56 @@ def get_species_by_label(label: str,
             if species.index == int(label.split('(')[-1].split(')')[0]):
                 return species
     return None
+
+
+def to_chemkin_label(species: T3Species) -> str:
+    """
+    Return a string identifier for the provided `species` that can be used in a
+    Chemkin file. Although the Chemkin format allows up to 16 characters for a
+    species identifier, this function uses a maximum of 10 to ensure that all
+    reaction equations fit in the maximum limit of 52 characters, compliant with the RMG convention.
+
+    Args:
+        species (T3Species): A T3 Species object.
+
+    Returns:
+        str: A Chemkin-compliant species label.
+    """
+    label = species.label
+    if not getattr(species, 'reactive', True) and 0 < len(label) <= 10:
+        return label
+    index = getattr(species, 't3_index', -1)
+    if index is None:
+        index = getattr(species, 'index', -1)
+    if index is None:
+        index = -1
+
+    if index == -1:
+        if len(label) > 0 and not re.search(r'[^A-Za-z0-9\-_,\(\)\*#.:\[\]]+', label):
+            if len(label) <= 16:
+                return label
+            else:
+                return label
+        elif species.mol is not None:
+            return '{0}'.format(species.mol.get_formula())
+    else:
+        if len(label) > 0 and index >= 0 and not re.search(r'[^A-Za-z0-9\-_,\(\)\*#.:\[\]]+', label):
+            name = '{0}({1:d})'.format(label, index)
+            if len(name) <= 16:
+                return name
+
+        if species.mol is not None:
+            name = '{0}({1:d})'.format(species.mol.get_formula(), index)
+            if len(name) <= 16:
+                return name
+            if index >= 0:
+                if 'X' in name:
+                    name = 'SX({0:d})'.format(index)
+                else:
+                    name = 'S({0:d})'.format(index)
+                if len(name) <= 16:
+                    return name
+    return label
 
 
 def dict_to_str(dictionary: dict,
@@ -83,9 +135,9 @@ def delete_root_rmg_log(project_directory: str) -> None:
         os.remove(rmg_log_path)
 
 
-def get_rmg_species_from_a_species_dict(species_dict: dict,
+def get_species_obj_from_a_species_dict(species_dict: dict,
                                         raise_error: bool = False,
-                                        ) -> Optional[Species]:
+                                        ) -> T3Species | None:
     """
     Get an RMG Species instance that corresponds to a species specified under the rmg.species
     section of the T3 input file (a species dictionary).
@@ -101,19 +153,18 @@ def get_rmg_species_from_a_species_dict(species_dict: dict,
     Returns:
         Species: The corresponding RMG species instance.
     """
-    species = None
-    errored = False
+    species, errored = None, False
     if species_dict['adjlist'] is not None:
-        species = Species(label=species_dict['label']).from_adjacency_list(species_dict['adjlist'])
+        species = T3Species(label=species_dict['label'], adjlist=species_dict['adjlist'])
     elif species_dict['smiles'] is not None:
-        species = Species(label=species_dict['label'], smiles=species_dict['smiles'])
+        species = T3Species(label=species_dict['label'], smiles=species_dict['smiles'])
     elif species_dict['inchi'] is not None:
-        species = Species(label=species_dict['label'], inchi=species_dict['inchi'])
+        species = T3Species(label=species_dict['label'], inchi=species_dict['inchi'])
     elif species_dict['xyz'] is not None:
         for xyz in species_dict['xyz']:
-            mol_bo = molecules_from_xyz(xyz=xyz)[1]
-            if mol_bo is not None:
-                species = Species(label=species_dict['label']).from_adjacency_list(mol_bo.to_adjacency_list())
+            mol = perceive_molecule_from_xyz(xyz=xyz)
+            if mol is not None:
+                species = T3Species(label=species_dict['label'], mol=mol)
                 break
         else:
             errored = True
@@ -271,7 +322,7 @@ def get_observable_label_from_header(header: str) -> str:
     return header.split('[')[1].split(']')[0]
 
 
-def get_parameter_from_header(header: str) -> Optional[str]:
+def get_parameter_from_header(header: str) -> str | None:
     """
     Get the parameter label from a header in an RMG SA csv file.
     parameter extraction examples:
@@ -301,4 +352,3 @@ def get_parameter_from_header(header: str) -> Optional[str]:
                 break
         text.append(header[i])
     return ''.join(text)
-
