@@ -9,8 +9,11 @@ import shutil
 import time
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from arc.job.local import (_determine_job_id, change_mode, execute_command,
-                           parse_running_jobs_ids, submit_job)
+from arc.job.local import (_determine_job_id,
+                           change_mode,
+                           execute_command,
+                           parse_running_jobs_ids,
+                           submit_job)
 
 from t3.imports import local_t3_path, settings, submit_scripts
 
@@ -409,148 +412,44 @@ def backup_rmg_files(project_directory: str):
                             dst=os.path.join(restart_backup_dir, folder))
 
 
-# def get_names_by_sub_folders(pwd: str) -> List[str]:
-#     """
-#     Get the names of the runs.
-#
-#     Args:
-#         pwd (str): The present working directory.
-#
-#     Returns:
-#         List[str]: the names of all runs.
-#     """
-#     names = list()
-#     for _, folders, _ in os.walk(pwd):
-#         for folder in folders:
-#             if folder[0] == 'x':
-#                 names.append(folder)
-#         # Don't continue to sub folders.
-#         break
-#     return sorted(names)
-#
-#
-# def initialize_rmg_job(names: List[str],   # rewrite for a single RMG job, wait for it to finish, trsh mem if needed
-#                        job_id_yml_path: str,
-#                        logger: 'Logger'
-#                        ) -> Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]:
-#     """
-#     Initialize the RMG job.
-#
-#     Args:
-#         names (List[str]): The run names.
-#         job_id_yml_path (str): The path to the job ID YAML file.
-#         logger (Logger): the T3 Logger object instance.
-#
-#     Returns:
-#         Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]: convergence, status, job_ids.
-#     """
-#     logger.info('\n\ninitializing RMG job...')
-#     convergence, status, job_ids = dict(), dict(), dict()
-#     if os.path.isfile(job_id_yml_path):
-#         job_ids = read_yaml_file(job_id_yml_path)
-#     server_job_ids = check_running_jobs_ids()
-#     for name in names:
-#         if name in job_ids.keys() and job_ids[name] in server_job_ids:
-#             logger.info(f'Job {name} is already running (index {job_ids[name]}).')
-#             convergence[name] = False
-#             continue
-#         logger.info(f'Initializing {name}')
-#         if not os.path.isfile(os.path.join(name, SUBMIT_FILENAME)):
-#             logger.info(f'Writing submit script for {name}')
-#             write_submit_script(name)
-#         if not rmg_job_converged(name):
-#             job_status, job_id = submit_job(name=name, logger=logger)  # note: not writing restart file
-#             convergence[name] = False
-#         else:
-#             logger.info(f'Job {name} already converged, not initializing it')
-#             job_status, job_id = '', 0
-#             convergence[name] = True
-#         status[name] = job_status
-#         job_ids[name] = job_id
-#     save_yaml_file(job_id_yml_path, job_ids)
-#     return convergence, status, job_ids
-#
-#
-# def update_names_and_dicts(names: List[str],
-#                            convergence: Dict[str, bool],
-#                            status: Dict[str, str],
-#                            job_ids: Dict[str, str],
-#                            ) -> Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]:
-#     """
-#     Check whether new folders were added, and update the data dictionaries accordingly.
-#
-#     Args:
-#         names (List[str]): Updated list of job names / folders.
-#         convergence (Dict[str, bool]): convergence.
-#         status (Dict[str, str]): status.
-#         job_ids (Dict[str, str]): job IDs.
-#
-#     Returns:
-#         Tuple[Dict[str, bool], Dict[str, str], Dict[str, str]]: convergence, status, job_ids.
-#     """
-#     for name in names:
-#         if name not in convergence.keys():
-#             convergence[name] = False
-#         if name not in status.keys():
-#             status[name] = ''
-#         if name not in job_ids.keys():
-#             job_ids[name] = 0
-#     return convergence, status, job_ids
-#
-#
-# def write_restart_file(name: str,  # Todo: implement this
-#                        logger: 'Logger',
-#                        ) -> None:
-#     """
-#     Convert an RMG input file into an RMG restart file.
-#
-#     Args:
-#         name (str): The job (folder) name.
-#         logger (Logger): The T3 Logger object instance.
-#     """
-#     restart_string = "restartFromSeed(path='seed')"
-#     rmg_input_path = os.path.join(name, 'input.py')
-#     with open(rmg_input_path, 'r') as f:
-#         content = f.read()
-#     if restart_string not in content:
-#         logger.info(f'Converting the RMG input file of {name} into an RMG restart file')
-#         content = f'{restart_string}\n\n{content}'
-#         with open(rmg_input_path, 'w') as f:
-#             f.write(content)
+def run_arkane_job(input_file: str,
+                   output_directory: str,
+                   plot: bool = False,
+                   logger: Optional['Logger'] = None,
+                   ) -> bool:
+    """
+    Run an Arkane job.
 
+    Args:
+        input_file (str): The path to the Arkane input file.
+        output_directory (str): The path to the output directory.
+        plot (bool, optional): Whether to plot the results.
+        logger (Logger, optional): The logger object.
 
-# Was part of rmg_runner():
-#
-# job_id_yml_path = os.path.join(local_t3_path, 'jobs.yml')
-# convergence, status, job_ids = initialize_rmg_job(names, job_id_yml_path, logger)
-#
-# while any(not conv for conv in convergence.values()):
-#     logger.info('\n\n\nlooping...')
-#     server_job_ids = check_running_jobs_ids()
-#     names = get_names_by_sub_folders(pwd)
-#     convergence, status, job_ids = update_names_and_dicts(names, convergence, status, job_ids)
-#     for name in names:
-#         job_id = job_ids[name]
-#         if job_id not in server_job_ids:
-#             logger.info(f'RMG job {name} {job_id} terminated')
-#             rmg_converged = rmg_job_converged(name)
-#             if rmg_converged:
-#                 logger.info(f'RMG job {name} {job_id} has converged!!!')
-#                 convergence[name] = True
-#                 continue
-#             if os.path.isfile(os.path.join(name, 'RMG.log')):
-#                 logger.info(f'RMG job {name} {job_id} did not converge')
-#                 write_restart_file(name)
-#                 logger.info(f'Restarting RMG job {name}')
-#             else:
-#                 logger.info(f'Running RMG job {name}')
-#             job_status, job_id = submit_job(name=name, logger=logger)
-#             status[name] = job_status
-#             job_ids[name] = job_id
-#         elif rmg_job_converged(name):
-#             convergence[name] = True
-#     currently_running_jobs = list()
-#     logger.info(f'\n\nConvergence: {convergence}\n\n')
-#     save_yaml_file(job_id_yml_path, job_ids)
-#     logger.info(f'Sleeping for {SLEEP_TIME} hours. ZZZ... ZZZ...')
-#     time.sleep(SLEEP_TIME * 60 * 60)
+    Returns:
+        bool: Whether the job was successful.
+    """
+    from arc.statmech.arkane import run_arkane
+
+    # Ensure output directory exists
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+
+    # run_arkane expects the input file to be named 'input.py' inside the directory.
+    target_input = os.path.join(output_directory, 'input.py')
+
+    if os.path.abspath(input_file) != os.path.abspath(target_input):
+        shutil.copyfile(input_file, target_input)
+
+    try:
+        run_arkane(statmech_dir=output_directory)
+    except Exception as e:
+        if logger:
+            logger.error(f'Arkane run failed with error: {e}')
+        return False
+
+    # Check for success by looking for the output file
+    output_file = os.path.join(output_directory, 'output.py')
+    if os.path.isfile(output_file):
+        return True
+    return False
