@@ -7,8 +7,7 @@ import cantera as ct
 import numpy as np
 from typing import List, Optional
 
-from rmgpy.tools.canteramodel import generate_cantera_conditions
-from rmgpy.tools.data import GenericData
+from t3.utils.slim_rmg import generate_cantera_conditions, GenericData
 
 from t3.common import get_observable_label_from_header, get_parameter_from_header
 from t3.logger import Logger
@@ -31,7 +30,7 @@ class CanteraConstantHP(SimulateAdapter):
         observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
         sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
         sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
+        global_observables (Optional[List[str]]): List of global observables ['IDT', 'ESR', 'SL'] used by Cantera adapters.
 
     Attributes:
         all_data (list): List containing the following RMG GenericData objects grouped as a tuple:
@@ -40,7 +39,7 @@ class CanteraConstantHP(SimulateAdapter):
         cantera_reactor_type (str): String specifying the type of Cantera reactor to use.
         cantera_simulation (ct.ReactorNet): Cantera reactor net object.
         conditions (list): List whose entries are reaction conditions for simulation.
-        global_observables (List[str]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
+        global_observables (List[str]): List of global observables ['IDT', 'ESR', 'SL'] used by Cantera adapters.
         inert_list (list): List of possible inert species in the model
         inert_index_list (list): List of indices corresponding to the inert species present in the model.
         initialconds (dict): Key is the Cantera species. Value is the initial mol fraction.
@@ -214,7 +213,7 @@ class CanteraConstantHP(SimulateAdapter):
         elif P0 is None:
             self.model.TDX = T0, 1 / V0, X0
 
-        self.cantera_reactor = ct.IdealGasConstPressureReactor(contents=self.model)
+        self.cantera_reactor = ct.IdealGasConstPressureReactor(self.model)
         # Run this individual condition as a simulation
         self.cantera_simulation = ct.ReactorNet([self.cantera_reactor])
 
@@ -401,19 +400,19 @@ class CanteraConstantHP(SimulateAdapter):
 
             # extract kinetic SA
             for rxn in reaction_sensitivity_data:
-                observable_label = get_observable_label_from_header(rxn)
+                observable_label = get_observable_label_from_header(rxn.label)
                 if observable_label not in sa_dict['kinetics']:
                     sa_dict['kinetics'][observable_label] = dict()
-                parameter = get_parameter_from_header(rxn)
+                parameter = get_parameter_from_header(rxn.label)
                 parameter = int(parameter[1:])
                 sa_dict['kinetics'][observable_label][parameter] = rxn.data
 
             # extract thermo SA
             for spc in thermodynamic_sensitivity_data:
-                observable_label = get_observable_label_from_header(spc)
+                observable_label = get_observable_label_from_header(spc.label)
                 if observable_label not in sa_dict['thermo']:
                     sa_dict['thermo'][observable_label] = dict()
-                parameter = get_parameter_from_header(spc)
+                parameter = get_parameter_from_header(spc.label)
                 sa_dict['thermo'][observable_label][parameter] = spc.data
 
         return sa_dict
