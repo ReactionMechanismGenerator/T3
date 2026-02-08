@@ -1,0 +1,110 @@
+name: T3 CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build-and-test:
+    name: Build and Test T3
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+      # 1. Checkout T3 (The repo running this CI)
+      - name: Checkout T3
+        uses: actions/checkout@v4
+        with:
+          path: T3
+
+      # 2. Checkout ARC (Dependency)
+      - name: Checkout ARC
+        uses: actions/checkout@v4
+        with:
+          repository: ReactionMechanismGenerator/ARC
+          ref: libraries  # TMP
+          path: ARC
+
+      # 3. Clean Disk (Important for heavy conda envs)
+      - name: Clean Ubuntu Image
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      # 4. Setup T3 Environment
+      - name: Set up micromamba (t3_env)
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: t3_env
+          environment-file: T3/environment.yml
+          cache-environment: true
+          generate-run-shell: true
+
+      # 5. Install Julia
+      - name: Install Julia 1.10
+        shell: micromamba-shell {0}
+        run: |
+          echo "::group::Install juliaup + Julia 1.10"
+          curl -fsSL https://install.julialang.org | sh -s -- -y
+          export PATH="$HOME/.juliaup/bin:$PATH"
+          juliaup add 1.10
+          juliaup default 1.10
+          echo "PATH=$HOME/.juliaup/bin:$PATH" >> "$GITHUB_ENV"
+          echo "::endgroup::"
+          julia --version
+
+      # 6. Install & Compile ARC (Dependency)
+      - name: Install and Compile ARC
+        shell: micromamba-shell {0}
+        working-directory: ARC
+        run: |
+          echo "::group::Install PyRDL (The ARC Way)"
+          bash devtools/install_pyrdl.sh t3_env
+          echo "::endgroup::"
+
+          echo "::group::Compile ARC extensions"
+          make compile
+          echo "::endgroup::"
+          
+          echo "::group::Install ARC in editable mode"
+          pip install -e .
+          echo "::endgroup::"
+
+      # 7. Install T3 (Self)
+      - name: Install T3
+        shell: micromamba-shell {0}
+        working-directory: T3
+        run: |
+          pip install -e .
+
+      # 8. Run T3 Tests
+      - name: Run Tests
+        shell: micromamba-shell {0}
+        working-directory: T3
+        run: |
+          echo "Running T3 Tests..."
+          export PYTHONPATH="$PYTHONPATH:$(pwd):${{ github.workspace }}/ARC"
+          
+          # Run pytest on the T3 tests directory
+          pytest tests/ --cov=t3 --cov-report=xml -ra -vv
+
+      # 9. Upload Coverage
+      - name: Upload coverage data
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: T3/coverage.xml
+          flags: unittests
+          name: codecov-t3
+          fail_ci_if_error: false
