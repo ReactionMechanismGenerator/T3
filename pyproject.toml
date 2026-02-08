@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "T3"
+dynamic = ["version"]
+description = "The Tandem Tool (T3) for automated chemical kinetic model development"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic",
+    "pyyaml",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "t3.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["t3*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = [
+    "tests/data",
+    "tests/test_simulate/data",
+    "ipython/simulator_adapter_examples/*_data",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",   # line too long — enforced at 120 by formatter, not linter
+    "E741",   # ambiguous variable name — common in scientific code (e.g., `l` for length)
+    "W293",   # blank line contains whitespace
+    "W291",   # trailing whitespace
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # unused imports in __init__.py are re-exports
+"t3/runners/rmg_incore_sa.py" = ["E701"]  # subprocess script, compact one-liners are fine
