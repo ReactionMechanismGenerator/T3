@@ -7,7 +7,7 @@ import shutil
 
 from mako.template import Template
 
-from t3.common import get_rmg_species_from_a_species_dict
+from t3.common import get_species_obj_from_a_species_dict
 from t3.utils.generator import generate_radicals
 
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
@@ -82,7 +82,7 @@ species(
                                                        reactive=spc['reactive'],
                                                        structure=structure)
         if spc['seed_all_rads'] is not None:
-            species_to_process = get_rmg_species_from_a_species_dict(species_dict=spc, raise_error=False)
+            species_to_process = get_species_obj_from_a_species_dict(species_dict=spc, raise_error=False)
             if species_to_process is not None:
                 radical_tuples = generate_radicals(species=species_to_process,
                                                    types=spc['seed_all_rads'],
@@ -226,9 +226,10 @@ liquidReactor(
     model = dict()
     model['tol_move_to_core'] = model_input['core_tolerance'][iteration] \
         if len(model_input['core_tolerance']) >= iteration + 1 else model_input['core_tolerance'][-1]
-    model['tolerance_interrupt_simulation'] = model_input['tolerance_interrupt_simulation'][iteration] \
-        if len(model_input['tolerance_interrupt_simulation']) >= iteration + 1 \
-        else model_input['tolerance_interrupt_simulation'][-1]
+    # Fall back to core_tolerance if tolerance_interrupt_simulation is None
+    tis = model_input['tolerance_interrupt_simulation'] or model_input['core_tolerance']
+    model['tolerance_interrupt_simulation'] = tis[iteration] \
+        if len(tis) >= iteration + 1 else tis[-1]
     model_keys_to_skip = ['core_tolerance', 'tolerance_interrupt_simulation', 'atol', 'rtol', 'sens_atol', 'sens_rtol']
     args = ''
     for key, value in model_input.items():
