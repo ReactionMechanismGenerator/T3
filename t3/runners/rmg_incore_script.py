@@ -9,10 +9,10 @@ Usage::
     conda activate rmg_env
 
     running with no optional args:
-        python-jl rmg_incore_script.py full/path/to/rmg/input.py > >(tee -a out.txt) 2> >(tee -a err.txt >&2)
+        python rmg_incore_script.py full/path/to/rmg/input.py > >(tee -a out.txt) 2> >(tee -a err.txt >&2)
 
     or with optional args:
-        python-jl rmg_incore_script.py full/path/to/rmg/input.py -v 20 -m 100 > >(tee -a out.txt) 2> >(tee -a err.txt >&2)
+        python rmg_incore_script.py full/path/to/rmg/input.py -v 20 -m 100 > >(tee -a out.txt) 2> >(tee -a err.txt >&2)
 """
 
 import argparse
@@ -26,7 +26,6 @@ from rmgpy.exceptions import (ChemicallySignificantEigenvaluesError,
                               ChemkinError,
                               CollisionError,
                               CoreError,
-                              ILPSolutionError,
                               InputError,
                               InvalidMicrocanonicalRateError,
                               KineticsError,

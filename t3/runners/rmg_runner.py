@@ -184,7 +184,7 @@ def run_rmg_incore(rmg_input_file_path: str,
                 'source $CONDA_BASE/etc/profile.d/conda.sh',
                 'conda activate rmg_env',
                 f'cd {project_directory}',
-                f'python-jl {script_path} {rmg_input_file_path}{verbose}{max_iterations} '
+                f'python {script_path} {rmg_input_file_path}{verbose}{max_iterations} '
                 f'> >(tee -a out.txt) 2> >(tee -a err.txt >&2)',
                 ]
     stdout, stderr = execute_command(commands, shell=True, no_fail=True, executable='/bin/bash')
