@@ -4,17 +4,14 @@ t3 utils generator module
 Used to generate specific species and reactions.
 """
 
-from typing import List
+from arc.molecule.molecule import Atom, Bond
+from arc.molecule.resonance import generate_resonance_structures_safely
 
-from rmgpy.molecule.molecule import Atom, Bond
-from rmgpy.species import Species
-
-from arc.common import generate_resonance_structures
-from arc.species import ARCSpecies
+from t3.chem import T3Species
 
 
-def generate_radicals(species: Species,
-                      types: List[str],
+def generate_radicals(species: T3Species,
+                      types: list[str],
                       react_aromatic_rings: bool = False,
                       ):
     """
@@ -32,12 +29,12 @@ def generate_radicals(species: Species,
                                the first entry in the tuple is a label,
                                the second entry is the respective SMILES representation.
     """
-    existing_radical_indices, output, aromatic_rings, output_species = list(), list(), list(), list()
-    if species is None or len(species.molecule[0].atoms) == 1 \
-            or not any(atom.is_hydrogen() for atom in species.molecule[0].atoms):
+    existing_radical_indices, output, output_species = list(), list(), list()
+    if species is None or len(species.mol.atoms) == 1 \
+            or not any(atom.is_hydrogen() for atom in species.mol.atoms):
         return output
-    spc = ARCSpecies(label=species.label, adjlist=species.copy(deep=True).to_adjacency_list(), keep_mol=True)
-    res_structures = generate_resonance_structures(spc.mol)
+    spc = T3Species(label=species.label, adjlist=species.mol.copy(deep=True).to_adjacency_list(), keep_mol=True)
+    res_structures = generate_resonance_structures_safely(spc.mol)
     spc.mol = res_structures[0] if res_structures is not None else spc.mol
     spc.mol.atoms = [a for a in spc.mol.atoms if not a.is_hydrogen()] + [a for a in spc.mol.atoms if a.is_hydrogen()]
     spc.final_xyz = spc.get_xyz(generate=True)
