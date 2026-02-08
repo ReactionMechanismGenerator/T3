@@ -39,8 +39,8 @@ qm:
   adapter: ARC
   level_of_theory: 'b3lyp/6-31g(d,p)'
   job_types:
+    conf_opt: true
     rotors: false
-    conformers: true
     fine: false
     freq: true
     opt: true
