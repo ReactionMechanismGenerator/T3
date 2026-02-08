@@ -5,9 +5,9 @@ used for input validation
 
 import os
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Annotated, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, conint, confloat, constr, root_validator, validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from arc.common import read_yaml_file
 
@@ -31,42 +31,43 @@ class T3Options(BaseModel):
     """
     A class for validating input.T3.options arguments
     """
-    flux_adapter: constr(max_length=255) = 'RMG'
-    profiles_adapter: constr(max_length=255) = 'RMG'
+    flux_adapter: Annotated[str, Field(max_length=255)] = 'RMG'
+    profiles_adapter: Annotated[str, Field(max_length=255)] = 'RMG'
     collision_violators_thermo: bool = False
     collision_violators_rates: bool = False
     all_core_species: bool = False
     all_core_reactions: bool = False
     fit_missing_GAV: bool = False
-    max_T3_iterations: conint(gt=0) = 10
-    max_RMG_exceptions_allowed: Optional[conint(ge=0)] = 10
-    max_RMG_walltime: constr(regex=r'\d+:\d\d:\d\d:\d\d') = '00:00:00:00'
-    max_T3_walltime: Optional[constr(regex=r'\d+:\d\d:\d\d:\d\d')] = None
-    max_rmg_processes: Optional[conint(ge=1)] = None
-    max_rmg_iterations: Optional[conint(ge=1)] = None
-    library_name: constr(max_length=255) = 'T3lib'
-    shared_library_name: Optional[constr(max_length=255)] = None
-    external_library_path: Optional[constr(max_length=255)] = None
-    num_sa_per_temperature_range: conint(ge=1) = 3
-    num_sa_per_pressure_range: conint(ge=1) = 3
-    num_sa_per_volume_range: conint(ge=1) = 3
-    num_sa_per_concentration_range: conint(ge=1) = 3
+    max_T3_iterations: Annotated[int, Field(gt=0)] = 10
+    max_RMG_exceptions_allowed: Optional[Annotated[int, Field(ge=0)]] = 10
+    max_RMG_walltime: Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')] = '00:00:00:00'
+    max_T3_walltime: Optional[Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')]] = None
+    max_rmg_processes: Optional[Annotated[int, Field(ge=1)]] = None
+    max_rmg_iterations: Optional[Annotated[int, Field(ge=1)]] = None
+    library_name: Annotated[str, Field(max_length=255)] = 'T3lib'
+    shared_library_name: Optional[Annotated[str, Field(max_length=255)]] = None
+    external_library_path: Optional[Annotated[str, Field(max_length=255)]] = None
+    num_sa_per_temperature_range: Annotated[int, Field(ge=1)] = 3
+    num_sa_per_pressure_range: Annotated[int, Field(ge=1)] = 3
+    num_sa_per_volume_range: Annotated[int, Field(ge=1)] = 3
+    num_sa_per_concentration_range: Annotated[int, Field(ge=1)] = 3
     modify_concentration_ranges_together: bool = True
     modify_concentration_ranges_in_reverse: bool = False
 
     class Config:
         extra = "forbid"
 
-    @validator('collision_violators_rates')
-    def check_collision_violators_rates(cls, value, values):
-        """T3Options.collision_violators_rates validator"""
-        # Compute thermo for species participating in collision rate violating reactions
-        # if computations of the respective rate coefficients were requested.
-        if 'collision_violators_thermo' in values and value:
-            values['collision_violators_thermo'] = True
-        return value
+    @model_validator(mode='after')
+    def enforce_collision_thermo(self) -> 'T3Options':
+        """
+        If collision_violators_rates is True, ensure collision_violators_thermo is also True.
+        """
+        if self.collision_violators_rates:
+            self.collision_violators_thermo = True
+        return self
 
-    @validator('library_name')
+    @field_validator('library_name')
+    @classmethod
     def check_library_name(cls, value):
         """T3Options.library_name validator"""
         for char in value:
@@ -75,7 +76,8 @@ class T3Options(BaseModel):
                                  f'Only the following characters are allowed:\n{VALID_CHARS}')
         return value
 
-    @validator('shared_library_name')
+    @field_validator('shared_library_name')
+    @classmethod
     def check_shared_library_name(cls, value):
         """T3Options.shared_library_name validator"""
         if value is not None:
@@ -85,7 +87,8 @@ class T3Options(BaseModel):
                                      f'Only the following characters are allowed:\n{VALID_CHARS}')
         return value
 
-    @validator('external_library_path')
+    @field_validator('external_library_path')
+    @classmethod
     def check_external_library_path(cls, value):
         """T3Options.external_library_path validator"""
         if value is not None:
@@ -100,22 +103,23 @@ class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
     """
-    adapter: constr(max_length=255) = 'RMGConstantTP'
-    atol: confloat(gt=0, lt=1e-1) = 1e-6
-    rtol: confloat(gt=0, lt=1e-1) = 1e-4
-    global_observables: Optional[List[constr(min_length=2, max_length=3)]] = None
-    SA_threshold: confloat(gt=0, lt=0.5) = 0.01
-    pdep_SA_threshold: Optional[confloat(gt=0, lt=0.5)] = 0.001
-    ME_methods: List[constr(min_length=2, max_length=3)] = ['CSE', 'MSC']
-    top_SA_species: conint(ge=0) = 10
-    top_SA_reactions: conint(ge=0) = 10
-    T_list: Optional[List[confloat(gt=0)]] = None
-    P_list: Optional[List[confloat(gt=0)]] = None
+    adapter: Annotated[str, Field(max_length=255)] = 'RMGConstantTP'
+    atol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-6
+    rtol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-4
+    global_observables: Optional[List[Annotated[str, Field(min_length=2, max_length=3)]]] = None
+    SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] = 0.01
+    pdep_SA_threshold: Optional[Annotated[float, Field(gt=0, lt=0.5)]] = 0.001
+    ME_methods: List[Annotated[str, Field(min_length=2, max_length=3)]] = ['CSE', 'MSC']
+    top_SA_species: Annotated[int, Field(ge=0)] = 10
+    top_SA_reactions: Annotated[int, Field(ge=0)] = 10
+    T_list: Optional[List[Annotated[float, Field(gt=0)]]] = None
+    P_list: Optional[List[Annotated[float, Field(gt=0)]]] = None
 
     class Config:
         extra = "forbid"
 
-    @validator('adapter')
+    @field_validator('adapter')
+    @classmethod
     def check_adapter(cls, value):
         """T3Sensitivity.adapter validator"""
         if value not in _registered_simulate_adapters.keys():
@@ -125,23 +129,25 @@ class T3Sensitivity(BaseModel):
                 f'\nPlease check that the simulate adapter was registered properly.')
         return value
 
-    @validator('global_observables')
+    @field_validator('global_observables')
+    @classmethod
     def check_global_observables(cls, value):
         """T3Sensitivity.global_observables validator"""
         if value is not None:
             for i, entry in enumerate(value):
-                if entry.lower() not in ['igd', 'esr', 'sl']:
-                    raise ValueError(f'The global observables list must contain a combination of "IgD", "ESR", and "SL", '
+                if entry.lower() not in ['idt', 'esr', 'sl']:
+                    raise ValueError(f'The global observables list must contain a combination of "IDT", "ESR", and "SL", '
                                      f'Got {entry} in {value}')
                 if entry.lower() in [value[j].lower() for j in range(i)]:
                     raise ValueError(f'The global observables list must not contain repetitions, got {value}')
         return value
 
-    @validator('ME_methods', always=True)
+    @field_validator('ME_methods')
+    @classmethod
     def check_me_methods(cls, value):
         """T3Sensitivity.ME_methods validator"""
         if value is None or not value:
-            raise ValueError(f'The ME methods argument cannot be None or empty.')
+            raise ValueError('The ME methods argument cannot be None or empty.')
         for i, entry in enumerate(value):
             if entry.lower() not in ['cse', 'rs', 'msc']:
                 raise ValueError(f'The ME methods list must contain a combination of "CSE", "RS", and "MSC", '
@@ -155,16 +161,16 @@ class T3Uncertainty(BaseModel):
     """
     A class for validating input.T3.uncertainty arguments
     """
-    adapter: Optional[constr(max_length=255)] = None
+    adapter: Optional[Annotated[str, Field(max_length=255)]] = None
     local_analysis: bool = False
     global_analysis: bool = False
     correlated: bool = True
-    local_number: conint(gt=0) = 10
-    global_number: conint(gt=0) = 5
-    termination_time: Optional[constr(regex=r'\d+:\d\d:\d\d:\d\d')] = None
-    PCE_run_time: conint(gt=0) = 1800
-    PCE_error_tolerance: Optional[confloat(gt=0)] = None
-    PCE_max_evals: Optional[conint(gt=0)] = None
+    local_number: Annotated[int, Field(gt=0)] = 10
+    global_number: Annotated[int, Field(gt=0)] = 5
+    termination_time: Optional[Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')]] = None
+    PCE_run_time: Annotated[int, Field(gt=0)] = 1800
+    PCE_error_tolerance: Optional[Annotated[float, Field(gt=0)]] = None
+    PCE_max_evals: Optional[Annotated[int, Field(gt=0)]] = None
     logx: bool = False
 
     class Config:
@@ -188,14 +194,15 @@ class RMGDatabase(BaseModel):
     class Config:
         extra = "forbid"
 
-    @validator('chemistry_sets')
-    def check_chemistry_sets(cls, value, values):
+    @field_validator('chemistry_sets')
+    @classmethod
+    def check_chemistry_sets(cls, value, info: ValidationInfo):
         """RMGDatabase.chemistry_sets validator"""
         libraries_dict = read_yaml_file(path=os.path.join(DATA_BASE_PATH, 'libraries.yml'))
         allowed_values = libraries_dict.keys()
         if value and any(v not in allowed_values for v in value):
             raise ValueError(f'The chemistry sets must be within of the following:\n{allowed_values}\nGot: {value}')
-        if value is None and (values['thermo_libraries'] is None or values['kinetics_libraries'] is None):
+        if value is None and (info.data.get('thermo_libraries') is None or info.data.get('kinetics_libraries') is None):
             raise ValueError('The chemistry set must be specified if thermo or kinetics libraries are not specified.')
         return value
 
@@ -214,7 +221,7 @@ class RMGSpecies(BaseModel):
     A class for validating input.RMG.species arguments
     """
     label: str
-    concentration: Union[confloat(ge=0), Tuple[confloat(ge=0), confloat(ge=0)]] = 0
+    concentration: Union[Annotated[float, Field(ge=0)], Tuple[Annotated[float, Field(ge=0)], Annotated[float, Field(ge=0)]]] = 0
     smiles: Optional[str] = None
     inchi: Optional[str] = None
     adjlist: Optional[str] = None
@@ -231,19 +238,21 @@ class RMGSpecies(BaseModel):
     class Config:
         extra = "forbid"
 
-    @validator('constant')
-    def check_ranged_concentration_not_constant(cls, value, values):
+    @field_validator('constant')
+    @classmethod
+    def check_ranged_concentration_not_constant(cls, value, info: ValidationInfo):
         """RMGSpecies.constant validator"""
-        label = ' for ' + values['label'] if 'label' in values else ''
-        if value and isinstance(values['concentration'], tuple):
+        label = ' for ' + info.data.get('label', '') if 'label' in info.data else ''
+        if value and isinstance(info.data.get('concentration'), tuple):
             raise ValueError(f"A constant species cannot have a concentration range.\n"
-                             f"Got{label}: {values['concentration']}.")
+                             f"Got{label}: {info.data.get('concentration')}.")
         return value
 
-    @validator('concentration')
-    def check_concentration_range_order(cls, value, values):
+    @field_validator('concentration')
+    @classmethod
+    def check_concentration_range_order(cls, value, info: ValidationInfo):
         """Make sure the concentration range is ordered from the smallest to the largest"""
-        label = ' for ' + values['label'] if 'label' in values else ''
+        label = ' for ' + info.data.get('label', '') if 'label' in info.data else ''
         if isinstance(value, tuple):
             if value[0] == value[1]:
                 raise ValueError(f"A concentration range cannot contain to identical concentrations.\n"
@@ -252,15 +261,22 @@ class RMGSpecies(BaseModel):
                 value = (value[1], value[0])
         return value
 
-    @validator('balance')
-    def check_concentration_of_balance_species(cls, value, values):
-        """Make sure the concentration of the balance species is defined, default to 1"""
-        if value and 'concentration' in values:
-            if not isinstance(values['concentration'], (int, float)):
+    @field_validator('balance')
+    @classmethod
+    def check_concentration_of_balance_species(cls, value, info: ValidationInfo):
+        """Make sure the concentration of the balance species is defined as a scalar, not a range"""
+        if value and 'concentration' in info.data:
+            if not isinstance(info.data.get('concentration'), (int, float)):
                 raise ValueError(f"The balance species concentration cannot be defined as a range, "
-                                 f"got: {values['concentration']}.")
-            values['concentration'] = values['concentration'] or 1
+                                 f"got: {info.data.get('concentration')}.")
         return value
+
+    @model_validator(mode='after')
+    def set_balance_concentration_default(self):
+        """Set concentration=1 for balance species if concentration is 0 (default)"""
+        if self.balance and self.concentration == 0:
+            self.concentration = 1
+        return self
 
 
 class RMGReactor(BaseModel):
@@ -268,18 +284,19 @@ class RMGReactor(BaseModel):
     A class for validating input.RMG.reactors arguments
     """
     type: str
-    T: Union[confloat(gt=0), List[confloat(gt=0)]]
-    P: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
-    V: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
-    termination_conversion: Optional[Dict[str, confloat(gt=0, lt=1)]] = None
-    termination_time: Optional[List[Union[confloat(gt=0), TerminationTimeEnum]]] = None
-    termination_rate_ratio: Optional[confloat(gt=0, lt=1)] = None
-    conditions_per_iteration: conint(gt=0) = 12
+    T: Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]
+    P: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
+    V: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
+    termination_conversion: Optional[Dict[str, Annotated[float, Field(gt=0, lt=1)]]] = None
+    termination_time: Optional[Tuple[Annotated[float, Field(gt=0)], TerminationTimeEnum]] = None
+    termination_rate_ratio: Optional[Annotated[float, Field(gt=0, lt=1)]] = None
+    conditions_per_iteration: Annotated[int, Field(gt=0)] = 12
 
     class Config:
         extra = "forbid"
 
-    @validator('type')
+    @field_validator('type')
+    @classmethod
     def check_reactor_type(cls, value):
         """RMGReactor.type validator"""
         supported_reactors = ['gas batch constant T P', 'liquid batch constant T V']
@@ -288,7 +305,8 @@ class RMGReactor(BaseModel):
             raise ValueError(f'Supported RMG reactors are\n{supported_reactors}\nGot: "{value}"')
         return value
 
-    @validator('T')
+    @field_validator('T')
+    @classmethod
     def check_t(cls, value):
         """RMGReactor.T validator"""
         if isinstance(value, list) and len(value) != 2:
@@ -296,43 +314,47 @@ class RMGReactor(BaseModel):
                              f'got {len(value)} values: {value}.')
         return value
 
-    @validator('P', always=True)
-    def check_p(cls, value, values):
+    @field_validator('P')
+    @classmethod
+    def check_p(cls, value, info: ValidationInfo):
         """RMGReactor.P validator"""
         if isinstance(value, list) and len(value) != 2:
             raise ValueError(f'When specifying the pressure as a list, only two values are allowed (P min, P max),\n'
                              f'got {len(value)} values: {value}.')
-        if 'type' in values and 'gas' in values['type'] and value is None:
+        reactor_type = info.data.get('type')
+        if reactor_type and 'gas' in reactor_type and value is None:
             raise ValueError('The reactor pressure must be specified for a gas-phase reactor.')
-        if 'type' in values and 'liquid' in values['type'] and value is not None:
+        if reactor_type and 'liquid' in reactor_type and value is not None:
             raise ValueError('A reactor pressure cannot be specified for a liquid-phase reactor.')
         return value
 
-    @validator('V', always=True)
-    def check_v(cls, value, values):
+    @field_validator('V')
+    @classmethod
+    def check_v(cls, value, info: ValidationInfo):
         """RMGReactor.V validator"""
         if isinstance(value, list) and len(value) != 2:
             raise ValueError(f'When specifying the volume as a list, only two values are allowed (V min, V max),\n'
                              f'got {len(value)} values: {value}.')
-        if 'type' in values and 'liquid' in values['type'] and value is None:
+        reactor_type = info.data.get('type')
+        if reactor_type and 'liquid' in reactor_type and value is None:
             raise ValueError('The reactor volume must be specified for a liquid-phase reactor.')
-        if 'type' in values and 'gas' in values['type'] and value is not None:
+        if reactor_type and 'gas' in reactor_type and value is not None:
             raise ValueError('A reactor volume cannot be specified for a gas-phase reactor.')
         return value
 
-    @validator('termination_time')
+    @field_validator('termination_time')
+    @classmethod
     def check_termination_time(cls, value):
         """RMGReactor.termination_time validator"""
         if len(value) != 2 or not isinstance(value[0], float) or not isinstance(value[1], str):
             raise ValueError(f'The specified termination time must be a list of 2 entries: '
                              f'the value (a float) and the units (a string). Got: {value}')
         if value[1] == TerminationTimeEnum.micro_s:
-            value[0] *= 1000
-            value[1] = TerminationTimeEnum.ms
+            value= (value[0] * 1000, TerminationTimeEnum.ms)
         elif value[1] == TerminationTimeEnum.hrs:
-            value[1] = TerminationTimeEnum.hours
-        value[1] = value[1].value  # convert the Enum class into a string
-        return tuple(value)
+            value = (value[0] ,TerminationTimeEnum.hours)
+        value = (value[0], value[1].value)  # convert the Enum class into a string
+        return value
 
 
 class RMGModel(BaseModel):
@@ -340,43 +362,44 @@ class RMGModel(BaseModel):
     A class for validating input.RMG.model arguments
     """
     # primary_tolerances:
-    core_tolerance: Union[confloat(gt=0, lt=1), List[confloat(gt=0, lt=1)]]
-    atol: confloat(gt=0, lt=1e-1) = 1e-16
-    rtol: confloat(gt=0, lt=1e-1) = 1e-8
+    core_tolerance: Union[Annotated[float, Field(gt=0, lt=1)], List[Annotated[float, Field(gt=0, lt=1)]]]
+    atol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-16
+    rtol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-8
     # filtering:
     filter_reactions: bool = True
-    filter_threshold: Union[confloat(gt=0), conint(gt=0)] = 1e+8
+    filter_threshold: Union[Annotated[float, Field(gt=0)], Annotated[int, Field(gt=0)]] = 1e+8
     # pruning:
-    tolerance_interrupt_simulation: Optional[Union[confloat(gt=0), List[confloat(gt=0)]]] = None
-    min_core_size_for_prune: Optional[conint(gt=0)] = None
-    min_species_exist_iterations_for_prune: Optional[conint(gt=0)] = None
-    tolerance_keep_in_edge: Optional[confloat(gt=0)] = None
-    maximum_edge_species: Optional[conint(gt=0)] = None
-    tolerance_thermo_keep_species_in_edge: Optional[confloat(gt=0)] = None
+    tolerance_interrupt_simulation: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
+    min_core_size_for_prune: Optional[Annotated[int, Field(gt=0)]] = None
+    min_species_exist_iterations_for_prune: Optional[Annotated[int, Field(gt=0)]] = None
+    tolerance_keep_in_edge: Optional[Annotated[float, Field(gt=0)]] = None
+    maximum_edge_species: Optional[Annotated[int, Field(gt=0)]] = None
+    tolerance_thermo_keep_species_in_edge: Optional[Annotated[float, Field(gt=0)]] = None
     # staging:
-    max_num_species: Optional[conint(gt=0)] = None
+    max_num_species: Optional[Annotated[int, Field(gt=0)]] = None
     # dynamics:
-    tolerance_move_edge_reaction_to_core: Optional[confloat(gt=0)] = None
-    tolerance_move_edge_reaction_to_core_interrupt: Optional[confloat(gt=0)] = None
+    tolerance_move_edge_reaction_to_core: Optional[Annotated[float, Field(gt=0)]] = None
+    tolerance_move_edge_reaction_to_core_interrupt: Optional[Annotated[float, Field(gt=0)]] = None
     dynamics_time_scale: Optional[tuple] = None
     # multiple_objects:
-    max_num_objs_per_iter: conint(gt=0) = 1
+    max_num_objs_per_iter: Annotated[int, Field(gt=0)] = 1
     terminate_at_max_objects: bool = False
     # misc:
     ignore_overall_flux_criterion: Optional[bool] = None
-    tolerance_branch_reaction_to_core: Optional[confloat(gt=0)] = None
-    branching_index: Optional[confloat(gt=0)] = None
-    branching_ratio_max: Optional[confloat(gt=0)] = None
+    tolerance_branch_reaction_to_core: Optional[Annotated[float, Field(gt=0)]] = None
+    branching_index: Optional[Annotated[float, Field(gt=0)]] = None
+    branching_ratio_max: Optional[Annotated[float, Field(gt=0)]] = None
     # surface algorithm
-    tolerance_move_edge_reaction_to_surface: Optional[confloat(gt=0)] = None
-    tolerance_move_surface_species_to_core: Optional[confloat(gt=0)] = None
-    tolerance_move_surface_reaction_to_core: Optional[confloat(gt=0)] = None
-    tolerance_move_edge_reaction_to_surface_interrupt: Optional[confloat(gt=0)] = None
+    tolerance_move_edge_reaction_to_surface: Optional[Annotated[float, Field(gt=0)]] = None
+    tolerance_move_surface_species_to_core: Optional[Annotated[float, Field(gt=0)]] = None
+    tolerance_move_surface_reaction_to_core: Optional[Annotated[float, Field(gt=0)]] = None
+    tolerance_move_edge_reaction_to_surface_interrupt: Optional[Annotated[float, Field(gt=0)]] = None
 
     class Config:
         extra = "forbid"
 
-    @validator('core_tolerance')
+    @field_validator('core_tolerance')
+    @classmethod
     def check_core_tolerance(cls, value):
         """
         RMGModel.core_tolerance validator
@@ -384,7 +407,8 @@ class RMGModel(BaseModel):
         """
         return [value] if isinstance(value, float) else value
 
-    @validator('filter_threshold')
+    @field_validator('filter_threshold')
+    @classmethod
     def check_filter_threshold(cls, value):
         """
         RMGModel.filter_threshold validator
@@ -393,26 +417,40 @@ class RMGModel(BaseModel):
         """
         return int(value) if isinstance(value, float) else value
 
-    @validator('tolerance_interrupt_simulation', always=True)
-    def check_tolerance_interrupt_simulation(cls, value, values):
+    @model_validator(mode='after')
+    def check_tolerance_interrupt_simulation(self) -> 'RMGModel':
         """
         RMGModel.tolerance_interrupt_simulation validator
-        set tolerance_interrupt_simulation to match core_tolerance
+        Sets tolerance_interrupt_simulation to match core_tolerance if not provided,
+        and ensures length consistency.
         """
-        if values['core_tolerance'] is not None:
-            if value is None:
-                return values['core_tolerance']
-            else:
-                if isinstance(value, float) and isinstance(values['core_tolerance'], list):
-                    value = [value] * len(values['core_tolerance'])
-                elif isinstance(value, list) and isinstance(values['core_tolerance'], list):
-                    if len(value) < len(values['core_tolerance']):
-                        value = value + values[-1] * (len(values['core_tolerance']) - len(value))
-                    elif len(value) > len(values['core_tolerance']):
-                        raise ValueError(f'The length of tolerance_interrupt_simulation ({len(value)}) '
-                                         f'cannot be greater than the length of core_tolerance '
-                                         f'({len(values["core_tolerance"])}).')
-        return value
+        # Access the already-validated values from self
+        core_tol = self.core_tolerance
+        # We need to access the raw attribute, which might be None if optional
+        tol_interrupt = self.tolerance_interrupt_simulation
+
+        if core_tol is not None:
+            # 1. Default to core_tolerance if not set
+            if tol_interrupt is None:
+                self.tolerance_interrupt_simulation = core_tol
+                return self
+
+            # 2. Logic for broadcasting float to list
+            if isinstance(tol_interrupt, float) and isinstance(core_tol, list):
+                self.tolerance_interrupt_simulation = [tol_interrupt] * len(core_tol)
+
+            # 3. Logic for list length validation/extension
+            elif isinstance(tol_interrupt, list) and isinstance(core_tol, list):
+                if len(tol_interrupt) < len(core_tol):
+                    # Extend with the last value
+                    self.tolerance_interrupt_simulation = tol_interrupt + [tol_interrupt[-1]] * (
+                                len(core_tol) - len(tol_interrupt))
+                elif len(tol_interrupt) > len(core_tol):
+                    raise ValueError(f'The length of tolerance_interrupt_simulation ({len(tol_interrupt)}) '
+                                     f'cannot be greater than the length of core_tolerance '
+                                     f'({len(core_tol)}).')
+
+        return self
 
 
 class RMGOptions(BaseModel):
@@ -430,12 +468,13 @@ class RMGOptions(BaseModel):
     verbose_comments: bool = False
     keep_irreversible: bool = False
     trimolecular_product_reversible: bool = True
-    save_seed_modulus: conint(ge=-1) = -1
+    save_seed_modulus: Annotated[int, Field(ge=-1)] = -1
 
     class Config:
         extra = "forbid"
 
-    @validator('units', always=True)
+    @field_validator('units')
+    @classmethod
     def check_units(cls, value):
         """RMGOptions.units validator"""
         if value.lower() is not None and value != 'si':
@@ -447,27 +486,29 @@ class RMGPDep(BaseModel):
     """
     A class for validating input.RMG.pdep arguments
     """
-    method: constr(min_length=2, max_length=3)
-    max_grain_size: confloat(gt=0) = 2
-    max_number_of_grains: conint(gt=0) = 250
-    T: List[Union[conint(gt=0), confloat(gt=0)]] = [300, 2500, 10]
-    P: List[Union[conint(gt=0), confloat(gt=0)]] = [0.01, 100, 10]
+    method: Annotated[str, Field(min_length=2, max_length=3)]
+    max_grain_size: Annotated[float, Field(gt=0)] = 2
+    max_number_of_grains: Annotated[int, Field(gt=0)] = 250
+    T: List[Union[Annotated[int, Field(gt=0)], Annotated[float, Field(gt=0)]]] = [300, 2500, 10]
+    P: List[Union[Annotated[int, Field(gt=0)], Annotated[float, Field(gt=0)]]] = [0.01, 100, 10]
     interpolation: str = 'Chebyshev'
-    T_basis_set: conint(gt=0) = 6
-    P_basis_set: conint(gt=0) = 4
-    max_atoms: conint(gt=0) = 16
+    T_basis_set: Annotated[int, Field(gt=0)] = 6
+    P_basis_set: Annotated[int, Field(gt=0)] = 4
+    max_atoms: Annotated[int, Field(gt=0)] = 16
 
     class Config:
         extra = "forbid"
 
-    @validator('method')
+    @field_validator('method')
+    @classmethod
     def check_method(cls, value):
         """RMGPDep.method validator"""
         if value not in ['CSE', 'RS', 'MSC']:
             raise ValueError(f"The PDep method must be either 'CSE', 'RS', or 'MSC'.\nGot: {value}")
         return value
 
-    @validator('T')
+    @field_validator('T')
+    @classmethod
     def check_t(cls, value):
         """RMGPDep.T validator"""
         if len(value) != 3:
@@ -479,7 +520,8 @@ class RMGPDep(BaseModel):
             raise ValueError(f'T count {value[2]} must be an integer, got a {type(value[2])}')
         return value
 
-    @validator('P')
+    @field_validator('P')
+    @classmethod
     def check_p(cls, value):
         """RMGPDep.P validator"""
         if len(value) != 3:
@@ -491,7 +533,8 @@ class RMGPDep(BaseModel):
             raise ValueError(f'P count {value[2]} must be an integer, got a {type(value[2])}')
         return value
 
-    @validator('interpolation', always=True)
+    @field_validator('interpolation')
+    @classmethod
     def check_interpolation(cls, value):
         """RMGPDep.interpolation validator"""
         if value not in ['PDepArrhenius', 'Chebyshev']:
@@ -499,22 +542,24 @@ class RMGPDep(BaseModel):
                              f'(recommended).\nGot {value}')
         return value
 
-    @validator('T_basis_set', always=True)
-    def check_t_basis_set(cls, value, values):
+    @field_validator('T_basis_set')
+    @classmethod
+    def check_t_basis_set(cls, value, info: ValidationInfo):
         """RMGPDep.T_basis_set validator"""
-        if values['T'] is not None and value >= values['T'][2] \
-                and values['interpolation'] is not None and values['interpolation'] == 'Chebyshev':
+        if info.data.get('T') is not None and value >= info.data['T'][2] \
+                and info.data.get('interpolation') is not None and info.data['interpolation'] == 'Chebyshev':
             raise ValueError(f'The T_basis_set must be lower than the number of T points.\n'
-                             f'Got {value} and {values["T"]}')
+                             f'Got {value} and {info.data.get("T")}')
         return value
 
-    @validator('P_basis_set', always=True)
-    def check_p_basis_set(cls, value, values):
+    @field_validator('P_basis_set')
+    @classmethod
+    def check_p_basis_set(cls, value, info: ValidationInfo):
         """RMGPDep.P_basis_set validator"""
-        if values['P'] is not None and value >= values['P'][2] \
-                and values['interpolation'] is not None and values['interpolation'] == 'Chebyshev':
+        if info.data.get('P') is not None and value >= info.data['P'][2] \
+                and info.data.get('interpolation') is not None and info.data['interpolation'] == 'Chebyshev':
             raise ValueError(f'The P_basis_set must be lower than the number of P points.\n'
-                             f'Got {value} and {values["P"]}')
+                             f'Got {value} and {info.data.get("P")}')
         return value
 
 
@@ -523,21 +568,22 @@ class RMGSpeciesConstraints(BaseModel):
     A class for validating input.RMG.species_constraints arguments
     """
     allowed: List[str] = ['input species', 'seed mechanisms', 'reaction libraries']
-    max_C_atoms: conint(ge=0)
-    max_O_atoms: conint(ge=0)
-    max_N_atoms: conint(ge=0)
-    max_Si_atoms: conint(ge=0)
-    max_S_atoms: conint(ge=0)
-    max_heavy_atoms: conint(ge=0)
-    max_radical_electrons: conint(ge=0)
-    max_singlet_carbenes: conint(ge=0) = 1
-    max_carbene_radicals: conint(ge=0) = 0
+    max_C_atoms: Annotated[int, Field(ge=0)]
+    max_O_atoms: Annotated[int, Field(ge=0)]
+    max_N_atoms: Annotated[int, Field(ge=0)]
+    max_Si_atoms: Annotated[int, Field(ge=0)]
+    max_S_atoms: Annotated[int, Field(ge=0)]
+    max_heavy_atoms: Annotated[int, Field(ge=0)]
+    max_radical_electrons: Annotated[int, Field(ge=0)]
+    max_singlet_carbenes: Annotated[int, Field(ge=0)] = 1
+    max_carbene_radicals: Annotated[int, Field(ge=0)] = 0
     allow_singlet_O2: bool = True
 
     class Config:
         extra = "forbid"
 
-    @validator('allowed')
+    @field_validator('allowed')
+    @classmethod
     def check_allowed(cls, value):
         """RMGSpeciesConstraints.allowed validator"""
         for val in value:
@@ -552,17 +598,12 @@ class T3(BaseModel):
     """
     A class for validating input.T3 arguments
     """
-    options: Optional[T3Options] = None
+    options: Optional[T3Options] = Field(default_factory=T3Options)
     sensitivity: Optional[T3Sensitivity] = None
     uncertainty: Optional[T3Uncertainty] = None
 
     class Config:
         extra = "forbid"
-
-    @validator('options', always=True)
-    def check_options(cls, value):
-        """T3.options validator"""
-        return value or T3Options()
 
 
 class RMG(BaseModel):
@@ -570,99 +611,86 @@ class RMG(BaseModel):
     A class for validating input.RMG arguments
     """
     rmg_execution_type: Optional[str] = None
-    memory: Optional[conint(ge=0)] = None
-    cpus: Optional[conint(gt=0)] = None
+    memory: Optional[Annotated[int, Field(ge=0)]] = None
+    cpus: Optional[Annotated[int, Field(gt=0)]] = None
     database: RMGDatabase
     reactors: List[RMGReactor]
     species: List[RMGSpecies]
     model: RMGModel
     pdep: Optional[RMGPDep] = None
-    options: Optional[RMGOptions] = None
+    options: Optional[RMGOptions] = Field(default_factory=RMGOptions)
     species_constraints: Optional[RMGSpeciesConstraints] = None
 
     class Config:
         extra = "forbid"
 
-    @validator('database', always=True)
+    @field_validator('database')
+    @classmethod
     def check_database(cls, value):
         """RMG.database validator"""
         if value is None or not value:
             raise ValueError('RMG database must be specified')
         return value
 
-    @validator('reactors', always=True)
+    @field_validator('reactors')
+    @classmethod
     def check_reactors(cls, value):
         """RMG.reactors validator"""
         if value is None or not value:
             raise ValueError('RMG reactors must be specified')
         return value
 
-    @validator('species', always=True)
+    @field_validator('species')
+    @classmethod
     def check_species(cls, value):
         """RMG.species validator"""
         if value is None or not value:
             raise ValueError('RMG species must be specified')
         return value
 
-    @validator('model', always=True)
+    @field_validator('model')
+    @classmethod
     def check_model(cls, value):
         """RMG.model validator"""
         if value is None or not value:
             raise ValueError('RMG model must be specified')
         return value
 
-    @validator('pdep')
-    def check_pdep_only_if_gas_phase(cls, value, values):
+    @field_validator('pdep')
+    @classmethod
+    def check_pdep_only_if_gas_phase(cls, value, info: ValidationInfo):
         """RMG.pdep validator"""
-        if value is not None and 'reactors' in values and values['reactors'] is not None:
-            reactor_types = set([reactor.type for reactor in values['reactors']])
+        if value is not None and 'reactors' in info.data and info.data['reactors'] is not None:
+            reactor_types = set([reactor.type for reactor in info.data['reactors']])
             if value is not None and not any(['gas' in reactor for reactor in reactor_types]):
                 raise ValueError(f'A pdep section can only be specified for gas phase reactors, got: {reactor_types}')
         return value
 
-    @root_validator(pre=True)
-    def check_species_and_reactors(cls, values):
-        if 'reactors' in values and values['reactors'] is not None \
-                and 'species' in values and values['species'] is not None:
-            # check species attributes (balance, solvation) make sense
-            reactor_types = set([reactor['type'] for reactor in values['reactors']])
-            balance_species, solvent_species = list(), list()
-            for species in values['species']:
-                if not balance_species and 'balance' in species and species['balance']:
-                    balance_species.append(species['label'])
-                if not solvent_species and 'solvent' in species and species['solvent']:
-                    solvent_species.append(species['label'])
-            gas_reactors, liquid_reactors = False, False
-            for reactor_type in reactor_types:
-                if 'gas' in reactor_type:
-                    gas_reactors = True
-                if 'liquid' in reactor_type:
-                    liquid_reactors = True
-            if liquid_reactors and len(balance_species):
+    @model_validator(mode='after')
+    def check_species_and_reactors(self) -> 'RMG':
+        if self.reactors and self.species:
+            reactor_types = {reactor.type for reactor in self.reactors}
+            balance_species = [s.label for s in self.species if s.balance]
+            solvent_species = [s.label for s in self.species if s.solvent]
+            gas_reactors = any('gas' in rt for rt in reactor_types)
+            liquid_reactors = any('liquid' in rt for rt in reactor_types)
+            if liquid_reactors and balance_species:
                 raise ValueError(f'A species ({balance_species}) cannot be set as a balance species '
                                  f'if liquid phase reactors are defined.')
-            if gas_reactors and len(solvent_species):
+            if gas_reactors and solvent_species:
                 raise ValueError(f'A species ({solvent_species}) cannot be set as a solvent '
                                  f'if gas phase reactors are defined.')
             if len(balance_species) > 1:
                 raise ValueError(f'Only a single species may be defined as balance,\ngot: {balance_species}')
             if len(solvent_species) > 1:
                 raise ValueError(f'Only a single species may be defined as a solvent,\ngot: {solvent_species}')
-            # check reactor termination_conversion has a corresponding species
-            for reactor in values['reactors']:
-                if 'termination_conversion' in reactor and reactor['termination_conversion'] is not None:
-                    species_labels = [species['label'] for species in values['species']]
-                    for termination_conversion_label in reactor['termination_conversion'].keys():
-                        if termination_conversion_label not in species_labels:
-                            raise ValueError(f'No species with label "{termination_conversion_label}" was defined. '
-                                             f'Make sure all species labels defined under termination_conversion '
-                                             f'have actual corresponding species.')
-        return values
-
-    @validator('options', always=True)
-    def check_options(cls, value):
-        """RMG.options validator"""
-        return value or RMGOptions()
+            species_labels = {s.label for s in self.species}
+            for reactor in self.reactors:
+                if reactor.termination_conversion:
+                    for term_label in reactor.termination_conversion.keys():
+                        if term_label not in species_labels:
+                            raise ValueError(f'No species with label "{term_label}" was defined.')
+        return self
 
 
 class QM(BaseModel):
@@ -670,13 +698,14 @@ class QM(BaseModel):
     A class for validating input.QM arguments
     """
     adapter: str = 'ARC'
-    species: Optional[list] = None
-    reactions: Optional[list] = None
+    species: list = Field(default_factory=list)
+    reactions: list = Field(default_factory=list)
 
     class Config:
         extra = "allow"
 
-    @validator('adapter')
+    @field_validator('adapter')
+    @classmethod
     def check_adapter(cls, value):
         """QM.adapter validator"""
         supported_qm_adapters = ['ARC']
@@ -684,70 +713,55 @@ class QM(BaseModel):
             raise ValueError(f'Supported QM adapters are:\n{supported_qm_adapters}\nGot:{value}')
         return value
 
-    @validator('species', 'reactions', always=True)
-    def check_species(cls, value):
-        """QM.species and QM.reactions validator"""
-        value = value or list()
-        return value
-
 
 class InputBase(BaseModel):
     """
     An InputBase class for validating input arguments
     """
-    project: constr(max_length=255)
-    project_directory: Optional[constr(max_length=255)] = None
-    verbose: conint(ge=10, le=30, multiple_of=10) = 20
-    t3: Optional[T3] = None
+    project: Annotated[str, Field(max_length=255)]
+    project_directory: Optional[Annotated[str, Field(max_length=255)]] = None
+    verbose: Annotated[int, Field(ge=10, le=30, multiple_of=10)] = 20
+    t3: Optional[T3] = Field(default_factory=T3)
     rmg: RMG
-    qm: Optional[QM] = None
+    qm: QM = Field(default_factory=QM)
 
     class Config:
         extra = "forbid"
 
-    @validator('t3', always=True)
-    def check_t3(cls, value):
-        """InputBase.t3 validator"""
-        return value or T3()
-
-    @validator('qm', always=True)
-    def check_qm(cls, value):
-        """InputBase.qm validator"""
-        return value or dict()
-
-    @root_validator(pre=True)
-    def validate_rmg_t3(cls, values):
-        """InputBase.validate_rmg_t3"""
-        if 'rmg' in values and 't3' in values and values['t3']:
-            # check termination time for global UA
-            if 'uncertainty' in values['t3'] and values['t3']['uncertainty'] is not None:
-                ua_termination_time = values['t3']['uncertainty']['termination_time']
-                rmg_reactor_termination_times = [reactor['termination_time'] for reactor in values['rmg']['reactors']]
-                if all([termination_time is None for termination_time in rmg_reactor_termination_times]) \
-                        and ua_termination_time is None and values['t3']['uncertainty']['global_analysis']:
+    @model_validator(mode='after')
+    def validate_rmg_t3(self) -> 'InputBase':
+        """
+        InputBase.validate_rmg_t3
+        Validates cross-dependencies between RMG and T3 configurations.
+        """
+        if self.rmg and self.t3:
+            if self.t3.uncertainty:
+                ua_term_time = self.t3.uncertainty.termination_time
+                rmg_reactor_term_times = [r.termination_time for r in self.rmg.reactors]
+                if all(t is None for t in rmg_reactor_term_times) \
+                        and ua_term_time is None \
+                        and self.t3.uncertainty.global_analysis:
                     raise ValueError('If a global uncertainty analysis is requested, a termination time must be '
                                      'specified either under "t3.uncertainty.termination_time" '
                                      'or in at least one RMG reactor.')
-            # check solvent for liquid phase
-            reactor_types = set([reactor['type'] for reactor in values['rmg']['reactors']])
-            solvents = list()
-            for species in values['rmg']['species']:
-                if 'solvent' in species and species['solvent']:
-                    solvents.append(species['label'])
-            if any(['liquid' in reactor_type for reactor_type in reactor_types]):
-                if not len(solvents):
+            reactor_types = {r.type for r in self.rmg.reactors}
+            solvents = [s.label for s in self.rmg.species if s.solvent]
+            is_liquid = any('liquid' in rt for rt in reactor_types)
+            if is_liquid:
+                if not solvents:
                     raise ValueError('One species must be defined as the solvent when using liquid phase reactors.')
                 if len(solvents) > 1:
                     raise ValueError(f'Only one solvent can be specified, got: {solvents}')
             else:
-                if len(solvents):
+                if solvents:
                     raise ValueError(f'No solvent species are allowed for gas phase reactors, got: {solvents}')
-            # check core_tolerance and max_T3_iterations
-            if 'model' in values['rmg'] and 'core_tolerance' in values['rmg']['model'] \
-                    and 'options' in values['t3'] and 'max_T3_iterations' in values['t3']['options'] \
-                    and not isinstance(values['rmg']['model']['core_tolerance'], float) \
-                    and len(values['rmg']['model']['core_tolerance']) > values['t3']['options']['max_T3_iterations']:
-                raise ValueError(f'The number of RMG core tolerances ({len(values["rmg"]["model"]["core_tolerance"])}) '
-                                 f'cannot be greater than the max number of T3 iterations '
-                                 f'({values["t3"]["options"]["max_T3_iterations"]}).')
-        return values
+            if self.rmg.model and self.rmg.model.core_tolerance \
+                    and self.t3.options and self.t3.options.max_T3_iterations:
+                core_tol = self.rmg.model.core_tolerance
+                max_iter = self.t3.options.max_T3_iterations
+                if isinstance(core_tol, list):
+                    if len(core_tol) > max_iter:
+                        raise ValueError(f'The number of RMG core tolerances ({len(core_tol)}) '
+                                         f'cannot be greater than the max number of T3 iterations '
+                                         f'({max_iter}).')
+        return self
