@@ -38,7 +38,7 @@ def test_write_rmg_input_file():
                        rmg=input_dict['rmg'],
                        qm=input_dict['qm'],
                        verbose=20,
-                       ).dict()
+                       ).model_dump()
     write_rmg_input_file(rmg=schema['rmg'],
                          t3=schema['t3'],
                          iteration=2,
@@ -104,7 +104,7 @@ model(
     terminateAtMaxObjects=False,
 )
 
-simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)
+simulator(atol=1e-16, rtol=1e-08)
 
 options(
     name='Seed',
@@ -244,7 +244,7 @@ def test_write_rmg_input_file_liquid():
                                    'max_radical_electrons': 1}}
 
     t3 = {'sensitivity':
-              {'adapter': 'RMGConstantTP',
+              {'adapter': 'CanteraConstantTP',
                'atol': 1e-6,
                'rtol': 1e-4,
                }
@@ -276,7 +276,7 @@ def test_write_rmg_input_file_liquid():
                  "    toleranceMoveToCore=0.001,\n",
                  "    toleranceInterruptSimulation=0.001,\n",
                  "    filterThreshold=100000000.0,\n",
-                 "simulator(atol=1e-16, rtol=1e-08, sens_atol=1e-06, sens_rtol=0.0001)\n",
+                 "simulator(atol=1e-16, rtol=1e-08)\n",
                  "    generateOutputHTML=True,\n",
                  "    allowed=['input species', 'seed mechanisms', 'reaction libraries'],\n",
                  "    maximumCarbonAtoms=4,\n",
@@ -309,7 +309,7 @@ def test_write_rmg_input_file_seed_all_radicals():
            'model': {'core_tolerance': [0.001]}}
 
     t3 = {'sensitivity':
-              {'adapter': 'RMGConstantTP',
+              {'adapter': 'CanteraConstantTP',
                'atol': 1e-6,
                'rtol': 1e-4,
                }

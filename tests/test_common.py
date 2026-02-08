@@ -8,8 +8,7 @@ t3 tests test_utils module
 import os
 import pytest
 
-from rmgpy.species import Species
-
+from t3.chem import T3Species
 import t3.common as common
 from t3.common import TEST_DATA_BASE_PATH
 from t3.schema import RMGSpecies
@@ -33,56 +32,57 @@ label2:
 
 def test_get_species_by_label():
     """Test getting species by label"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
-                     iteration=1,
-                     set_paths=True,
-                     )
-    rmg_species, rmg_reactions = t3.load_species_and_reactions_from_chemkin_file()
+    t3_species = [T3Species(label='H2O', t3_index=7, smiles='O'),
+                  T3Species(label='CH4', t3_index=1, smiles='C')]
     label = 'H2O'
-    species = common.get_species_by_label(label, rmg_species)
+    species = common.get_species_by_label(label, t3_species)
     assert species.label == label
-    assert species.index == 7
+    assert species.t3_index == 7
+    
+    species = common.get_species_by_label('CH4', t3_species)
+    assert species.label == 'CH4'
+    assert species.t3_index == 1
 
 
 def test_get_rmg_species_from_a_species_dict():
     """Test getting an RMG species from a species dictionary"""
-    species = common.get_rmg_species_from_a_species_dict(
+    species = common.get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'smiles': 'C=O'}).dict())
-    assert isinstance(species, Species)
+    assert isinstance(species, T3Species)
     assert species.label == 'spc'
-    assert species.molecule[0].to_smiles() == 'C=O'
+    assert species.mol.to_smiles() == 'C=O'
 
     adj = """1 C u0 p0 c0 {2,D} {3,S} {4,S}
 2 O u0 p2 c0 {1,D}
 3 H u0 p0 c0 {1,S}
 4 H u0 p0 c0 {1,S}"""
-    species = common.get_rmg_species_from_a_species_dict(
+    species = common.get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'adjlist': adj}).dict())
-    assert isinstance(species, Species)
+    assert isinstance(species, T3Species)
     assert species.label == 'spc'
-    assert species.molecule[0].to_smiles() == 'C=O'
+    assert species.mol.to_smiles() == 'C=O'
 
-    species = common.get_rmg_species_from_a_species_dict(
+    species = common.get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'inchi': 'InChI=1S/CH2O/c1-2/h1H2'}).dict())
-    assert isinstance(species, Species)
+    assert isinstance(species, T3Species)
     assert species.label == 'spc'
-    assert species.molecule[0].to_smiles() == 'C=O'
+    assert species.mol.to_smiles() == 'C=O'
 
     xyz = """O  0.0000000  0.0000000  0.7047750
 C  0.0000000  0.0000000 -0.5593030
 H  0.0000000  0.9470590 -1.1411940
 H  0.0000000 -0.9470590 -1.1411940"""
-    species = common.get_rmg_species_from_a_species_dict(
+    species = common.get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'xyz': [xyz]}).dict())
-    assert isinstance(species, Species)
+    assert isinstance(species, T3Species)
     assert species.label == 'spc'
-    assert species.molecule[0].to_smiles() == 'C=O'
+    assert species.mol.to_smiles() == 'C=O'
 
-    species = common.get_rmg_species_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
+    species = common.get_species_obj_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
                                                          raise_error=False)
     assert species is None
     with pytest.raises(ValueError):
-        common.get_rmg_species_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
+        common.get_species_obj_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
                                                    raise_error=True)
 
 
