@@ -36,13 +36,15 @@ def init_logger(project: str = 'project_name',
 
 def test_initialize_logger():
     """Test initializing the logger"""
-    logger_object = init_logger()
-    assert isinstance(logger_object, logger.Logger)
-    assert logger_object.project == 'project_name'
-    assert logger_object.project_directory == log_project_directory
-    assert logger_object.verbose == 10
-    assert isinstance(logger_object.t0, datetime.datetime)
-    shutil.rmtree(log_project_directory, ignore_errors=True)
+    try:
+        logger_object = init_logger()
+        assert isinstance(logger_object, logger.Logger)
+        assert logger_object.project == 'project_name'
+        assert logger_object.project_directory == log_project_directory
+        assert logger_object.verbose == 10
+        assert isinstance(logger_object.t0, datetime.datetime)
+    finally:
+        shutil.rmtree(log_project_directory, ignore_errors=True)
 
 
 def log_messages(logger_object):
@@ -114,9 +116,16 @@ def test_log():
 
 def test_log_max_time_reached():
     """Test logging reaching the maximum walltime"""
-    logger_object = init_logger(verbose=30)  # warning
-    logger_object.log_max_time_reached(max_time='01:00:00:00')
-    with open(os.path.join(log_project_directory, 't3.log')) as f:
-        lines = f.readlines()
-    assert 'Terminating T3 due to time limit.\n' in lines
+    try:
+        logger_object = init_logger(verbose=30)  # warning
+        logger_object.log_max_time_reached(max_time='01:00:00:00')
+        with open(os.path.join(log_project_directory, 't3.log')) as f:
+            lines = f.readlines()
+        assert 'Terminating T3 due to time limit.\n' in lines
+    finally:
+        shutil.rmtree(log_project_directory, ignore_errors=True)
+
+
+def teardown_module():
+    """Safety net: remove the log project dir even if a test failed mid-run."""
     shutil.rmtree(log_project_directory, ignore_errors=True)

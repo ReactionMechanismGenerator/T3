@@ -1,33 +1,39 @@
-project: functional_1_thermo_1_rate
+project: functional_2_thermo
 
 t3:
   options:
     max_T3_iterations: 1
     max_RMG_walltime: '00:00:05:00'
   sensitivity:
-    adapter: RMGConstantTP
-    top_SA_species: 1
-    top_SA_reactions: 1
+    adapter: CanteraConstantTP
+    top_SA_species: 5
+    top_SA_reactions: 0
 
 rmg:
   rmg_execution_type: incore
   database:
-    thermo_libraries: ['primaryThermoLibrary', 'BurkeH2O2', 'FFCM1(-)']
-    kinetics_libraries: ['primaryH2O2', 'FFCM1(-)']
+    thermo_libraries: ['primaryThermoLibrary', 'BurkeH2O2', 'FFCM1(-)', 'NOx2018']
+    kinetics_libraries: ['primaryH2O2', 'FFCM1(-)', 'NOx2018']
   species:
     - label: propane
       smiles: 'CCC'
-      concentration: 0.5
+      concentration: 1
+    - label: O2
+      smiles: '[O][O]'
+      concentration: 5
+    - label: N2
+      smiles: 'N#N'
+      concentration: 18.8
     - label: 1-propyl
       smiles: '[CH2]CC'
-      concentration: 0.25
+      concentration: 1e-10
     - label: 2-propyl
       smiles: 'C[CH]C'
-      concentration: 0.25
+      concentration: 1e-10
       SA_observable: true
   reactors:
     - type: gas batch constant T P
-      T: 1000
+      T: 1500
       P: 1
       termination_time: [1e-6, 's']
       termination_rate_ratio: 0.1
@@ -50,6 +56,7 @@ qm:
   conformer_level: gfn2
   arkane_level_of_theory: CBS-QB3
   freq_scale_factor: 1.0
+  ts_adapters: ['heuristics', 'linear']
   job_types:
     rotors: false
     fine: false

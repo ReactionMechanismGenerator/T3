@@ -76,7 +76,7 @@ def check_expected_generated_radicals(radicals: list, expected_radicals: list):
     unique_smiles = set([rad[1] for rad in radicals])
     assert len(expected_radicals) == len(unique_smiles), \
         f"Expected {len(expected_radicals)} unique SMILES, got {len(unique_smiles)}"
-    
+
     # Check all generated radicals have matching SMILES in expected
     for rad_tuple in radicals:
         assert any(isomorphic_smiles(rad_tuple[1], expected_rad_tuple[1]) for expected_rad_tuple in expected_radicals), \

@@ -1,0 +1,4421 @@
+generator: ck2yaml
+input-files: [chem_annotated.inp, chem_annotated.inp]
+cantera-version: 3.2.0
+date: Sun, 08 Feb 2026 13:01:02 +0200
+
+units: {length: cm, time: s, quantity: mol, activation-energy: 
+    kcal/mol}
+
+phases:
+- name: gas
+  thermo: ideal-gas
+  elements: [H, D, T, C, Ci, O, Oi, N, Ne, Ar, He, Si, S, F, Cl, Br, I,
+    X, H, D, T, C, Ci, O, Oi, N, Ne, Ar, He, Si, S, F, Cl, Br, I, X]
+  species: [N2, Ne, fuel(1), H(2), H2(4), C2H4(22), CH3(23), CH4(31), 
+      C2H6(51), C2H5(52), C3H3(74), C3H8(100), NC3H7(101), IC3H7(102), 
+      C3H5(103), C3H6(104), C3H4(174), C3H4(176), PC4H9(191), 
+      SC4H9(192), C4H8(197), C4H8(198), C4H7(199), C4H7(200), 
+      C4H7(201), C4H6(203), C6H10(349), C5H8(410), C5H11(428), 
+      C5H11(429), C5H10(431), C5H10(432), C5H9(435), C5H11(544), 
+      C5H11(547), C6H12(788), C6H11(791), C6H13(792), C6H13(793), 
+      C6H13(794), C7H13(796), C7H14(797), C7H15(798), C7H15(799), 
+      C7H15(800), C7H15(801), C8H16(804), C8H17(805), C8H17(808), 
+      C9H18(811), C9H19(812), C9H19(815), C9H19(816), S(837), S(838), 
+      S(839), S(840), S(841), S(842), C7H13(853), C7H12(891), 
+      C9H18(893), C7H13(913), C8H16(923), C6H11(942), C6H10(947), 
+      C7H14(952), C7H13(958), C7H13(967), S(1229), S(1232), S(1235), 
+      C3H6(1252), S(1258), S(1260), S(1268), C5H9(1270), C5H9(1271), 
+      S(1272), C4H8(1282), S(1292), S(1294), S(1330), S(1333), S(1440),
+    S(1460), C3H5(1509), S(1528), S(1570), S(1633), S(1681), S(1719), 
+      S(1721), S(1722), C5H9(1778), S(1970), S(2094), S(2095), 
+      C4H7(2173), C4H6(2174), S(2312), S(2320), C6H9(2321), C6H9(2322),
+    C6H9(2323), C6H9(2324), C6H9(2325), S(2329), S(2337), S(2415), 
+      S(2416), S(2499), S(2500), C5H8(2537), S(2586), S(2587), S(2590),
+    S(2771), S(2773), C3H4(3014), C6H9(3035), S(3114), C6H9(3118), 
+      C6H8(3165), C6H8(3166), C6H9(3305), S(3448), C6H9(3478), S(3489),
+    S(3758), S(4056), S(4453), S(4579), S(4580), S(4584), S(4697), 
+      S(4706), S(5423), S(5424), S(5464), S(5995), S(6059), S(6061), 
+      S(6208), S(6210), S(6212), S(6217), S(6220), S(6221), S(6227), 
+      S(6301), S(6302), S(6386), S(6388), S(6421), S(6422), S(6644), 
+      S(6645), S(7257), S(7258), S(7583), S(7609), S(7824), S(8871), 
+      S(8872), S(8896), S(9689), S(9692), S(9695), S(11135), S(12347), 
+      S(12992), S(13223), S(13684), S(13685), S(14083), S(14087), 
+      S(14436), S(14437), S(14438), S(15088)]
+  kinetics: gas
+  state: {T: 300.0, P: 1 atm}
+
+elements:
+- symbol: Ci
+  atomic-weight: 13.003
+- symbol: D
+  atomic-weight: 2.014
+- symbol: Oi
+  atomic-weight: 17.999
+- symbol: T
+  atomic-weight: 3.016
+- symbol: X
+  atomic-weight: 195.083
+
+species:
+- name: N2
+  composition: {N: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 6000.0]
+    data:
+    - [3.53101, -1.23661e-04, -5.02999e-07, 2.43531e-09, -1.40881e-12, 
+        -1046.98, 2.96747]
+    - [2.95258, 1.3969e-03, -4.92632e-07, 7.8601e-11, -4.60755e-15, 
+        -923.949, 5.87189]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' N2'
+- name: Ne
+  composition: {Ne: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 6000.0]
+    data:
+    - [2.5, 0.0, 0.0, 0.0, 0.0, -745.375, 3.35532]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' Ne'
+- name: fuel(1)
+  composition: {C: 12, H: 26}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1391.0, 5000.0]
+    data:
+    - [-2.62182, 0.147238, -9.4397e-05, 3.07441e-08, -4.03602e-12, 
+        -4.00654e+04, 50.0995]
+    - [38.5095, 0.056355, -1.91493e-05, 2.96025e-09, -1.71244e-13, 
+        -5.48843e+04, -172.671]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' fuel(1)'
+- name: H(2)
+  composition: {H: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 4101.03, 5000.0]
+    data:
+    - [2.5, 1.56839909e-13, -2.12371896e-16, 9.39504946e-20, 
+        -1.27958334e-23, 2.54742178e+04, -0.444972896]
+    - [2.49999696, 2.82830243e-09, -9.83483362e-13, 1.51619205e-16, 
+        -8.74287095e-21, 2.54742204e+04, -0.444953778]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' H(2)'
+- name: H2(4)
+  composition: {H: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1959.1, 5000.0]
+    data:
+    - [3.43536477, 2.12704667e-04, -2.78612148e-07, 3.40257051e-10, 
+        -7.7600695e-14, -1031.35988, -3.90841983]
+    - [2.78809738, 5.87729871e-04, 1.58968784e-07, -5.52655469e-11, 
+        4.34250082e-15, -596.103883, 0.113138407]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' H2(4)'
+- name: C2H4(22)
+  composition: {C: 2, H: 4}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 979.35, 5000.0]
+    data:
+    - [3.97471641, -4.75844716e-03, 4.16783925e-05, -4.51392723e-08, 
+        1.54224851e-11, 4915.40744, 3.62430717]
+    - [3.55660475, 0.0110627487, -4.17019213e-06, 7.85587085e-10, 
+        -5.70061091e-14, 4320.46545, 2.17720235]
+    note: 'Thermo library: thermo_DFT_CCSDTF12_BAC'
+  note: ' C2H4(22)'
+- name: CH3(23)
+  composition: {C: 1, H: 3}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 697.66, 5000.0]
+    data:
+    - [3.96043154, 5.92933161e-04, 8.78577868e-06, -9.88034016e-09, 
+        3.63236227e-12, 1.64218817e+04, 0.339863654]
+    - [3.09511239, 5.55429763e-03, -1.88158781e-06, 3.13334818e-10, 
+        -2.05195008e-14, 1.6542619e+04, 4.20297598]
+    note: 'Thermo library: thermo_DFT_CCSDTF12_BAC'
+  note: ' CH3(23)'
+- name: CH4(31)
+  composition: {C: 1, H: 4}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1084.12, 5000.0]
+    data:
+    - [4.20541641, -5.35558709e-03, 2.51123719e-05, -2.13763401e-08, 
+        5.97526176e-12, -1.01619434e+04, -0.921283497]
+    - [0.908258982, 0.0114540969, -4.57174454e-06, 8.29193125e-10, 
+        -5.66316086e-14, -9719.97148, 13.9931326]
+    note: 'Thermo library: primaryThermoLibrary'
+  note: ' CH4(31)'
+- name: C2H6(51)
+  composition: {C: 2, H: 6}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1012.42, 5000.0]
+    data:
+    - [3.72238711, 1.65090748e-03, 3.44173098e-05, -3.76855072e-08, 
+        1.24449318e-11, -1.15575899e+04, 4.68250076]
+    - [2.82850762, 0.0173040145, -6.73331816e-06, 1.23741453e-09, 
+        -8.6567168e-14, -1.19978187e+04, 5.93797588]
+    note: 'Thermo library: thermo_DFT_CCSDTF12_BAC'
+  note: ' C2H6(51)'
+- name: C2H5(52)
+  composition: {C: 2, H: 5}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1006.87, 5000.0]
+    data:
+    - [3.68745416, 3.06903086e-03, 2.55868378e-05, -2.94070406e-08, 
+        9.94049912e-12, 1.31153653e+04, 6.96688878]
+    - [3.53785743, 0.0137310835, -5.29560032e-06, 9.71472005e-10, 
+        -6.80280505e-14, 1.2635159e+04, 5.15539375]
+    note: 'Thermo library: thermo_DFT_CCSDTF12_BAC'
+  note: ' C2H5(52)'
+- name: C3H3(74)
+  composition: {C: 3, H: 3}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 949.37, 5000.0]
+    data:
+    - [3.09018471, 0.0173588577, -8.30777165e-06, -2.4784899e-09, 
+        2.58708163e-12, 4.07558456e+04, 8.11427701]
+    - [6.99886206, 7.24417963e-03, -2.3657263e-06, 3.98593268e-10, 
+        -2.69785242e-14, 3.9727355e+04, -12.0477788]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C3H3(74)'
+- name: C3H8(100)
+  composition: {C: 3, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 990.01, 5000.0]
+    data:
+    - [3.06332164, 0.0129219375, 3.47015601e-05, -4.70923435e-08, 
+        1.71374319e-11, -1.43905771e+04, 10.7837021]
+    - [5.60455766, 0.0219526107, -8.22065151e-06, 1.50100338e-09, 
+        -1.05632325e-13, -1.58394698e+04, -6.22711802]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C3H8(100)'
+- name: NC3H7(101)
+  composition: {C: 3, H: 7}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 984.47, 5000.0]
+    data:
+    - [3.02813311, 0.0147026024, 2.40500163e-05, -3.66725641e-08, 
+        1.38605867e-11, 1.05120556e+04, 12.4699515]
+    - [6.1655182, 0.0184493147, -6.79021015e-06, 1.23047209e-09, 
+        -8.63849754e-14, 9095.02489, -6.67653875]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' NC3H7(101)'
+- name: IC3H7(102)
+  composition: {C: 3, H: 7}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1029.98, 5000.0]
+    data:
+    - [3.23518591, 0.0111015995, 2.80213918e-05, -3.59458823e-08, 
+        1.23657323e-11, 9053.75554, 11.9813571]
+    - [4.36582753, 0.0214399432, -8.4855823e-06, 1.56801579e-09, 
+        -1.09812936e-13, 8039.56524, 2.70055576]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' IC3H7(102)'
+- name: C3H5(103)
+  composition: {C: 3, H: 5}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 942.17, 5000.0]
+    data:
+    - [3.29618728, 5.79172404e-03, 4.33939283e-05, -5.99915891e-08, 
+        2.3382634e-11, 1.89082129e+04, 9.01979498]
+    - [8.06849838, 0.0101838861, -2.84807906e-06, 5.00911608e-10, 
+        -3.7965477e-14, 1.69147372e+04, -19.5264192]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C3H5-A(103)'
+- name: C3H6(104)
+  composition: {C: 3, H: 6}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 983.75, 5000.0]
+    data:
+    - [3.31912882, 8.17949267e-03, 3.347395e-05, -4.36198164e-08, 
+        1.58215311e-11, 749.324994, 9.54022275]
+    - [5.36752189, 0.0170743528, -6.35110571e-06, 1.16620226e-09, 
+        -8.27626068e-14, -487.125845, -4.54450743]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C3H6(104)'
+- name: C3H4(174)
+  composition: {C: 3, H: 4}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 949.71, 5000.0]
+    data:
+    - [3.37446087, 7.04632186e-03, 2.78301589e-05, -3.99438422e-08, 
+        1.557263e-11, 2.11885612e+04, 7.62051335]
+    - [6.79959424, 9.59973065e-03, -3.02064907e-06, 5.37819214e-10, 
+        -3.92599215e-14, 1.97722576e+04, -12.7584206]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C3H4-A(174)'
+- name: C3H4(176)
+  composition: {C: 3, H: 4}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 969.99, 5000.0]
+    data:
+    - [3.30523275, 0.0109264869, 1.31987886e-05, -2.25162552e-08, 
+        8.87413283e-12, 2.0738223e+04, 7.19163288]
+    - [5.8005528, 0.0113535784, -4.03490424e-06, 7.19062141e-10, 
+        -5.0218367e-14, 1.974996e+04, -7.36969277]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C3H4-P(176)'
+- name: PC4H9(191)
+  composition: {C: 4, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1050.58, 5000.0]
+    data:
+    - [2.25387517, 0.0316764191, 2.89967517e-06, -1.98045433e-08, 
+        8.20489159e-12, 7652.6432, 17.2724793]
+    - [7.59594204, 0.0260841578, -1.01718214e-05, 1.85188192e-09, 
+        -1.28168737e-13, 5716.35691, -12.6367662]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' PC4H9(191)'
+- name: SC4H9(192)
+  composition: {C: 4, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1083.85, 5000.0]
+    data:
+    - [2.48182389, 0.027098624, 1.03886823e-05, -2.36649704e-08, 
+        8.65275587e-12, 6369.61855, 17.294296]
+    - [6.12698047, 0.0282086421, -1.13016957e-05, 2.07331252e-09, 
+        -1.43451043e-13, 4724.10369, -4.53090211]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' SC4H9(192)'
+- name: C4H8(197)
+  composition: {C: 4, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1007.28, 5000.0]
+    data:
+    - [2.58773847, 0.0232776847, 1.93416315e-05, -3.555015e-08, 
+        1.36908211e-11, -1918.72966, 14.5750281]
+    - [7.20513194, 0.023636224, -9.03153894e-06, 1.65393577e-09, 
+        -1.16020014e-13, -3797.32256, -12.4424018]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C4H8-1(197)'
+- name: C4H8(198)
+  composition: {C: 4, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1157.78, 5000.0]
+    data:
+    - [2.51999621, 0.0276811355, 9.44248758e-07, -1.2501455e-08, 
+        4.67165352e-12, -3343.74824, 13.0195154]
+    - [6.0421581, 0.0260073942, -1.04844255e-05, 1.90882943e-09, 
+        -1.30602142e-13, -4862.72035, -7.52658774]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C4H8-2(198)'
+- name: C4H7(199)
+  composition: {C: 4, H: 7}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 995.01, 5000.0]
+    data:
+    - [2.6851458, 0.020774458, 2.19958267e-05, -3.85571012e-08, 
+        1.49722684e-11, 1.47127821e+04, 14.0723609]
+    - [7.60270679, 0.0207982081, -7.87779506e-06, 1.45013864e-09, 
+        -1.02663228e-13, 1.27543963e+04, -14.5508999]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C4H71-3(199)'
+- name: C4H7(200)
+  composition: {C: 4, H: 7}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1051.01, 5000.0]
+    data:
+    - [2.4860013, 0.0277403919, -7.51222923e-07, -1.39968747e-08, 
+        6.14176876e-12, 2.311556e+04, 15.6915233]
+    - [7.36566479, 0.0210618256, -8.19307438e-06, 1.49013224e-09, 
+        -1.03097616e-13, 2.14330006e+04, -11.2176426]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C4H71-4(200)'
+- name: C4H7(201)
+  composition: {C: 4, H: 7}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1012.54, 5000.0]
+    data:
+    - [2.52157303, 0.0259936062, 6.08980726e-06, -2.23097682e-08, 
+        9.36554646e-12, 2.79100802e+04, 15.2845061]
+    - [7.74082486, 0.0203541132, -7.74605009e-06, 1.41034639e-09, 
+        -9.84410633e-14, 2.60852961e+04, -13.7520947]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C4H71-1(201)'
+- name: C4H6(203)
+  composition: {C: 4, H: 6}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 946.05, 5000.0]
+    data:
+    - [2.80599454, 0.0102584295, 6.17260905e-05, -9.01643576e-08, 
+        3.5911736e-11, 1.16584971e+04, 12.0621383]
+    - [12.4693673, 0.0100553982, -2.41207345e-06, 4.57078429e-10, 
+        -3.93161511e-14, 8010.77987, -43.6374458]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' C4H6(203)'
+- name: C6H10(349)
+  composition: {C: 6, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1413.0, 5000.0]
+    data:
+    - [-1.01375, 0.0638243, -4.40654e-05, 1.58295e-08, -2.30831e-12, 
+        7940.34, 32.5056]
+    - [16.0456, 0.0234774, -7.85798e-06, 1.20201e-09, -6.901e-14, 
+        2118.99, -58.8452]
+    note: 'Thermo library: CurranPentane'
+  note: ' C6H101-5(349)'
+- name: C5H8(410)
+  composition: {C: 5, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1397.0, 5000.0]
+    data:
+    - [-0.47217, 0.0559413, -4.50459e-05, 1.96181e-08, -3.5201e-12, 
+        7149.6, 25.6277]
+    - [14.0758, 0.0182376, -6.20748e-06, 9.60351e-10, -5.55742e-14, 
+        2400.34, -51.2988]
+    note: 'Thermo library: CurranPentane'
+  note: ' B13DE2M(410)'
+- name: C5H11(428)
+  composition: {C: 5, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1394.0, 5000.0]
+    data:
+    - [0.098319, 0.0558654, -3.28856e-05, 9.58367e-09, -1.08641e-12, 
+        4820.66, 28.6921]
+    - [15.1918, 0.0240339, -8.19718e-06, 1.27003e-09, -7.35728e-14, 
+        -802.149, -53.6479]
+    note: 'Thermo library: CurranPentane'
+  note: ' C5H11-1(428)'
+- name: C5H11(429)
+  composition: {C: 5, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1395.0, 5000.0]
+    data:
+    - [0.817689, 0.0492654, -2.13786e-05, 1.85532e-09, 7.06259e-13, 
+        3262.21, 26.5876]
+    - [14.7177, 0.0241668, -8.18648e-06, 1.26272e-09, -7.29268e-14, 
+        -2260.28, -50.6071]
+    note: 'Thermo library: CurranPentane'
+  note: ' C5H11-2(429)'
+- name: C5H10(431)
+  composition: {C: 5, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1390.0, 5000.0]
+    data:
+    - [-0.165024, 0.0530727, -3.10862e-05, 8.92413e-09, -9.8162e-13, 
+        -4593.76, 28.057]
+    - [14.3625, 0.0226076, -7.70501e-06, 1.1933e-09, -6.91126e-14, 
+        -1.00193e+04, -51.2512]
+    note: 'Thermo library: CurranPentane'
+  note: ' C5H10-1(431)'
+- name: C5H10(432)
+  composition: {C: 5, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1385.0, 5000.0]
+    data:
+    - [0.590529, 0.0485275, -2.43232e-05, 4.86096e-09, -1.13099e-13, 
+        -5997.78, 24.1816]
+    - [13.9426, 0.0228735, -7.778e-06, 1.20285e-09, -6.95972e-14, 
+        -1.12166e+04, -49.538]
+    note: 'Thermo library: CurranPentane'
+  note: ' C5H10-2(432)'
+- name: C5H9(435)
+  composition: {C: 5, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1391.0, 5000.0]
+    data:
+    - [0.207677, 0.0496049, -3.00622e-05, 9.19962e-09, -1.13246e-12, 
+        2.01252e+04, 28.5856]
+    - [13.7335, 0.0207003, -7.06963e-06, 1.09639e-09, -6.35591e-14, 
+        1.51176e+04, -45.0795]
+    note: 'Thermo library: CurranPentane'
+  note: ' C5H91-5(435)'
+- name: C5H11(544)
+  composition: {C: 5, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1397.0, 5000.0]
+    data:
+    - [-1.05354, 0.061973, -4.24711e-05, 1.55774e-08, -2.40104e-12, 
+        4236.34, 33.1806]
+    - [15.344, 0.0238466, -8.11897e-06, 1.25635e-09, -7.27147e-14, 
+        -1527.68, -55.0323]
+    note: 'Thermo library: CurranPentane'
+  note: ' AC5H11(544)'
+- name: C5H11(547)
+  composition: {C: 5, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1397.0, 5000.0]
+    data:
+    - [-1.05354, 0.061973, -4.24711e-05, 1.55774e-08, -2.40104e-12, 
+        4236.34, 32.4911]
+    - [15.344, 0.0238466, -8.11897e-06, 1.25635e-09, -7.27147e-14, 
+        -1527.68, -55.7218]
+    note: 'Thermo library: CurranPentane'
+  note: ' DC5H11(547)'
+- name: C6H12(788)
+  composition: {C: 6, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1000.0, 5000.0]
+    data:
+    - [-0.555477, 0.0646057, -3.42004e-05, 5.04218e-09, 1.14774e-12, 
+        -7486.02, 31.4621]
+    - [15.0917, 0.0290769, -9.5016e-06, 1.4765e-09, -8.94808e-14, 
+        -1.24629e+04, -51.9476]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' C6H12(788)'
+- name: C6H11(791)
+  composition: {C: 6, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1000.0, 5000.0]
+    data:
+    - [-0.102852, 0.0623649, -3.81471e-05, 1.15531e-08, -1.44216e-12, 
+        8354.81, 29.0126]
+    - [16.0125, 0.0243247, -7.05642e-06, 1.00566e-09, -5.73513e-14, 
+        3255.88, -56.644]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' SAXC6H11(791)'
+- name: C6H13(792)
+  composition: {C: 6, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1390.0, 5000.0]
+    data:
+    - [-0.204871, 0.0683801, -4.14448e-05, 1.26156e-08, -1.5312e-12, 
+        1832.8, 31.6075]
+    - [18.5385, 0.0283108, -9.65307e-06, 1.49548e-09, -8.66336e-14, 
+        -5092.99, -70.4491]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXC6H13(792)'
+- name: C6H13(793)
+  composition: {C: 6, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1380.0, 5000.0]
+    data:
+    - [0.22956, 0.0633327, -3.24135e-05, 6.46388e-09, -9.6142e-14, 
+        525.639, 30.8006]
+    - [18.3687, 0.0280268, -9.47032e-06, 1.45889e-09, -8.42002e-14, 
+        -6460.94, -69.0934]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' SXC6H13(793)'
+- name: C6H13(794)
+  composition: {C: 6, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1380.0, 5000.0]
+    data:
+    - [0.22956, 0.0633327, -3.24135e-05, 6.46388e-09, -9.6142e-14, 
+        525.639, 30.8006]
+    - [18.3687, 0.0280268, -9.47032e-06, 1.45889e-09, -8.42002e-14, 
+        -6460.94, -69.0934]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S2XC6H13(794)'
+- name: C7H13(796)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1389.0, 5000.0]
+    data:
+    - [-1.66946, 0.0793202, -5.20232e-05, 1.74804e-08, -2.40913e-12, 
+        6759.27, 37.376]
+    - [20.9278, 0.0292841, -1.009e-05, 1.57426e-09, -9.16506e-14, 
+        -1412.96, -85.0447]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXC7H13(796)'
+- name: C7H14(797)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1392.0, 5000.0]
+    data:
+    - [-1.67721, 0.0824612, -5.46504e-05, 1.87862e-08, -2.65738e-12, 
+        -1.02169e+04, 38.5068]
+    - [21.0898, 0.0310608, -1.05645e-05, 1.63406e-09, -9.45598e-14, 
+        -1.8326e+04, -84.4391]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' C7H14(797)'
+- name: C7H15(798)
+  composition: {C: 7, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1390.0, 5000.0]
+    data:
+    - [-0.49957, 0.0808826, -5.00533e-05, 1.56549e-08, -1.96616e-12, 
+        -1045.9, 34.6564]
+    - [21.7941, 0.032628, -1.11138e-05, 1.72067e-09, -9.96367e-14, 
+        -9209.38, -86.4954]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXC7H15(798)'
+- name: C7H15(799)
+  composition: {C: 7, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1382.0, 5000.0]
+    data:
+    - [-0.0379156, 0.0756727, -4.07474e-05, 9.32679e-09, -4.92361e-13, 
+        -2356.05, 33.7322]
+    - [21.6369, 0.0323325, -1.09274e-05, 1.68357e-09, -9.71774e-14, 
+        -1.05874e+04, -85.221]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' SXC7H15(799)'
+- name: C7H15(800)
+  composition: {C: 7, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1382.0, 5000.0]
+    data:
+    - [-0.0379156, 0.0756727, -4.07474e-05, 9.32679e-09, -4.92361e-13, 
+        -2356.05, 33.7322]
+    - [21.6369, 0.0323325, -1.09274e-05, 1.68357e-09, -9.71774e-14, 
+        -1.05874e+04, -85.221]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S2XC7H15(800)'
+- name: C7H15(801)
+  composition: {C: 7, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1382.0, 5000.0]
+    data:
+    - [-0.0379156, 0.0756727, -4.07474e-05, 9.32679e-09, -4.92361e-13, 
+        -2356.05, 33.7322]
+    - [21.6369, 0.0323325, -1.09274e-05, 1.68357e-09, -9.71774e-14, 
+        -1.05874e+04, -85.221]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S3XC7H15(801)'
+- name: C8H16(804)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1392.0, 5000.0]
+    data:
+    - [-1.89227, 0.0946066, -6.27386e-05, 2.15158e-08, -3.02719e-12, 
+        -1.31075e+04, 41.1879]
+    - [24.354, 0.0353666, -1.20208e-05, 1.85855e-09, -1.07522e-13, 
+        -2.24486e+04, -100.538]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' C8H16(804)'
+- name: C8H17(805)
+  composition: {C: 8, H: 17}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1390.0, 5000.0]
+    data:
+    - [-0.772759, 0.093255, -5.84447e-05, 1.8557e-08, -2.37127e-12, 
+        -3926.9, 37.6131]
+    - [25.051, 0.036948, -1.25765e-05, 1.94628e-09, -1.12669e-13, 
+        -1.33301e+04, -102.557]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXC8H17(805)'
+- name: C8H17(808)
+  composition: {C: 8, H: 17}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1383.0, 5000.0]
+    data:
+    - [-0.304233, 0.0880077, -4.90743e-05, 1.21858e-08, -8.87773e-13, 
+        -5237.93, 36.6583]
+    - [24.9044, 0.0366394, -1.2385e-05, 1.90835e-09, -1.10161e-13, 
+        -1.47135e+04, -101.345]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S3XC8H17(808)'
+- name: C9H18(811)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1392.0, 5000.0]
+    data:
+    - [-2.16108, 0.106958, -7.10973e-05, 2.43971e-08, -3.42772e-12, 
+        -1.59891e+04, 44.1245]
+    - [27.6142, 0.0396825, -1.34819e-05, 2.0839e-09, -1.20539e-13, 
+        -2.65709e+04, -116.619]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' C9H18(811)'
+- name: C9H19(812)
+  composition: {C: 9, H: 19}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1390.0, 5000.0]
+    data:
+    - [-1.04387, 0.105617, -6.682e-05, 2.14486e-08, -2.77404e-12, 
+        -6808.19, 42.3519]
+    - [28.3098, 0.0412657, -1.40383e-05, 2.17175e-09, -1.25692e-13, 
+        -1.74516e+04, -116.838]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXC9H19(812)'
+- name: C9H19(815)
+  composition: {C: 9, H: 19}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1386.0, 5000.0]
+    data:
+    - [-0.576046, 0.100512, -5.77755e-05, 1.53277e-08, -1.35057e-12, 
+        -8122.9, 39.5796]
+    - [28.0393, 0.041144, -1.3926e-05, 2.14746e-09, -1.24022e-13, 
+        -1.87728e+04, -116.697]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S3XC9H19(815)'
+- name: C9H19(816)
+  composition: {C: 9, H: 19}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1386.0, 5000.0]
+    data:
+    - [-0.576046, 0.100512, -5.77755e-05, 1.53277e-08, -1.35057e-12, 
+        -8122.9, 39.5796]
+    - [28.0393, 0.041144, -1.3926e-05, 2.14746e-09, -1.24022e-13, 
+        -1.87728e+04, -116.697]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S4XC9H19(816)'
+- name: S(837)
+  composition: {C: 12, H: 25}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1390.0, 5000.0]
+    data:
+    - [-1.85029, 0.142671, -9.18917e-05, 3.00883e-08, -3.97454e-12, 
+        -1.5453e+04, 49.3702]
+    - [38.0922, 0.0542108, -1.84206e-05, 2.84762e-09, -1.64732e-13, 
+        -2.98194e+04, -166.883]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXC12H25(837)'
+- name: S(838)
+  composition: {C: 12, H: 25}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1385.0, 5000.0]
+    data:
+    - [-1.36787, 0.137355, -8.24076e-05, 2.36422e-08, -2.47436e-12, 
+        -1.67661e+04, 48.3522]
+    - [37.9688, 0.0538719, -1.82171e-05, 2.80775e-09, -1.62108e-13, 
+        -3.12145e+04, -165.806]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' SXC12H25(838)'
+- name: S(839)
+  composition: {C: 12, H: 25}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1385.0, 5000.0]
+    data:
+    - [-1.36787, 0.137355, -8.24076e-05, 2.36422e-08, -2.47436e-12, 
+        -1.67661e+04, 48.3522]
+    - [37.9688, 0.0538719, -1.82171e-05, 2.80775e-09, -1.62108e-13, 
+        -3.12145e+04, -165.806]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S2XC12H25(839)'
+- name: S(840)
+  composition: {C: 12, H: 25}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1385.0, 5000.0]
+    data:
+    - [-1.36787, 0.137355, -8.24076e-05, 2.36422e-08, -2.47436e-12, 
+        -1.67661e+04, 48.3522]
+    - [37.9688, 0.0538719, -1.82171e-05, 2.80775e-09, -1.62108e-13, 
+        -3.12145e+04, -165.806]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S3XC12H25(840)'
+- name: S(841)
+  composition: {C: 12, H: 25}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1385.0, 5000.0]
+    data:
+    - [-1.36787, 0.137355, -8.24076e-05, 2.36422e-08, -2.47436e-12, 
+        -1.67661e+04, 48.3522]
+    - [37.9688, 0.0538719, -1.82171e-05, 2.80775e-09, -1.62108e-13, 
+        -3.12145e+04, -165.806]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S4XC12H25(841)'
+- name: S(842)
+  composition: {C: 12, H: 25}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1385.0, 5000.0]
+    data:
+    - [-1.36787, 0.137355, -8.24076e-05, 2.36422e-08, -2.47436e-12, 
+        -1.67661e+04, 48.3522]
+    - [37.9688, 0.0538719, -1.82171e-05, 2.80775e-09, -1.62108e-13, 
+        -3.12145e+04, -165.806]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' S5XC12H25(842)'
+- name: C7H13(853)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1389.0, 5000.0]
+    data:
+    - [-1.66946, 0.0793202, -5.20232e-05, 1.74804e-08, -2.40913e-12, 
+        6759.27, 38.4731]
+    - [20.9278, 0.0292841, -1.009e-05, 1.57426e-09, -9.16506e-14, 
+        -1412.96, -83.9476]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' SAXC7H13(853)'
+- name: C7H12(891)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1397.0, 5000.0]
+    data:
+    - [-2.50244, 0.0873984, -7.11094e-05, 3.08712e-08, -5.48967e-12, 
+        1603.47, 39.7299]
+    - [20.9347, 0.026808, -9.15645e-06, 1.42006e-09, -8.23222e-14, 
+        -6027.82, -84.197]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' CH2-3-1C6H10(891)'
+- name: C9H18(893)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1391.0, 5000.0]
+    data:
+    - [-1.10105, 0.0979164, -5.05751e-05, 5.87235e-09, 2.42065e-12, 
+        -1.75568e+04, 38.9535]
+    - [23.3474, 0.0430964, -1.38965e-05, 2.13847e-09, -1.28697e-13, 
+        -2.53782e+04, -91.568]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' C9H18-4(893)'
+- name: C7H13(913)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1372.0, 5000.0]
+    data:
+    - [0.0510707, 0.0729893, -4.0495e-05, 1.00132e-08, -8.10665e-13, 
+        1.19909e+04, 43.9029]
+    - [22.7491, 0.0287965, -1.01622e-05, 1.61105e-09, -9.48402e-14, 
+        3077.27, -81.3859]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXCH2-3-1C6H11(913)'
+- name: C8H16(923)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1391.0, 5000.0]
+    data:
+    - [-1.21774, 0.0882852, -4.86946e-05, 9.3159e-09, 6.45244e-13, 
+        -1.46273e+04, 37.6708]
+    - [20.5157, 0.038473, -1.24391e-05, 1.91727e-09, -1.15482e-13, 
+        -2.1538e+04, -78.1175]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' C8H16-3(923)'
+- name: C6H11(942)
+  composition: {C: 6, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1394.0, 5000.0]
+    data:
+    - [-1.18772, 0.067972, -4.72509e-05, 1.74233e-08, -2.68819e-12, 
+        1.67611e+04, 37.1393]
+    - [17.3862, 0.0248639, -8.51628e-06, 1.3233e-09, -7.68158e-14, 
+        1.02277e+04, -62.8048]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PXCH2-3-1C5H9(942)'
+- name: C6H10(947)
+  composition: {C: 6, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1368.0, 5000.0]
+    data:
+    - [5.69172, 0.0348843, 9.72853e-06, -1.891e-08, 5.1071e-12, 
+        -8914.98, 4.26763]
+    - [20.8165, 0.0261803, -1.05808e-05, 1.81995e-09, -1.12948e-13, 
+        -1.72782e+04, -87.159]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' CH2-3-1C5H8(947)'
+- name: C7H14(952)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1390.0, 5000.0]
+    data:
+    - [-1.16533, 0.079044, -4.96102e-05, 1.58569e-08, -2.05346e-12, 
+        -1.17362e+04, 38.1864]
+    - [20.6192, 0.0314853, -1.07162e-05, 1.65828e-09, -9.59912e-14, 
+        -1.96713e+04, -80.0526]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' C7H14-2(952)'
+- name: C7H13(958)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1000.0, 5000.0]
+    data:
+    - [-0.65701, 0.080941, -6.47455e-05, 3.26716e-08, -7.96074e-12, 
+        1.27202e+04, 33.6426]
+    - [19.6992, 0.0273057, -7.79661e-06, 1.1004e-09, -6.24402e-14, 
+        6511.8, -73.2632]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' PX7-2C7H13(958)'
+- name: C7H13(967)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [298.0, 1364.0, 5000.0]
+    data:
+    - [-0.11204, 0.0699305, -3.27762e-05, 4.29403e-09, 5.4659e-13, 
+        3210.07, 42.2783]
+    - [22.964, 0.0288693, -1.02474e-05, 1.6309e-09, -9.62704e-14, 
+        -6214.13, -86.4295]
+    note: 'Thermo library: JetSurF2.0'
+  note: ' CH3-3-TAXC6H10(967)'
+- name: S(1229)
+  composition: {C: 6, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1829.16, 5000.0]
+    data:
+    - [0.7234979, 0.064096293, -3.88937745e-05, 1.18285733e-08, 
+        -1.46479468e-12, -9554.73312, 23.4752929]
+    - [15.581581, 0.0316049584, -1.22495193e-05, 2.1177265e-09, 
+        -1.37577838e-13, -1.49903396e+04, -57.1786454]
+    note: 'Thermo library: CH'
+  note: ' CC=CCCC(1229)'
+- name: S(1232)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1276.13, 5000.0]
+    data:
+    - [-1.07688366, 0.0975382687, -5.11186223e-05, 8.35717065e-09, 
+        9.72517633e-13, -1.74296071e+04, 39.7767572]
+    - [17.7774488, 0.0558079866, -2.24825986e-05, 4.06231812e-09, 
+        -2.75407854e-13, -2.36559424e+04, -61.3228209]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) +
+      group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+  note: ' CCC=CCCCCC(1232)'
+- name: S(1235)
+  composition: {C: 6, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1839.12, 5000.0]
+    data:
+    - [0.73976588, 0.063583643, -3.85035835e-05, 1.16726825e-08, 
+        -1.43916018e-12, -9539.96494, 23.5193818]
+    - [15.6639663, 0.0311245583, -1.20299998e-05, 2.07631914e-09, 
+        -1.34696774e-13, -1.50295038e+04, -57.5745448]
+    note: 'Thermo library: CH'
+  note: ' CCC=CCC(1235)'
+- name: C3H6(1252)
+  composition: {C: 3, H: 6}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1330.25, 5000.0]
+    data:
+    - [2.92362992, 0.0210869657, -1.82398951e-06, -5.35947224e-09, 
+        1.86094476e-12, 3.71014626e+04, 19.8374456]
+    - [5.20768877, 0.020552155, -8.36239795e-06, 1.49634165e-09, 
+        -1.00128183e-13, 3.59334376e+04, 6.06019311]
+    note: 'Thermo group additivity estimation: group(Cs-CsHHH) + group(Cs-CsHHH)
+      + group(CsJ2_singlet-CsH)'
+  note: ' C[C]C(1252)'
+- name: S(1258)
+  composition: {C: 6, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1814.31, 5000.0]
+    data:
+    - [1.25185563, 0.0626911915, -3.52397752e-05, 9.76468414e-09, 
+        -1.12881513e-12, 2.85760866e+04, 33.2339648]
+    - [11.2892418, 0.04056154, -1.69436224e-05, 3.04169411e-09, 
+        -2.02419659e-13, 2.49339462e+04, -21.1698192]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-
+      CsH)
+  note: ' C[C]CCCC(1258)'
+- name: S(1260)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1159.53, 5000.0]
+    data:
+    - [-0.262006965, 0.0809408701, -3.1723731e-05, -5.78653661e-09, 
+        5.24190156e-12, -1.45998212e+04, 33.9020587]
+    - [14.680831, 0.0508557292, -2.05693581e-05, 3.76329994e-09, 
+        -2.5875237e-13, -1.95080128e+04, -46.6219663]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+  note: ' CCCC=CCCC(1260)'
+- name: S(1268)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1093.68, 5000.0]
+    data:
+    - [0.516528369, 0.064682099, -1.31157629e-05, -1.94273863e-08, 
+        9.493656e-12, -1.17682827e+04, 29.5503235]
+    - [12.5233747, 0.0444655479, -1.78891621e-05, 3.29347027e-09, 
+        -2.28557043e-13, -1.58118594e+04, -35.9302081]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) +
+      group(Cds-CdsCsH) + group(Cds-CdsCsH)
+  note: ' CCC=CCCC(1268)'
+- name: C5H9(1270)
+  composition: {C: 5, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1893.61, 5000.0]
+    data:
+    - [1.83944474, 0.0435138111, -2.22324066e-05, 5.12869186e-09, 
+        -4.29392529e-13, 2.37941138e+04, 20.0359949]
+    - [13.4982707, 0.0227876479, -8.90500744e-06, 1.52470525e-09, 
+        -9.72344723e-14, 1.86791581e+04, -45.5020948]
+    note: 'Thermo library: CurranPentane + radical(Cds_S)'
+  note: ' C=[C]CCC(1270)'
+- name: C5H9(1271)
+  composition: {C: 5, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1258.94, 5000.0]
+    data:
+    - [1.73657091, 0.0433848948, -1.82815563e-05, -3.42432918e-10, 
+        1.54970163e-12, 2.49125812e+04, 20.3180762]
+    - [9.69669583, 0.0277871828, -1.12472202e-05, 2.04884429e-09, 
+        -1.39732105e-13, 2.21401203e+04, -22.9688771]
+    note: 'Thermo library: CurranPentane + radical(Cds_P)'
+  note: ' [CH]=CCCC(1271)'
+- name: S(1272)
+  composition: {C: 5, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 2216.62, 5000.0]
+    data:
+    - [1.7483128, 0.0494323699, -2.57683604e-05, 6.32372783e-09, 
+        -6.20564534e-13, 3.1420726e+04, 29.2252097]
+    - [13.8275834, 0.0276347263, -1.10177615e-05, 1.88736313e-09, 
+        -1.20212008e-13, 2.60656966e+04, -38.6651859]
+    note: 'Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH)
+      + group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-CsH)'
+  note: ' C[C]CCC(1272)'
+- name: C4H8(1282)
+  composition: {C: 4, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1802.43, 5000.0]
+    data:
+    - [2.23551296, 0.0362128062, -1.62669516e-05, 2.7719717e-09, 
+        -6.63883096e-14, 3.4266313e+04, 25.2570487]
+    - [10.5025207, 0.0226352649, -8.93626772e-06, 1.52847153e-09, 
+        -9.75150615e-14, 3.05115405e+04, -21.645735]
+    note: 'Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsHHH)
+      + group(Cs-CsHHH) + group(CsJ2_singlet-CsH)'
+  note: ' C[C]CC(1282)'
+- name: S(1292)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1865.45, 5000.0]
+    data:
+    - [-1.03376944, 0.0998446772, -5.98543596e-05, 1.77890858e-08, 
+        -2.14857554e-12, -1.75704803e+04, 38.9634353]
+    - [22.2888933, 0.0498345721, -1.96411564e-05, 3.41775278e-09, 
+        -2.22573671e-13, -2.62718673e+04, -88.0964902]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-
+      CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+  note: ' CC=CCCCCCC(1292)'
+- name: S(1294)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1981.76, 5000.0]
+    data:
+    - [-0.554111731, 0.0867122973, -5.06133827e-05, 1.44888322e-08, 
+        -1.66706926e-12, -1.47246811e+04, 35.021752]
+    - [22.6405981, 0.03989665, -1.51790392e-05, 2.56886029e-09, 
+        -1.63382638e-13, -2.39180955e+04, -92.7445218]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+  note: ' CC=CCCCCC(1294)'
+- name: S(1330)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 2453.87, 5000.0]
+    data:
+    - [0.955761369, 0.0651237701, -3.33912779e-05, 7.8947951e-09, 
+        -7.29538764e-13, 1.29240163e+04, 30.2871699]
+    - [23.2642555, 0.0287594025, -1.11626276e-05, 1.85575899e-09, 
+        -1.14286206e-13, 1975.52043, -97.3641402]
+    note: 'Thermo library: JetSurF2.0 + radical(RCCJCC)'
+  note: ' C=CCC[CH]CC(1330)'
+- name: S(1333)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1571.3, 5000.0]
+    data:
+    - [0.687699587, 0.0765400862, -4.60496491e-05, 1.42608924e-08, 
+        -1.90215063e-12, 2.57352721e+04, 37.5032093]
+    - [10.6189149, 0.0512587153, -2.19156048e-05, 4.02143184e-09, 
+        -2.73022232e-13, 2.26142692e+04, -14.8971739]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) +
+      group(CsJ2_singlet-CsH)
+  note: ' C[C]CCCCC(1333)'
+- name: S(1440)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1345.11, 5000.0]
+    data:
+    - [-0.514045632, 0.104965549, -6.96214349e-05, 2.50861177e-08, 
+        -3.99626358e-12, 2.00570791e+04, 46.3147933]
+    - [11.2806603, 0.0698910877, -3.05079816e-05, 5.70053774e-09, 
+        -3.93276501e-13, 1.68840561e+04, -14.0846436]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-CsH)
+  note: ' C[C]CCCCCCC(1440)'
+- name: S(1460)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1430.56, 5000.0]
+    data:
+    - [0.092682641, 0.0906889586, -5.76442524e-05, 1.94745414e-08, 
+        -2.88405155e-12, 2.28959403e+04, 41.887804]
+    - [10.7665925, 0.0608435632, -2.63501563e-05, 4.89093386e-09, 
+        -3.35468501e-13, 1.98420058e+04, -13.4296077]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + group(CsJ2_singlet-CsH)
+  note: ' C[C]CCCCCC(1460)'
+- name: C3H5(1509)
+  composition: {C: 3, H: 5}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 937.44, 5000.0]
+    data:
+    - [3.52409511, -3.09059408e-03, 7.19138652e-05, -9.1478763e-08, 
+        3.49768991e-11, 3.37825437e+04, 9.37900903]
+    - [9.02708622, 8.1341702e-03, -1.57933534e-06, 2.78497606e-10, 
+        -2.5120992e-14, 3.12258349e+04, -24.9478793]
+    note: 'Thermo library: DFT_QCI_thermo'
+  note: ' [CH]1CC1(1509)'
+- name: S(1528)
+  composition: {C: 6, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1805.84, 5000.0]
+    data:
+    - [1.32690885, 0.0574339435, -3.37024404e-05, 9.80798886e-09, 
+        -1.18019008e-12, 4.39455825e+04, 33.4556529]
+    - [12.1439074, 0.0334742618, -1.38009048e-05, 2.46099612e-09, 
+        -1.63089499e-13, 4.00387708e+04, -25.1233987]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-CdsHH) +
+      group(CsJ2_singlet-CsH)
+  note: ' C=CCC[C]C(1528)'
+- name: S(1570)
+  composition: {C: 6, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1814.31, 5000.0]
+    data:
+    - [1.25185563, 0.0626911915, -3.52397752e-05, 9.76468414e-09, 
+        -1.12881513e-12, 2.85760866e+04, 33.2339648]
+    - [11.2892418, 0.04056154, -1.69436224e-05, 3.04169411e-09, 
+        -2.02419659e-13, 2.49339462e+04, -21.1698192]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-
+      CsH)
+  note: ' CC[C]CCC(1570)'
+- name: S(1633)
+  composition: {C: 5, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 2216.62, 5000.0]
+    data:
+    - [1.7483128, 0.0494323699, -2.57683604e-05, 6.32372783e-09, 
+        -6.20564534e-13, 3.1420726e+04, 28.5320625]
+    - [13.8275834, 0.0276347263, -1.10177615e-05, 1.88736313e-09, 
+        -1.20212008e-13, 2.60656966e+04, -39.3583331]
+    note: 'Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH)
+      + group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-CsH)'
+  note: ' CC[C]CC(1633)'
+- name: S(1681)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1054.67, 5000.0]
+    data:
+    - [0.465437404, 0.0648480812, -9.56951891e-06, -2.58204479e-08, 
+        1.23866423e-11, -1.13879545e+04, 29.2561302]
+    - [13.2840592, 0.0431736626, -1.70612515e-05, 3.13614303e-09, 
+        -2.18573211e-13, -1.55902803e+04, -40.3724325]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-
+      CdsCsH) + group(Cds-CdsHH)
+  note: ' C=CC(C)CCC(1681)'
+- name: S(1719)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 2379.31, 5000.0]
+    data:
+    - [0.942084033, 0.0650289404, -3.34198263e-05, 8.01035816e-09, 
+        -7.55826731e-13, 1.14528181e+04, 32.2860389]
+    - [21.1869581, 0.0309940519, -1.19630313e-05, 1.99830441e-09, 
+        -1.24124917e-13, 1819.05824, -82.9322325]
+    note: 'Thermo library: JetSurF2.0 + radical(RCCJC)'
+  note: ' C[CH]CCC=CC(1719)'
+- name: S(1721)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1900.37, 5000.0]
+    data:
+    - [0.708949407, 0.0696468766, -4.03037319e-05, 1.14372718e-08, 
+        -1.3234606e-12, 1.66804415e+04, 30.8439455]
+    - [15.6015392, 0.0382997476, -1.5560491e-05, 2.75700892e-09, 
+        -1.8152808e-13, 1.10202298e+04, -50.5657618]
+    note: 'Thermo library: JetSurF2.0 + radical(Cds_S)'
+  note: ' C[C]=CCCCC(1721)'
+- name: S(1722)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1571.3, 5000.0]
+    data:
+    - [0.687699587, 0.0765400862, -4.60496491e-05, 1.42608924e-08, 
+        -1.90215063e-12, 2.57352721e+04, 37.5032093]
+    - [10.6189149, 0.0512587153, -2.19156048e-05, 4.02143184e-09, 
+        -2.73022232e-13, 2.26142692e+04, -14.8971739]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) +
+      group(CsJ2_singlet-CsH)
+  note: ' CC[C]CCCC(1722)'
+- name: C5H9(1778)
+  composition: {C: 5, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 963.42, 5000.0]
+    data:
+    - [2.65115309, 9.21678298e-03, 9.6055083e-05, -1.2662155e-07, 
+        4.76858605e-11, 2.20206165e+04, 16.2572218]
+    - [11.5751046, 0.0241767326, -8.21574602e-06, 1.56744617e-09, 
+        -1.19036643e-13, 1.78873378e+04, -38.9902534]
+    note: 'Thermo library: CH + radical(Isobutyl)'
+  note: ' [CH2]C1CCC1(1778)'
+- name: S(1970)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1571.3, 5000.0]
+    data:
+    - [0.687699587, 0.0765400862, -4.60496491e-05, 1.42608924e-08, 
+        -1.90215063e-12, 2.57352721e+04, 36.8100622]
+    - [10.6189149, 0.0512587153, -2.19156048e-05, 4.02143184e-09, 
+        -2.73022232e-13, 2.26142692e+04, -15.590321]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) +
+      group(CsJ2_singlet-CsH)
+  note: ' CCC[C]CCC(1970)'
+- name: S(2094)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1021.05, 5000.0]
+    data:
+    - [0.805774491, 0.0567088793, 1.0800013e-06, -3.64852935e-08, 
+        1.65095182e-11, 3969.22054, 28.5069234]
+    - [13.581386, 0.0369459565, -1.43791255e-05, 2.65834952e-09, 
+        -1.87418948e-13, -218.412012, -41.1250363]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) +
+      group(Cds-CdsHH) + group(Cds-CdsHH)
+  note: ' C=CCC(C)C=C(2094)'
+- name: S(2095)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1118.34, 5000.0]
+    data:
+    - [0.768969641, 0.060485577, -1.73309647e-05, -1.22228145e-08, 
+        6.75023634e-12, 3453.59682, 28.4516564]
+    - [12.1604262, 0.039656907, -1.61062507e-05, 2.97091056e-09, 
+        -2.05964929e-13, -339.702238, -33.3476811]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+      + group(Cds-CdsCsH) + group(Cds-CdsHH)
+  note: ' C=CCCC=CC(2095)'
+- name: C4H7(2173)
+  composition: {C: 4, H: 7}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 936.88, 5000.0]
+    data:
+    - [2.93067723, 0.0117177927, 5.1746505e-05, -7.3679451e-08, 
+        2.89580252e-11, 2.58550043e+04, 14.2261442]
+    - [8.74005628, 0.0169768939, -4.80491411e-06, 8.10817765e-10, 
+        -5.83779921e-14, 2.34471195e+04, -20.4631486]
+    note: 'Thermo library: CurranPentane + radical(Isobutyl)'
+  note: ' [CH2]C1CC1(2173)'
+- name: C4H6(2174)
+  composition: {C: 4, H: 6}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 950.4, 5000.0]
+    data:
+    - [3.4131523, -4.60678924e-03, 9.5714989e-05, -1.18792984e-07, 
+        4.44461364e-11, 1.74039881e+04, 10.1521954]
+    - [9.72197116, 0.0136871966, -3.93800911e-06, 7.58611631e-10, 
+        -6.15930936e-14, 1.41794116e+04, -30.6187463]
+    note: 'Thermo library: CH'
+  note: ' C1=CCC1(2174)'
+- name: S(2312)
+  composition: {C: 6, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1858.04, 5000.0]
+    data:
+    - [1.95877996, 0.0507034597, -1.82264692e-05, -4.45615785e-10, 
+        8.37305303e-13, 7915.44953, 19.9451015]
+    - [17.8629448, 0.0315590054, -1.49565863e-05, 2.7532927e-09, 
+        -1.81380726e-13, -600.158128, -73.6476707]
+    note: 'Thermo library: CH + radical(Allyl_P)'
+  note: ' [CH2]C=C(C)CC(2312)'
+- name: S(2320)
+  composition: {C: 6, H: 10}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 972.84, 5000.0]
+    data:
+    - [1.89251887, 0.0285660764, 5.75267394e-05, -9.12258151e-08, 
+        3.58058694e-11, 1.00463983e+04, 20.5339598]
+    - [12.7398596, 0.0282099037, -1.01443737e-05, 1.89811338e-09, 
+        -1.39070729e-13, 5842.18101, -42.2601671]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cds-CdsCsCs)
+      + group(Cds-CdsCsH) + ring(Cyclobutene)
+  note: ' CCC1=CCC1(2320)'
+- name: C6H9(2321)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 2087.06, 5000.0]
+    data:
+    - [2.95743353, 0.0462065076, -1.26807311e-05, -2.68333222e-09, 
+        1.03952892e-12, 8421.03124, 15.4137302]
+    - [23.6772279, 0.0273705694, -1.41463271e-05, 2.57731234e-09, 
+        -1.6469595e-13, -4774.03184, -110.683857]
+    note: 'Thermo library: JetSurF2.0 + radical(Allyl_S)'
+  note: ' C=CC(=C)[CH]C(2321)'
+- name: C6H9(2322)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 2259.36, 5000.0]
+    data:
+    - [3.35509042, 0.0463661466, -1.48175104e-05, -1.03296487e-09, 
+        6.70978622e-13, 1.61111036e+04, 16.8178459]
+    - [30.8163467, 0.019046568, -1.08199071e-05, 1.959748e-09, 
+        -1.21834692e-13, -1733.90732, -150.080059]
+    note: 'Thermo library: JetSurF2.0 + radical(RCCJ)'
+  note: ' [CH2]CC(=C)C=C(2322)'
+- name: C6H9(2323)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 815.35, 5000.0]
+    data:
+    - [1.17421079, 0.0755691837, -1.12515516e-04, 1.21202413e-07, 
+        -5.07985399e-11, 1.5455161e+04, 22.5396333]
+    - [-3.29850295, 0.0647285054, -3.2260169e-05, 6.26812296e-09, 
+        -4.37173656e-13, 1.7274226e+04, 49.8872689]
+    note: 'Thermo library: JetSurF2.0 + radical(C=CJC=C)'
+  note: ' C=[C]C(=C)CC(2323)'
+- name: C6H9(2324)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 784.81, 5000.0]
+    data:
+    - [1.21872155, 0.0721126821, -9.88540638e-05, 1.04842526e-07, 
+        -4.50723015e-11, 2.12411209e+04, 23.1847063]
+    - [-1.9062495, 0.0624834055, -3.16031671e-05, 6.22162705e-09, 
+        -4.38837995e-13, 2.25186618e+04, 42.5178929]
+    note: 'Thermo library: JetSurF2.0 + radical(Cds_P)'
+  note: ' [CH]=C(C=C)CC(2324)'
+- name: C6H9(2325)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 784.81, 5000.0]
+    data:
+    - [1.21872155, 0.0721126821, -9.88540638e-05, 1.04842526e-07, 
+        -4.50723015e-11, 2.12411209e+04, 23.1847063]
+    - [-1.9062495, 0.0624834055, -3.16031671e-05, 6.22162705e-09, 
+        -4.38837995e-13, 2.25186618e+04, 42.5178929]
+    note: 'Thermo library: JetSurF2.0 + radical(Cds_P)'
+  note: ' [CH]=CC(=C)CC(2325)'
+- name: S(2329)
+  composition: {C: 6, H: 11}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1067.74, 5000.0]
+    data:
+    - [1.57841432, 0.0407184057, 1.94969084e-05, -4.46337844e-08, 
+        1.69907752e-11, 7752.4318, 22.4935378]
+    - [10.7679392, 0.0358347024, -1.5144746e-05, 2.90860721e-09, 
+        -2.08092006e-13, 4106.02078, -30.3287973]
+    note: 'Thermo library: CH + radical(Allyl_S)'
+  note: ' C=C([CH]C)CC(2329)'
+- name: S(2337)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1044.05, 5000.0]
+    data:
+    - [0.751291326, 0.0593687233, -3.88029511e-06, -2.87824404e-08, 
+        1.30844756e-11, 4474.72539, 26.4825568]
+    - [11.9471726, 0.042327378, -1.6539839e-05, 3.01857069e-09, 
+        -2.09550769e-13, 727.89533, -34.7615861]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-
+      CdsCsH) + group(Cds-CdsHH) + radical(Allyl_T)
+  note: ' C=C[C](CC)CC(2337)'
+- name: S(2415)
+  composition: {C: 9, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1088.44, 5000.0]
+    data:
+    - [-0.428931053, 0.0834205329, -2.97999436e-05, -1.22893227e-08, 
+        8.45198143e-12, 1.41670989e+04, 35.6852833]
+    - [15.6639844, 0.0502890683, -1.99854324e-05, 3.65407375e-09, 
+        -2.52722898e-13, 9123.17741, -50.3950398]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH) + group(Cds-CdsHH) + radical(Allyl_T)
+  note: ' C=CCC[C](C=C)CC(2415)'
+- name: S(2416)
+  composition: {C: 9, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1102.68, 5000.0]
+    data:
+    - [-0.76060658, 0.0902952979, -4.32155076e-05, -2.31421924e-09, 
+        5.6991048e-12, 1.43122633e+04, 37.8911485]
+    - [17.7797922, 0.0478213904, -1.91486901e-05, 3.51679888e-09, 
+        -2.43818767e-13, 8716.82314, -60.1993741]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-
+      Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH) + radical(Allyl_P)
+  note: ' [CH2]C(=CCCC=C)CC(2416)'
+- name: S(2499)
+  composition: {C: 10, H: 17}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1253.32, 5000.0]
+    data:
+    - [-1.23065905, 0.10058971, -5.47997716e-05, 1.02206951e-08, 
+        6.93376535e-13, 9863.1305, 40.3842172]
+    - [18.0938628, 0.0562375743, -2.24502283e-05, 4.04113965e-09, 
+        -2.73717248e-13, 3658.65222, -62.6364888]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH) + radical(Allyl_T)
+  note: ' C=C[C](CC)CCC=CC(2499)'
+- name: S(2500)
+  composition: {C: 10, H: 17}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1699.06, 5000.0]
+    data:
+    - [-1.72804139, 0.109123843, -7.2765929e-05, 2.45453144e-08, 
+        -3.35159736e-12, 1.00161701e+04, 43.2058731]
+    - [24.4613357, 0.0474662012, -1.83307174e-05, 3.18584774e-09, 
+        -2.08685803e-13, 1116.91987, -97.0244397]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-
+      Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + radical(Allyl_P)
+  note: ' [CH2]C(=CCCC=CC)CC(2500)'
+- name: C5H8(2537)
+  composition: {C: 5, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 968.65, 5000.0]
+    data:
+    - [2.55856008, 0.0164931909, 6.06454005e-05, -8.65192763e-08, 
+        3.31315138e-11, 1.27437681e+04, 15.2309152]
+    - [10.3592189, 0.0225462604, -7.98424213e-06, 1.49736318e-09, 
+        -1.10500301e-13, 9437.35489, -31.4207615]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-
+      CdsCsH) + ring(Cyclobutene)
+  note: ' CC1=CCC1(2537)'
+- name: S(2586)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1726.99, 5000.0]
+    data:
+    - [0.495199585, 0.0718818103, -4.4521493e-05, 1.39349303e-08, 
+        -1.80042895e-12, 4.00314298e+04, 38.416968]
+    - [14.8859531, 0.0385506493, -1.55714899e-05, 2.75949963e-09, 
+        -1.82679757e-13, 3.5060855e+04, -38.8730275]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-
+      CdsHH) + group(CsJ2_singlet-CsH)
+  note: ' C=CCC(C)[C]C(2586)'
+- name: S(2587)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1719.02, 5000.0]
+    data:
+    - [0.437724174, 0.0722399285, -4.51087877e-05, 1.42800197e-08, 
+        -1.86367669e-12, 4.01629911e+04, 38.6608492]
+    - [15.1627377, 0.0379760825, -1.52103989e-05, 2.68485443e-09, 
+        -1.77366871e-13, 3.51004882e+04, -40.3561237]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-
+      CdsHH) + group(CsJ2_singlet-CsH)
+  note: ' C=CC(C)C[C]C(2587)'
+- name: S(2590)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1044.4, 5000.0]
+    data:
+    - [0.863916383, 0.0563693268, -1.85000037e-06, -3.08316809e-08, 
+        1.38704058e-11, 3741.3662, 28.8013951]
+    - [12.7392233, 0.0382848637, -1.52258055e-05, 2.82426015e-09, 
+        -1.9843076e-13, -233.349356, -36.1594149]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)(Cds-Cds)HH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+      + group(Cds-CdsCsH) + group(Cds-CdsHH)
+  note: ' C=CCC=CCC(2590)'
+- name: S(2771)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1616.76, 5000.0]
+    data:
+    - [0.789532879, 0.0710568422, -4.40213934e-05, 1.39330564e-08, 
+        -1.86351324e-12, 4.11031811e+04, 37.6209743]
+    - [11.9799647, 0.0433706162, -1.83344789e-05, 3.3410654e-09, 
+        -2.25661706e-13, 3.74847532e+04, -21.7424805]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-
+      CdsHH) + group(CsJ2_singlet-CsH)
+  note: ' C=CCC[C]CC(2771)'
+- name: S(2773)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1591.45, 5000.0]
+    data:
+    - [1.03728023, 0.0690415998, -4.13699145e-05, 1.26430671e-08, 
+        -1.65887833e-12, 3.96184273e+04, 36.2840548]
+    - [10.0783989, 0.0463174314, -1.99516095e-05, 3.67085193e-09, 
+        -2.49441788e-13, 3.67407219e+04, -11.5350561]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) +
+      group(Cds-CdsCsH) + group(CsJ2_singlet-CsH)
+  note: ' C[C]CCC=CC(2773)'
+- name: C3H4(3014)
+  composition: {C: 3, H: 4}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 756.52, 5000.0]
+    data:
+    - [3.124425, 0.0207345174, -1.96571132e-05, 1.49091328e-08, 
+        -5.3806186e-12, 4.38597693e+04, 8.50628522]
+    - [3.81496629, 0.015705715, -6.95465671e-06, 1.30829792e-09, 
+        -9.06465022e-14, 4.37947113e+04, 5.62805956]
+    note: 'Thermo group additivity estimation: group(Cs-(Cds-Cds)HHH) +
+      group(Cds-CdsCsH) + group(CdJ2_singlet-Cds)'
+  note: ' [C]=CC(3014)'
+- name: C6H9(3035)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1039.56, 5000.0]
+    data:
+    - [1.33325538, 0.0502722997, -1.90145759e-05, -8.04413981e-09, 
+        5.96499167e-12, 3.00541993e+04, 24.0165094]
+    - [11.5269326, 0.0277035124, -1.04804719e-05, 1.89389996e-09, 
+        -1.31102947e-13, 2.7034914e+04, -29.8858483]
+    note: 'Thermo library: CH + radical(Isobutyl)'
+  note: ' [CH2]C(C)C=C=C(3035)'
+- name: S(3114)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1591.45, 5000.0]
+    data:
+    - [1.03728023, 0.0690415998, -4.13699145e-05, 1.26430671e-08, 
+        -1.65887833e-12, 3.96184273e+04, 36.2840548]
+    - [10.0783989, 0.0463174314, -1.99516095e-05, 3.67085193e-09, 
+        -2.49441788e-13, 3.67407219e+04, -11.5350561]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-
+      CdsCsH) + group(CsJ2_singlet-CsH)
+  note: ' C[C]CC=CCC(3114)'
+- name: C6H9(3118)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 2054.7, 5000.0]
+    data:
+    - [1.81402685, 0.0486374453, -2.61398152e-05, 6.75640783e-09, 
+        -7.07485545e-13, 3.54636645e+04, 23.2445894]
+    - [12.0737456, 0.0286641784, -1.15585897e-05, 2.02536993e-09, 
+        -1.31846696e-13, 3.12475559e+04, -33.6409032]
+    note: 'Thermo library: JetSurF2.0 + radical(RCCJC)'
+  note: ' C=C=CC[CH]C(3118)'
+- name: C6H8(3165)
+  composition: {C: 6, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1027.47, 5000.0]
+    data:
+    - [1.76615755, 0.0391419233, 1.3098135e-06, -2.64913363e-08, 
+        1.19198159e-11, 2.83246599e+04, 11.4896121]
+    - [11.3548037, 0.0242142133, -9.60132683e-06, 1.80824582e-09, 
+        -1.29129133e-13, 2.5171806e+04, -40.7840893]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)(Cds-Cds)HH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH) + group(Cd-(Cd)CddHH) +
+      group(Cdd-CdsCds)
+  note: ' C=C=CCC=C(3165)'
+- name: C6H8(3166)
+  composition: {C: 6, H: 8}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 982.12, 5000.0]
+    data:
+    - [1.51950545, 0.0470215825, -1.64789137e-05, -1.0703608e-08, 
+        7.4235478e-12, 2.77349351e+04, 21.7864643]
+    - [10.8967142, 0.0255126978, -9.10807546e-06, 1.58889833e-09, 
+        -1.0822048e-13, 2.50884493e+04, -27.3800938]
+    note: 'Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) +
+      group(Cs-CtCsHH) + group(Cds-CdsCsH) + group(Cds-CdsHH) + group(Ct-CtCs)
+      + group(Ct-CtH)'
+  note: ' C#CCCC=C(3166)'
+- name: C6H9(3305)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 960.8, 5000.0]
+    data:
+    - [1.90824843, 0.0287520574, 5.13573612e-05, -8.63155929e-08, 
+        3.48666563e-11, 3.84989325e+04, 20.8836224]
+    - [13.4706246, 0.0236696411, -7.92435259e-06, 1.45747709e-09, 
+        -1.0755228e-13, 3.42898819e+04, -44.7773353]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-
+      CdsHH) + ring(Cyclopropane) + radical(Cds_S)
+  note: ' C=[C]C1CC1C(3305)'
+- name: S(3448)
+  composition: {C: 9, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1061.02, 5000.0]
+    data:
+    - [-0.7059412, 0.0892475164, -4.49533221e-05, -2.53069283e-09, 
+        6.5876526e-12, 9548.57172, 35.1713764]
+    - [18.4447996, 0.0432247781, -1.68934109e-05, 3.08903809e-09, 
+        -2.14803265e-13, 4011.37533, -65.2971802]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-Cds(Cds-Cds)Cs) +
+      group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + group(Cds-CdsHH)
+  note: ' C=CCCC(C=C)=CC(3448)'
+- name: C6H9(3478)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 948.69, 5000.0]
+    data:
+    - [2.21848177, 0.0187551787, 8.16544074e-05, -1.18501282e-07, 
+        4.6607289e-11, 2.57586397e+04, 18.2430794]
+    - [13.4484382, 0.0231193139, -7.01129861e-06, 1.26459542e-09, 
+        -9.50589116e-14, 2.13007484e+04, -47.6084695]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-
+      CdsHH) + ring(Cyclopropane) + radical(Allyl_T)
+  note: ' C=C[C]1CC1C(3478)'
+- name: S(3489)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1283.96, 5000.0]
+    data:
+    - [0.996884038, 0.071517835, -4.69429932e-05, 1.69717824e-08, 
+        -2.7765227e-12, 4.09555844e+04, 36.215796]
+    - [7.74887053, 0.0504829684, -2.23688022e-05, 4.21220826e-09, 
+        -2.92106255e-13, 3.92217271e+04, 1.9537069]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-CdsHH) +
+      group(CsJ2_singlet-CsH)
+  note: ' C=CC[C]CCC(3489)'
+- name: S(3758)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1430.56, 5000.0]
+    data:
+    - [0.092682641, 0.0906889586, -5.76442524e-05, 1.94745414e-08, 
+        -2.88405155e-12, 2.28959403e+04, 41.887804]
+    - [10.7665925, 0.0608435632, -2.63501563e-05, 4.89093386e-09, 
+        -3.35468501e-13, 1.98420058e+04, -13.4296077]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + group(CsJ2_singlet-CsH)
+  note: ' CC[C]CCCCC(3758)'
+- name: S(4056)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1430.56, 5000.0]
+    data:
+    - [0.092682641, 0.0906889586, -5.76442524e-05, 1.94745414e-08, 
+        -2.88405155e-12, 2.28959403e+04, 41.887804]
+    - [10.7665925, 0.0608435632, -2.63501563e-05, 4.89093386e-09, 
+        -3.35468501e-13, 1.98420058e+04, -13.4296077]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + group(CsJ2_singlet-CsH)
+  note: ' CCC[C]CCCC(4056)'
+- name: S(4453)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1345.11, 5000.0]
+    data:
+    - [-0.514045632, 0.104965549, -6.96214349e-05, 2.50861177e-08, 
+        -3.99626358e-12, 2.00570791e+04, 46.3147933]
+    - [11.2806603, 0.0698910877, -3.05079816e-05, 5.70053774e-09, 
+        -3.93276501e-13, 1.68840561e+04, -14.0846436]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-CsH)
+  note: ' CC[C]CCCCCC(4453)'
+- name: S(4579)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 987.97, 5000.0]
+    data:
+    - [1.77080364, 0.0308470578, 7.22278228e-05, -1.03343397e-07, 
+        3.84709897e-11, 4619.23006, 26.3835361]
+    - [9.74608697, 0.0439382369, -1.65484643e-05, 3.05464395e-09, 
+        -2.17308708e-13, 828.601994, -23.2047444]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsHHH) + ring(Cyclopentane) + radical(cyclopentane)
+  note: ' CCC1C[CH]CC1(4579)'
+- name: S(4580)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 962.85, 5000.0]
+    data:
+    - [1.21258787, 0.0406227496, 6.16008948e-05, -1.04591488e-07, 
+        4.19796522e-11, 1.56980479e+04, 26.4384215]
+    - [14.462476, 0.0369590182, -1.27367515e-05, 2.3019116e-09, 
+        -1.65180204e-13, 1.07648306e+04, -49.350961]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-CsCsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + ring(Cyclobutane) + radical(Isobutyl)
+  note: ' [CH2]C1CCC1CC(4580)'
+- name: S(4584)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1345.11, 5000.0]
+    data:
+    - [-0.514045632, 0.104965549, -6.96214349e-05, 2.50861177e-08, 
+        -3.99626358e-12, 2.00570791e+04, 46.3147933]
+    - [11.2806603, 0.0698910877, -3.05079816e-05, 5.70053774e-09, 
+        -3.93276501e-13, 1.68840561e+04, -14.0846436]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-CsH)
+  note: ' CCC[C]CCCCC(4584)'
+- name: S(4697)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 996.12, 5000.0]
+    data:
+    - [1.37846798, 0.0377751294, 6.26310939e-05, -9.89562352e-08, 
+        3.77762433e-11, 1.44233034e+04, 26.6192723]
+    - [12.8274742, 0.0408464867, -1.58492939e-05, 2.99667466e-09, 
+        -2.16645219e-13, 9709.09798, -40.7849057]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-CsCsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + ring(Cyclobutane) + radical(Cs_S)
+  note: ' C[CH]C1CCC1C(4697)'
+- name: S(4706)
+  composition: {C: 9, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1345.11, 5000.0]
+    data:
+    - [-0.514045632, 0.104965549, -6.96214349e-05, 2.50861177e-08, 
+        -3.99626358e-12, 2.00570791e+04, 45.6216461]
+    - [11.2806603, 0.0698910877, -3.05079816e-05, 5.70053774e-09, 
+        -3.93276501e-13, 1.68840561e+04, -14.7777908]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsHHH) + group(Cs-CsHHH) + group(CsJ2_singlet-CsH)
+  note: ' CCCC[C]CCCC(4706)'
+- name: S(5423)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 981.26, 5000.0]
+    data:
+    - [1.69429357, 0.0293254755, 8.40918248e-05, -1.20235533e-07, 
+        4.53260656e-11, 5666.61703, 26.6500803]
+    - [12.0502873, 0.040683705, -1.51656492e-05, 2.8390858e-09, 
+        -2.05673758e-13, 1055.02481, -36.2580219]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsHHH) + ring(Cyclopentane) + radical(Cs_S)
+  note: ' C[CH]C1CCCC1(5423)'
+- name: S(5424)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 968.11, 5000.0]
+    data:
+    - [1.54357114, 0.0312543777, 8.50642776e-05, -1.261416e-07, 
+        4.8744934e-11, 6960.87438, 26.420701]
+    - [13.7819678, 0.0377216345, -1.33237709e-05, 2.46301152e-09, 
+        -1.79305463e-13, 1918.54462, -46.0295404]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsHHH) + ring(Cyclopentane) + radical(RCCJ)
+  note: ' [CH2]CC1CCCC1(5424)'
+- name: S(5464)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1018.92, 5000.0]
+    data:
+    - [0.47180896, 0.0652078387, -1.89926916e-05, -1.92023301e-08, 
+        1.13522355e-11, -143.675375, 25.9786137]
+    - [14.8444641, 0.0350786562, -1.3346932e-05, 2.43063131e-09, 
+        -1.69788427e-13, -4437.49562, -50.3283504]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH)
+      + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH)
+  note: ' C=CC(=CC)CC(5464)'
+- name: S(5995)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 971.73, 5000.0]
+    data:
+    - [1.74410362, 0.0263658177, 9.57077347e-05, -1.34618411e-07, 
+        5.10527185e-11, 4579.17642, 25.4978784]
+    - [12.8917213, 0.0389700601, -1.40385969e-05, 2.61844406e-09, 
+        -1.91096725e-13, -348.912689, -42.1728877]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-CsCsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + ring(Cyclopentane) + radical(Cs_S)
+  note: ' CC1[CH]CCC1C(5995)'
+- name: S(6059)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 911.24, 5000.0]
+    data:
+    - [1.53151057, 5.16283158e-04, 2.35346063e-04, -3.3432585e-07, 
+        1.37334547e-10, 4222.28996, 26.1093574]
+    - [34.1634883, -3.11771321e-03, 1.15166204e-05, -2.43950438e-09, 
+        1.53565537e-13, -7521.02583, -160.091988]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) +
+      group(Cs-CsCsHH) + ring(Cycloheptane) + radical(cycloheptane)
+  note: ' [CH]1CCCCCC1(6059)'
+- name: S(6061)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 961.81, 5000.0]
+    data:
+    - [0.921062817, 0.0496924323, 3.51309822e-05, -7.85126775e-08, 
+        3.32570142e-11, 1.62376723e+04, 27.4704793]
+    - [14.9001563, 0.035817904, -1.22601577e-05, 2.18265859e-09, 
+        -1.54483116e-13, 1.15013291e+04, -50.0691762]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-CsCsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + ring(Cyclopropane) + radical(Isobutyl)
+  note: ' [CH2]C1CC1CCC(6061)'
+- name: S(6208)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1018.92, 5000.0]
+    data:
+    - [0.47180896, 0.0652078387, -1.89926916e-05, -1.92023301e-08, 
+        1.13522355e-11, -143.675375, 25.9786137]
+    - [14.8444641, 0.0350786562, -1.3346932e-05, 2.43063131e-09, 
+        -1.69788427e-13, -4437.49562, -50.3283504]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH)
+      + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH)
+  note: ' C=CC(C)=CCC(6208)'
+- name: S(6210)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1014.35, 5000.0]
+    data:
+    - [0.88744165, 0.0508227871, 2.90216985e-05, -6.69918654e-08, 
+        2.70350489e-11, 1.83803483e+04, 27.1318084]
+    - [14.4093274, 0.0392702868, -1.56627822e-05, 2.97229604e-09, 
+        -2.13898324e-13, 1.34882883e+04, -48.8884792]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsCs) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + ring(Cyclopropane) + radical(cyclopropane)
+  note: ' CCCC1(C)[CH]C1(6210)'
+- name: S(6212)
+  composition: {C: 7, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1563.62, 5000.0]
+    data:
+    - [0.895222181, 0.0705452016, -4.30275468e-05, 1.36176326e-08, 
+        -1.85017561e-12, 1.48373445e+04, 26.486697]
+    - [10.5147352, 0.0459369886, -1.94206809e-05, 3.55262583e-09, 
+        -2.4093464e-13, 1.18290796e+04, -24.2218898]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cds-CdsCsCs) + group(Cds-CdsCsH) + radical(Cds_S)
+  note: ' C[C]=C(C)CCC(6212)'
+- name: S(6217)
+  composition: {C: 7, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1984.16, 5000.0]
+    data:
+    - [0.203297241, 0.0737280813, -4.23493671e-05, 1.19515136e-08, 
+        -1.36101524e-12, -1.3732365e+04, 28.5529538]
+    - [18.9936457, 0.0358471147, -1.37116406e-05, 2.32933302e-09, 
+        -1.48632511e-13, -2.11889265e+04, -74.9745544]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cds-CdsCsCs) + group(Cds-CdsCsH)
+  note: ' CC=C(C)CCC(6217)'
+- name: S(6220)
+  composition: {C: 9, H: 17}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1146.99, 5000.0]
+    data:
+    - [-1.13993333, 0.0974067288, -4.73089463e-05, -2.75198517e-10, 
+        4.8506111e-12, 7368.70147, 39.2391572]
+    - [19.0621427, 0.0523034617, -2.14751303e-05, 3.97769823e-09, 
+        -2.76108966e-13, 1066.92838, -68.2635504]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsCs) + group(Cs-CsCsHH) + longDistanceInteraction_noncyclic(CsCs-ST) + group(Cs-CsCsHH) +
+      longDistanceInteraction_noncyclic(CsCs-ST) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-
+      CdsHH) + radical(RCCJ)
+  note: ' [CH2]CC(C)(C=C)CCC(6220)'
+- name: S(6221)
+  composition: {C: 9, H: 17}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1677.79, 5000.0]
+    data:
+    - [-0.838112288, 0.0989611878, -6.30465235e-05, 2.04645181e-08, 
+        -2.74225901e-12, 5404.04174, 39.2038541]
+    - [18.9273945, 0.0518377844, -2.09160236e-05, 3.72380103e-09, 
+        -2.47763258e-13, -1228.33588, -66.3812075]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH) + radical(RCCJ)
+  note: ' [CH2]CCC=C(C)CCC(6221)'
+- name: S(6227)
+  composition: {C: 8, H: 16}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1341.43, 5000.0]
+    data:
+    - [-0.473381668, 0.0861089266, -4.7243209e-05, 1.02768734e-08, 
+        -1.8723676e-13, -1.64298518e+04, 33.8798653]
+    - [16.4438831, 0.0483814663, -1.92774202e-05, 3.44618307e-09, 
+        -2.31430012e-13, -2.21127756e+04, -56.9704455]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH)
+  note: ' CCC=C(C)CCC(6227)'
+- name: S(6301)
+  composition: {C: 10, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1104.21, 5000.0]
+    data:
+    - [-1.56719314, 0.104335791, -4.37541944e-05, -1.01380712e-08, 
+        9.06413324e-12, -5193.14442, 41.7019037]
+    - [20.7595408, 0.0562853898, -2.30758801e-05, 4.30178446e-09, 
+        -3.01004601e-13, -1.2125156e+04, -77.2872216]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsCs) + group(Cs-CsCsHH) + longDistanceInteraction_noncyclic(CsCs-ST) + group(Cs-CsCsHH) +
+      group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH) + group(Cds-CdsHH)
+  note: ' C=CCC(C)(C=C)CCC(6301)'
+- name: S(6302)
+  composition: {C: 10, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1728.19, 5000.0]
+    data:
+    - [-1.60439116, 0.109507854, -7.05442868e-05, 2.29407508e-08, 
+        -3.03804575e-12, -6739.54129, 42.9107763]
+    - [23.4105234, 0.0516100333, -2.02919018e-05, 3.55562512e-09, 
+        -2.33827362e-13, -1.53857521e+04, -91.4570573]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH)
+  note: ' C=CCCC=C(C)CCC(6302)'
+- name: S(6386)
+  composition: {C: 11, H: 20}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1704.13, 5000.0]
+    data:
+    - [-2.48795926, 0.124269963, -8.18666529e-05, 2.73590725e-08, 
+        -3.71096954e-12, -1.05224982e+04, 48.0937734]
+    - [26.752202, 0.0556365639, -2.14547489e-05, 3.72562828e-09, 
+        -2.43898162e-13, -2.04883403e+04, -108.559811]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH)
+      + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH)
+  note: ' C=CC(C)CC=C(C)CCC(6386)'
+- name: S(6388)
+  composition: {C: 11, H: 20}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1664.1, 5000.0]
+    data:
+    - [-1.86641756, 0.120885911, -7.77241262e-05, 2.54170937e-08, 
+        -3.43230077e-12, -1.10683613e+04, 45.6316924]
+    - [22.0827016, 0.0633195071, -2.58345736e-05, 4.62930787e-09, 
+        -3.09330807e-13, -1.90391257e+04, -82.105933]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+  note: ' CC=CCCC=C(C)CCC(6388)'
+- name: S(6421)
+  composition: {C: 13, H: 23}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1619.08, 5000.0]
+    data:
+    - [-3.26287591, 0.145980915, -9.69732081e-05, 3.31500589e-08, 
+        -4.66761188e-12, -345.787352, 53.5908664]
+    - [26.4640796, 0.07253897, -2.8932445e-05, 5.13370178e-09, 
+        -3.41622793e-13, -9971.80562, -104.148543]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) +
+      group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) +
+      group(Cds-CdsHH) + radical(Allyl_T)
+  note: ' C=C[C](CC)CCC=C(C)CCC(6421)'
+- name: S(6422)
+  composition: {C: 13, H: 23}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1539.9, 5000.0]
+    data:
+    - [-3.47427247, 0.151555018, -1.06366946e-04, 3.8605938e-08, 
+        -5.76504957e-12, -206.059635, 55.3571126]
+    - [26.9446081, 0.0725402511, -2.93999455e-05, 5.28491358e-09, 
+        -3.55471465e-13, -9574.51907, -104.528935]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-
+      Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsCs) + group(Cds-
+      CdsCsH) + group(Cds-CdsCsH) + radical(Allyl_P)
+  note: ' [CH2]C(=CCCC=C(C)CCC)CC(6422)'
+- name: S(6644)
+  composition: {C: 14, H: 26}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1640.69, 5000.0]
+    data:
+    - [-4.54686449, 0.168408508, -1.15339706e-04, 3.99253126e-08, 
+        -5.61784413e-12, -1.96992156e+04, 60.1452322]
+    - [33.5341074, 0.0755687977, -3.04625538e-05, 5.43752744e-09, 
+        -3.62864027e-13, -3.21952513e+04, -142.428652]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsCs) + group(Cs-CsCsHH) + longDistanceInteraction_noncyclic(CsCs-ST) + group(Cs-CsCsHH) +
+      group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cds-CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-CdsHH)
+  note: ' C=CC(C)(CC=C(C)CCC)CCC(6644)'
+- name: S(6645)
+  composition: {C: 14, H: 26}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1493.14, 5000.0]
+    data:
+    - [-3.66708273, 0.163797198, -1.12438881e-04, 4.03865007e-08, 
+        -6.08485836e-12, -2.12875424e+04, 57.2987346]
+    - [24.2754505, 0.0889409466, -3.72382224e-05, 6.81021205e-09, 
+        -4.63063342e-13, -2.96319107e+04, -88.709292]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH)
+      + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-
+      CdsCsCs) + group(Cds-CdsCsH) + group(Cds-CdsCsH)
+  note: ' CCCC(C)=CCCC=C(C)CCC(6645)'
+- name: S(7257)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 986.2, 5000.0]
+    data:
+    - [1.14719786, 0.0448209785, 3.89626219e-05, -7.75763578e-08, 
+        3.1447016e-11, 6117.82733, 23.8475131]
+    - [14.1046051, 0.0357390975, -1.33458564e-05, 2.4820057e-09, 
+        -1.78514056e-13, 1448.03472, -49.2027043]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cds-CdsCsCs) + group(Cds-CdsCsH) + ring(Cyclobutene)
+  note: ' CCC1CC=C1C(7257)'
+- name: S(7258)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 982.03, 5000.0]
+    data:
+    - [1.15192124, 0.0401477249, 6.13586617e-05, -1.05178306e-07, 
+        4.18436222e-11, 6885.43215, 23.2541924]
+    - [16.5345633, 0.0329495018, -1.23567346e-05, 2.37194476e-09, 
+        -1.7598944e-13, 1190.05855, -64.2945954]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsCs) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) +
+      group(Cds-CdsCsH) + group(Cds-CdsCsH) + ring(Cyclobutene)
+  note: ' CCC1(C)C=CC1(7258)'
+- name: S(7583)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1181.86, 5000.0]
+    data:
+    - [0.366512245, 0.070056553, -4.05140145e-05, 8.23922218e-09, 
+        5.44795345e-13, -1751.77911, 25.2579219]
+    - [13.897083, 0.0369023083, -1.447755e-05, 2.60178333e-09, 
+        -1.76918498e-13, -5832.79239, -46.0147245]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-
+      CdsCsH) + group(Cds-CdsCsH) + group(Cds-Cds(Cds-Cds)H)
+  note: ' CC=CC(C)=CC(7583)'
+- name: S(7609)
+  composition: {C: 8, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1102.79, 5000.0]
+    data:
+    - [-0.361583701, 0.0828814597, -3.69902168e-05, -4.03334552e-09, 
+        5.65700123e-12, 1196.12201, 32.8262587]
+    - [15.8303579, 0.0467331878, -1.85381419e-05, 3.38062051e-09, 
+        -2.33198547e-13, -3748.33158, -53.1007436]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + longDistanceInteraction_noncyclic(CdCs-ST) + group(Cds-CdsCsH) + radical(Allyl_P)
+  note: ' [CH2]C=C(C)C(C)CC(7609)'
+- name: S(7824)
+  composition: {C: 13, H: 22}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1149.98, 5000.0]
+    data:
+    - [-3.82649781, 0.150146686, -9.63298178e-05, 2.24938577e-08, 
+        7.71909131e-13, -3403.04907, 53.0525023]
+    - [28.703718, 0.0669776424, -2.69534856e-05, 4.94602336e-09, 
+        -3.41839252e-13, -1.286733e+04, -117.052445]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsCs) + group(Cs-CsCsHH) + longDistanceInteraction_noncyclic(CsCs-ST) + group(Cs-CsCsHH) +
+      group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH) + group(Cds-
+      CdsCsH) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + group(Cds-CdsHH)
+  note: ' C=CC(=CC)CC(C)(C=C)CCC(7824)'
+- name: S(8871)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 971.15, 5000.0]
+    data:
+    - [1.1980843, 0.0415695495, 5.21080406e-05, -9.41874683e-08, 
+        3.81505009e-11, 5159.26775, 22.7259432]
+    - [15.143301, 0.0335810607, -1.19304068e-05, 2.2034503e-09, 
+        -1.59983298e-13, 118.802521, -56.149183]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cds-CdsCsCs) + group(Cds-CdsCsH) + ring(Cyclobutene)
+  note: ' CC1=CC(C)C1C(8871)'
+- name: S(8872)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1018.92, 5000.0]
+    data:
+    - [0.471785674, 0.0652081149, -1.89936603e-05, -1.9201079e-08, 
+        1.13517074e-11, -319.801011, 26.1346949]
+    - [14.8445673, 0.0350784823, -1.33468323e-05, 2.43060788e-09, 
+        -1.6978649e-13, -4613.66615, -50.1729345]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-Cds(Cds-Cds)H)
+      + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH)
+  note: ' C=CC=C(C)CC(8872)'
+- name: S(8896)
+  composition: {C: 8, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1068.58, 5000.0]
+    data:
+    - [0.102833176, 0.0725608603, -1.46687148e-05, -2.26311686e-08, 
+        1.13004676e-11, -518.882092, 29.6447439]
+    - [13.3154895, 0.0495546754, -1.95067467e-05, 3.5536298e-09, 
+        -2.45554723e-13, -4852.88844, -42.0417352]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-(Cds-Cds)CsCsH) + longDistanceInteraction_noncyclic(CsCs-ST) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + radical(Allyl_T)
+  note: ' CC=C[C](C)C(C)C(8896)'
+- name: S(9689)
+  composition: {C: 8, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1024.12, 5000.0]
+    data:
+    - [-0.137990333, 0.0750632077, -1.03748759e-05, -3.44781181e-08, 
+        1.70388813e-11, 1840.00788, 32.5339711]
+    - [16.3371207, 0.0453467272, -1.75745445e-05, 3.22869765e-09, 
+        -2.26438807e-13, -3350.61598, -56.2083605]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsCsH) + group(Cs-(Cds-Cds)CsCsH) + longDistanceInteraction_noncyclic(CsCs-ST) + group(Cs-CsHHH) +
+      group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + radical(Allyl_P)
+  note: ' [CH2]C=CC(C)C(C)C(9689)'
+- name: S(9692)
+  composition: {C: 8, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1771.33, 5000.0]
+    data:
+    - [-0.0427475802, 0.0842543029, -5.08209518e-05, 1.53746316e-08, 
+        -1.91880834e-12, -1454.06061, 29.0504153]
+    - [16.6639528, 0.0465275464, -1.88732571e-05, 3.35068443e-09, 
+        -2.21792623e-13, -7372.70003, -61.1015559]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsCs) + radical(Allyl_S)
+  note: ' CC[CH]C(C)=C(C)C(9692)'
+- name: S(9695)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1018.92, 5000.0]
+    data:
+    - [0.47180896, 0.0652078387, -1.89926916e-05, -1.92023301e-08, 
+        1.13522355e-11, -143.675375, 25.9786137]
+    - [14.8444641, 0.0350786562, -1.3346932e-05, 2.43063131e-09, 
+        -1.69788427e-13, -4437.49562, -50.3283504]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH)
+      + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH)
+  note: ' C=C(C=CC)CC(9695)'
+- name: S(11135)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 973.67, 5000.0]
+    data:
+    - [1.21188724, 0.0411089267, 5.32417166e-05, -9.50389595e-08, 
+        3.83066363e-11, 6254.16499, 24.282883]
+    - [15.1338503, 0.0337240028, -1.21155582e-05, 2.25070961e-09, 
+        -1.63775185e-13, 1182.08073, -54.6353628]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) +
+      group(Cds-CdsCsCs) + group(Cds-CdsCsH) + ring(Cyclobutene)
+  note: ' CCC1=CC(C)C1(11135)'
+- name: S(12347)
+  composition: {C: 8, H: 15}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1854.9, 5000.0]
+    data:
+    - [-0.437341443, 0.0854771224, -5.19157239e-05, 1.57224148e-08, 
+        -1.93034768e-12, -1296.24308, 31.1708414]
+    - [20.3582426, 0.0406325484, -1.56513694e-05, 2.68872201e-09, 
+        -1.73693483e-13, -9011.00145, -82.0040166]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-CdsCsCs) + radical(Allyl_S)
+  note: ' C[CH]C(C)=C(C)CC(12347)'
+- name: S(12992)
+  composition: {C: 6, H: 9}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 960.77, 5000.0]
+    data:
+    - [2.44592184, 0.0109916187, 1.04208677e-04, -1.40054801e-07, 
+        5.33264276e-11, 1.58362383e+04, 18.3389458]
+    - [13.5136315, 0.0238286298, -7.81554983e-06, 1.50350863e-09, 
+        -1.16356972e-13, 1.09903729e+04, -48.7644278]
+    note: 'Thermo library: CH + radical(Allyl_P)'
+  note: ' [CH2]C1=CCCC1(12992)'
+- name: S(13223)
+  composition: {C: 9, H: 14}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 999.79, 5000.0]
+    data:
+    - [-0.664551522, 0.0853729245, -2.59869012e-05, -2.78311247e-08, 
+        1.69306078e-11, 1.00640481e+04, 35.2130375]
+    - [20.1217579, 0.0401130293, -1.49489791e-05, 2.72748392e-09, 
+        -1.92337203e-13, 4013.31573, -74.5382339]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-
+      CdsCsH) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + group(Cds-CdsHH) + group(Cds-CdsHH)
+  note: ' C=CCC(C)C(=C)C=C(13223)'
+- name: S(13684)
+  composition: {C: 13, H: 22}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1528.85, 5000.0]
+    data:
+    - [-4.08270712, 0.154497418, -1.14774549e-04, 4.39821231e-08, 
+        -6.79976175e-12, -4422.54811, 55.238811]
+    - [31.6120217, 0.0611068165, -2.31454266e-05, 4.02618242e-09, 
+        -2.66042595e-13, -1.53368255e+04, -132.120273]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH)
+      + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH) + group(Cds-Cds(Cds-Cds)H) +
+      group(Cds-CdsHH) + group(Cds-CdsHH)
+  note: ' C=CC(=C)C(C)CC=C(C)CCC(13684)'
+- name: S(13685)
+  composition: {C: 13, H: 22}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1475.08, 5000.0]
+    data:
+    - [-3.51489904, 0.151596053, -1.11782922e-04, 4.30089531e-08, 
+        -6.78415456e-12, -4965.46494, 52.9820896]
+    - [27.025277, 0.0687795254, -2.75670859e-05, 4.94726949e-09, 
+        -3.33355816e-13, -1.39752834e+04, -106.227871]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-CdsCsCs) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-
+      Cds(Cds-Cds)H) + group(Cds-CdsHH)
+  note: ' C=CC(=CC)CCC=C(C)CCC(13685)'
+- name: S(14083)
+  composition: {C: 8, H: 13}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1027.49, 5000.0]
+    data:
+    - [-0.336982311, 0.0822354188, -4.18094179e-05, -4.0238951e-09, 
+        7.38968674e-12, 2.16596513e+04, 32.375282]
+    - [17.8154787, 0.0374447292, -1.4197406e-05, 2.57125371e-09, 
+        -1.78740645e-13, 1.65634259e+04, -62.3390721]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-Cds(Cds-Cds)Cs)
+      + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsHH) + group(Cds-CdsHH) + radical(RCCJ)
+  note: ' [CH2]CC(=C)C(=C)CC(14083)'
+- name: S(14087)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 975.04, 5000.0]
+    data:
+    - [0.49014661, 0.0615738994, -7.03817714e-07, -4.38934724e-08, 
+        2.15660778e-11, 372.82129, 25.4117071]
+    - [16.8014094, 0.0315103692, -1.11471547e-05, 2.0101138e-09, 
+        -1.42515453e-13, -4559.74579, -61.8513569]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-Cds(Cds-
+      Cds)H) + group(Cds-CdsHH) + group(Cds-CdsHH)
+  note: ' C=CC(=C)C(C)C(14087)'
+- name: S(14436)
+  composition: {C: 12, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 985.01, 5000.0]
+    data:
+    - [-2.81170108, 0.126526745, -5.71119761e-05, -2.33492463e-08, 
+        2.00365262e-11, 1.23664847e+04, 45.654929]
+    - [29.0796317, 0.0487577256, -1.74704042e-05, 3.14482433e-09, 
+        -2.21610776e-13, 3573.91317, -120.461184]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-(Cds-Cds)CsCsH) + group(Cs-CsHHH) + group(Cs-CsHHH) + group(Cds-Cds(Cds-
+      Cds)Cs) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-Cds(Cds-Cds)H) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + group(Cds-CdsHH) + group(Cds-CdsHH) +
+      group(Cds-CdsHH)
+  note: ' C=CC(=C)C(C)C(C)C(=C)C=C(14436)'
+- name: S(14437)
+  composition: {C: 12, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1018.72, 5000.0]
+    data:
+    - [-2.84432984, 0.130326319, -7.59610785e-05, 2.0303389e-09, 
+        9.5500061e-12, 1.18506051e+04, 46.2732342]
+    - [27.2083423, 0.0521828831, -1.95886719e-05, 3.54626497e-09, 
+        -2.47312466e-13, 3659.3295, -109.422019]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsCsH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-Cds(Cds-
+      Cds)Cs) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH) + group(Cds-Cds(Cds-Cds)H) + group(Cds-Cds(Cds-Cds)H) + group(Cds-CdsHH) + group(Cds-CdsHH) +
+      group(Cds-CdsHH)
+  note: ' C=CC(=C)C(C)CC(C=C)=CC(14437)'
+- name: S(14438)
+  composition: {C: 12, H: 18}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 1108.69, 5000.0]
+    data:
+    - [-2.94951965, 0.134906456, -9.71545679e-05, 2.9837693e-08, 
+        -1.6845883e-12, 1.13379355e+04, 45.7701788]
+    - [26.0909541, 0.0543848856, -2.10253329e-05, 3.79074401e-09, 
+        -2.60244928e-13, 3408.01103, -104.051802]
+    note: |-
+      Thermo group additivity estimation: group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)HHH) + group(Cs-(Cds-Cds)HHH) + group(Cds-
+      Cds(Cds-Cds)Cs) + group(Cds-Cds(Cds-Cds)Cs) + group(Cds-CdsCsH) + group(Cds-CdsCsH) + group(Cds-Cds(Cds-Cds)H) + group(Cds-Cds(Cds-Cds)H) + group(Cds-
+      CdsHH) + group(Cds-CdsHH)
+  note: ' C=CC(=CC)CCC(C=C)=CC(14438)'
+- name: S(15088)
+  composition: {C: 7, H: 12}
+  thermo:
+    model: NASA7
+    temperature-ranges: [100.0, 989.02, 5000.0]
+    data:
+    - [1.16098352, 0.0443592828, 4.01068545e-05, -7.84529924e-08, 
+        3.16196477e-11, 7212.72606, 25.4045916]
+    - [14.1016015, 0.0358715416, -1.35251432e-05, 2.52791217e-09, 
+        -1.82195746e-13, 2508.45369, -47.7254644]
+    note: |-
+      Thermo group additivity estimation: group(Cs-CsCsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-(Cds-Cds)CsHH) + group(Cs-CsHHH) +
+      group(Cds-CdsCsCs) + group(Cds-CdsCsH) + ring(Cyclobutene)
+  note: ' CCCC1=CCC1(15088)'
+
+reactions:
+- equation: C6H13(792) + C6H13(792) <=> fuel(1)  # Reaction 1
+  rate-constant: {A: 9.4e+14, b: -0.5, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #1; RMG #4957
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(792), fuel(1); C6H13(792), fuel(1); 
+- equation: NC3H7(101) + C9H19(812) <=> fuel(1)  # Reaction 2
+  rate-constant: {A: 1.88e+14, b: -0.5, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #2; RMG #4954
+    Library reaction: JetSurF2.0
+    Flux pairs: NC3H7(101), fuel(1); C9H19(812), fuel(1); 
+- equation: C6H13(792) (+M) <=> C6H13(793) (+M)  # Reaction 3
+  type: falloff
+  low-P-rate-constant: {A: 5.4e-26, b: 13.087, Ea: -0.603}
+  high-P-rate-constant: {A: 183.0, b: 2.55, Ea: 10.96}
+  Troe: {A: -25.38, T3: 215.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #3; RMG #4918
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(792), C6H13(793); 
+- equation: C9H19(812) (+M) <=> C9H19(816) (+M)  # Reaction 4
+  type: falloff
+  low-P-rate-constant: {A: 9.9e-38, b: 17.215, Ea: -0.603}
+  high-P-rate-constant: {A: 22.9, b: 2.82, Ea: 10.756}
+  Troe: {A: -16.33, T3: 200.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #4; RMG #4915
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(812), C9H19(816); 
+- equation: C9H19(812) (+M) <=> C9H19(815) (+M)  # Reaction 5
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 5.1e-44, b: 18.749, Ea: -0.603}
+  high-P-rate-constant: {A: 5.13, b: 3.23, Ea: 16.848}
+  Troe: {A: -20.15, T3: 205.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #5; RMG #4908
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(812), C9H19(815); 
+- equation: C9H19(812) (+M) <=> C9H19(815) (+M)  # Reaction 6
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 3.9e-34, b: 15.855, Ea: -0.606}
+  high-P-rate-constant: {A: 2.95, b: 3.08, Ea: 11.016}
+  Troe: {A: -15.24, T3: 216.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {H2(4): 2.0, CH4(31): 2.0, C2H6(51): 3.0}
+  note: |
+    Reaction index: Chemkin #6; RMG #4922
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(812), C9H19(815); 
+- equation: C9H19(815) <=> C9H19(816)  # Reaction 7
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #7; RMG #6097
+    Template reaction: intra_H_migration
+    Flux pairs: C9H19(815), C9H19(816); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: C6H13(792) (+M) <=> C2H4(22) + PC4H9(191) (+M)  # Reaction 8
+  type: falloff
+  low-P-rate-constant: {A: 7.1e-35, b: 15.411, Ea: -0.6}
+  high-P-rate-constant: {A: 1.02e+12, b: 0.3, Ea: 27.274}
+  Troe: {A: -5.91, T3: 333.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {C2H6(51): 3.0, H2(4): 2.0, CH4(31): 2.0}
+  note: |
+    Reaction index: Chemkin #8; RMG #4440
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(792), C2H4(22); C6H13(792), PC4H9(191); 
+- equation: C6H13(792) (+M) <=> C6H13(794) (+M)  # Reaction 9
+  type: falloff
+  low-P-rate-constant: {A: 2.0e-26, b: 12.833, Ea: -0.601}
+  high-P-rate-constant: {A: 6.98, b: 3.2, Ea: 16.558}
+  Troe: {A: -10.14, T3: 307.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #9; RMG #4911
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(792), C6H13(794); 
+- equation: C6H13(794) <=> C6H13(793)  # Reaction 10
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #10; RMG #6085
+    Template reaction: intra_H_migration
+    Flux pairs: C6H13(794), C6H13(793); 
+    From training reaction 357 used for R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: C6H13(794) <=> C6H13(793)  # Reaction 11
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #11; RMG #6086
+    Template reaction: intra_H_migration
+    Flux pairs: C6H13(794), C6H13(793); 
+    From training reaction 357 used for R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: C6H13(794) <=> C6H13(793)  # Reaction 12
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #12; RMG #6147
+    Template reaction: intra_H_migration
+    Flux pairs: C6H13(794), C6H13(793); 
+    From training reaction 357 used for R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: C6H13(794) <=> C6H13(793)  # Reaction 13
+  duplicate: true
+  rate-constant: {A: 1.1e+09, b: 1.01, Ea: 36.4}
+  note: |
+    Reaction index: Chemkin #13; RMG #6148
+    Template reaction: intra_H_migration
+    Flux pairs: C6H13(794), C6H13(793); 
+    From training reaction 369 used for R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: C9H19(812) (+M) <=> C2H4(22) + C7H15(798) (+M)  # Reaction 14
+  type: falloff
+  low-P-rate-constant: {A: 1.8e-57, b: 23.463, Ea: -0.602}
+  high-P-rate-constant: {A: 9.12e+11, b: 0.31, Ea: 27.238}
+  Troe: {A: -2.46, T3: 206.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {H2(4): 2.0, CH4(31): 2.0, C2H6(51): 3.0}
+  note: |
+    Reaction index: Chemkin #14; RMG #4636
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(812), C2H4(22); C9H19(812), C7H15(798); 
+- equation: PC4H9(191) <=> C2H4(22) + C2H5(52)  # Reaction 15
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 3.54e+41, b: -9.46, Ea: 34.528}
+  - {P: 1.0 atm, A: 1.34e+43, b: -9.52, Ea: 37.667}
+  - {P: 10.0 atm, A: 5.12e+39, b: -8.15, Ea: 38.474}
+  - {P: 100.0 atm, A: 2.32e+30, b: -5.12, Ea: 35.92}
+  note: |
+    Reaction index: Chemkin #15; RMG #1040
+    Library reaction: CurranPentane
+    Flux pairs: PC4H9(191), C2H4(22); PC4H9(191), C2H5(52); 
+- equation: CH3(23) + C2H4(22) <=> NC3H7(101)  # Reaction 16
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.0013 atm, A: 8.67e+48, b: -12.54, Ea: 18.206}
+  - {P: 0.04 atm, A: 1.06e+49, b: -12.04, Ea: 20.001}
+  - {P: 1.0 atm, A: 7.67e+47, b: -11.17, Ea: 22.366}
+  - {P: 10.0 atm, A: 1.81e+45, b: -10.03, Ea: 23.769}
+  - {P: 100.0 atm, A: 2.04e+40, b: -8.25, Ea: 24.214}
+  note: |
+    Reaction index: Chemkin #16; RMG #691
+    Library reaction: CurranPentane
+- equation: CH3(23) + C2H4(22) <=> NC3H7(101)  # Reaction 17
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.0013 atm, A: 1.12e+43, b: -11.3, Ea: 13.08}
+  - {P: 0.04 atm, A: 7.28e+39, b: -9.88, Ea: 13.164}
+  - {P: 1.0 atm, A: 2.6e+33, b: -7.46, Ea: 12.416}
+  - {P: 10.0 atm, A: 3.85e+27, b: -5.38, Ea: 11.455}
+  - {P: 100.0 atm, A: 1.66e+21, b: -3.17, Ea: 10.241}
+  note: |
+    Reaction index: Chemkin #17; RMG #691
+    Library reaction: CurranPentane
+- equation: C6H13(793) (+M) <=> C3H6(104) + NC3H7(101) (+M)  # Reaction 18
+  type: falloff
+  low-P-rate-constant: {A: 3.7e-33, b: 14.91, Ea: -0.6}
+  high-P-rate-constant: {A: 4.47e+11, b: 0.57, Ea: 28.045}
+  Troe: {A: -6.53, T3: 333.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #18; RMG #4441
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(793), C3H6(104); C6H13(793), NC3H7(101); 
+- equation: C6H12(788) <=> C3H6(104) + C3H6(104)  # Reaction 19
+  rate-constant: {A: 7.08e+06, b: 1.65, Ea: 53.752}
+  note: |
+    Reaction index: Chemkin #19; RMG #4427
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H12(788), C3H6(104); C6H12(788), C3H6(104); 
+- equation: C9H19(816) (+M) <=> NC3H7(101) + C6H12(788) (+M)  # Reaction 20
+  type: falloff
+  low-P-rate-constant: {A: 6.2e-43, b: 18.418, Ea: -0.603}
+  high-P-rate-constant: {A: 1.1e+12, b: 0.55, Ea: 28.084}
+  Troe: {A: -32.13, T3: 207.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #20; RMG #4642
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(816), NC3H7(101); C9H19(816), C6H12(788); 
+- equation: C7H15(800) (+M) <=> CH3(23) + C6H12(788) (+M)  # Reaction 21
+  type: falloff
+  low-P-rate-constant: {A: 1.06e-42, b: 18.004, Ea: -0.602}
+  high-P-rate-constant: {A: 1.1e+11, b: 0.75, Ea: 29.402}
+  Troe: {A: -20.94, T3: 217.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {C2H6(51): 3.0, H2(4): 2.0, CH4(31): 2.0}
+  note: |
+    Reaction index: Chemkin #21; RMG #4502
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H15(800), CH3(23); C7H15(800), C6H12(788); 
+- equation: C7H15(798) (+M) <=> C7H15(800) (+M)  # Reaction 22
+  type: falloff
+  low-P-rate-constant: {A: 5.4e-26, b: 13.202, Ea: -0.603}
+  high-P-rate-constant: {A: 676.0, b: 2.39, Ea: 10.406}
+  Troe: {A: -25.39, T3: 215.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #22; RMG #4917
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H15(798), C7H15(800); 
+- equation: C5H10(431) <=> C2H4(22) + C3H6(104)  # Reaction 23
+  rate-constant: {A: 1.62e+06, b: 1.81, Ea: 53.454}
+  note: |
+    Reaction index: Chemkin #23; RMG #4401
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H10(431), C2H4(22); C5H10(431), C3H6(104); 
+- equation: C6H13(794) (+M) <=> CH3(23) + C5H10(431) (+M)  # Reaction 24
+  type: falloff
+  low-P-rate-constant: {A: 4.0e-39, b: 16.782, Ea: -0.6}
+  high-P-rate-constant: {A: 8.13e+10, b: 0.78, Ea: 29.648}
+  Troe: {A: -7.03, T3: 314.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #24; RMG #4443
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(794), CH3(23); C6H13(794), C5H10(431); 
+- equation: C9H19(815) (+M) <=> PC4H9(191) + C5H10(431) (+M)  # Reaction 25
+  type: falloff
+  low-P-rate-constant: {A: 3.1e-43, b: 18.418, Ea: -0.603}
+  high-P-rate-constant: {A: 5.5e+11, b: 0.55, Ea: 28.084}
+  Troe: {A: -32.13, T3: 207.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #25; RMG #4640
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(815), PC4H9(191); C9H19(815), C5H10(431); 
+- equation: C6H13(794) (+M) <=> C2H5(52) + C4H8(197) (+M)  # Reaction 26
+  type: falloff
+  low-P-rate-constant: {A: 4.5e-26, b: 13.09, Ea: -0.601}
+  high-P-rate-constant: {A: 3.55e+12, b: 0.29, Ea: 28.297}
+  Troe: {A: -0.74, T3: 308.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #26; RMG #4442
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(794), C2H5(52); C6H13(794), C4H8(197); 
+- equation: C7H15(800) (+M) <=> NC3H7(101) + C4H8(197) (+M)  # Reaction 27
+  type: falloff
+  low-P-rate-constant: {A: 2.0e-38, b: 16.814, Ea: -0.602}
+  high-P-rate-constant: {A: 2.95e+12, b: 0.31, Ea: 28.257}
+  Troe: {A: -20.96, T3: 221.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #27; RMG #4501
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H15(800), NC3H7(101); C7H15(800), C4H8(197); 
+- equation: CH3(23) + C2H5(52) <=> CH4(31) + C2H4(22)  # Reaction 28
+  rate-constant: {A: 1.18e+04, b: 2.45, Ea: -2.921}
+  note: |
+    Reaction index: Chemkin #28; RMG #246
+    Library reaction: CurranPentane
+    Flux pairs: C2H5(52), C2H4(22); CH3(23), CH4(31); 
+- equation: CH3(23) + NC3H7(101) <=> CH4(31) + C3H6(104)  # Reaction 29
+  rate-constant: {A: 1.1e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #29; RMG #4247
+    Library reaction: JetSurF2.0
+    Flux pairs: NC3H7(101), C3H6(104); CH3(23), CH4(31); 
+- equation: CH3(23) + PC4H9(191) <=> CH4(31) + C4H8(197)  # Reaction 30
+  rate-constant: {A: 1.1e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #30; RMG #4278
+    Library reaction: JetSurF2.0
+    Flux pairs: PC4H9(191), C4H8(197); CH3(23), CH4(31); 
+- equation: CH3(23) + C6H13(792) <=> CH4(31) + C6H12(788)  # Reaction 31
+  rate-constant: {A: 1.1e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #31; RMG #4451
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(792), C6H12(788); CH3(23), CH4(31); 
+- equation: CH3(23) + C6H13(793) <=> CH4(31) + C6H12(788)  # Reaction 32
+  rate-constant: {A: 2.2e+14, b: -0.68, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #32; RMG #4460
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(793), C6H12(788); CH3(23), CH4(31); 
+- equation: H(2) + CH3(23) (+M) <=> CH4(31) (+M)  # Reaction 33
+  type: falloff
+  low-P-rate-constant: {A: 2.477e+33, b: -4.76, Ea: 2.44}
+  high-P-rate-constant: {A: 1.27e+16, b: -0.63, Ea: 0.383}
+  Troe: {A: 0.783, T3: 74.0, T1: 2940.0, T2: 6960.0}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #33; RMG #169
+    Library reaction: CurranPentane
+    Flux pairs: H(2), CH4(31); CH3(23), CH4(31); 
+- equation: H(2) + C2H4(22) (+M) <=> C2H5(52) (+M)  # Reaction 34
+  type: falloff
+  low-P-rate-constant: {A: 1.419e+39, b: -6.642, Ea: 5.769}
+  high-P-rate-constant: {A: 9.569e+08, b: 1.463, Ea: 1.355}
+  Troe: {A: -0.569, T3: 299.0, T1: -9150.0, T2: 152.0}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #34; RMG #242
+    Library reaction: CurranPentane
+    Flux pairs: H(2), C2H5(52); C2H4(22), C2H5(52); 
+- equation: CH3(23) + CH3(23) <=> H(2) + C2H5(52)  # Reaction 35
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.01 atm, A: 4.74e+12, b: 0.105, Ea: 10.664}
+  - {P: 0.1 atm, A: 2.57e+13, b: -0.096, Ea: 11.406}
+  - {P: 1.0 atm, A: 3.1e+14, b: -0.362, Ea: 13.373}
+  - {P: 10.0 atm, A: 2.15e+10, b: 0.885, Ea: 13.533}
+  - {P: 100.0 atm, A: 103.2, b: 3.23, Ea: 11.236}
+  note: |
+    Reaction index: Chemkin #35; RMG #247
+    Library reaction: CurranPentane
+    Flux pairs: CH3(23), C2H5(52); CH3(23), H(2); 
+- equation: H(2) + C3H6(104) <=> NC3H7(101)  # Reaction 36
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.0013 atm, A: 7.99e+81, b: -23.161, Ea: 22.239}
+  - {P: 0.04 atm, A: 4.24e+68, b: -18.427, Ea: 19.665}
+  - {P: 1.0 atm, A: 1.04e+49, b: -11.5, Ea: 15.359}
+  - {P: 10.0 atm, A: 6.2e+41, b: -8.892, Ea: 14.637}
+  note: |
+    Reaction index: Chemkin #36; RMG #688
+    Library reaction: CurranPentane
+- equation: H(2) + C3H6(104) <=> NC3H7(101)  # Reaction 37
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.0013 atm, A: 1.85e+26, b: -5.83, Ea: 3.866}
+  - {P: 0.04 atm, A: 2.82e+30, b: -6.49, Ea: 5.471}
+  - {P: 1.0 atm, A: 3.78e+28, b: -5.57, Ea: 5.625}
+  - {P: 10.0 atm, A: 1.46e+25, b: -4.28, Ea: 5.248}
+  - {P: 100.0 atm, A: 7.24e+26, b: -4.21, Ea: 6.825}
+  - {P: 100.0 atm, A: 4.22e+27, b: -4.39, Ea: 9.346}
+  note: |
+    Reaction index: Chemkin #37; RMG #688
+    Library reaction: CurranPentane
+- equation: H(2) + C3H6(104) <=> CH3(23) + C2H4(22)  # Reaction 38
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.0013 atm, A: 1.54e+09, b: 1.35, Ea: 2.542}
+  - {P: 0.04 atm, A: 7.88e+10, b: 0.87, Ea: 3.6}
+  - {P: 1.0 atm, A: 2.67e+12, b: 0.47, Ea: 5.431}
+  - {P: 10.0 atm, A: 9.25e+22, b: -2.6, Ea: 12.898}
+  - {P: 100.0 atm, A: 1.32e+23, b: -2.42, Ea: 16.5}
+  note: |
+    Reaction index: Chemkin #38; RMG #689
+    Library reaction: CurranPentane
+- equation: H(2) + C3H6(104) <=> CH3(23) + C2H4(22)  # Reaction 39
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 10.0 atm, A: 1.24e+05, b: 2.52, Ea: 3.679}
+  - {P: 100.0 atm, A: 2510.0, b: 2.91, Ea: 3.981}
+  note: |
+    Reaction index: Chemkin #39; RMG #689
+    Library reaction: CurranPentane
+- equation: H(2) + C4H8(197) <=> PC4H9(191)  # Reaction 40
+  rate-constant: {A: 2.5e+11, b: 0.51, Ea: 2.62}
+  note: |
+    Reaction index: Chemkin #40; RMG #1042
+    Library reaction: CurranPentane
+    Flux pairs: H(2), PC4H9(191); C4H8(197), PC4H9(191); 
+- equation: H(2) + NC3H7(101) <=> CH3(23) + C2H5(52)  # Reaction 41
+  rate-constant: {A: 3.7e+24, b: -2.92, Ea: 12.505}
+  note: |
+    Reaction index: Chemkin #41; RMG #4241
+    Library reaction: JetSurF2.0
+    Flux pairs: NC3H7(101), C2H5(52); H(2), CH3(23); 
+- equation: H(2) + C4H8(197) <=> C2H4(22) + C2H5(52)  # Reaction 42
+  rate-constant: {A: 1.6e+22, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #42; RMG #4261
+    Library reaction: JetSurF2.0
+    Flux pairs: C4H8(197), C2H5(52); H(2), C2H4(22); 
+- equation: H(2) + C4H8(197) <=> CH3(23) + C3H6(104)  # Reaction 43
+  rate-constant: {A: 3.2e+22, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #43; RMG #4262
+    Library reaction: JetSurF2.0
+    Flux pairs: C4H8(197), C3H6(104); H(2), CH3(23); 
+- equation: H(2) + PC4H9(191) <=> C2H5(52) + C2H5(52)  # Reaction 44
+  rate-constant: {A: 3.7e+24, b: -2.92, Ea: 12.505}
+  note: |
+    Reaction index: Chemkin #44; RMG #4272
+    Library reaction: JetSurF2.0
+    Flux pairs: PC4H9(191), C2H5(52); H(2), C2H5(52); 
+- equation: H(2) + C5H10(431) <=> C2H4(22) + NC3H7(101)  # Reaction 45
+  rate-constant: {A: 8.0e+21, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #45; RMG #4402
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H10(431), NC3H7(101); H(2), C2H4(22); 
+- equation: H(2) + C5H10(431) <=> C2H5(52) + C3H6(104)  # Reaction 46
+  rate-constant: {A: 1.6e+22, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #46; RMG #4403
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H10(431), C3H6(104); H(2), C2H5(52); 
+- equation: H(2) + C6H12(788) <=> C2H4(22) + PC4H9(191)  # Reaction 47
+  rate-constant: {A: 8.0e+21, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #47; RMG #4428
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H12(788), PC4H9(191); H(2), C2H4(22); 
+- equation: H(2) + C6H12(788) <=> C3H6(104) + NC3H7(101)  # Reaction 48
+  rate-constant: {A: 1.6e+22, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #48; RMG #4429
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H12(788), NC3H7(101); H(2), C3H6(104); 
+- equation: H(2) + C6H13(792) <=> C2H5(52) + PC4H9(191)  # Reaction 49
+  rate-constant: {A: 3.7e+24, b: -2.92, Ea: 12.505}
+  note: |
+    Reaction index: Chemkin #49; RMG #4444
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(792), PC4H9(191); H(2), C2H5(52); 
+- equation: H(2) + C6H13(793) <=> C2H5(52) + PC4H9(191)  # Reaction 50
+  rate-constant: {A: 1.4e+28, b: -3.94, Ea: 15.916}
+  note: |
+    Reaction index: Chemkin #50; RMG #4453
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(793), PC4H9(191); H(2), C2H5(52); 
+- equation: H(2) + C9H19(812) <=> C2H5(52) + C7H15(798)  # Reaction 51
+  rate-constant: {A: 3.7e+24, b: -2.92, Ea: 12.505}
+  note: |
+    Reaction index: Chemkin #51; RMG #4644
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(812), C7H15(798); H(2), C2H5(52); 
+- equation: C6H13(792) <=> H(2) + C6H12(788)  # Reaction 52
+  rate-constant: {A: 8.85e+29, b: -5.03, Ea: 43.29}
+  note: |
+    Reaction index: Chemkin #52; RMG #6036
+    Template reaction: R_Addition_MultipleBond
+    Flux pairs: C6H13(792), C6H12(788); C6H13(792), H(2); 
+    Matched reaction 2924 C6H13-12 <=> C6H12-3 + H in R_Addition_MultipleBond/training
+    This reaction matched rate rule [Cds-CsH_Cds-HH;HJ]
+    family: R_Addition_MultipleBond
+- equation: H(2) + C6H12(788) <=> C6H13(793)  # Reaction 53
+  rate-constant: {A: 3.36e+08, b: 1.56, Ea: 0.6}
+  note: |
+    Reaction index: Chemkin #53; RMG #6083
+    Template reaction: R_Addition_MultipleBond
+    Flux pairs: C6H12(788), C6H13(793); H(2), C6H13(793); 
+    From training reaction 9 used for Cds-HH_Cds-CsH;HJ
+    Exact match found for rate rule [Cds-HH_Cds-CsH;HJ]
+    Euclidian distance = 0
+    family: R_Addition_MultipleBond
+- equation: H(2) + H(2) + M <=> H2(4) + M  # Reaction 54
+  type: three-body
+  rate-constant: {A: 7.0e+17, b: -1.0, Ea: 0.0}
+  efficiencies: {H2(4): 0.0, H(2): 0.0, N2: 0.0}
+  note: |
+    Reaction index: Chemkin #54; RMG #9
+    Library reaction: primaryH2O2
+    Flux pairs: H(2), H2(4); H(2), H2(4); 
+- equation: H(2) + H(2) + H2(4) <=> H2(4) + H2(4)  # Reaction 55
+  rate-constant: {A: 1.0e+17, b: -0.6, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #55; RMG #12
+    Library reaction: primaryH2O2
+    Flux pairs: H2(4), H2(4); H(2), H2(4); H(2), H2(4); 
+- equation: N2 + H(2) + H(2) <=> N2 + H2(4)  # Reaction 56
+  rate-constant: {A: 5.4e+18, b: -1.3, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #56; RMG #13
+    Library reaction: primaryH2O2
+    Flux pairs: N2, N2; H(2), H2(4); H(2), H2(4); 
+- equation: H(2) + H(2) + H(2) <=> H(2) + H2(4)  # Reaction 57
+  rate-constant: {A: 3.2e+15, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #57; RMG #14
+    Library reaction: primaryH2O2
+    Flux pairs: H(2), H2(4); H(2), H(2); H(2), H(2); 
+- equation: H(2) + CH4(31) <=> H2(4) + CH3(23)  # Reaction 58
+  rate-constant: {A: 6.14e+05, b: 2.5, Ea: 9.587}
+  note: |
+    Reaction index: Chemkin #58; RMG #170
+    Library reaction: CurranPentane
+    Flux pairs: CH4(31), CH3(23); H(2), H2(4); 
+- equation: H(2) + C2H5(52) <=> H2(4) + C2H4(22)  # Reaction 59
+  rate-constant: {A: 2.0e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #59; RMG #248
+    Library reaction: CurranPentane
+    Flux pairs: C2H5(52), C2H4(22); H(2), H2(4); 
+- equation: H(2) + NC3H7(101) <=> H2(4) + C3H6(104)  # Reaction 60
+  rate-constant: {A: 1.8e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #60; RMG #4242
+    Library reaction: JetSurF2.0
+    Flux pairs: NC3H7(101), C3H6(104); H(2), H2(4); 
+- equation: H(2) + PC4H9(191) <=> H2(4) + C4H8(197)  # Reaction 61
+  rate-constant: {A: 1.8e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #61; RMG #4273
+    Library reaction: JetSurF2.0
+    Flux pairs: PC4H9(191), C4H8(197); H(2), H2(4); 
+- equation: H(2) + C6H13(792) <=> H2(4) + C6H12(788)  # Reaction 62
+  rate-constant: {A: 1.8e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #62; RMG #4445
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(792), C6H12(788); H(2), H2(4); 
+- equation: H(2) + C6H13(793) <=> H2(4) + C6H12(788)  # Reaction 63
+  rate-constant: {A: 3.2e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #63; RMG #4454
+    Library reaction: JetSurF2.0
+    Flux pairs: C6H13(793), C6H12(788); H(2), H2(4); 
+- equation: S(841) (+M) <=> C6H12(788) + C6H13(792) (+M)  # Reaction 64
+  type: falloff
+  low-P-rate-constant: {A: 3.1e-43, b: 18.418, Ea: -0.603}
+  high-P-rate-constant: {A: 5.5e+11, b: 0.55, Ea: 28.084}
+  Troe: {A: -32.13, T3: 207.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #64; RMG #4888
+    Library reaction: JetSurF2.0
+    Flux pairs: S(841), C6H12(788); S(841), C6H13(792); 
+- equation: H(2) + fuel(1) <=> H2(4) + S(841)  # Reaction 65
+  rate-constant: {A: 0.0634, b: 4.65, Ea: 1.34}
+  note: |
+    Reaction index: Chemkin #65; RMG #4980
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(841); H(2), H2(4); 
+- equation: CH3(23) + fuel(1) <=> CH4(31) + S(841)  # Reaction 66
+  rate-constant: {A: 2.82e-07, b: 5.89, Ea: 4.768}
+  note: |
+    Reaction index: Chemkin #66; RMG #4992
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(841); CH3(23), CH4(31); 
+- equation: H(2) + S(841) <=> fuel(1)  # Reaction 67
+  rate-constant: {A: 2.591e+13, b: 0.217, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #67; RMG #6031
+    Template reaction: R_Recombination
+    Flux pairs: S(841), fuel(1); H(2), fuel(1); 
+    Matched reaction 161 H + C12H25-5 <=> C12H26-11 in R_Recombination/training
+    This reaction matched rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R]
+    family: R_Recombination
+    Ea raised from -0.0 to 0 kJ/mol.
+- equation: C2H5(52) + S(841) <=> C2H4(22) + fuel(1)  # Reaction 68
+  rate-constant: {A: 2.330481e+15, b: -0.9, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #68; RMG #6133
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); C2H5(52), C2H4(22); 
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_N-5R!H->O_Sp-5CS-4CCNSS_Ext-4CNS-R
+    Multiplied by reaction path degeneracy 3.0
+- equation: NC3H7(101) + S(841) <=> C3H6(104) + fuel(1)  # Reaction 69
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #69; RMG #6252
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); NC3H7(101), C3H6(104); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C6H13(792) + S(841) <=> C6H12(788) + fuel(1)  # Reaction 70
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #70; RMG #6299
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); C6H13(792), C6H12(788); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C6H13(793) + S(841) <=> C6H12(788) + fuel(1)  # Reaction 71
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #71; RMG #6300
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); C6H13(793), C6H12(788); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: PC4H9(191) + S(841) <=> C4H8(197) + fuel(1)  # Reaction 72
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #72; RMG #6509
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); PC4H9(191), C4H8(197); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: H(2) + IC3H7(102) <=> CH3(23) + C2H5(52)  # Reaction 73
+  rate-constant: {A: 2.0e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #73; RMG #584
+    Library reaction: CurranPentane
+    Flux pairs: IC3H7(102), C2H5(52); H(2), CH3(23); 
+- equation: H(2) + C3H6(104) <=> IC3H7(102)  # Reaction 74
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.0013 atm, A: 1.35e+44, b: -10.68, Ea: 8.196}
+  - {P: 0.04 atm, A: 2.11e+57, b: -14.23, Ea: 15.147}
+  - {P: 1.0 atm, A: 3.26e+61, b: -14.94, Ea: 20.161}
+  - {P: 10.0 atm, A: 5.3e+56, b: -13.12, Ea: 20.667}
+  - {P: 100.0 atm, A: 1.11e+50, b: -10.8, Ea: 20.202}
+  note: |
+    Reaction index: Chemkin #74; RMG #690
+    Library reaction: CurranPentane
+- equation: H(2) + C3H6(104) <=> IC3H7(102)  # Reaction 75
+  duplicate: true
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.0013 atm, A: 2.17e+130, b: -32.58, Ea: 136.14}
+  - {P: 0.04 atm, A: 2.25e+29, b: -5.84, Ea: 4.242}
+  - {P: 1.0 atm, A: 1.06e+30, b: -5.63, Ea: 5.613}
+  - {P: 10.0 atm, A: 6.11e+26, b: -4.44, Ea: 5.182}
+  - {P: 100.0 atm, A: 2.73e+23, b: -3.26, Ea: 4.597}
+  note: |
+    Reaction index: Chemkin #75; RMG #690
+    Library reaction: CurranPentane
+- equation: H(2) + IC3H7(102) <=> H2(4) + C3H6(104)  # Reaction 76
+  rate-constant: {A: 3.2e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #76; RMG #4237
+    Library reaction: JetSurF2.0
+    Flux pairs: IC3H7(102), C3H6(104); H(2), H2(4); 
+- equation: CH3(23) + IC3H7(102) <=> CH4(31) + C3H6(104)  # Reaction 77
+  rate-constant: {A: 2.2e+14, b: -0.68, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #77; RMG #4240
+    Library reaction: JetSurF2.0
+    Flux pairs: IC3H7(102), C3H6(104); CH3(23), CH4(31); 
+- equation: NC3H7(101) <=> IC3H7(102)  # Reaction 78
+  type: Chebyshev
+  temperature-range: [300.0, 2000.0]
+  pressure-range: [0.01 atm, 98.692 atm]
+  data:
+  - [-2.618, 0.3544, -0.06979, 2.082e-03]
+  - [11.33, 0.5915, -0.09743, -5.227e-03]
+  - [-0.2931, 0.3537, -0.02704, -0.01375]
+  - [-0.1684, 0.1473, 0.01395, -0.01033]
+  - [-0.06718, 0.03208, 0.01938, -2.155e-03]
+  - [-0.01503, -9.388e-03, 9.839e-03, 2.545e-03]
+  note: |
+    Reaction index: Chemkin #78; RMG #6079
+    PDep reaction: PDepNetwork #28
+    Flux pairs: NC3H7(101), IC3H7(102); 
+- equation: IC3H7(102) + S(841) <=> C3H6(104) + fuel(1)  # Reaction 79
+  rate-constant: {A: 3.0e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #79; RMG #6253
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); IC3H7(102), C3H6(104); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 6.0
+- equation: S(840) (+M) <=> C5H10(431) + C7H15(798) (+M)  # Reaction 80
+  type: falloff
+  low-P-rate-constant: {A: 3.1e-43, b: 18.418, Ea: -0.603}
+  high-P-rate-constant: {A: 5.5e+11, b: 0.55, Ea: 28.084}
+  Troe: {A: -32.13, T3: 207.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #80; RMG #4886
+    Library reaction: JetSurF2.0
+    Flux pairs: S(840), C5H10(431); S(840), C7H15(798); 
+- equation: S(840) (+M) <=> S(841) (+M)  # Reaction 81
+  type: falloff
+  low-P-rate-constant: {A: 3.0e-27, b: 13.481, Ea: -0.607}
+  high-P-rate-constant: {A: 1.86, b: 3.27, Ea: 13.198}
+  Troe: {A: -19.7, T3: 215.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #81; RMG #4939
+    Library reaction: JetSurF2.0
+    Flux pairs: S(840), S(841); 
+- equation: H(2) + fuel(1) <=> H2(4) + S(840)  # Reaction 82
+  rate-constant: {A: 0.0634, b: 4.65, Ea: 1.34}
+  note: |
+    Reaction index: Chemkin #82; RMG #4979
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(840); H(2), H2(4); 
+- equation: CH3(23) + fuel(1) <=> CH4(31) + S(840)  # Reaction 83
+  rate-constant: {A: 2.82e-07, b: 5.89, Ea: 4.768}
+  note: |
+    Reaction index: Chemkin #83; RMG #4991
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(840); CH3(23), CH4(31); 
+- equation: H(2) + S(840) <=> fuel(1)  # Reaction 84
+  rate-constant: {A: 2.591e+13, b: 0.217, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #84; RMG #6030
+    Template reaction: R_Recombination
+    Flux pairs: S(840), fuel(1); H(2), fuel(1); 
+    Matched reaction 160 H + C12H25-4 <=> C12H26-10 in R_Recombination/training
+    This reaction matched rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R]
+    family: R_Recombination
+    Ea raised from -0.0 to 0 kJ/mol.
+- equation: C2H5(52) + S(840) <=> C2H4(22) + fuel(1)  # Reaction 85
+  rate-constant: {A: 2.330481e+15, b: -0.9, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #85; RMG #6132
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); C2H5(52), C2H4(22); 
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_N-5R!H->O_Sp-5CS-4CCNSS_Ext-4CNS-R
+    Multiplied by reaction path degeneracy 3.0
+- equation: NC3H7(101) + S(840) <=> C3H6(104) + fuel(1)  # Reaction 86
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #86; RMG #6250
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); NC3H7(101), C3H6(104); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: IC3H7(102) + S(840) <=> C3H6(104) + fuel(1)  # Reaction 87
+  rate-constant: {A: 3.0e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #87; RMG #6251
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); IC3H7(102), C3H6(104); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 6.0
+- equation: C6H13(792) + S(840) <=> C6H12(788) + fuel(1)  # Reaction 88
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #88; RMG #6297
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); C6H13(792), C6H12(788); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C6H13(793) + S(840) <=> C6H12(788) + fuel(1)  # Reaction 89
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #89; RMG #6298
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); C6H13(793), C6H12(788); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: PC4H9(191) + S(840) <=> C4H8(197) + fuel(1)  # Reaction 90
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #90; RMG #6507
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); PC4H9(191), C4H8(197); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(840) + fuel(1) <=> S(841) + fuel(1)  # Reaction 91
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #91; RMG #6629
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(841); S(840), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(839) (+M) <=> S(841) (+M)  # Reaction 92
+  type: falloff
+  low-P-rate-constant: {A: 3.9e-34, b: 15.855, Ea: 1.244}
+  high-P-rate-constant: {A: 2.95, b: 3.08, Ea: 12.866}
+  Troe: {A: -15.24, T3: 216.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #92; RMG #4946
+    Library reaction: JetSurF2.0
+    Flux pairs: S(839), S(841); 
+- equation: H(2) + fuel(1) <=> H2(4) + S(839)  # Reaction 93
+  rate-constant: {A: 0.0634, b: 4.65, Ea: 1.34}
+  note: |
+    Reaction index: Chemkin #93; RMG #4978
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(839); H(2), H2(4); 
+- equation: CH3(23) + fuel(1) <=> CH4(31) + S(839)  # Reaction 94
+  rate-constant: {A: 2.82e-07, b: 5.89, Ea: 4.768}
+  note: |
+    Reaction index: Chemkin #94; RMG #4990
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(839); CH3(23), CH4(31); 
+- equation: H(2) + S(839) <=> fuel(1)  # Reaction 95
+  rate-constant: {A: 2.591e+13, b: 0.217, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #95; RMG #6029
+    Template reaction: R_Recombination
+    Flux pairs: S(839), fuel(1); H(2), fuel(1); 
+    Matched reaction 159 H + C12H25-3 <=> C12H26-9 in R_Recombination/training
+    This reaction matched rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R]
+    family: R_Recombination
+    Ea raised from -0.0 to 0 kJ/mol.
+- equation: C2H5(52) + S(839) <=> C2H4(22) + fuel(1)  # Reaction 96
+  rate-constant: {A: 2.330481e+15, b: -0.9, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #96; RMG #6131
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); C2H5(52), C2H4(22); 
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_N-5R!H->O_Sp-5CS-4CCNSS_Ext-4CNS-R
+    Multiplied by reaction path degeneracy 3.0
+- equation: NC3H7(101) + S(839) <=> C3H6(104) + fuel(1)  # Reaction 97
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #97; RMG #6248
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); NC3H7(101), C3H6(104); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: IC3H7(102) + S(839) <=> C3H6(104) + fuel(1)  # Reaction 98
+  rate-constant: {A: 3.0e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #98; RMG #6249
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); IC3H7(102), C3H6(104); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 6.0
+- equation: C6H13(792) + S(839) <=> C6H12(788) + fuel(1)  # Reaction 99
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #99; RMG #6295
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); C6H13(792), C6H12(788); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C6H13(793) + S(839) <=> C6H12(788) + fuel(1)  # Reaction 100
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #100; RMG #6296
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); C6H13(793), C6H12(788); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: PC4H9(191) + S(839) <=> C4H8(197) + fuel(1)  # Reaction 101
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #101; RMG #6505
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); PC4H9(191), C4H8(197); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(839) + fuel(1) <=> S(841) + fuel(1)  # Reaction 102
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #102; RMG #6628
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(841); S(839), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(839) <=> S(840)  # Reaction 103
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #103; RMG #6752
+    Template reaction: intra_H_migration
+    Flux pairs: S(839), S(840); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(839) <=> S(840)  # Reaction 104
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #104; RMG #6754
+    Template reaction: intra_H_migration
+    Flux pairs: S(839), S(840); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(839) + fuel(1) <=> S(840) + fuel(1)  # Reaction 105
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #105; RMG #6756
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(840); S(839), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(840) <=> S(839)  # Reaction 106
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #106; RMG #6769
+    Template reaction: intra_H_migration
+    Flux pairs: S(840), S(839); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(840) <=> S(839)  # Reaction 107
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #107; RMG #6772
+    Template reaction: intra_H_migration
+    Flux pairs: S(840), S(839); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(840) (+M) <=> S(842) (+M)  # Reaction 108
+  type: falloff
+  low-P-rate-constant: {A: 5.2e-30, b: 14.079, Ea: -0.606}
+  high-P-rate-constant: {A: 1.41, b: 3.32, Ea: 16.144}
+  Troe: {A: -21.93, T3: 219.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #108; RMG #4925
+    Library reaction: JetSurF2.0
+    Flux pairs: S(840), S(842); 
+- equation: S(839) (+M) <=> S(842) (+M)  # Reaction 109
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 5.2e-30, b: 14.079, Ea: -0.606}
+  high-P-rate-constant: {A: 1.41, b: 3.32, Ea: 16.144}
+  Troe: {A: -21.93, T3: 219.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #109; RMG #4926
+    Library reaction: JetSurF2.0
+    Flux pairs: S(839), S(842); 
+- equation: S(839) (+M) <=> S(842) (+M)  # Reaction 110
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 3.0e-27, b: 13.481, Ea: -0.607}
+  high-P-rate-constant: {A: 1.86, b: 3.27, Ea: 13.198}
+  Troe: {A: -19.7, T3: 215.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #110; RMG #4938
+    Library reaction: JetSurF2.0
+    Flux pairs: S(839), S(842); 
+- equation: H(2) + fuel(1) <=> H2(4) + S(842)  # Reaction 111
+  rate-constant: {A: 0.0634, b: 4.65, Ea: 1.34}
+  note: |
+    Reaction index: Chemkin #111; RMG #4981
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(842); H(2), H2(4); 
+- equation: CH3(23) + fuel(1) <=> CH4(31) + S(842)  # Reaction 112
+  rate-constant: {A: 2.82e-07, b: 5.89, Ea: 4.768}
+  note: |
+    Reaction index: Chemkin #112; RMG #4993
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(842); CH3(23), CH4(31); 
+- equation: H(2) + S(842) <=> fuel(1)  # Reaction 113
+  rate-constant: {A: 2.591e+13, b: 0.217, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #113; RMG #6032
+    Template reaction: R_Recombination
+    Flux pairs: S(842), fuel(1); H(2), fuel(1); 
+    Matched reaction 162 H + C12H25-6 <=> C12H26-12 in R_Recombination/training
+    This reaction matched rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R]
+    family: R_Recombination
+    Ea raised from -0.0 to 0 kJ/mol.
+- equation: C2H5(52) + S(842) <=> C2H4(22) + fuel(1)  # Reaction 114
+  rate-constant: {A: 2.330481e+15, b: -0.9, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #114; RMG #6134
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); C2H5(52), C2H4(22); 
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_N-5R!H->O_Sp-5CS-4CCNSS_Ext-4CNS-R
+    Multiplied by reaction path degeneracy 3.0
+- equation: NC3H7(101) + S(842) <=> C3H6(104) + fuel(1)  # Reaction 115
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #115; RMG #6254
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); NC3H7(101), C3H6(104); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: IC3H7(102) + S(842) <=> C3H6(104) + fuel(1)  # Reaction 116
+  rate-constant: {A: 3.0e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #116; RMG #6255
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); IC3H7(102), C3H6(104); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 6.0
+- equation: C6H13(792) + S(842) <=> C6H12(788) + fuel(1)  # Reaction 117
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #117; RMG #6301
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); C6H13(792), C6H12(788); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C6H13(793) + S(842) <=> C6H12(788) + fuel(1)  # Reaction 118
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #118; RMG #6302
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); C6H13(793), C6H12(788); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: PC4H9(191) + S(842) <=> C4H8(197) + fuel(1)  # Reaction 119
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #119; RMG #6511
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); PC4H9(191), C4H8(197); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(842) <=> S(841)  # Reaction 120
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #120; RMG #6626
+    Template reaction: intra_H_migration
+    Flux pairs: S(842), S(841); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(842) <=> S(841)  # Reaction 121
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #121; RMG #6627
+    Template reaction: intra_H_migration
+    Flux pairs: S(842), S(841); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(842) + fuel(1) <=> S(841) + fuel(1)  # Reaction 122
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #122; RMG #6630
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(841); S(842), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(842) + fuel(1) <=> S(840) + fuel(1)  # Reaction 123
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #123; RMG #6757
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(840); S(842), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(842) + fuel(1) <=> S(839) + fuel(1)  # Reaction 124
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #124; RMG #6773
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(839); S(842), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(841) <=> S(842)  # Reaction 125
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #125; RMG #6797
+    Template reaction: intra_H_migration
+    Flux pairs: S(841), S(842); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(841) <=> S(842)  # Reaction 126
+  duplicate: true
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #126; RMG #6798
+    Template reaction: intra_H_migration
+    Flux pairs: S(841), S(842); 
+    Estimated using template [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: C7H14(797) <=> C3H6(104) + C4H8(197)  # Reaction 127
+  rate-constant: {A: 7.08e+06, b: 1.65, Ea: 53.752}
+  note: |
+    Reaction index: Chemkin #127; RMG #4489
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H14(797), C3H6(104); C7H14(797), C4H8(197); 
+- equation: H(2) + C7H14(797) <=> C3H6(104) + PC4H9(191)  # Reaction 128
+  rate-constant: {A: 1.6e+22, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #128; RMG #4491
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H14(797), PC4H9(191); H(2), C3H6(104); 
+- equation: H(2) + C7H15(798) <=> H2(4) + C7H14(797)  # Reaction 129
+  rate-constant: {A: 1.8e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #129; RMG #4506
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H15(798), C7H14(797); H(2), H2(4); 
+- equation: CH3(23) + C7H15(798) <=> CH4(31) + C7H14(797)  # Reaction 130
+  rate-constant: {A: 1.1e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #130; RMG #4512
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H15(798), C7H14(797); CH3(23), CH4(31); 
+- equation: C9H19(815) (+M) <=> C2H5(52) + C7H14(797) (+M)  # Reaction 131
+  type: falloff
+  low-P-rate-constant: {A: 8.2e-43, b: 18.276, Ea: -0.603}
+  high-P-rate-constant: {A: 6.76e+09, b: 1.11, Ea: 27.023}
+  Troe: {A: -30.04, T3: 210.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #131; RMG #4641
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(815), C2H5(52); C9H19(815), C7H14(797); 
+- equation: H(2) + C7H14(797) <=> C7H15(798)  # Reaction 132
+  rate-constant: {A: 3.01e+08, b: 1.6, Ea: 2.4}
+  note: |
+    Reaction index: Chemkin #132; RMG #6157
+    Template reaction: R_Addition_MultipleBond
+    Flux pairs: C7H14(797), C7H15(798); H(2), C7H15(798); 
+    From training reaction 10 used for Cds-CsH_Cds-HH;HJ
+    Exact match found for rate rule [Cds-CsH_Cds-HH;HJ]
+    Euclidian distance = 0
+    family: R_Addition_MultipleBond
+- equation: C7H15(798) + S(839) <=> C7H14(797) + fuel(1)  # Reaction 133
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #133; RMG #6815
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); C7H15(798), C7H14(797); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C7H15(798) + S(840) <=> C7H14(797) + fuel(1)  # Reaction 134
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #134; RMG #6817
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); C7H15(798), C7H14(797); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C7H15(798) + S(841) <=> C7H14(797) + fuel(1)  # Reaction 135
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #135; RMG #6819
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); C7H15(798), C7H14(797); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C7H15(798) + S(842) <=> C7H14(797) + fuel(1)  # Reaction 136
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #136; RMG #6821
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); C7H15(798), C7H14(797); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(838) (+M) <=> C3H6(104) + C9H19(812) (+M)  # Reaction 137
+  type: falloff
+  low-P-rate-constant: {A: 1.0e-43, b: 18.591, Ea: -0.603}
+  high-P-rate-constant: {A: 6.03e+10, b: 0.84, Ea: 27.82}
+  Troe: {A: -43.32, T3: 200.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #137; RMG #4883
+    Library reaction: JetSurF2.0
+    Flux pairs: S(838), C3H6(104); S(838), C9H19(812); 
+- equation: S(838) (+M) <=> S(841) (+M)  # Reaction 138
+  type: falloff
+  low-P-rate-constant: {A: 5.2e-30, b: 14.079, Ea: -0.606}
+  high-P-rate-constant: {A: 1.41, b: 3.32, Ea: 16.144}
+  Troe: {A: -21.93, T3: 219.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #138; RMG #4927
+    Library reaction: JetSurF2.0
+    Flux pairs: S(838), S(841); 
+- equation: S(838) (+M) <=> S(842) (+M)  # Reaction 139
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 3.0e-27, b: 13.481, Ea: -0.607}
+  high-P-rate-constant: {A: 1.86, b: 3.27, Ea: 13.198}
+  Troe: {A: -19.7, T3: 215.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #139; RMG #4937
+    Library reaction: JetSurF2.0
+    Flux pairs: S(838), S(842); 
+- equation: S(838) (+M) <=> S(842) (+M)  # Reaction 140
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 3.9e-34, b: 15.855, Ea: 1.244}
+  high-P-rate-constant: {A: 2.95, b: 3.08, Ea: 12.866}
+  Troe: {A: -15.24, T3: 216.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #140; RMG #4947
+    Library reaction: JetSurF2.0
+    Flux pairs: S(838), S(842); 
+- equation: H(2) + fuel(1) <=> H2(4) + S(838)  # Reaction 141
+  rate-constant: {A: 0.0634, b: 4.65, Ea: 1.34}
+  note: |
+    Reaction index: Chemkin #141; RMG #4977
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(838); H(2), H2(4); 
+- equation: CH3(23) + fuel(1) <=> CH4(31) + S(838)  # Reaction 142
+  rate-constant: {A: 2.82e-07, b: 5.89, Ea: 4.768}
+  note: |
+    Reaction index: Chemkin #142; RMG #4989
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(838); CH3(23), CH4(31); 
+- equation: H(2) + S(838) <=> fuel(1)  # Reaction 143
+  rate-constant: {A: 2.591e+13, b: 0.217, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #143; RMG #6033
+    Template reaction: R_Recombination
+    Flux pairs: S(838), fuel(1); H(2), fuel(1); 
+    Matched reaction 158 H + C12H25-2 <=> C12H26-8 in R_Recombination/training
+    This reaction matched rate rule [Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R]
+    family: R_Recombination
+    Ea raised from -0.0 to 0 kJ/mol.
+- equation: C2H5(52) + S(838) <=> C2H4(22) + fuel(1)  # Reaction 144
+  rate-constant: {A: 2.330481e+15, b: -0.9, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #144; RMG #6135
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); C2H5(52), C2H4(22); 
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_N-5R!H->O_Sp-5CS-4CCNSS_Ext-4CNS-R
+    Multiplied by reaction path degeneracy 3.0
+- equation: NC3H7(101) + S(838) <=> C3H6(104) + fuel(1)  # Reaction 145
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #145; RMG #6256
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); NC3H7(101), C3H6(104); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: IC3H7(102) + S(838) <=> C3H6(104) + fuel(1)  # Reaction 146
+  rate-constant: {A: 3.0e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #146; RMG #6257
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); IC3H7(102), C3H6(104); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 6.0
+- equation: C6H13(792) + S(838) <=> C6H12(788) + fuel(1)  # Reaction 147
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #147; RMG #6303
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); C6H13(792), C6H12(788); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C6H13(793) + S(838) <=> C6H12(788) + fuel(1)  # Reaction 148
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #148; RMG #6304
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); C6H13(793), C6H12(788); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: PC4H9(191) + S(838) <=> C4H8(197) + fuel(1)  # Reaction 149
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #149; RMG #6513
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); PC4H9(191), C4H8(197); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(838) + fuel(1) <=> S(841) + fuel(1)  # Reaction 150
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #150; RMG #6631
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(841); S(838), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(840) <=> S(838)  # Reaction 151
+  duplicate: true
+  rate-constant: {A: 1.1e+09, b: 1.01, Ea: 36.4}
+  note: |
+    Reaction index: Chemkin #151; RMG #6753
+    Template reaction: intra_H_migration
+    Flux pairs: S(840), S(838); 
+    From training reaction 369 used for R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(838) <=> S(840)  # Reaction 152
+  duplicate: true
+  rate-constant: {A: 2.841478e+07, b: 1.625, Ea: 35.45}
+  note: |
+    Reaction index: Chemkin #152; RMG #6755
+    Template reaction: intra_H_migration
+    Flux pairs: S(838), S(840); 
+    Estimated using average of templates [R3H_SS;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)] + [R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC] for rate
+    rule [R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(838) + fuel(1) <=> S(840) + fuel(1)  # Reaction 153
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #153; RMG #6758
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(840); S(838), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(839) <=> S(838)  # Reaction 154
+  rate-constant: {A: 6.76e+09, b: 0.88, Ea: 38.0}
+  note: |
+    Reaction index: Chemkin #154; RMG #6770
+    Template reaction: intra_H_migration
+    Flux pairs: S(839), S(838); 
+    From training reaction 357 used for R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R2H_S;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(838) + fuel(1) <=> S(839) + fuel(1)  # Reaction 155
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #155; RMG #6774
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(839); S(838), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(838) + fuel(1) <=> S(842) + fuel(1)  # Reaction 156
+  rate-constant: {A: 5.147495e-03, b: 4.29, Ea: 7.713}
+  note: |
+    Reaction index: Chemkin #156; RMG #6799
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(842); S(838), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: C7H15(798) + S(838) <=> C7H14(797) + fuel(1)  # Reaction 157
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #157; RMG #6823
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); C7H15(798), C7H14(797); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(840) <=> S(838)  # Reaction 158
+  duplicate: true
+  rate-constant: {A: 1.1e+09, b: 1.01, Ea: 36.4}
+  note: |
+    Reaction index: Chemkin #158; RMG #6976
+    Template reaction: intra_H_migration
+    Flux pairs: S(840), S(838); 
+    From training reaction 369 used for R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(840) <=> S(838)  # Reaction 159
+  duplicate: true
+  rate-constant: {A: 1.1e+09, b: 1.01, Ea: 36.4}
+  note: |
+    Reaction index: Chemkin #159; RMG #6977
+    Template reaction: intra_H_migration
+    Flux pairs: S(840), S(838); 
+    From training reaction 369 used for R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC
+    Exact match found for rate rule [R3H_SS_Cs;C_rad_out_H/NonDeC;Cs_H_out_H/NonDeC]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: C5H11(428) <=> C2H4(22) + NC3H7(101)  # Reaction 160
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 4410.0, b: 2.192, Ea: 18.827}
+  - {P: 1.0 atm, A: 8.06e+20, b: -2.628, Ea: 29.232}
+  - {P: 10.0 atm, A: 2.17e+28, b: -4.578, Ea: 34.864}
+  - {P: 100.0 atm, A: 6.47e+24, b: -3.383, Ea: 34.388}
+  - {P: 1000.0 atm, A: 2.34e+17, b: -1.123, Ea: 31.176}
+  note: |
+    Reaction index: Chemkin #160; RMG #2273
+    Library reaction: CurranPentane
+    Flux pairs: C5H11(428), C2H4(22); C5H11(428), NC3H7(101); 
+- equation: C5H11(428) <=> H(2) + C5H10(431)  # Reaction 161
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 3.24e-14, b: 7.022, Ea: 15.354}
+  - {P: 1.0 atm, A: 5.1e+12, b: -0.402, Ea: 29.991}
+  - {P: 10.0 atm, A: 4.07e+27, b: -4.483, Ea: 39.814}
+  - {P: 100.0 atm, A: 1.02e+26, b: -3.794, Ea: 40.806}
+  - {P: 1000.0 atm, A: 6.52e+16, b: -0.987, Ea: 36.957}
+  note: |
+    Reaction index: Chemkin #161; RMG #2274
+    Library reaction: CurranPentane
+    Flux pairs: C5H11(428), H(2); C5H11(428), C5H10(431); 
+- equation: H(2) + C5H11(428) <=> C2H5(52) + NC3H7(101)  # Reaction 162
+  rate-constant: {A: 3.7e+24, b: -2.92, Ea: 12.505}
+  note: |
+    Reaction index: Chemkin #162; RMG #4412
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H11(428), NC3H7(101); H(2), C2H5(52); 
+- equation: H(2) + C5H11(428) <=> H2(4) + C5H10(431)  # Reaction 163
+  rate-constant: {A: 1.8e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #163; RMG #4413
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H11(428), C5H10(431); H(2), H2(4); 
+- equation: CH3(23) + C5H11(428) <=> CH4(31) + C5H10(431)  # Reaction 164
+  rate-constant: {A: 1.1e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #164; RMG #4417
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H11(428), C5H10(431); CH3(23), CH4(31); 
+- equation: H(2) + C7H14(797) <=> C2H4(22) + C5H11(428)  # Reaction 165
+  rate-constant: {A: 8.0e+21, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #165; RMG #4490
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H14(797), C5H11(428); H(2), C2H4(22); 
+- equation: C7H15(798) (+M) <=> C2H4(22) + C5H11(428) (+M)  # Reaction 166
+  type: falloff
+  low-P-rate-constant: {A: 2.8e-44, b: 18.729, Ea: -0.603}
+  high-P-rate-constant: {A: 7.94e+11, b: 0.33, Ea: 27.21}
+  Troe: {A: -14.66, T3: 219.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #166; RMG #4499
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H15(798), C2H4(22); C7H15(798), C5H11(428); 
+- equation: H(2) + C7H15(798) <=> C2H5(52) + C5H11(428)  # Reaction 167
+  rate-constant: {A: 3.7e+24, b: -2.92, Ea: 12.505}
+  note: |
+    Reaction index: Chemkin #167; RMG #4505
+    Library reaction: JetSurF2.0
+    Flux pairs: C7H15(798), C5H11(428); H(2), C2H5(52); 
+- equation: S(842) (+M) <=> C5H11(428) + C7H14(797) (+M)  # Reaction 168
+  type: falloff
+  low-P-rate-constant: {A: 3.1e-43, b: 18.418, Ea: -0.603}
+  high-P-rate-constant: {A: 5.5e+11, b: 0.55, Ea: 28.084}
+  Troe: {A: -32.13, T3: 207.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #168; RMG #4890
+    Library reaction: JetSurF2.0
+    Flux pairs: S(842), C5H11(428); S(842), C7H14(797); 
+- equation: C5H11(428) + C7H15(798) <=> fuel(1)  # Reaction 169
+  rate-constant: {A: 1.88e+14, b: -0.5, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #169; RMG #4956
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H11(428), fuel(1); C7H15(798), fuel(1); 
+- equation: C5H11(428) + S(839) <=> C5H10(431) + fuel(1)  # Reaction 170
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #170; RMG #6403
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); C5H11(428), C5H10(431); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C5H11(428) + S(840) <=> C5H10(431) + fuel(1)  # Reaction 171
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #171; RMG #6405
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); C5H11(428), C5H10(431); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C5H11(428) + S(841) <=> C5H10(431) + fuel(1)  # Reaction 172
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #172; RMG #6407
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); C5H11(428), C5H10(431); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C5H11(428) + S(842) <=> C5H10(431) + fuel(1)  # Reaction 173
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #173; RMG #6409
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); C5H11(428), C5H10(431); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C5H11(428) + S(838) <=> C5H10(431) + fuel(1)  # Reaction 174
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #174; RMG #6411
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); C5H11(428), C5H10(431); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C8H17(805) (+M) <=> C2H4(22) + C6H13(792) (+M)  # Reaction 175
+  type: falloff
+  low-P-rate-constant: {A: 1.8e-57, b: 23.463, Ea: -0.602}
+  high-P-rate-constant: {A: 9.12e+11, b: 0.31, Ea: 27.238}
+  Troe: {A: -2.46, T3: 206.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {H2(4): 2.0, CH4(31): 2.0, C2H6(51): 3.0}
+  note: |
+    Reaction index: Chemkin #175; RMG #4566
+    Library reaction: JetSurF2.0
+    Flux pairs: C8H17(805), C2H4(22); C8H17(805), C6H13(792); 
+- equation: H(2) + C8H17(805) <=> C2H5(52) + C6H13(792)  # Reaction 176
+  rate-constant: {A: 3.7e+24, b: -2.92, Ea: 12.505}
+  note: |
+    Reaction index: Chemkin #176; RMG #4573
+    Library reaction: JetSurF2.0
+    Flux pairs: C8H17(805), C6H13(792); H(2), C2H5(52); 
+- equation: S(839) (+M) <=> C4H8(197) + C8H17(805) (+M)  # Reaction 177
+  type: falloff
+  low-P-rate-constant: {A: 3.0e-43, b: 18.43, Ea: -0.603}
+  high-P-rate-constant: {A: 2.04e+13, b: 0.04, Ea: 28.494}
+  Troe: {A: -34.47, T3: 208.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #177; RMG #4884
+    Library reaction: JetSurF2.0
+    Flux pairs: S(839), C4H8(197); S(839), C8H17(805); 
+- equation: PC4H9(191) + C8H17(805) <=> fuel(1)  # Reaction 178
+  rate-constant: {A: 1.88e+14, b: -0.5, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #178; RMG #4955
+    Library reaction: JetSurF2.0
+    Flux pairs: PC4H9(191), fuel(1); C8H17(805), fuel(1); 
+- equation: C8H17(808) (+M) <=> NC3H7(101) + C5H10(431) (+M)  # Reaction 179
+  type: falloff
+  low-P-rate-constant: {A: 3.1e-43, b: 18.418, Ea: -0.603}
+  high-P-rate-constant: {A: 5.5e+11, b: 0.55, Ea: 28.084}
+  Troe: {A: -32.13, T3: 207.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #179; RMG #4570
+    Library reaction: JetSurF2.0
+    Flux pairs: C8H17(808), NC3H7(101); C8H17(808), C5H10(431); 
+- equation: C8H17(808) (+M) <=> C2H5(52) + C6H12(788) (+M)  # Reaction 180
+  type: falloff
+  low-P-rate-constant: {A: 8.2e-43, b: 18.276, Ea: -0.603}
+  high-P-rate-constant: {A: 6.76e+09, b: 1.11, Ea: 27.023}
+  Troe: {A: -30.04, T3: 210.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #180; RMG #4571
+    Library reaction: JetSurF2.0
+    Flux pairs: C8H17(808), C2H5(52); C8H17(808), C6H12(788); 
+- equation: C8H17(805) (+M) <=> C8H17(808) (+M)  # Reaction 181
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 5.1e-44, b: 18.749, Ea: -0.603}
+  high-P-rate-constant: {A: 5.13, b: 3.23, Ea: 16.848}
+  Troe: {A: -20.15, T3: 205.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #181; RMG #4909
+    Library reaction: JetSurF2.0
+    Flux pairs: C8H17(805), C8H17(808); 
+- equation: C8H17(805) (+M) <=> C8H17(808) (+M)  # Reaction 182
+  duplicate: true
+  type: falloff
+  low-P-rate-constant: {A: 9.9e-38, b: 17.215, Ea: -0.603}
+  high-P-rate-constant: {A: 22.9, b: 2.82, Ea: 10.756}
+  Troe: {A: -16.33, T3: 200.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #182; RMG #4916
+    Library reaction: JetSurF2.0
+    Flux pairs: C8H17(805), C8H17(808); 
+- equation: S(1258) <=> C6H12(788)  # Reaction 183
+  rate-constant: {A: 2.453877e+17, b: -1.28, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #183; RMG #6293
+    Template reaction: Singlet_Carbene_Intra_Disproportionation
+    Flux pairs: S(1258), C6H12(788); 
+    Estimated using template [CsJ2-C;CsJ2(CsC);CH] for rate rule [CsJ2-C;CsJ2(CsC);CH3]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 3.0
+    family: Singlet_Carbene_Intra_Disproportionation
+    Ea raised from -20.7 to 0 kJ/mol.
+- equation: H(2) + S(837) (+M) <=> fuel(1) (+M)  # Reaction 184
+  type: falloff
+  low-P-rate-constant: {A: 3.01e+48, b: -9.32, Ea: 5.834}
+  high-P-rate-constant: {A: 3.6e+13, b: 0.0, Ea: 0.0}
+  Troe: {A: 0.498, T3: 1310.0, T1: 1310.0, T2: 5.0e+04}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #184; RMG #4892
+    Library reaction: JetSurF2.0
+    Flux pairs: H(2), fuel(1); S(837), fuel(1); 
+- equation: S(837) (+M) <=> S(840) (+M)  # Reaction 185
+  type: falloff
+  low-P-rate-constant: {A: 5.1e-44, b: 18.749, Ea: -0.603}
+  high-P-rate-constant: {A: 5.13, b: 3.23, Ea: 16.848}
+  Troe: {A: -20.15, T3: 205.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #185; RMG #4905
+    Library reaction: JetSurF2.0
+    Flux pairs: S(837), S(840); 
+- equation: S(837) (+M) <=> S(841) (+M)  # Reaction 186
+  type: falloff
+  low-P-rate-constant: {A: 9.9e-38, b: 17.215, Ea: -0.603}
+  high-P-rate-constant: {A: 22.9, b: 2.82, Ea: 10.756}
+  Troe: {A: -16.33, T3: 200.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #186; RMG #4912
+    Library reaction: JetSurF2.0
+    Flux pairs: S(837), S(841); 
+- equation: S(837) (+M) <=> S(842) (+M)  # Reaction 187
+  type: falloff
+  low-P-rate-constant: {A: 3.9e-34, b: 15.855, Ea: -0.606}
+  high-P-rate-constant: {A: 2.95, b: 3.08, Ea: 11.016}
+  Troe: {A: -15.24, T3: 216.0, T1: 28.0, T2: 5.0e+06}
+  efficiencies: {CH4(31): 2.0, C2H6(51): 3.0, H2(4): 2.0}
+  note: |
+    Reaction index: Chemkin #187; RMG #4919
+    Library reaction: JetSurF2.0
+    Flux pairs: S(837), S(842); 
+- equation: H(2) + fuel(1) <=> H2(4) + S(837)  # Reaction 188
+  rate-constant: {A: 0.0645, b: 4.7, Ea: 3.679}
+  note: |
+    Reaction index: Chemkin #188; RMG #4976
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(837); H(2), H2(4); 
+- equation: CH3(23) + fuel(1) <=> CH4(31) + S(837)  # Reaction 189
+  rate-constant: {A: 5.16e-08, b: 6.08, Ea: 6.223}
+  note: |
+    Reaction index: Chemkin #189; RMG #4988
+    Library reaction: JetSurF2.0
+    Flux pairs: fuel(1), S(837); CH3(23), CH4(31); 
+- equation: C2H5(52) + S(837) <=> C2H4(22) + fuel(1)  # Reaction 190
+  rate-constant: {A: 6.87e+13, b: -0.35, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #190; RMG #6136
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); C2H5(52), C2H4(22); 
+    Estimated from node Root_N-4R->H_4CNOS-u1_N-1R!H->O_N-4CNOS->O_Ext-4CNS-R_N-Sp-5R!H#4CCCNNNSSS_N-2R!H->S_N-5R!H->O_Sp-5CS-4CCNSS_1CNS->C_Ext-5CS-R
+    Multiplied by reaction path degeneracy 3.0
+- equation: NC3H7(101) + S(837) <=> C3H6(104) + fuel(1)  # Reaction 191
+  rate-constant: {A: 2.9e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #191; RMG #6258
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); NC3H7(101), C3H6(104); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Sp-6C-4C_Ext-6C-R
+    Multiplied by reaction path degeneracy 2.0
+- equation: IC3H7(102) + S(837) <=> C3H6(104) + fuel(1)  # Reaction 192
+  rate-constant: {A: 3.0e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #192; RMG #6259
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); IC3H7(102), C3H6(104); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 6.0
+- equation: C6H13(792) + S(837) <=> C6H12(788) + fuel(1)  # Reaction 193
+  rate-constant: {A: 2.9e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #193; RMG #6305
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); C6H13(792), C6H12(788); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Sp-6C-4C_Ext-6C-R
+    Multiplied by reaction path degeneracy 2.0
+- equation: C6H13(793) + S(837) <=> C6H12(788) + fuel(1)  # Reaction 194
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #194; RMG #6306
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); C6H13(793), C6H12(788); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: C5H11(428) + S(837) <=> C5H10(431) + fuel(1)  # Reaction 195
+  rate-constant: {A: 2.9e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #195; RMG #6413
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); C5H11(428), C5H10(431); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Sp-6C-4C_Ext-6C-R
+    Multiplied by reaction path degeneracy 2.0
+- equation: PC4H9(191) + S(837) <=> C4H8(197) + fuel(1)  # Reaction 196
+  rate-constant: {A: 2.9e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #196; RMG #6515
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); PC4H9(191), C4H8(197); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Sp-6C-4C_Ext-6C-R
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(837) + fuel(1) <=> S(841) + fuel(1)  # Reaction 197
+  rate-constant: {A: 4.327734e-03, b: 4.29, Ea: 7.536}
+  note: |
+    Reaction index: Chemkin #197; RMG #6632
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(841); S(837), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H2/Cs]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(837) + fuel(1) <=> S(840) + fuel(1)  # Reaction 198
+  rate-constant: {A: 4.327734e-03, b: 4.29, Ea: 7.536}
+  note: |
+    Reaction index: Chemkin #198; RMG #6759
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(840); S(837), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H2/Cs]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(837) <=> S(839)  # Reaction 199
+  rate-constant: {A: 1.064e+06, b: 1.93, Ea: 33.8}
+  note: |
+    Reaction index: Chemkin #199; RMG #6771
+    Template reaction: intra_H_migration
+    Flux pairs: S(837), S(839); 
+    From training reaction 108 used for R3H_SS_Cs;C_rad_out_2H;Cs_H_out_H/(NonDeC/Cs)
+    Exact match found for rate rule [R3H_SS_Cs;C_rad_out_2H;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(837) + fuel(1) <=> S(839) + fuel(1)  # Reaction 200
+  rate-constant: {A: 4.327734e-03, b: 4.29, Ea: 7.536}
+  note: |
+    Reaction index: Chemkin #200; RMG #6775
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(839); S(837), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H2/Cs]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(837) + fuel(1) <=> S(842) + fuel(1)  # Reaction 201
+  rate-constant: {A: 4.327734e-03, b: 4.29, Ea: 7.536}
+  note: |
+    Reaction index: Chemkin #201; RMG #6800
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(842); S(837), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H2/Cs]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: C7H15(798) + S(837) <=> C7H14(797) + fuel(1)  # Reaction 202
+  rate-constant: {A: 2.9e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #202; RMG #6825
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); C7H15(798), C7H14(797); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Sp-6C-4C_Ext-6C-R
+    Multiplied by reaction path degeneracy 2.0
+- equation: S(837) <=> S(838)  # Reaction 203
+  rate-constant: {A: 6.48e+07, b: 1.57, Ea: 35.3}
+  note: |
+    Reaction index: Chemkin #203; RMG #6975
+    Template reaction: intra_H_migration
+    Flux pairs: S(837), S(838); 
+    From training reaction 106 used for R2H_S;C_rad_out_2H;Cs_H_out_H/(NonDeC/Cs)
+    Exact match found for rate rule [R2H_S;C_rad_out_2H;Cs_H_out_H/(NonDeC/Cs)]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 2.0
+    family: intra_H_migration
+- equation: S(837) + fuel(1) <=> S(838) + fuel(1)  # Reaction 204
+  rate-constant: {A: 4.327734e-03, b: 4.29, Ea: 7.536}
+  note: |
+    Reaction index: Chemkin #204; RMG #6978
+    Template reaction: H_Abstraction
+    Flux pairs: fuel(1), S(838); S(837), fuel(1); 
+    Estimated using an average for rate rule [C/H2/NonDeC;C_rad/H2/Cs]
+    Euclidian distance = 0
+    Multiplied by reaction path degeneracy 4.0
+    family: H_Abstraction
+- equation: S(1333) <=> C7H14(797)  # Reaction 205
+  rate-constant: {A: 2.453877e+17, b: -1.28, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #205; RMG #6813
+    Template reaction: Singlet_Carbene_Intra_Disproportionation
+    Flux pairs: S(1333), C7H14(797); 
+    Estimated using template [CsJ2-C;CsJ2(CsC);CH] for rate rule [CsJ2-C;CsJ2(CsC);CH3]
+    Euclidian distance = 1.0
+    Multiplied by reaction path degeneracy 3.0
+    family: Singlet_Carbene_Intra_Disproportionation
+    Ea raised from -20.7 to 0 kJ/mol.
+- equation: C5H11(428) <=> C5H11(429)  # Reaction 206
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 1.61e+10, b: -0.128, Ea: 16.305}
+  - {P: 1.0 atm, A: 2.88e+17, b: -2.073, Ea: 21.414}
+  - {P: 10.0 atm, A: 5.09e+18, b: -2.284, Ea: 23.337}
+  - {P: 100.0 atm, A: 1.38e+14, b: -0.838, Ea: 21.871}
+  - {P: 1000.0 atm, A: 1.6e+08, b: 0.954, Ea: 19.221}
+  note: |
+    Reaction index: Chemkin #206; RMG #2275
+    Library reaction: CurranPentane
+    Flux pairs: C5H11(428), C5H11(429); 
+- equation: C5H11(429) <=> C2H5(52) + C3H6(104)  # Reaction 207
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 8.54e+25, b: -4.241, Ea: 31.303}
+  - {P: 1.0 atm, A: 2.34e+31, b: -5.581, Ea: 35.992}
+  - {P: 10.0 atm, A: 4.63e+28, b: -4.592, Ea: 36.186}
+  - {P: 100.0 atm, A: 3.77e+20, b: -2.108, Ea: 32.927}
+  - {P: 1000.0 atm, A: 3.56e+14, b: -0.301, Ea: 30.124}
+  note: |
+    Reaction index: Chemkin #207; RMG #2278
+    Library reaction: CurranPentane
+    Flux pairs: C5H11(429), C2H5(52); C5H11(429), C3H6(104); 
+- equation: C5H11(429) <=> H(2) + C5H10(431)  # Reaction 208
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 8.26e+10, b: -0.118, Ea: 29.715}
+  - {P: 1.0 atm, A: 6.92e+26, b: -4.456, Ea: 39.997}
+  - {P: 10.0 atm, A: 3.81e+29, b: -4.969, Ea: 43.662}
+  - {P: 100.0 atm, A: 4.22e+20, b: -2.16, Ea: 40.523}
+  - {P: 1000.0 atm, A: 5.05e+11, b: 0.526, Ea: 36.461}
+  note: |
+    Reaction index: Chemkin #208; RMG #2279
+    Library reaction: CurranPentane
+    Flux pairs: C5H11(429), H(2); C5H11(429), C5H10(431); 
+- equation: H(2) + C5H11(429) <=> C2H5(52) + NC3H7(101)  # Reaction 209
+  rate-constant: {A: 1.4e+28, b: -3.94, Ea: 15.916}
+  note: |
+    Reaction index: Chemkin #209; RMG #4405
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H11(429), NC3H7(101); H(2), C2H5(52); 
+- equation: H(2) + C5H11(429) <=> H2(4) + C5H10(431)  # Reaction 210
+  rate-constant: {A: 3.2e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #210; RMG #4406
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H11(429), C5H10(431); H(2), H2(4); 
+- equation: CH3(23) + C5H11(429) <=> CH4(31) + C5H10(431)  # Reaction 211
+  rate-constant: {A: 2.2e+14, b: -0.68, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #211; RMG #4411
+    Library reaction: JetSurF2.0
+    Flux pairs: C5H11(429), C5H10(431); CH3(23), CH4(31); 
+- equation: C5H11(429) + S(839) <=> C5H10(431) + fuel(1)  # Reaction 212
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #212; RMG #6404
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); C5H11(429), C5H10(431); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: C5H11(429) + S(840) <=> C5H10(431) + fuel(1)  # Reaction 213
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #213; RMG #6406
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); C5H11(429), C5H10(431); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: C5H11(429) + S(841) <=> C5H10(431) + fuel(1)  # Reaction 214
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #214; RMG #6408
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); C5H11(429), C5H10(431); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: C5H11(429) + S(842) <=> C5H10(431) + fuel(1)  # Reaction 215
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #215; RMG #6410
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); C5H11(429), C5H10(431); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: C5H11(429) + S(838) <=> C5H10(431) + fuel(1)  # Reaction 216
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #216; RMG #6412
+    Template reaction: Disproportionation
+    Flux pairs: S(838), fuel(1); C5H11(429), C5H10(431); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: C5H11(429) + S(837) <=> C5H10(431) + fuel(1)  # Reaction 217
+  rate-constant: {A: 1.5e+11, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #217; RMG #6414
+    Template reaction: Disproportionation
+    Flux pairs: S(837), fuel(1); C5H11(429), C5H10(431); 
+    Estimated from node Root_Ext-2R!H-R_2R!H->C_4R->C
+    Multiplied by reaction path degeneracy 3.0
+- equation: C9H18(811) <=> C3H6(104) + C6H12(788)  # Reaction 218
+  rate-constant: {A: 7.08e+06, b: 1.65, Ea: 53.752}
+  note: |
+    Reaction index: Chemkin #218; RMG #4626
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H18(811), C3H6(104); C9H18(811), C6H12(788); 
+- equation: H(2) + C9H18(811) <=> C2H4(22) + C7H15(798)  # Reaction 219
+  rate-constant: {A: 8.0e+21, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #219; RMG #4627
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H18(811), C7H15(798); H(2), C2H4(22); 
+- equation: H(2) + C9H18(811) <=> C3H6(104) + C6H13(792)  # Reaction 220
+  rate-constant: {A: 1.6e+22, b: -2.39, Ea: 11.18}
+  note: |
+    Reaction index: Chemkin #220; RMG #4628
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H18(811), C6H13(792); H(2), C3H6(104); 
+- equation: H(2) + C9H19(812) <=> H2(4) + C9H18(811)  # Reaction 221
+  rate-constant: {A: 1.8e+12, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #221; RMG #4645
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(812), C9H18(811); H(2), H2(4); 
+- equation: CH3(23) + C9H19(812) <=> CH4(31) + C9H18(811)  # Reaction 222
+  rate-constant: {A: 1.1e+13, b: 0.0, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #222; RMG #4651
+    Library reaction: JetSurF2.0
+    Flux pairs: C9H19(812), C9H18(811); CH3(23), CH4(31); 
+- equation: S(841) (+M) <=> NC3H7(101) + C9H18(811) (+M)  # Reaction 223
+  type: falloff
+  low-P-rate-constant: {A: 3.1e-43, b: 18.418, Ea: -0.603}
+  high-P-rate-constant: {A: 5.5e+11, b: 0.55, Ea: 28.084}
+  Troe: {A: -32.13, T3: 207.0, T1: 28.0, T2: 5.0e+04}
+  efficiencies: {C2H6(51): 3.0, H2(4): 2.0, CH4(31): 2.0}
+  note: |
+    Reaction index: Chemkin #223; RMG #4889
+    Library reaction: JetSurF2.0
+    Flux pairs: S(841), NC3H7(101); S(841), C9H18(811); 
+- equation: H(2) + C9H18(811) <=> C9H19(812)  # Reaction 224
+  rate-constant: {A: 3.01e+08, b: 1.6, Ea: 2.4}
+  note: |
+    Reaction index: Chemkin #224; RMG #6047
+    Template reaction: R_Addition_MultipleBond
+    Flux pairs: C9H18(811), C9H19(812); H(2), C9H19(812); 
+    From training reaction 10 used for Cds-CsH_Cds-HH;HJ
+    Exact match found for rate rule [Cds-CsH_Cds-HH;HJ]
+    Euclidian distance = 0
+    family: R_Addition_MultipleBond
+- equation: C9H19(812) + S(839) <=> C9H18(811) + fuel(1)  # Reaction 225
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #225; RMG #7526
+    Template reaction: Disproportionation
+    Flux pairs: S(839), fuel(1); C9H19(812), C9H18(811); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C9H19(812) + S(840) <=> C9H18(811) + fuel(1)  # Reaction 226
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #226; RMG #7528
+    Template reaction: Disproportionation
+    Flux pairs: S(840), fuel(1); C9H19(812), C9H18(811); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C9H19(812) + S(841) <=> C9H18(811) + fuel(1)  # Reaction 227
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #227; RMG #7530
+    Template reaction: Disproportionation
+    Flux pairs: S(841), fuel(1); C9H19(812), C9H18(811); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
+- equation: C9H19(812) + S(842) <=> C9H18(811) + fuel(1)  # Reaction 228
+  rate-constant: {A: 2.1053e+14, b: -0.55, Ea: 0.0}
+  note: |
+    Reaction index: Chemkin #228; RMG #7532
+    Template reaction: Disproportionation
+    Flux pairs: S(842), fuel(1); C9H19(812), C9H18(811); 
+    Estimated from node Root_Ext-1R!H-R_N-4R->O_N-Sp-5R!H=1R!H_Ext-4CHNS-R_N-6R!H->S_4CHNS->C_N-
+    Sp-6BrBrBrCCCClClClFFFIIINNNOOOPPPSiSiSi#4C_6BrCClFINOPSi->C_N-1R!H-inRing_Ext-4C-R_2R!H->C
+    Multiplied by reaction path degeneracy 2.0
