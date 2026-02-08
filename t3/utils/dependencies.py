@@ -5,26 +5,31 @@ t3 utils dependencies module
 
 def check_dependencies():
     """
-    Check that RMG and ARC are available.
+    Check that ARC and its native deps (py_rdl) are available.
     """
-    rmg_available, arc_available = True, True
-    try:
-        from rmgpy.rmg.main import RMG
-    except ImportError:
-        rmg_available = False
-    try:
-        from arc import ARC
-    except ImportError:
-        arc_available = False
+    missing = []
 
-    if not rmg_available or not arc_available:
+    try:
+        import py_rdl  # noqa: F401 — import IS the availability check
+    except ImportError:
+        missing.append(
+            ('py_rdl',
+             'Required by ARC. Install with `make install-pyrdl` from the T3 repo, '
+             'or `pip install git+https://github.com/rareylab/RingDecomposerLib.git#subdirectory=src/Python`.')
+        )
+
+    try:
+        from arc import ARC  # noqa: F401 — import IS the availability check
+    except ImportError:
+        missing.append(
+            ('ARC',
+             'See https://reactionmechanismgenerator.github.io/ARC/installation.html')
+        )
+
+    if missing:
         msg = 'Error: Cannot execute T3. Missing the following critical component(s):\n'
-        if not rmg_available:
-            msg += '  - RMG\n'
-            msg += '    (See https://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/index.html)\n'
-        if not arc_available:
-            msg += '  - ARC\n'
-            msg += '    (See https://reactionmechanismgenerator.github.io/ARC/installation.html)\n'
+        for name, hint in missing:
+            msg += f'  - {name}\n    ({hint})\n'
         msg += '\nInstall the missing packages, make sure they were added to the PYTHONPATH, and rerun T3.'
         print(msg)
-        raise ValueError(f'T3 is missing core dependencies, see the above message.')
+        raise ValueError('T3 is missing core dependencies, see the above message.')
