@@ -30,10 +30,11 @@ else
     source "$BASE/etc/profile.d/conda.sh"
 fi
 
-# Temporarily change directory to $HOME to install software
+# Temporarily change directory to parent to install sibling repos
 pushd .
 cd ..
 
+# Clone or update RMG-database
 if [ -d "./RMG-database" ]; then
     cd RMG-database || exit
     git pull https://github.com/ReactionMechanismGenerator/RMG-database
@@ -42,6 +43,7 @@ else
     git clone https://github.com/ReactionMechanismGenerator/RMG-database
 fi;
 
+# Clone or update RMG-Py
 if [ -d "./RMG-Py" ]; then
     cd RMG-Py || exit
     git pull https://github.com/ReactionMechanismGenerator/RMG-Py
@@ -51,7 +53,7 @@ else
 fi;
 
 echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-echo "export PATH=$PATH:$(pwd)" >> ~/.bashrc 
+echo "export PATH=$PATH:$(pwd)" >> ~/.bashrc
 PYTHONPATH=$PYTHONPATH:$(pwd)
 export PYTHONPATH
 PATH=$PATH:$(pwd)
@@ -59,55 +61,25 @@ export PATH
 # shellcheck source=~/.bashrc
 source ~/.bashrc
 
-#Creating rmg_env environment (or updating if it already exists)
+# Create or update rmg_env
 if { $COMMAND_PKG env list | grep 'rmg_env'; } >/dev/null 2>&1; then
     $COMMAND_PKG env update -n rmg_env -f environment.yml
 else
     $COMMAND_PKG env create -f environment.yml
 fi;
 
-#Prior to activation of the environment, the LD_LIBRARY_PATH needs to be set as an environmnet variable when rmg_env is activated.
-#This exporting and unsetting will solve the RMS installation during the Julia compile and also when the environment is deactivated
-#the original LD_LIBRARY_PATH is set.
-echo "export OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh"
-echo "export LD_LIBRARY_PATH=$BASE/envs/rmg_env/lib:$LD_LIBRARY_PATH" >> "$BASE/envs/rmg_env/etc/conda/activate.d/env_vars.sh"
-echo "export LD_LIBRARY_PATH=${OLD_LD_LIBRARY_PATH}" >> "$BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh"
-echo "unset OLD_LD_LIBRARY_PATH" >> "$BASE/envs/rmg_env/etc/conda/deactivate.d/env_vars.sh"
-
-#Active rmg_env environment
+# Activate rmg_env and compile RMG-Py
 if [ "$COMMAND_PKG" == "micromamba" ]; then
     micromamba activate rmg_env
 else
     conda activate rmg_env
 fi
 
-#Compile RMG-Py
 make
-#Update pyjulia to the latest version
-$COMMAND_PKG update pyjulia -c conda-forge -y
 
-#Ensure that added paths etc. are set and then reactivate rmg_env
-. ~/.bashrc
-if [ "$COMMAND_PKG" == "micromamba" ]; then
-    micromamba activate rmg_env
-else
-    conda activate rmg_env
-fi
+conda deactivate
 
-### Install python + julia connection and compile RMS
-#
-#This code here is for updating julia if ever required:     $(julia -e 'using Pkg; Pkg.add("UpdateJulia"); using UpdateJulia; update_julia()')
-python -c "import julia; julia.install(); import diffeqpy; diffeqpy.install()"
-julia -e 'using Pkg; Pkg.add(PackageSpec(name="ReactionMechanismSimulator",rev="main"));using ReactionMechanismSimulator'
-
-# check that Python and Julia are being accessed from the rmg_env
-echo checking which python...
-which python
-echo checking which julia...
-which julia
-echo linking python-jl to python...
-ln -sfn $(which python-jl) $(which python)
-
+# Switch to t3_env and clone/install ARC
 if [ "$COMMAND_PKG" == "micromamba" ]; then
     micromamba activate t3_env
 else
@@ -144,3 +116,6 @@ conda deactivate
 
 # Restore original directory
 popd || exit
+
+# Install PyRDL into t3_env (delegates to ARC's install_pyrdl.sh)
+bash devtools/install_pyrdl.sh
