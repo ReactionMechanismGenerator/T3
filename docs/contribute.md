@@ -13,6 +13,4 @@ Code of Conduct</a>.
 
 It is recommended to first open an issue on GitHub,
 notifying the developers on a bug you are trying to fix
-or a feature you plan to implement (see our
-<a href="https://github.com/ReactionMechanismGenerator/T3/wiki/Roadmap" target="_blank">road map</a>)
-to avoid duplicate work.
+or a feature you plan to implement.

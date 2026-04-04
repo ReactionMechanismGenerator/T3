@@ -27,13 +27,14 @@ nav:
 - running.md
 - Tutorials:
   - tutorials/1_no_qm.md
+  - tutorials/2_adding_simulate_adapter.md
 - how_to.md
+- examples.md
+- Input reference: input_reference.md
 - output.md
 - release.md
-- credits.md
 - contribute.md
 - cite.md
-- licence.md
 
 # Extras
 extra:
@@ -47,6 +48,14 @@ extra:
 google_analytics:
   - UA-16019208-2
   - auto
+
+# Build hooks
+hooks:
+  - docs/hooks.py
+
+# Files in docs/ that are not pages
+exclude_docs: |
+  hooks.py
 
 # Extensions
 markdown_extensions:
