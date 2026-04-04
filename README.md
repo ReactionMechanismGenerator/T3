@@ -8,10 +8,27 @@
 ![Build Status](https://github.com/ReactionMechanismGenerator/T3/actions/workflows/cont_int.yml/badge.svg)
 [![codecov](https://codecov.io/gh/ReactionMechanismGenerator/T3/branch/main/graph/badge.svg)](https://codecov.io/gh/ReactionMechanismGenerator/T3)
 [![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
-![python](https://img.shields.io/badge/Python-3.7+-blue.svg)
+![python](https://img.shields.io/badge/Python-3.12+-blue.svg)
+
+T3 iteratively generates and refines detailed chemical kinetic models by combining
+[RMG](https://rmg.mit.edu/) for model generation,
+[Cantera](https://cantera.org/) for sensitivity analysis,
+and [ARC](https://reactionmechanismgenerator.github.io/ARC/) for quantum mechanical calculations.
 
 ### T3 works according to the following general scheme:
 
 ![T3 scheme][cycle]
 
 [cycle]: /grf/T3-circle.gif "T3 scheme"
+
+### Quick start
+
+```bash
+git clone https://github.com/ReactionMechanismGenerator/T3.git
+cd T3
+make install all
+conda activate t3_env
+```
+
+See the [full documentation](https://reactionmechanismgenerator.github.io/T3/) for
+detailed installation instructions, tutorials, and examples.
