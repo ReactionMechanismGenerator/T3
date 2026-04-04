@@ -1,23 +1,37 @@
 """
-Cantera Simulator Adapter module
-Used to run mechanism analysis with Cantera as ideal gases in a batch reactor at constant T and P
+Cantera Simulator Base Adapter module.
+Contains shared logic for all Cantera batch reactor adapters.
+
+Subclasses need only set ``cantera_reactor_type`` and implement
+``create_reactor`` (and optionally override ``get_idt_by_T``).
+This makes it straightforward for users to create a new adapter for a
+different reactor configuration.
 """
 
 import cantera as ct
 import numpy as np
+from abc import abstractmethod
 from typing import List, Optional
 
-from t3.utils.slim_rmg import generate_cantera_conditions, GenericData
-
+from t3.common import get_observable_label_from_header, get_parameter_from_header
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
-from t3.simulate.factory import register_simulate_adapter
+from t3.utils.fix_cantera import fix_cantera
+from t3.utils.rmg_shim import generate_cantera_conditions, GenericData
 
 
-class CanteraConstantTP(SimulateAdapter):
+class CanteraBase(SimulateAdapter):
     """
-    CanteraConstantTP is an adapter for the abstract class SimulateAdapter that simulates ideal gases
-    in a batch reactor at constant T and P
+    Base class for Cantera batch reactor simulation adapters.
+
+    All shared functionality (setup, integration, SA extraction, equilibrium,
+    half-life) lives here.  Concrete subclasses only need to:
+
+    1. Set the class attribute ``cantera_reactor_type`` to the appropriate
+       Cantera reactor type string.
+    2. Implement ``create_reactor()`` to return the desired ``ct.Reactor``.
+    3. Optionally override ``get_idt_by_T()`` (the default computes
+       max dT/dt; constant-T reactors should return empty lists).
 
     Args:
         t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.
@@ -28,7 +42,7 @@ class CanteraConstantTP(SimulateAdapter):
         rtol (float): The relative tolerance used when integrating.
         observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
         sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
-        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
+        sa_rtol (float, optional): The relative tolerance used when performing sensitivity analysis.
         global_observables (Optional[List[str]]): List of global observables ['IDT', 'ESR', 'SL'] used by Cantera adapters.
 
     Attributes:
@@ -39,7 +53,7 @@ class CanteraConstantTP(SimulateAdapter):
         cantera_simulation (ct.ReactorNet): Cantera reactor net object.
         conditions (list): List whose entries are reaction conditions for simulation.
         global_observables (List[str]): List of global observables ['IDT', 'ESR', 'SL'] used by Cantera adapters.
-        inert_list (list): List of possible inert species in the model
+        inert_list (list): List of possible inert species in the model.
         inert_index_list (list): List of indices corresponding to the inert species present in the model.
         initialconds (dict): Key is the Cantera species. Value is the initial mol fraction.
         logger (Logger): Instance of T3's Logger class.
@@ -58,6 +72,8 @@ class CanteraConstantTP(SimulateAdapter):
         t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.
     """
 
+    cantera_reactor_type: str = ''
+
     def __init__(self,
                  t3: dict,
                  rmg: dict,
@@ -68,7 +84,7 @@ class CanteraConstantTP(SimulateAdapter):
                  observable_list: Optional[list] = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None
+                 global_observables: Optional[List[str]] = None,
                  ):
 
         self.t3 = t3
@@ -86,8 +102,6 @@ class CanteraConstantTP(SimulateAdapter):
         self.sensitive_species = list()
         self.initialconds = dict()
         self.all_data = list()
-        # this adapter is for constant TP batch simulations
-        self.cantera_reactor_type = 'IdealGasConstPressureTemperatureReactor'
 
         self.model = None
         self.cantera_simulation = None
@@ -100,24 +114,22 @@ class CanteraConstantTP(SimulateAdapter):
 
         self.set_up()
 
-        # create list of indices of the inerts
-        for i, species in enumerate(self.model.species()):
-            if species.name in self.inert_list:
-                self.inert_index_list.append(i)
+    @abstractmethod
+    def create_reactor(self):
+        """
+        Create and return the Cantera reactor object.
+        Called after ``self.model`` state (TPX or TDX) has been set.
 
-        self.spc_identifier_lookup = {}
-        for i, spc in enumerate(self.model.species()):
-            self.spc_identifier_lookup[spc.name] = i
-
-        self.rxn_identifier_lookup = {}
-        for i, rxn in enumerate(self.model.reactions()):
-            self.rxn_identifier_lookup[rxn.equation] = i
+        Returns:
+            A Cantera reactor object (e.g., ct.IdealGasReactor, ct.IdealGasConstPressureReactor).
+        """
+        pass
 
     def set_up(self):
         """
         Read in the Cantera input file and set up the empty attributes initialized in the init method.
         """
-        # read in the cantera .cti file
+        fix_cantera(self.paths['cantera annotated'])
         self.model = ct.Solution(infile=self.paths['cantera annotated'])
         self.num_ct_reactions = len(self.model.reactions())
         self.num_ct_species = len(self.model.species())
@@ -135,15 +147,27 @@ class CanteraConstantTP(SimulateAdapter):
         for i, rxn in enumerate(self.model.reactions()):
             self.rxn_identifier_lookup[rxn.equation] = i
 
-        self.species_names_without_indices = [self.model.species()[i].name.split('(')[0] for i in
-                                              range(self.num_ct_species)]
+        # Build base-name lookup (species name without the RMG index suffix)
+        species_base_names = [self.model.species()[i].name.split('(')[0]
+                              for i in range(self.num_ct_species)]
+
         # set initial conditions and find any species for SA
         for input_species in self.rmg['species']:
-            # find index of this species in the list of Cantera species
-            idx = self.species_names_without_indices.index(input_species['label'])
-            self.initialconds.update({self.model.species(idx).name: input_species['concentration']})
+            label = input_species['label']
+            matches = [i for i, name in enumerate(species_base_names) if name == label]
+            if len(matches) == 0:
+                raise ValueError(
+                    f"Species '{label}' not found in the Cantera model. "
+                    f"Available species: {[s.name for s in self.model.species()]}")
+            if len(matches) > 1:
+                raise ValueError(
+                    f"Ambiguous species label '{label}' matches multiple model species: "
+                    f"{[self.model.species()[i].name for i in matches]}. "
+                    f"Use the full Cantera name including the index suffix.")
+            idx = matches[0]
+            self.initialconds[self.model.species(idx).name] = input_species['concentration']
 
-            if self.species_names_without_indices[idx] in self.observable_list:
+            if label in self.observable_list:
                 self.sensitive_species.append(self.model.species(idx).name)
 
         reactor_type_list = [self.cantera_reactor_type]
@@ -169,9 +193,8 @@ class CanteraConstantTP(SimulateAdapter):
         Args:
             reactor_type_list (list): A list of strings specifying the type of supported Cantera reactor:
                                       IdealGasReactor: A constant volume, zero-dimensional reactor for ideal gas mixtures
-                                      IdealGasConstPressureReactor: A homogeneous, constant pressure, zero-dimensional reactor for ideal gas mixtures
-                                      IdealGasConstPressureTemperatureReactor: A homogeneous, constant pressure and constant temperature, zero-dimensional reactor
-                                                                              for ideal gas mixtures (the same as RMG's SimpleReactor)
+                                      IdealGasConstPressureReactor: A homogeneous, constant pressure, zero-dimensional reactor
+                                                                    for ideal gas mixtures
             reaction_time_list (tuple): A tuple object giving the ([list of reaction times], units)
             mol_frac_list (list): A list of molfrac dictionaries with species object keys
                                and mole fraction values
@@ -181,7 +204,6 @@ class CanteraConstantTP(SimulateAdapter):
                 P0_list (tuple): A tuple giving the ([list of initial pressures], units)
                 V0_list (tuple): A tuple giving the ([list of initial specific volumes], units)
         """
-
         self.conditions = generate_cantera_conditions(reactor_type_list,
                                                       reaction_time_list,
                                                       mol_frac_list,
@@ -189,6 +211,25 @@ class CanteraConstantTP(SimulateAdapter):
                                                       P0_list,
                                                       V0_list,
                                                       )
+
+    def _get_initial_state(self, condition):
+        """
+        Extract T0, P0, V0 from a condition object.
+
+        Args:
+            condition: A Cantera condition object.
+
+        Returns:
+            Tuple of (T0, P0, V0) where exactly one of P0 or V0 is None.
+        """
+        T0 = condition.T0.value_si
+        try:
+            V0 = condition.V0.value_si
+            P0 = None
+        except AttributeError:
+            P0 = condition.P0.value_si
+            V0 = None
+        return T0, P0, V0
 
     def reinitialize_simulation(self,
                                 T0=None,
@@ -212,7 +253,7 @@ class CanteraConstantTP(SimulateAdapter):
         elif P0 is None:
             self.model.TDX = T0, 1 / V0, X0
 
-        self.cantera_reactor = ct.IdealGasConstPressureReactor(self.model, energy='off')
+        self.cantera_reactor = self.create_reactor()
         # Run this individual condition as a simulation
         self.cantera_simulation = ct.ReactorNet([self.cantera_reactor])
 
@@ -221,11 +262,6 @@ class CanteraConstantTP(SimulateAdapter):
         self.cantera_simulation.rtol = self.rtol
 
         if self.sensitive_species:
-            if ct.__version__ == '2.2.1':
-                self.logger.warning('Cantera version 2.2.1 may not support sensitivity analysis unless SUNDIALS '
-                                    'was used during compilation.')
-                self.logger.warning('Upgrade to newer of Cantera in anaconda using the command '
-                                    '"conda update -c rmg cantera"')
             # Add all the reactions as part of SA
             for i in range(self.num_ct_reactions):
                 self.cantera_reactor.add_sensitivity_reaction(i)
@@ -233,36 +269,25 @@ class CanteraConstantTP(SimulateAdapter):
             for i in range(self.num_ct_species):
                 self.cantera_reactor.add_sensitivity_species_enthalpy(i)
             # Set the tolerances for the sensitivity coefficients
-            self.cantera_simulation.rtol_sensitivity = self.sa_atol
-            self.cantera_simulation.atol_sensitivity = self.sa_rtol
+            self.cantera_simulation.atol_sensitivity = self.sa_atol
+            self.cantera_simulation.rtol_sensitivity = self.sa_rtol
 
     def simulate(self):
         """
         Simulate the mechanism and store all results to the all_data attribute.
         """
-
         if self.sensitive_species:
-            self.logger.info('Running a simulation with SA using CanteraConstantTP...')
+            self.logger.info(f'Running a simulation with SA using {self.__class__.__name__}...')
         else:
-            self.logger.info('Running a simulation using CanteraConstantTP...')
+            self.logger.info(f'Running a simulation using {self.__class__.__name__}...')
 
         species_names_list = [species.name for species in self.model.species()]
         self.all_data = list()
 
         for condition in self.conditions:
             # Set Cantera simulation conditions
-            T0 = condition.T0.value_si
-            try:
-                V0 = self.conditions[0].V0.value_si
-                P0 = None
-            except AttributeError:
-                P0 = condition.P0.value_si
-                V0 = None
-            self.reinitialize_simulation(T0=T0,
-                                         P0=P0,
-                                         X0=condition.mol_frac,
-                                         V0=V0,
-                                         )
+            T0, P0, V0 = self._get_initial_state(condition)
+            self.reinitialize_simulation(T0=T0, P0=P0, X0=condition.mol_frac, V0=V0)
 
             # Initialize the variables to be saved
             times = []
@@ -275,7 +300,7 @@ class CanteraConstantTP(SimulateAdapter):
             # Begin integration
             while self.cantera_simulation.time < condition.reaction_time.value_si:
 
-                # Advance the state of the reactor network in time from the current time to time t [s], taking as many integrator timesteps as necessary.
+                # Advance the state of the reactor network in time
                 self.cantera_simulation.step()
                 times.append(self.cantera_simulation.time)
                 temperature.append(self.cantera_reactor.T)
@@ -283,53 +308,50 @@ class CanteraConstantTP(SimulateAdapter):
                 species_data.append(self.cantera_reactor.thermo[species_names_list].X)
 
                 if self.sensitive_species:
-                    # Cantera returns mass-based sensitivities rather than molar concentration or mole fraction based sensitivities.
-                    # The equation for converting between them is:
-                    #
-                    # d ln xi = d ln wi - sum_(species i) (dln wi) (xi)
-                    #
-                    # where xi is the mole fraction of species i and wi is the mass fraction of species i
+                    # Cantera returns mass-based sensitivities.  Convert to mole-fraction basis:
+                    #   d ln x_k = d ln w_k - sum_i (d ln w_i) * x_i   (over non-inert i)
 
-                    mass_frac_sensitivity_array = self.cantera_simulation.sensitivities()
+                    mass_frac_sa = self.cantera_simulation.sensitivities()
                     if condition.reactor_type == 'IdealGasReactor':
-                        # Row 0: mass, Row 1: volume, Row 2: internal energy or temperature, Row 3+: mass fractions of species
-                        mass_frac_sensitivity_array = mass_frac_sensitivity_array[3:, :]
-                    elif condition.reactor_type == 'IdealGasConstPressureReactor' or condition.reactor_type == 'IdealGasConstPressureTemperatureReactor':
-                        # Row 0: mass, Row 1: enthalpy or temperature, Row 2+: mass fractions of the species
-                        mass_frac_sensitivity_array = mass_frac_sensitivity_array[2:, :]
+                        # Rows: mass, volume, internal energy/temperature, then species
+                        mass_frac_sa = mass_frac_sa[3:, :]
+                    elif condition.reactor_type == 'IdealGasConstPressureReactor':
+                        # Rows: mass, enthalpy/temperature, then species
+                        mass_frac_sa = mass_frac_sa[2:, :]
                     else:
-                        raise Exception('Other types of reactor conditions are currently not supported')
+                        raise NotImplementedError(
+                            f'Reactor type {condition.reactor_type!r} is not supported for SA. '
+                            f'Supported: IdealGasReactor, IdealGasConstPressureReactor.')
 
-                    for i in range(len(mass_frac_sensitivity_array)):
-                        mass_frac_sensitivity_array[i] *= species_data[-1][i]
+                    # Weight each species row by its current mole fraction
+                    x = np.array(species_data[-1])
+                    mass_frac_sa *= x[:, np.newaxis]
 
-                    # extract kinetics SA
-                    kinetics_mass_frac_sa = mass_frac_sensitivity_array[:, 0:self.num_ct_reactions]
-                    sensitivity_array = np.zeros(len(self.sensitive_species) * len(self.model.reactions()))
+                    # Non-inert correction (vectorized sum over non-inert species)
+                    non_inert_mask = np.ones(self.num_ct_species, dtype=bool)
+                    non_inert_mask[self.inert_index_list] = False
+
+                    kin_correction = mass_frac_sa[non_inert_mask, :self.num_ct_reactions].sum(axis=0)
+                    thermo_correction = mass_frac_sa[non_inert_mask, self.num_ct_reactions:].sum(axis=0)
+
+                    # Build SA arrays for each sensitive species
+                    kin_sa = np.zeros(len(self.sensitive_species) * self.num_ct_reactions)
+                    thermo_sa = np.zeros(len(self.sensitive_species) * self.num_ct_species)
+
                     for index, species in enumerate(self.sensitive_species):
-                        for j in range(self.num_ct_reactions):
-                            sensitivity_array[self.num_ct_reactions * index + j] = self.cantera_simulation.sensitivity(
-                                species, j)
+                        raw_kin = np.array([self.cantera_simulation.sensitivity(species, j)
+                                           for j in range(self.num_ct_reactions)])
+                        start = self.num_ct_reactions * index
+                        kin_sa[start:start + self.num_ct_reactions] = raw_kin - kin_correction
 
-                            for i in range(len(kinetics_mass_frac_sa)):
-                                if i not in self.inert_index_list:
-                                    # massFracSensitivity for inerts are returned as 0.0 in Cantera, so we do not include them here
-                                    sensitivity_array[self.num_ct_reactions * index + j] -= kinetics_mass_frac_sa[i][j]
-                    kinetic_sensitivity_data.append(sensitivity_array)
+                        raw_thermo = np.array([
+                            self.cantera_simulation.sensitivity(species, j + self.num_ct_reactions)
+                            for j in range(self.num_ct_species)])
+                        start = self.num_ct_species * index
+                        thermo_sa[start:start + self.num_ct_species] = raw_thermo - thermo_correction
 
-                    # extract thermo SA
-                    thermo_mass_frac_sa = mass_frac_sensitivity_array[:, self.num_ct_reactions:]
-                    sensitivity_array = np.zeros(len(self.sensitive_species) * self.num_ct_species)
-                    for index, species in enumerate(self.sensitive_species):
-                        for j in range(self.num_ct_species):
-                            sensitivity_array[self.num_ct_species * index + j] = self.cantera_simulation.sensitivity(
-                                species, j + self.num_ct_reactions)
-
-                            for i in range(len(mass_frac_sensitivity_array)):
-                                if i not in self.inert_index_list:
-                                    # massFracSensitivity for inerts are returned as 0.0 in Cantera, so we must not include them here
-                                    sensitivity_array[self.num_ct_species * index + j] -= thermo_mass_frac_sa[i][j]
-                    thermo_sensitivity_data.append(sensitivity_array)
+                    kinetic_sensitivity_data.append(kin_sa)
+                    thermo_sensitivity_data.append(thermo_sa)
 
             # Convert species_data and sensitivity data to numpy arrays
             species_data = np.array(species_data)
@@ -349,11 +371,10 @@ class CanteraConstantTP(SimulateAdapter):
             condition_data = [temperature, pressure]
 
             for index, species in enumerate(self.model.species()):
-                # Create generic data object that saves the species object into the species object.  To allow easier manipulate later.
                 species_generic_data = GenericData(label=species.name,
                                                    species=species,
                                                    data=species_data[:, index],
-                                                   index=index
+                                                   index=index,
                                                    )
                 condition_data.append(species_generic_data)
 
@@ -389,50 +410,61 @@ class CanteraConstantTP(SimulateAdapter):
         Obtain the SA coefficients.
 
         Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
+             sa_dict (dict): Keys are ``'time'``, ``'kinetics'``, ``'thermo'``.
+                             Each value is a **list** (one entry per simulation condition).
+
+                             ``sa_dict['time'][i]``      – time array for condition *i*.
+                             ``sa_dict['kinetics'][i]``   – dict mapping observable label →
+                                                            {reaction_index (int): coeff array}.
+                             ``sa_dict['thermo'][i]``     – dict mapping observable label →
+                                                            {species_name (str): coeff array}.
         """
-        sa_dict = {'kinetics': dict(), 'thermo': dict(), 'time': list()}
+        sa_dict = {'kinetics': [], 'thermo': [], 'time': []}
 
         for condition_data in self.all_data:
             time, data_list, reaction_sensitivity_data, thermodynamic_sensitivity_data = condition_data
-            sa_dict['time'] = time.data
+            sa_dict['time'].append(time.data)
 
-            # extract kinetic SA
+            condition_kinetics = dict()
             for rxn in reaction_sensitivity_data:
-                # for kinetics, get `ethane(1)` from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)`
-                observable_label = rxn.label.split('[')[1].split(']')[0]
-                if observable_label not in sa_dict['kinetics']:
-                    sa_dict['kinetics'][observable_label] = dict()
-                # for kinetics, get k8 from `dln[ethane(1)]/dln[k8]: H(6)+ethane(1)=H2(12)+C2H5(5)` then only extract 8
-                parameter = rxn.label.split('[')[2].split(']')[0]
+                observable_label = get_observable_label_from_header(rxn.label)
+                if observable_label not in condition_kinetics:
+                    condition_kinetics[observable_label] = dict()
+                parameter = get_parameter_from_header(rxn.label)
                 parameter = int(parameter[1:])
-                sa_dict['kinetics'][observable_label][parameter] = rxn.data
+                condition_kinetics[observable_label][parameter] = rxn.data
+            sa_dict['kinetics'].append(condition_kinetics)
 
-            # extract thermo SA
+            condition_thermo = dict()
             for spc in thermodynamic_sensitivity_data:
-                # for thermo get 'C2H4(8)' from `dln[ethane(1)]/dH[C2H4(8)]`
-                observable_label = spc.label.split('[')[1].split(']')[0]
-                if observable_label not in sa_dict['thermo']:
-                    sa_dict['thermo'][observable_label] = dict()
-                # for thermo get 'C2H4(8)' from `dln[ethane(1)]/dH[C2H4(8)]`
-                parameter = spc.label.split('[')[2].split(']')[0]
-                sa_dict['thermo'][observable_label][parameter] = spc.data
+                observable_label = get_observable_label_from_header(spc.label)
+                if observable_label not in condition_thermo:
+                    condition_thermo[observable_label] = dict()
+                parameter = get_parameter_from_header(spc.label)
+                condition_thermo[observable_label][parameter] = spc.data
+            sa_dict['thermo'].append(condition_thermo)
 
         return sa_dict
 
     def get_idt_by_T(self):
         """
-        Finds the ignition point by approximating dT/dt as a first order forward difference and then finds
-        the point of maximum slope. Since this adapter simulates at constant T, this method
-        returns a dictionary whose values are empty lists.
+        Finds the ignition point by approximating dT/dt as a first order forward difference
+        and then finds the point of maximum slope.
 
         Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
+            idt_dict (dict): Dictionary whose keys are 'idt' and 'idt_index' and whose values are lists of
                              the ignition delay time in seconds and index at which idt occurs respectively.
         """
         idt_dict = {'idt': list(),
                     'idt_index': list(),
                     }
+        for i, condition_data in enumerate(self.all_data):
+            time, data_list, reaction_sensitivity_data, thermodynamic_sensitivity_data = condition_data
+            T_data = data_list[0]
+
+            dTdt = np.diff(T_data.data) / np.diff(time.data)
+            idt_dict['idt_index'].append(int(np.argmax(dTdt)))
+            idt_dict['idt'].append(time.data[idt_dict['idt_index'][i]])
 
         return idt_dict
 
@@ -450,21 +482,8 @@ class CanteraConstantTP(SimulateAdapter):
         """
         equilibrium_dictionaries = list()
         for condition in self.conditions:
-            # Set Cantera simulation conditions
-            T0 = condition.T0.value_si
-            try:
-                V0 = self.conditions[0].V0.value_si
-                P0 = None
-            except AttributeError:
-                P0 = condition.P0.value_si
-                V0 = None
-
-            self.reinitialize_simulation(T0=T0,
-                                         P0=P0,
-                                         X0=condition.mol_frac,
-                                         V0=V0,
-                                         )
-
+            T0, P0, V0 = self._get_initial_state(condition)
+            self.reinitialize_simulation(T0=T0, P0=P0, X0=condition.mol_frac, V0=V0)
             self.model.equilibrate(constrained_state_vars)
             equilibrium_dictionaries.append(self.model.mole_fraction_dict())
 
@@ -489,18 +508,8 @@ class CanteraConstantTP(SimulateAdapter):
         spc_index = self.spc_identifier_lookup[species]
 
         for condition in self.conditions:
-            T0 = condition.T0.value_si
-            try:
-                V0 = self.conditions[0].V0.value_si
-                P0 = None
-            except AttributeError:
-                P0 = condition.P0.value_si
-                V0 = None
-            self.reinitialize_simulation(T0=T0,
-                                         P0=P0,
-                                         X0=condition.mol_frac,
-                                         V0=V0,
-                                         )
+            T0, P0, V0 = self._get_initial_state(condition)
+            self.reinitialize_simulation(T0=T0, P0=P0, X0=condition.mol_frac, V0=V0)
             if criteria == 'mol_frac':
                 x0 = self.model.X[spc_index]
             elif criteria == 'mass_frac':
@@ -508,7 +517,8 @@ class CanteraConstantTP(SimulateAdapter):
             else:
                 raise ValueError(f'Invalid criteria: {criteria}')
 
-            while True:
+            found = False
+            while self.cantera_simulation.time < condition.reaction_time.value_si:
                 self.cantera_simulation.step()
 
                 if criteria == 'mol_frac':
@@ -517,10 +527,9 @@ class CanteraConstantTP(SimulateAdapter):
                     x1 = self.model.mass_fraction_dict()[species]
 
                 if x1 < x0 * 0.5:
+                    found = True
                     break
-            t50_list.append(self.cantera_simulation.time)
+            t50_list.append(self.cantera_simulation.time if found
+                            else condition.reaction_time.value_si)
 
         return t50_list
-
-
-register_simulate_adapter("CanteraConstantTP", CanteraConstantTP)
