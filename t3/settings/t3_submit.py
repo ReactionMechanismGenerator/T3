@@ -55,7 +55,7 @@ submit_scripts = {
 # python /Local/ce_dana/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
 #
 # touch final_time
-# 
+#
 # """,
     'rmg': """#!/bin/bash -l
 
