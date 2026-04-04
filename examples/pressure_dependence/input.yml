@@ -1,0 +1,95 @@
+# Pressure-dependent model generation with Chebyshev interpolation
+#
+# This example demonstrates enabling pressure dependence (PDep) in
+# the RMG model generation. PDep is essential for systems where
+# chemically activated reactions or unimolecular decomposition at
+# moderate pressures are important (e.g., hydrocarbon oxidation).
+#
+# PDep is only supported for gas phase simulations. The Chebyshev
+# interpolation is recommended over PDepArrhenius for most cases.
+# Adjust max_atoms to control which species are treated with PDep
+# networks (higher = more networks but slower).
+
+project: pressure_dependence_example
+
+t3:
+  options:
+    max_T3_iterations: 5
+    max_RMG_walltime: '00:00:30:00'
+  sensitivity:
+    adapter: CanteraConstantTP
+    SA_threshold: 0.01
+    pdep_SA_threshold: 0.001  # threshold for PES-level SA on sensitive PDep reactions
+    ME_methods: ['CSE', 'MSC']
+    top_SA_species: 10
+    top_SA_reactions: 10
+
+rmg:
+  database:
+    thermo_libraries:
+      - primaryThermoLibrary
+      - BurkeH2O2
+      - DFT_QCI_thermo
+    kinetics_libraries:
+      - BurkeH2O2inN2
+  species:
+    - label: propane
+      smiles: CCC
+      concentration: 0.04
+    - label: O2
+      smiles: '[O][O]'
+      concentration: 0.21
+    - label: N2
+      smiles: N#N
+      concentration: 0.75
+      balance: true
+    - label: OH
+      smiles: '[OH]'
+      SA_observable: true
+    - label: CH2O
+      smiles: C=O
+      SA_observable: true
+  reactors:
+    - type: gas batch constant T P
+      T: 1000
+      P: 1
+      termination_conversion:
+        propane: 0.3
+      termination_time: [2, 's']
+  model:
+    core_tolerance: [0.05, 0.01, 0.005]
+  pdep:
+    method: MSC
+    max_grain_size: 2          # kJ/mol
+    max_number_of_grains: 250
+    T: [300, 2500, 10]         # [T_min, T_max, n_points], Units: K
+    P: [0.01, 100, 10]        # [P_min, P_max, n_points], Units: bar
+    interpolation: Chebyshev
+    T_basis_set: 6
+    P_basis_set: 4
+    max_atoms: 16
+  species_constraints:
+    max_C_atoms: 6
+    max_O_atoms: 4
+    max_N_atoms: 0
+    max_Si_atoms: 0
+    max_S_atoms: 0
+    max_heavy_atoms: 10
+    max_radical_electrons: 2
+
+qm:
+  adapter: ARC
+  adaptive_levels:
+    (1, 6):
+      opt_level: wb97xd/def2tzvp
+      sp_level: ccsd(t)-f12/aug-cc-pvtz-f12
+    (7, 'inf'):
+      opt_level: wb97xd/def2svp
+      sp_level: dlpno-ccsd(T)/def2-tzvp
+  job_types:
+    rotors: true
+    conformers: true
+    fine: true
+    freq: true
+    opt: true
+    sp: true

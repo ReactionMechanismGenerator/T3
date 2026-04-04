@@ -1,0 +1,82 @@
+# Pre-QM calculations (iteration 0): compute thermo before RMG runs
+#
+# This example demonstrates T3's "iteration 0" feature. By specifying
+# species (and optionally reactions) in the QM block, ARC computes
+# their thermodynamic properties and rate coefficients BEFORE the
+# first RMG iteration. This ensures RMG has accurate parameters for
+# key species from the start.
+#
+# Use cases:
+# - Compute thermo for the fuel molecule and its key radicals upfront
+# - Provide rate coefficients for known important reactions
+# - Combine with seed_all_rads to cover radical derivatives automatically
+#
+# The seed_all_rads option on the fuel species generates radical,
+# alkoxyl (RO.), and peroxyl (ROO.) derivatives and adds them to
+# the RMG input. Their thermo is computed in iteration 0, so RMG
+# has accurate data for these species from the first iteration.
+
+project: pre_qm_iteration_0_example
+
+t3:
+  options:
+    max_T3_iterations: 5
+    max_RMG_walltime: '00:00:15:00'
+  sensitivity:
+    adapter: CanteraConstantTP
+    SA_threshold: 0.01
+    top_SA_species: 10
+    top_SA_reactions: 10
+
+rmg:
+  database:
+    thermo_libraries:
+      - primaryThermoLibrary
+      - BurkeH2O2
+      - DFT_QCI_thermo
+    kinetics_libraries:
+      - BurkeH2O2inN2
+  species:
+    - label: propane
+      smiles: CCC
+      concentration: 0.04
+      seed_all_rads: ['radical', 'alkoxyl', 'peroxyl']  # generate radical derivatives for RMG input
+    - label: O2
+      smiles: '[O][O]'
+      concentration: 0.21
+    - label: N2
+      smiles: N#N
+      concentration: 0.75
+      balance: true
+    - label: OH
+      smiles: '[OH]'
+      SA_observable: true
+  reactors:
+    - type: gas batch constant T P
+      T: 800
+      P: 1
+      termination_conversion:
+        propane: 0.3
+      termination_time: [5, 's']
+  model:
+    core_tolerance: [0.05, 0.01, 0.005]
+
+qm:
+  adapter: ARC
+  level_of_theory: CBS-QB3
+  job_types:
+    rotors: true
+    conformers: true
+    fine: true
+    freq: true
+    opt: true
+    sp: true
+  # Species listed here are computed in iteration 0 (before RMG runs).
+  # Their thermo will be available in a T3 library for all RMG iterations.
+  species:
+    - label: npropyl
+      smiles: '[CH2]CC'
+    - label: ipropyl
+      smiles: 'C[CH]C'
+    - label: propylperoxyl
+      smiles: CCCO[O]
