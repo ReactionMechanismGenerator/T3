@@ -5,6 +5,7 @@ Should be executed locally on the head node using the t3 environment.
 
 import datetime
 import os
+import shlex
 import shutil
 import time
 from typing import TYPE_CHECKING, List, Optional, Tuple
@@ -12,8 +13,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 from arc.job.local import (_determine_job_id,
                            change_mode,
                            execute_command,
-                           parse_running_jobs_ids,
-                           submit_job)
+                           parse_running_jobs_ids)
 
 from t3.imports import local_t3_path, settings, submit_scripts
 
@@ -180,15 +180,21 @@ def run_rmg_incore(rmg_input_file_path: str,
     verbose = f' -v {verbose}' if verbose is not None else ''
     max_iterations = f' -m {max_iterations}' if max_iterations is not None else ''
     script_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'rmg_incore_script.py')
-    commands = ['CONDA_BASE=$(conda info --base)',
-                'source $CONDA_BASE/etc/profile.d/conda.sh',
-                'conda activate rmg_env',
-                f'cd {project_directory}',
-                f'python {script_path} {rmg_input_file_path}{verbose}{max_iterations} '
-                f'> >(tee -a out.txt) 2> >(tee -a err.txt >&2)',
-                ]
-    stdout, stderr = execute_command(commands, shell=True, no_fail=True, executable='/bin/bash')
-    if 'RMG threw an exception and did not converge.\n' in stderr:
+    inner_cmd = (f'python {script_path} {rmg_input_file_path}{verbose}{max_iterations} '
+                 f'> >(tee -a out.txt) 2> >(tee -a err.txt >&2)')
+    shell_script = rf'''bash -lc 'set -uo pipefail
+cd "{project_directory}"
+if command -v micromamba >/dev/null 2>&1; then
+    micromamba run -n rmg_env bash -c "{inner_cmd}"
+elif command -v conda >/dev/null 2>&1 || command -v mamba >/dev/null 2>&1; then
+    conda run -n rmg_env bash -c "{inner_cmd}"
+else
+    echo "Micromamba/Mamba/Conda required" >&2
+    exit 1
+fi' '''
+    stdout, stderr = execute_command(shell_script, shell=True, no_fail=True, executable='/bin/bash')
+    stderr_text = ''.join(stderr) if isinstance(stderr, list) else (stderr or '')
+    if 'RMG threw an exception and did not converge.' in stderr_text:
         return True
     return False
 
@@ -448,8 +454,64 @@ def run_arkane_job(input_file: str,
             logger.error(f'Arkane run failed with error: {e}')
         return False
 
-    # Check for success by looking for the output file
-    output_file = os.path.join(output_directory, 'output.py')
-    if os.path.isfile(output_file):
+    # Check for success by looking for the sensitivity output directory,
+    # which is the actual product of a successful Arkane SA job.
+    # Do not rely on output.py as it may pre-exist from previous runs.
+    sa_dir = os.path.join(output_directory, 'sensitivity')
+    if os.path.isdir(sa_dir) and any(f.endswith('.yml') or f.endswith('.yaml') for f in os.listdir(sa_dir)):
         return True
     return False
+
+
+def run_rmg_sa_incore(rmg_input_file_path: str,
+                      chemkin_file_path: str,
+                      species_dict_path: str,
+                      output_path: str,
+                      observables: Optional[List[str]] = None,
+                      threshold: float = 1e-3,
+                      ) -> Tuple[bool, Optional[str]]:
+    """
+    Run RMG Sensitivity Analysis incore under the rmg_env.
+    """
+    project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
+    script_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'rmg_incore_sa.py')
+
+    rmg_input_file_path = os.path.abspath(rmg_input_file_path)
+    chemkin_file_path = os.path.abspath(chemkin_file_path)
+    species_dict_path = os.path.abspath(species_dict_path)
+    output_path = os.path.abspath(output_path)
+
+    obs_str = ""
+    if observables:
+        obs_str = f"-obs {' '.join(shlex.quote(o) for o in observables)}"
+
+    inner_cmd = (f'python {script_path} '
+                 f'-i {rmg_input_file_path} '
+                 f'-c {chemkin_file_path} '
+                 f'-d {species_dict_path} '
+                 f'-o {output_path} '
+                 f'-t {threshold} '
+                 f'{obs_str} '
+                 f'> >(tee -a sa_out.txt) 2> >(tee -a sa_err.txt >&2)')
+    shell_script = rf'''bash -lc 'set -uo pipefail
+cd "{project_directory}"
+if command -v micromamba >/dev/null 2>&1; then
+    micromamba run -n rmg_env bash -c "{inner_cmd}"
+elif command -v conda >/dev/null 2>&1 || command -v mamba >/dev/null 2>&1; then
+    conda run -n rmg_env bash -c "{inner_cmd}"
+else
+    echo "Micromamba/Mamba/Conda required" >&2
+    exit 1
+fi' '''
+
+    execute_command(shell_script, shell=True, no_fail=True, executable='/bin/bash')
+
+    if os.path.isfile(output_path):
+        return True, None
+
+    error_msg = "Unknown error"
+    err_file = os.path.join(project_directory, 'sa_err.txt')
+    if os.path.isfile(err_file):
+        with open(err_file, 'r') as f:
+            error_msg = f.read()
+    return False, error_msg

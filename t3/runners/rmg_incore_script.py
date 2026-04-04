@@ -85,7 +85,6 @@ def main() -> None:
             CollisionError,
             CoreError,
             DASPKError,
-            ILPSolutionError,
             InvalidMicrocanonicalRateError,
             KineticsError,
             ModifiedStrongCollisionError,
