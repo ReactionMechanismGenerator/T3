@@ -1,22 +1,22 @@
-# Cantera-based sensitivity analysis for H2/O2 combustion
+# Plug flow reactor (PFR) example
 #
-# This example demonstrates using a Cantera simulation adapter for
-# sensitivity analysis instead of RMG's built-in SA. Cantera adapters
-# support global observables (ignition delay, extinction strain rate,
-# laminar flame speed) in addition to species-based SA.
+# An isothermal, isobaric flow reactor (a Lagrangian parcel of gas advected
+# at constant T and P) is simulated with the CanteraPFR adapter.  The PFR
+# discretization is controlled by module-level constants in
+# t3/simulate/cantera_pfr.py (LENGTH, AREA, N_CELLS); the residence time
+# is taken from the reactor entry's termination_time.
 
-project: cantera_sa_example
+project: pfr_example
 
 t3:
   options:
     max_T3_iterations: 5
     max_RMG_walltime: '00:00:10:00'
   sensitivity:
-    adapter: CanteraConstantTP
+    adapter: CanteraPFR
     atol: 1e-6
     rtol: 1e-4
     SA_threshold: 0.01
-    global_observables: ['IDT']  # track ignition delay time sensitivity
     top_SA_species: 10
     top_SA_reactions: 10
 
@@ -42,11 +42,11 @@ rmg:
       SA_observable: true
   reactors:
     - type: gas batch constant T P
-      T: 1200
+      T: 1000
       P: 1
       termination_conversion:
         H2: 0.9
-      termination_time: [5, 's']
+      termination_time: [1, 's']    # PFR residence time
   model:
     core_tolerance: [0.01, 0.005, 0.001]
 
