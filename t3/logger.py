@@ -12,7 +12,8 @@ from typing import Dict, List, Optional, Tuple
 
 from arc.common import get_git_branch, get_git_commit
 
-from t3.common import VERSION, dict_to_str, t3_path, time_lapse
+from t3.common import dict_to_str, t3_path, time_lapse
+from t3.version import __version__ as VERSION
 from t3.chem import T3Species, T3Reaction, T3Status
 
 

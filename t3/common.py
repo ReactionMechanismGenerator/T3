@@ -14,9 +14,6 @@ import yaml
 if TYPE_CHECKING:
     from t3.chem import T3Species
 
-
-VERSION = '0.1.0'
-
 t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolute path to the T3 folder
 DATA_BASE_PATH = os.path.join(t3_path, 'data')
 TEST_DATA_BASE_PATH = os.path.join(t3_path, 'tests', 'data')
