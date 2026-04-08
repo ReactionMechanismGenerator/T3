@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ReactionMechanismGenerator/ARC
-          ref: main
+          ref: linear_ts
           path: ARC
 
       # 3. Checkout RMG Database
@@ -55,7 +55,7 @@ jobs:
         with:
           repository: ReactionMechanismGenerator/RMG-Py
           path: RMG-Py
-          ref: main
+          ref: xTB
           fetch-depth: 1
 
       # 5. Clean Disk (Important for heavy conda envs)
