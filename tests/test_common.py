@@ -347,3 +347,277 @@ def test_save_yaml_file_nested_round_trip():
     loaded = read_yaml_file(path=path)
     assert loaded == content
     shutil.rmtree(tmp_dir)
+
+
+# ---------------------------------------------------------------------------
+# Tests for the new helpers (remove_numeric_parentheses, numpy_to_list,
+# get_atom_counts, get_oxidizer_stoichiometry, determine_concentrations_by_equivalence_ratios)
+# ---------------------------------------------------------------------------
+
+def test_remove_numeric_parentheses():
+    assert common.remove_numeric_parentheses('OH(12)') == 'OH'
+    assert common.remove_numeric_parentheses('CH3CH2(245)') == 'CH3CH2'
+    assert common.remove_numeric_parentheses('plain') == 'plain'
+    assert common.remove_numeric_parentheses('') == ''
+    # Only trailing parens are stripped:
+    assert common.remove_numeric_parentheses('A(1)B(2)') == 'A(1)B'
+    assert common.remove_numeric_parentheses('S(40)') == 'S'
+
+
+def test_numpy_to_list():
+    import numpy as np
+    assert common.numpy_to_list(np.array([1, 2, 3])) == [1, 2, 3]
+    assert common.numpy_to_list(np.array([[1, 2], [3, 4]])) == [[1, 2], [3, 4]]
+    assert common.numpy_to_list([1, 2, 3]) == [1, 2, 3]
+    assert common.numpy_to_list(None) is None
+    assert common.numpy_to_list(7.5) == 7.5
+
+
+def test_get_atom_counts():
+    """Atom counts should match formulas regardless of identifier kind."""
+    assert common.get_atom_counts(smiles='C') == {'C': 1, 'H': 4, 'N': 0, 'O': 0, 'other': 0}
+    assert common.get_atom_counts(smiles='CCO') == {'C': 2, 'H': 6, 'N': 0, 'O': 1, 'other': 0}
+    assert common.get_atom_counts(smiles='N') == {'C': 0, 'H': 3, 'N': 1, 'O': 0, 'other': 0}
+    assert common.get_atom_counts(smiles='[O][O]') == {'C': 0, 'H': 0, 'N': 0, 'O': 2, 'other': 0}
+    assert common.get_atom_counts(smiles='OO') == {'C': 0, 'H': 2, 'N': 0, 'O': 2, 'other': 0}  # H2O2
+    assert common.get_atom_counts(smiles='N#N') == {'C': 0, 'H': 0, 'N': 2, 'O': 0, 'other': 0}
+    # Adjacency list path:
+    assert common.get_atom_counts(adjlist="""1 C u0 p0 c0 {2,S} {3,S} {4,S} {5,S}
+2 H u0 p0 c0 {1,S}
+3 H u0 p0 c0 {1,S}
+4 H u0 p0 c0 {1,S}
+5 H u0 p0 c0 {1,S}""") == {'C': 1, 'H': 4, 'N': 0, 'O': 0, 'other': 0}
+    # Missing identifier:
+    with pytest.raises(ValueError):
+        common.get_atom_counts()
+
+
+def test_get_oxidizer_stoichiometry_o2():
+    """Hydrocarbon + O2 stoichiometry should match hand-balanced reactions."""
+    # CH4 + 2 O2
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='C', oxidizer_smiles='[O][O]') == 2.0
+    # C3H8 + 5 O2
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='CCC', oxidizer_smiles='[O][O]') == 5.0
+    # C5H12 + 8 O2
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='CCCCC', oxidizer_smiles='[O][O]') == 8.0
+    # C6H14 + 9.5 O2
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='CCCCCC', oxidizer_smiles='[O][O]') == 9.5
+    # C2H5OH (CCO) + 3 O2 → 2 CO2 + 3 H2O
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='CCO', oxidizer_smiles='[O][O]') == 3.0
+    # NH3 + 0.75 O2 → 0.5 N2 + 1.5 H2O   (4 NH3 + 3 O2 → 2 N2 + 6 H2O)
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='N', oxidizer_smiles='[O][O]') == 0.75
+    # Ethylamine NCC: a=2, b=7, c=1, d=0  ⇒ (4 + 3.5)/2 = 3.75
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='NCC', oxidizer_smiles='[O][O]') == 3.75
+
+
+def test_get_oxidizer_stoichiometry_h2o2():
+    """Fuel + H2O2 stoichiometry: each H2O2 supplies 1 net active O."""
+    # C3H8 + 10 H2O2 → 3 CO2 + 14 H2O
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='CCC', oxidizer_smiles='OO') == 10.0
+    # CH4 + 4 H2O2 → CO2 + 6 H2O
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='C', oxidizer_smiles='OO') == 4.0
+    # 2 NH3 + 3 H2O2 → N2 + 6 H2O   ⇒ 1.5 H2O2 per NH3
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='N', oxidizer_smiles='OO') == 1.5
+
+
+def test_get_oxidizer_stoichiometry_n2o():
+    """N2O has 1 O atom per molecule and no H — each supplies 1 net active O."""
+    # CH4 + 4 N2O → CO2 + 2 H2O + 4 N2
+    assert common.get_oxidizer_stoichiometry(fuel_smiles='C', oxidizer_smiles='[N-]=[N+]=O') == 4.0
+
+
+def test_get_oxidizer_stoichiometry_rejects_bad_inputs():
+    # Sulfur-containing fuel: not C/H/N/O
+    with pytest.raises(ValueError, match='not C/H/N/O'):
+        common.get_oxidizer_stoichiometry(fuel_smiles='CS', oxidizer_smiles='[O][O]')
+    # Water as "oxidizer" supplies no net active O (k_O - k_H/2 = 1 - 1 = 0)
+    with pytest.raises(ValueError, match='no net active oxygen'):
+        common.get_oxidizer_stoichiometry(fuel_smiles='C', oxidizer_smiles='O')
+
+
+def test_determine_concentrations_no_fuel():
+    """No fuel role → returns None."""
+    species = [{'label': 'O2', 'smiles': '[O][O]', 'concentration': 0, 'role': 'oxidizer'}]
+    assert common.determine_concentrations_by_equivalence_ratios(species) is None
+
+
+def test_determine_concentrations_no_equivalence_ratios():
+    """Fuel role but no equivalence_ratios → returns None."""
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'concentration': 1, 'role': 'fuel'},
+        {'label': 'O2', 'smiles': '[O][O]', 'concentration': 2, 'role': 'oxidizer'},
+    ]
+    assert common.determine_concentrations_by_equivalence_ratios(species) is None
+
+
+def test_determine_concentrations_propane_air():
+    """Propane in air at φ ∈ {0.5, 1.0, 1.5} — checks the corrected (stoich/φ) formula."""
+    species = [
+        {'label': 'propane', 'smiles': 'CCC', 'role': 'fuel',
+         'equivalence_ratios': [0.5, 1.0, 1.5], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+        {'label': 'N2', 'smiles': 'N#N', 'role': 'diluent', 'concentration': 0},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    assert sweep is not None
+    assert sweep['equivalence_ratios'] == [0.5, 1.0, 1.5]
+    assert sweep['concentrations']['propane'] == [1.0, 1.0, 1.0]
+    # Stoich for C3H8 = 5; corrected formula: [O2] = 5 / φ
+    assert sweep['concentrations']['O2'] == pytest.approx([10.0, 5.0, 10.0 / 3.0])
+    # Diluent N2 at default 3.76 ratio
+    expected_n2 = [10.0 * 3.76, 5.0 * 3.76, (10.0 / 3.0) * 3.76]
+    assert sweep['concentrations']['N2'] == pytest.approx(expected_n2)
+
+
+def test_determine_concentrations_methane_air_single_phi():
+    """Single equivalence ratio still produces a 1-element column."""
+    species = [
+        {'label': 'methane', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+        {'label': 'N2', 'smiles': 'N#N', 'role': 'diluent', 'concentration': 0},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    assert sweep['equivalence_ratios'] == [1.0]
+    assert sweep['concentrations']['methane'] == [1.0]
+    assert sweep['concentrations']['O2'] == [2.0]
+    assert sweep['concentrations']['N2'] == pytest.approx([2.0 * 3.76])
+
+
+def test_determine_concentrations_ammonia_air():
+    """Ammonia / air — small stoich, verify lean/rich direction is correct."""
+    species = [
+        {'label': 'NH3', 'smiles': 'N', 'role': 'fuel',
+         'equivalence_ratios': [0.5, 1.0, 1.5], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    # Stoich for NH3 = 0.75; corrected: [O2] = 0.75 / φ
+    assert sweep['concentrations']['O2'] == pytest.approx([1.5, 0.75, 0.5])
+
+
+def test_determine_concentrations_explicit_fuel_concentration():
+    """Non-default fuel concentration scales every column linearly."""
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0, 2.0], 'concentration': 3.0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    assert sweep['concentrations']['CH4'] == [3.0, 3.0]
+    # 3 * 2 / 1 = 6 ; 3 * 2 / 2 = 3
+    assert sweep['concentrations']['O2'] == pytest.approx([6.0, 3.0])
+
+
+def test_determine_concentrations_h2o2_oxidizer():
+    """Propane + H2O2 (no O2) — alkane / non-O2 oxidizer mixture."""
+    species = [
+        {'label': 'C3H8', 'smiles': 'CCC', 'role': 'fuel',
+         'equivalence_ratios': [0.5, 1.0, 2.0], 'concentration': 0},
+        {'label': 'H2O2', 'smiles': 'OO', 'role': 'oxidizer', 'concentration': 0},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    # Stoich C3H8 + 10 H2O2; corrected: [H2O2] = 10 / φ
+    assert sweep['concentrations']['H2O2'] == pytest.approx([20.0, 10.0, 5.0])
+
+
+def test_determine_concentrations_multi_oxidizer():
+    """Multi-oxidizer mixture: 60% O2 + 40% H2O2 share the demand."""
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer',
+         'concentration': 0, 'oxidizer_fraction': 0.6},
+        {'label': 'H2O2', 'smiles': 'OO', 'role': 'oxidizer',
+         'concentration': 0, 'oxidizer_fraction': 0.4},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    # CH4: stoich for O2 = 2, for H2O2 = 4. Each gets its own stoich * fraction / φ.
+    assert sweep['concentrations']['O2'] == pytest.approx([2.0 * 0.6])
+    assert sweep['concentrations']['H2O2'] == pytest.approx([4.0 * 0.4])
+
+
+def test_determine_concentrations_multi_oxidizer_bad_fractions():
+    """Oxidizer fractions must sum to 1.0."""
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer',
+         'concentration': 0, 'oxidizer_fraction': 0.7},
+        {'label': 'H2O2', 'smiles': 'OO', 'role': 'oxidizer',
+         'concentration': 0, 'oxidizer_fraction': 0.5},
+    ]
+    with pytest.raises(ValueError, match='must sum to 1.0'):
+        common.determine_concentrations_by_equivalence_ratios(species)
+
+
+def test_determine_concentrations_multi_diluent_custom_ratios():
+    """Two diluents, each with its own diluent_to_oxidizer_ratio."""
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+        {'label': 'N2', 'smiles': 'N#N', 'role': 'diluent',
+         'concentration': 0, 'diluent_to_oxidizer_ratio': 3.76},
+        {'label': 'Ar', 'smiles': '[Ar]', 'role': 'diluent',
+         'concentration': 0, 'diluent_to_oxidizer_ratio': 1.0},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    assert sweep['concentrations']['O2'] == [2.0]
+    assert sweep['concentrations']['N2'] == pytest.approx([2.0 * 3.76])
+    assert sweep['concentrations']['Ar'] == pytest.approx([2.0 * 1.0])
+
+
+def test_determine_concentrations_diluent_default_ratio():
+    """A diluent without an explicit ratio defaults to 3.76 (air-like)."""
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+        {'label': 'N2', 'smiles': 'N#N', 'role': 'diluent', 'concentration': 0},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    assert sweep['concentrations']['N2'] == pytest.approx([2.0 * 3.76])
+
+
+def test_determine_concentrations_inert_passthrough():
+    """A non-zero, no-role species is passed through as a constant column."""
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0, 0.5], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+        {'label': 'He', 'smiles': '[He]', 'role': None, 'concentration': 0.5},
+    ]
+    sweep = common.determine_concentrations_by_equivalence_ratios(species)
+    assert sweep['concentrations']['He'] == [0.5, 0.5]
+
+
+def test_determine_concentrations_two_fuels_rejected():
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+        {'label': 'C2H6', 'smiles': 'CC', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+    ]
+    with pytest.raises(ValueError, match='Exactly one species'):
+        common.determine_concentrations_by_equivalence_ratios(species)
+
+
+def test_determine_concentrations_fuel_without_oxidizer_rejected():
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [1.0], 'concentration': 0},
+    ]
+    with pytest.raises(ValueError, match='no.*role="oxidizer"'):
+        common.determine_concentrations_by_equivalence_ratios(species)
+
+
+def test_determine_concentrations_empty_eq_ratios_rejected():
+    species = [
+        {'label': 'CH4', 'smiles': 'C', 'role': 'fuel',
+         'equivalence_ratios': [], 'concentration': 0},
+        {'label': 'O2', 'smiles': '[O][O]', 'role': 'oxidizer', 'concentration': 0},
+    ]
+    with pytest.raises(ValueError, match='empty equivalence_ratios'):
+        common.determine_concentrations_by_equivalence_ratios(species)
