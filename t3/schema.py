@@ -103,11 +103,12 @@ class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
     """
-    adapter: Annotated[str, Field(max_length=255)] = 'RMGConstantTP'
+    adapter: Optional[Annotated[str, Field(max_length=255)]] = 'CanteraConstantTP'
     atol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-6
     rtol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-4
     global_observables: Optional[List[Annotated[str, Field(min_length=2, max_length=3)]]] = None
     SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] = 0.01
+    max_sa_workers: Annotated[int, Field(ge=1)] = 24
     pdep_SA_threshold: Optional[Annotated[float, Field(gt=0, lt=0.5)]] = 0.001
     ME_methods: List[Annotated[str, Field(min_length=2, max_length=3)]] = ['CSE', 'MSC']
     top_SA_species: Annotated[int, Field(ge=0)] = 10
@@ -122,7 +123,7 @@ class T3Sensitivity(BaseModel):
     @classmethod
     def check_adapter(cls, value):
         """T3Sensitivity.adapter validator"""
-        if value not in _registered_simulate_adapters.keys():
+        if value is not None and value not in _registered_simulate_adapters.keys():
             raise ValueError(
                 f'The "T3 sensitivity adapter" argument of {value} was not present in the keys for the '
                 f'_registered_simulate_adapters dictionary: {list(_registered_simulate_adapters.keys())}'
@@ -216,12 +217,23 @@ class RadicalTypeEnum(str, Enum):
     peroxyl = 'peroxyl'
 
 
+class SpeciesRoleEnum(str, Enum):
+    """Allowed RMGSpecies role values for fuel/oxidizer/diluent mixtures."""
+    fuel = 'fuel'
+    oxidizer = 'oxidizer'
+    diluent = 'diluent'
+
+
 class RMGSpecies(BaseModel):
     """
     A class for validating input.RMG.species arguments
     """
     label: str
     concentration: Union[Annotated[float, Field(ge=0)], Tuple[Annotated[float, Field(ge=0)], Annotated[float, Field(ge=0)]]] = 0
+    role: Optional[SpeciesRoleEnum] = None
+    equivalence_ratios: Optional[List[Annotated[float, Field(gt=0)]]] = None
+    oxidizer_fraction: Optional[Annotated[float, Field(gt=0, le=1)]] = None
+    diluent_to_oxidizer_ratio: Optional[Annotated[float, Field(gt=0)]] = None
     smiles: Optional[str] = None
     inchi: Optional[str] = None
     adjlist: Optional[str] = None
@@ -247,6 +259,29 @@ class RMGSpecies(BaseModel):
             raise ValueError(f"A constant species cannot have a concentration range.\n"
                              f"Got{label}: {info.data.get('concentration')}.")
         return value
+
+    @model_validator(mode='after')
+    def check_role_consistency(self) -> 'RMGSpecies':
+        """
+        Cross-field role validation:
+        - equivalence_ratios may only be set on a fuel species.
+        - oxidizer_fraction may only be set on an oxidizer species.
+        - diluent_to_oxidizer_ratio may only be set on a diluent species.
+        - A fuel species must declare equivalence_ratios (the φ-driven sweep).
+        """
+        if self.equivalence_ratios is not None and self.role != SpeciesRoleEnum.fuel:
+            raise ValueError(f"equivalence_ratios may only be set on a species with role='fuel'. "
+                             f"Got role={self.role!r} for {self.label!r}.")
+        if self.oxidizer_fraction is not None and self.role != SpeciesRoleEnum.oxidizer:
+            raise ValueError(f"oxidizer_fraction may only be set on a species with role='oxidizer'. "
+                             f"Got role={self.role!r} for {self.label!r}.")
+        if self.diluent_to_oxidizer_ratio is not None and self.role != SpeciesRoleEnum.diluent:
+            raise ValueError(f"diluent_to_oxidizer_ratio may only be set on a species with role='diluent'. "
+                             f"Got role={self.role!r} for {self.label!r}.")
+        if self.role == SpeciesRoleEnum.fuel and not self.equivalence_ratios:
+            raise ValueError(f"A fuel species must declare a non-empty equivalence_ratios list. "
+                             f"Got equivalence_ratios={self.equivalence_ratios!r} for {self.label!r}.")
+        return self
 
     @field_validator('concentration')
     @classmethod
@@ -279,6 +314,14 @@ class RMGSpecies(BaseModel):
         return self
 
 
+class IDTModeEnum(str, Enum):
+    """
+    Sweep mode used by the IDT adapter when several T / P / φ values are given.
+    """
+    matrix = 'matrix'  # full T_list × P_list × φ_list cartesian product
+    row = 'row'        # zip(T_list, P_list, φ_list) — all must have the same length
+
+
 class RMGReactor(BaseModel):
     """
     A class for validating input.RMG.reactors arguments
@@ -291,6 +334,7 @@ class RMGReactor(BaseModel):
     termination_time: Optional[Tuple[Annotated[float, Field(gt=0)], TerminationTimeEnum]] = None
     termination_rate_ratio: Optional[Annotated[float, Field(gt=0, lt=1)]] = None
     conditions_per_iteration: Annotated[int, Field(gt=0)] = 12
+    idt_mode: IDTModeEnum = IDTModeEnum.matrix
 
     class Config:
         extra = "forbid"
@@ -308,9 +352,9 @@ class RMGReactor(BaseModel):
     @field_validator('T')
     @classmethod
     def check_t(cls, value):
-        """RMGReactor.T validator"""
-        if isinstance(value, list) and len(value) != 2:
-            raise ValueError(f'When specifying the temperature as a list, only two values are allowed (T min, T max),\n'
+        """RMGReactor.T validator. Lists must have at least 2 entries (min/max range, or explicit row points)."""
+        if isinstance(value, list) and len(value) < 2:
+            raise ValueError(f'When specifying the temperature as a list, at least two values are required,\n'
                              f'got {len(value)} values: {value}.')
         return value
 
@@ -318,8 +362,8 @@ class RMGReactor(BaseModel):
     @classmethod
     def check_p(cls, value, info: ValidationInfo):
         """RMGReactor.P validator"""
-        if isinstance(value, list) and len(value) != 2:
-            raise ValueError(f'When specifying the pressure as a list, only two values are allowed (P min, P max),\n'
+        if isinstance(value, list) and len(value) < 2:
+            raise ValueError(f'When specifying the pressure as a list, at least two values are required,\n'
                              f'got {len(value)} values: {value}.')
         reactor_type = info.data.get('type')
         if reactor_type and 'gas' in reactor_type and value is None:
@@ -332,8 +376,8 @@ class RMGReactor(BaseModel):
     @classmethod
     def check_v(cls, value, info: ValidationInfo):
         """RMGReactor.V validator"""
-        if isinstance(value, list) and len(value) != 2:
-            raise ValueError(f'When specifying the volume as a list, only two values are allowed (V min, V max),\n'
+        if isinstance(value, list) and len(value) < 2:
+            raise ValueError(f'When specifying the volume as a list, at least two values are required,\n'
                              f'got {len(value)} values: {value}.')
         reactor_type = info.data.get('type')
         if reactor_type and 'liquid' in reactor_type and value is None:
