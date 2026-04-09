@@ -1,0 +1,71 @@
+# Multi-condition sensitivity analysis with ranged T, P, and concentrations
+#
+# This example demonstrates how to run SA across a grid of conditions
+# when temperature, pressure, or species concentrations are specified
+# as ranges rather than single values. T3 generates equally distributed
+# points within each range and runs SA at every combination.
+#
+# Use num_sa_per_*_range to control grid density.
+# Use modify_concentration_ranges_together to control whether species
+# concentrations are varied together or in full combinatorial fashion.
+
+project: ranged_conditions_example
+
+t3:
+  options:
+    max_T3_iterations: 5
+    max_RMG_walltime: '00:00:15:00'
+    num_sa_per_temperature_range: 3    # 3 temperatures in [800, 1500] K
+    num_sa_per_pressure_range: 2       # 2 pressures in [1, 10] bar
+    num_sa_per_concentration_range: 2  # 2 concentrations per ranged species
+    modify_concentration_ranges_together: true  # vary fuel and oxidizer together (not combinatorial)
+  sensitivity:
+    adapter: CanteraConstantTP
+    SA_threshold: 0.01
+    top_SA_species: 10
+    top_SA_reactions: 10
+
+rmg:
+  database:
+    thermo_libraries:
+      - primaryThermoLibrary
+      - BurkeH2O2
+    kinetics_libraries:
+      - BurkeH2O2inN2
+  species:
+    - label: H2
+      smiles: '[H][H]'
+      concentration: [0.10, 0.67]  # fuel concentration range
+    - label: O2
+      smiles: '[O][O]'
+      concentration: [0.10, 0.33]  # oxidizer concentration range
+    - label: N2
+      smiles: N#N
+      concentration: 0.57
+      balance: true
+    - label: OH
+      smiles: '[OH]'
+      SA_observable: true
+    - label: H
+      smiles: '[H]'
+      SA_observable: true
+  reactors:
+    - type: gas batch constant T P
+      T: [800, 1500]      # temperature range, Units: K
+      P: [1, 10]          # pressure range, Units: bar
+      termination_conversion:
+        H2: 0.9
+      termination_time: [5, 's']
+      conditions_per_iteration: 12
+  model:
+    core_tolerance: [0.01, 0.005, 0.001]
+
+qm:
+  adapter: ARC
+  level_of_theory: b3lyp/6-31g(d,p)
+  job_types:
+    rotors: false
+    fine: false
+    freq: true
+    opt: true
+    sp: true

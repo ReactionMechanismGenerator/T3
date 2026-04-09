@@ -19,7 +19,7 @@ submit_scripts = {
 #
 # touch initial_time
 #
-# python-jl ~/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
+# python ~/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
 #
 # touch final_time
 #
@@ -52,10 +52,10 @@ submit_scripts = {
 #
 # conda activate rmg_env
 #
-# python-jl /Local/ce_dana/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
+# python /Local/ce_dana/Code/RMG-Py/rmg.py -n {cpus} input.py{max_iterations}
 #
 # touch final_time
-# 
+#
 # """,
     'rmg': """#!/bin/bash -l
 
@@ -73,7 +73,7 @@ conda activate rmg_env
 
 touch initial_time
 
-python-jl $rmgpy_path/rmg.py -n {cpus} input.py{max_iterations}
+python $rmgpy_path/rmg.py -n {cpus} input.py{max_iterations}
 
 touch final_time
 

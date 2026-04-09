@@ -1,401 +1,182 @@
-# 2. Adding a Simulate Adapter
+# 2. Adding a Cantera simulation adapter
 
-This tutorial demonstrates how to create a new simulate adapter for T3 to use when simulating
-a mechanism. The currently implemented Cantera, RMG, and RMS adapters provide good examples for this process, 
-though this tutorial explains the steps in more detail by walking through each piece of the code block below. 
-First, create a file under `T3/t3/simulate/` where we will write the new simulate adapter class.
-Next, add the required imports as shown below. Additional packages may be needed depending on the task, but at
-a minimum, these are required.
+This tutorial walks through creating a new Cantera-based simulation adapter for T3.
+We will implement a **constant-volume, isothermal** batch reactor (`CanteraConstantTV`),
+which is not currently part of T3 but is straightforward to add using the existing
+`CanteraBase` class.
 
-```Python hl_lines="1 2 3 4"
-from t3.logger import Logger
-from t3.simulate.adapter import SimulateAdapter
+All Cantera adapters in T3 share a common base class that handles mechanism loading,
+condition generation, time integration, sensitivity analysis, and data storage.
+A new adapter only needs to:
+
+1. Set the `cantera_reactor_type` class attribute.
+2. Implement `create_reactor()` to return the appropriate Cantera reactor.
+3. Optionally override `get_idt_by_T()` if the default behavior is not appropriate.
+
+
+## Step 1: Create the adapter file
+
+Create a new file at `T3/t3/simulate/cantera_constant_tv.py`:
+
+```python
+"""
+Cantera Simulator Adapter module
+Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor at constant T-V
+"""
+
+import cantera as ct
+
+from t3.simulate.cantera_base import CanteraBase
 from t3.simulate.factory import register_simulate_adapter
+```
 
-class NewSimulator(SimulateAdapter):
+These imports are the minimum required for any Cantera adapter:
+
+- `cantera` provides the reactor objects.
+- `CanteraBase` provides all shared simulation logic.
+- `register_simulate_adapter` registers the adapter so T3 can find it by name.
+
+
+## Step 2: Define the adapter class
+
+```python
+class CanteraConstantTV(CanteraBase):
     """
-    Briefly summarize what conditions and/or assumptions are used in this simulator.
-
-    Args:
-        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.
-        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.
-        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.
-        logger (Logger): Instance of T3's Logger class.
-        atol (float): The absolute tolerance used when integrating.
-        rtol (float): The relative tolerance used when integrating.
-        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
-        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
-        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
-
-    Attributes:
-        <varies by class> 
+    Simulates ideal gases in a batch reactor at constant temperature and volume.
+    Uses ``ct.IdealGasReactor`` with ``energy='off'`` to maintain constant T,
+    and the default constant-volume behavior of ``IdealGasReactor``.
     """
 
-    def __init__(self,
-                 t3: dict,
-                 rmg: dict,
-                 paths: dict,
-                 logger: Type[Logger],
-                 atol: float = 1e-16,
-                 rtol: float = 1e-8,
-                 observable_list: Optional[list] = None,
-                 sa_atol: float = 1e-6,
-                 sa_rtol: float = 1e-4,
-                 global_observables: Optional[Type[List[str]]] = None
-                 ):
-        
-        # initialize attributes
-        self.t3 = t3
-        self.rmg = rmg
-        self.paths = paths
-        self.logger = logger
-        self.atol = atol
-        self.rtol = rtol
-        self.observable_list = observable_list or list()
-        self.sa_atol = sa_atol
-        self.sa_rtol = sa_rtol
-        self.global_observables = global_observables
-        
-        # run any additional setup required by the class
-        self.set_up()
+    cantera_reactor_type = 'IdealGasReactor'
 
-
-    def set_up(self):
-        """
-        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.
-        """
-        <Implement code here>    
-
-
-    def simulate(self):
-        """
-        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.
-        """
-        <Implement code here>
-
-
-    def get_sa_coefficients(self):
-        """
-        Obtain the sensitivity analysis coefficients.
-        
-        Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
-        """
-        <Implement code here>
-
+    def create_reactor(self):
+        """Create a constant-volume reactor with the energy equation disabled (isothermal)."""
+        return ct.IdealGasReactor(self.model, energy='off')
 
     def get_idt_by_T(self):
         """
-        Finds the ignition point by approximating dT/dt as a first order forward difference
-        and then finds the point of maximum slope.
+        Since this adapter simulates at constant T, there is no ignition.
 
         Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
-                             the ignition delay time in seconds and index at which idt occurs respectively.
+            idt_dict (dict): Dictionary whose values are empty lists.
         """
-        <Implement code here>
-
-
-
-register_simulate_adapter("NewSimulator", NewSimulator)
-
+        return {'idt': list(), 'idt_index': list()}
 ```
 
-The new class must inherit from the abstract adapter class in `T3/t3/simulate/adapter.py`. All simulate adapters
-accept the same arguments, allowing them to be used in a standardized way. Thus, the `Args` section in the docstring
-and the `__init__` method will be constant for all adapters.
+Key points:
+
+- **`cantera_reactor_type`**: A string identifying the Cantera reactor class. Used
+  internally for logging and identification.
+- **`create_reactor()`**: The only required method. It returns a Cantera reactor instance.
+  The `self.model` attribute (a `ct.Solution` object) is set up by `CanteraBase` during
+  initialization with the mechanism and initial conditions.
+- **`get_idt_by_T()`**: The default implementation in `CanteraBase` computes ignition
+  delay from the maximum `dT/dt`. Since a constant-T reactor has no temperature rise,
+  we override it to return empty lists.
 
 
-```Python hl_lines="5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53"
-from t3.logger import Logger
-from t3.simulate.adapter import SimulateAdapter
+## Step 3: Register the adapter
+
+At the bottom of the file, register the adapter with the factory:
+
+```python
+register_simulate_adapter("CanteraConstantTV", CanteraConstantTV)
+```
+
+The first argument is the string name that users will use in their input files.
+
+
+## Complete file
+
+Here is the complete `cantera_constant_tv.py`:
+
+```python
+"""
+Cantera Simulator Adapter module
+Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor at constant T-V
+"""
+
+import cantera as ct
+
+from t3.simulate.cantera_base import CanteraBase
 from t3.simulate.factory import register_simulate_adapter
 
-class NewSimulator(SimulateAdapter):
+
+class CanteraConstantTV(CanteraBase):
     """
-    Briefly summarize what conditions and/or assumptions are used in this simulator.
-
-    Args:
-        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.
-        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.
-        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.
-        logger (Logger): Instance of T3's Logger class.
-        atol (float): The absolute tolerance used when integrating.
-        rtol (float): The relative tolerance used when integrating.
-        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
-        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
-        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
-
-    Attributes:
-        <varies by class> 
+    Simulates ideal gases in a batch reactor at constant temperature and volume.
+    Uses ``ct.IdealGasReactor`` with ``energy='off'`` to maintain constant T,
+    and the default constant-volume behavior of ``IdealGasReactor``.
     """
 
-    def __init__(self,
-                 t3: dict,
-                 rmg: dict,
-                 paths: dict,
-                 logger: Type[Logger],
-                 atol: float = 1e-16,
-                 rtol: float = 1e-8,
-                 observable_list: Optional[list] = None,
-                 sa_atol: float = 1e-6,
-                 sa_rtol: float = 1e-4,
-                 global_observables: Optional[Type[List[str]]] = None
-                 ):
-        
-        # initialize attributes
-        self.t3 = t3
-        self.rmg = rmg
-        self.paths = paths
-        self.logger = logger
-        self.atol = atol
-        self.rtol = rtol
-        self.observable_list = observable_list or list()
-        self.sa_atol = sa_atol
-        self.sa_rtol = sa_rtol
-        self.global_observables = global_observables
-        
-        # run any additional setup required by the class
-        self.set_up()
+    cantera_reactor_type = 'IdealGasReactor'
 
-
-    def set_up(self):
-        """
-        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.
-        """
-        <Implement code here>    
-
-
-    def simulate(self):
-        """
-        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.
-        """
-        <Implement code here>
-
-
-    def get_sa_coefficients(self):
-        """
-        Obtain the sensitivity analysis coefficients.
-        
-        Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
-        """
-        <Implement code here>
-
+    def create_reactor(self):
+        """Create a constant-volume reactor with the energy equation disabled (isothermal)."""
+        return ct.IdealGasReactor(self.model, energy='off')
 
     def get_idt_by_T(self):
         """
-        Finds the ignition point by approximating dT/dt as a first order forward difference
-        and then finds the point of maximum slope.
+        Since this adapter simulates at constant T, there is no ignition.
 
         Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
-                             the ignition delay time in seconds and index at which idt occurs respectively.
+            idt_dict (dict): Dictionary whose values are empty lists.
         """
-        <Implement code here>
+        return {'idt': list(), 'idt_index': list()}
 
 
-register_simulate_adapter("NewSimulator", NewSimulator)
-
+register_simulate_adapter("CanteraConstantTV", CanteraConstantTV)
 ```
 
 
-The next step is to implement the following methods that were inherited by the abstract class: `set_up()`,
-`simulate()`, `get_sa_coefficients()`, and  `get_idt_by_T()`. These methods are present in all simulators, and 
- if they return anything, do so in a standard format. This standardizes the use of different simulators, making it 
- easy for the user to simulate their mechanism with different adapters. 
+## Step 4: Register the import
 
-```Python hl_lines="54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86"
-from t3.logger import Logger
-from t3.simulate.adapter import SimulateAdapter
-from t3.simulate.factory import register_simulate_adapter
+Add the import to `T3/t3/simulate/__init__.py`:
 
-class NewSimulator(SimulateAdapter):
-    """
-    Briefly summarize what conditions and/or assumptions are used in this simulator.
-
-    Args:
-        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.
-        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.
-        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.
-        logger (Logger): Instance of T3's Logger class.
-        atol (float): The absolute tolerance used when integrating.
-        rtol (float): The relative tolerance used when integrating.
-        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
-        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
-        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
-
-    Attributes:
-        <varies by class> 
-    """
-
-    def __init__(self,
-                 t3: dict,
-                 rmg: dict,
-                 paths: dict,
-                 logger: Type[Logger],
-                 atol: float = 1e-16,
-                 rtol: float = 1e-8,
-                 observable_list: Optional[list] = None,
-                 sa_atol: float = 1e-6,
-                 sa_rtol: float = 1e-4,
-                 global_observables: Optional[Type[List[str]]] = None
-                 ):
-        
-        # initialize attributes
-        self.t3 = t3
-        self.rmg = rmg
-        self.paths = paths
-        self.logger = logger
-        self.atol = atol
-        self.rtol = rtol
-        self.observable_list = observable_list or list()
-        self.sa_atol = sa_atol
-        self.sa_rtol = sa_rtol
-        self.global_observables = global_observables
-        
-        # run any additional setup required by the class
-        self.set_up()
-
-
-    def set_up(self):
-        """
-        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.
-        """
-        <Implement code here>    
-
-
-    def simulate(self):
-        """
-        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.
-        """
-        <Implement code here>
-
-
-    def get_sa_coefficients(self):
-        """
-        Obtain the sensitivity analysis coefficients.
-        
-        Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
-        """
-        <Implement code here>
-
-
-    def get_idt_by_T(self):
-        """
-        Finds the ignition point by approximating dT/dt as a first order forward difference
-        and then finds the point of maximum slope.
-
-        Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
-                             the ignition delay time in seconds and index at which idt occurs respectively.
-        """
-        <Implement code here>
-
-
-
-register_simulate_adapter("NewSimulator", NewSimulator)
-
+```python
+from t3.simulate.cantera_constant_tv import CanteraConstantTV
 ```
 
-Finally, register the adapter with the factory at the bottom of the file. 
-Also, initialize the simulator by importing it in `T3/t3/simulate/__init__.py`.
-
-```Python hl_lines="87 88 89"
-from t3.logger import Logger
-from t3.simulate.adapter import SimulateAdapter
-from t3.simulate.factory import register_simulate_adapter
-
-class NewSimulator(SimulateAdapter):
-    """
-    Briefly summarize what conditions and/or assumptions are used in this simulator.
-
-    Args:
-        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.
-        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.
-        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.
-        logger (Logger): Instance of T3's Logger class.
-        atol (float): The absolute tolerance used when integrating.
-        rtol (float): The relative tolerance used when integrating.
-        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: ['OH']
-        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.
-        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.
-        global_observables (Optional[List[str]]): List of global observables ['IgD', 'ESR', 'SL'] used by Cantera adapters.
-
-    Attributes:
-        <varies by class> 
-    """
-
-    def __init__(self,
-                 t3: dict,
-                 rmg: dict,
-                 paths: dict,
-                 logger: Type[Logger],
-                 atol: float = 1e-16,
-                 rtol: float = 1e-8,
-                 observable_list: Optional[list] = None,
-                 sa_atol: float = 1e-6,
-                 sa_rtol: float = 1e-4,
-                 global_observables: Optional[Type[List[str]]] = None
-                 ):
-        
-        # initialize attributes
-        self.t3 = t3
-        self.rmg = rmg
-        self.paths = paths
-        self.logger = logger
-        self.atol = atol
-        self.rtol = rtol
-        self.observable_list = observable_list or list()
-        self.sa_atol = sa_atol
-        self.sa_rtol = sa_rtol
-        self.global_observables = global_observables
-        
-        # run any additional setup required by the class
-        self.set_up()
+This ensures the adapter is registered when T3 starts.
 
 
-    def set_up(self):
-        """
-        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.
-        """
-        <Implement code here>    
+## Step 5: Use the adapter
 
+The new adapter can now be used in T3 input files:
 
-    def simulate(self):
-        """
-        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.
-        """
-        <Implement code here>
-
-
-    def get_sa_coefficients(self):
-        """
-        Obtain the sensitivity analysis coefficients.
-        
-        Returns:
-             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
-        """
-        <Implement code here>
-
-
-    def get_idt_by_T(self):
-        """
-        Finds the ignition point by approximating dT/dt as a first order forward difference
-        and then finds the point of maximum slope.
-
-        Returns:
-            idt_dict (dict): Dictionary whose keys include 'idt' and 'idt_index' and whose values are lists of
-                             the ignition delay time in seconds and index at which idt occurs respectively.
-        """
-        <Implement code here>
-
-
-
-register_simulate_adapter("NewSimulator", NewSimulator)
-
+```yaml
+t3:
+  sensitivity:
+    adapter: CanteraConstantTV
+    SA_threshold: 0.01
 ```
+
+
+## Comparison of existing Cantera adapters
+
+For reference, here is how the existing adapters differ:
+
+| Adapter | Reactor Class | `energy` | Behavior |
+|---|---|---|---|
+| `CanteraConstantTP` | `IdealGasConstPressureReactor` | `'off'` | Constant T, constant P |
+| `CanteraConstantHP` | `IdealGasConstPressureReactor` | (default: on) | Adiabatic, constant P |
+| `CanteraConstantUV` | `IdealGasReactor` | (default: on) | Adiabatic, constant V |
+| `CanteraPFR` | `IdealGasConstPressureReactor` | `'off'` | Isothermal PFR (Lagrangian) |
+| `CanteraPFRTProfile` | `IdealGasConstPressureReactor` | `'off'` | PFR with prescribed `T(z)` (Lagrangian, no SA) |
+| `CanteraJSR` | `IdealGasReactor` (in flow network) | `'off'` | Isothermal, isobaric jet stirred reactor (steady-state, open) |
+| **CanteraConstantTV** | `IdealGasReactor` | `'off'` | **Constant T, constant V** |
+
+The pattern is consistent: choose the Cantera reactor class that matches your
+volume/pressure constraint, then set `energy='off'` for isothermal operation
+or leave it on for adiabatic.
+
+
+## Adding tests
+
+It is recommended to add tests for the new adapter under `T3/tests/test_simulate/`.
+Follow the pattern in `test_cantera_constant_tp.py`:
+
+- Test that the adapter is registered in the factory.
+- Test `set_up()` with a sample mechanism.
+- Test `simulate()` produces reasonable species profiles.
+- Test `get_sa_coefficients()` returns the expected SA dictionary format.

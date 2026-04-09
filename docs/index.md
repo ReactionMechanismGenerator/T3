@@ -7,12 +7,9 @@
 </p>
 <p align="center">
 <a href="https://github.com/ReactionMechanismGenerator/T3/releases" target="_blank">
-    <img src="https://img.shields.io/badge/version-0.1.0-blue.svg" alt="Release">
+    <img src="https://img.shields.io/badge/version-{{T3_VERSION}}-blue.svg" alt="Release">
 </a>
 <img src="https://github.com/ReactionMechanismGenerator/T3/actions/workflows/cont_int.yml/badge.svg" alt="Build Status">
-<a href="https://lgtm.com/projects/g/ReactionMechanismGenerator/T3/context:python" target="_blank">
-    <img src="https://img.shields.io/lgtm/grade/python/g/ReactionMechanismGenerator/T3.svg?logo=lgtm&logoWidth=18" alt="Language grade: Python">
-</a>
 <a href="https://codecov.io/gh/ReactionMechanismGenerator/T3" target="_blank">
     <img src="https://codecov.io/gh/ReactionMechanismGenerator/T3/branch/main/graph/badge.svg" alt="Coverage">
 </a>
@@ -20,7 +17,7 @@
     <img src="http://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT license">
 </a>
 <a href="https://www.python.org/" target="_blank">
-    <img src="https://img.shields.io/badge/Python-3.7+-blue.svg" alt="Python">
+    <img src="https://img.shields.io/badge/Python-3.12+-blue.svg" alt="Python">
 </a>
 </p>
 
@@ -28,16 +25,9 @@
 
 **Documentation**: [T3 Documentation](https://reactionmechanismgenerator.github.io/T3/)
 
-
 **Source Code**: [T3 Source](https://github.com/ReactionMechanismGenerator/T3)
 
 ---
-
-> **Note:**
-    T3 is currently under intense development.
-    Features described in these documentation pages
-    which are still not implemented in the code will
-    be marked with an asterisk (*).
 
 ## General
 
@@ -62,18 +52,55 @@ The key features are:
   <img src="T3-circle.gif" alt="T3 scheme">
 </p>
 
-At it's core, T3 iteratively calls
-<a href="https://rmg.mit.edu/", target="_blank">RMG</a>
+At its core, T3 iteratively calls
+<a href="https://rmg.mit.edu/" target="_blank">RMG</a>
 and an automated QM tool
 (currently supporting only
-<a href="https://reactionmechanismgenerator.github.io/ARC/", target="_blank">ARC</a>)
+<a href="https://reactionmechanismgenerator.github.io/ARC/" target="_blank">ARC</a>)
 to generate a kinetic model and refine it, respectively.
+
+In each iteration:
+
+1. **RMG** generates a kinetic model using the specified mechanism generation parameters.
+2. **T3** runs **sensitivity analysis** (SA) on the generated model to identify the most
+   influential reactions and species.
+3. Species and reactions whose thermodynamic or kinetic parameters are uncertain
+   and appear as important in the SA are sent to **ARC** for quantum mechanical
+   calculation.
+4. The refined parameters are fed back into RMG for the next iteration.
+
 The maximal number of iterations along with various control parameters
 can be determined by the user.
-Calculated thermodynamic properties and rate coefficients can optionally
-be uploaded to the community cloud,
-<a href="https://tckdb.github.io/TCKDB/", target="_blank">TCKDB</a>*.
-T3 also queries TCKDB before instructing the automated QM tool to perform calculations.
+
+
+## Quick start
+
+After [installation](installation.md), activate the environment and run
+one of the [examples](examples.md):
+
+```bash
+conda activate t3_env
+cd ~/Code/T3/examples/minimal
+python -c "
+from t3 import T3
+import yaml
+
+with open('input.yml') as f:
+    args = yaml.safe_load(f)
+
+t3_object = T3(**args)
+t3_object.execute()
+"
+```
+
+Or use the YAML input file directly:
+
+```bash
+python ~/Code/T3/T3.py input.yml
+```
+
+See the [tutorials](tutorials/1_no_qm.md) for step-by-step guides.
+
 
 ## Intended audience
 
@@ -85,13 +112,15 @@ are given.
 
 ## Requirements
 
-Python 3.7+
+Python 3.12+
 
 T3 stands on the shoulders of giants:
 
 * <a href="https://rmg.mit.edu/" class="external-link" target="_blank">RMG</a> for model generation.
 * <a href="https://reactionmechanismgenerator.github.io/ARC/" class="external-link" target="_blank">ARC</a>
 for automating electronic structure calculations.
+* <a href="https://cantera.org/" class="external-link" target="_blank">Cantera</a>
+for mechanism simulation and sensitivity analysis.
 
 ## License
 

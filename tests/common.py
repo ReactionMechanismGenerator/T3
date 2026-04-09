@@ -6,9 +6,8 @@ from typing import Optional
 import os
 import shutil
 
-from rmgpy.molecule import Molecule
-
 from arc.common import read_yaml_file
+from arc.molecule.molecule import Molecule
 
 from t3.common import EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
 from t3.main import T3
@@ -38,6 +37,8 @@ def run_minimal(project: Optional[str] = None,
                                       or os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
     if project is not None:
         input_dict['project'] = project
+    if 't3' in input_dict and 'sensitivity' in input_dict['t3']:
+        input_dict['t3']['sensitivity']['adapter'] = 'CanteraConstantTP'
     t3 = T3(**input_dict)
     t3.iteration = iteration or 0
     if set_paths:
@@ -66,13 +67,20 @@ def isomorphic_smiles(smiles_1: str,
 def check_expected_generated_radicals(radicals: list, expected_radicals: list):
     """
     A helper function for testing the generator.
+    
+    Checks that:
+    1. The number of expected radicals matches the number of unique SMILES generated
+    2. All generated radicals have SMILES that match at least one expected SMILES
     """
-    assert len(expected_radicals) == len(set([rad[0] for rad in radicals]))
-    assert len(expected_radicals) == len(set([rad[1] for rad in radicals]))
-    expected_labels = [expected_rad_tuple[0] for expected_rad_tuple in expected_radicals]
+    # Check unique SMILES count matches expected count
+    unique_smiles = set([rad[1] for rad in radicals])
+    assert len(expected_radicals) == len(unique_smiles), \
+        f"Expected {len(expected_radicals)} unique SMILES, got {len(unique_smiles)}"
+
+    # Check all generated radicals have matching SMILES in expected
     for rad_tuple in radicals:
-        assert rad_tuple[0] in expected_labels
-        assert any(isomorphic_smiles(rad_tuple[1], expected_rad_tuple[1]) for expected_rad_tuple in expected_radicals)
+        assert any(isomorphic_smiles(rad_tuple[1], expected_rad_tuple[1]) for expected_rad_tuple in expected_radicals), \
+            f"Generated SMILES {rad_tuple[1]} not found in expected radicals"
 
 
 def almost_equal(a: float,

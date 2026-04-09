@@ -97,7 +97,7 @@ def test_t3_options_schema():
 
 def test_t3_sensitivity_schema():
     """Test creating an instance of T3Sensitivity"""
-    t3_sensitivity = T3Sensitivity(adapter='RMGConstantTP',
+    t3_sensitivity = T3Sensitivity(adapter='CanteraConstantTP',
                                    atol=1e-6,
                                    rtol=1e-4,
                                    global_observables=None,
@@ -107,7 +107,7 @@ def test_t3_sensitivity_schema():
                                    top_SA_species=10,
                                    top_SA_reactions=10
                                    )
-    assert t3_sensitivity.adapter is 'RMGConstantTP'
+    assert t3_sensitivity.adapter == 'CanteraConstantTP'
     assert t3_sensitivity.atol == 1e-6
     assert t3_sensitivity.rtol == 1e-4
     assert t3_sensitivity.global_observables is None
@@ -399,7 +399,7 @@ def test_rmg_reactors_schema():
                              T=[800, 1750],
                              P=[1e0, 1e1],
                              termination_conversion={'ethane': 0.2},
-                             termination_time=[5, 'hrs'],
+                             termination_time=(5, 'hrs'),
                              termination_rate_ratio=0.01,
                              conditions_per_iteration=12
                              )

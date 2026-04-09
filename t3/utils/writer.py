@@ -7,7 +7,9 @@ import shutil
 
 from mako.template import Template
 
-from t3.common import get_rmg_species_from_a_species_dict
+from arc.species.perceive import perceive_molecule_from_xyz
+
+from t3.chem import T3Species
 from t3.utils.generator import generate_radicals
 
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
@@ -69,7 +71,7 @@ species(
 """
     for spc in species:
         if spc['adjlist'] is not None:
-            structure = f'adjacencyList("""'
+            structure = 'adjacencyList("""'
             structure += spc['adjlist']
             structure += '""")'
         elif spc['smiles'] is not None:
@@ -77,12 +79,12 @@ species(
         elif spc['inchi'] is not None:
             structure = f"InChI('{spc['inchi']}')"
         else:
-            raise ValueError(f"A species must have either an adjlist, smiles, or inchi descriptor.")
+            raise ValueError("A species must have either an adjlist, smiles, or inchi descriptor.")
         rmg_input += Template(species_template).render(label=spc['label'],
                                                        reactive=spc['reactive'],
                                                        structure=structure)
         if spc['seed_all_rads'] is not None:
-            species_to_process = get_rmg_species_from_a_species_dict(species_dict=spc, raise_error=False)
+            species_to_process = get_species_obj_from_a_species_dict(species_dict=spc, raise_error=False)
             if species_to_process is not None:
                 radical_tuples = generate_radicals(species=species_to_process,
                                                    types=spc['seed_all_rads'],
@@ -226,9 +228,10 @@ liquidReactor(
     model = dict()
     model['tol_move_to_core'] = model_input['core_tolerance'][iteration] \
         if len(model_input['core_tolerance']) >= iteration + 1 else model_input['core_tolerance'][-1]
-    model['tolerance_interrupt_simulation'] = model_input['tolerance_interrupt_simulation'][iteration] \
-        if len(model_input['tolerance_interrupt_simulation']) >= iteration + 1 \
-        else model_input['tolerance_interrupt_simulation'][-1]
+    # Fall back to core_tolerance if tolerance_interrupt_simulation is None
+    tis = model_input['tolerance_interrupt_simulation'] or model_input['core_tolerance']
+    model['tolerance_interrupt_simulation'] = tis[iteration] \
+        if len(tis) >= iteration + 1 else tis[-1]
     model_keys_to_skip = ['core_tolerance', 'tolerance_interrupt_simulation', 'atol', 'rtol', 'sens_atol', 'sens_rtol']
     args = ''
     for key, value in model_input.items():
@@ -428,3 +431,44 @@ def to_camel_case(uv: str) -> str:
         else:
             capitalize = True
     return ccv
+
+
+def get_species_obj_from_a_species_dict(species_dict: dict,
+                                        raise_error: bool = False,
+                                        ) -> T3Species | None:
+    """
+    Get a T3Species instance that corresponds to a species specified under the rmg.species
+    section of the T3 input file (a species dictionary).
+
+    Args:
+        species_dict (dict): The species dictionary to process.
+        raise_error (bool, optional): Whether to raise an error if a T3Species instance cannot be generated.
+                                      Default: ``False``.
+
+    Raises:
+        ValueError: If the species dictionary does not have a specified structure (if ``raise_error`` is ``True``).
+
+    Returns:
+        T3Species: The corresponding T3Species instance, or ``None`` if it cannot be generated.
+    """
+    species, errored = None, False
+    if species_dict['adjlist'] is not None:
+        species = T3Species(label=species_dict['label'], adjlist=species_dict['adjlist'])
+    elif species_dict['smiles'] is not None:
+        species = T3Species(label=species_dict['label'], smiles=species_dict['smiles'])
+    elif species_dict['inchi'] is not None:
+        species = T3Species(label=species_dict['label'], inchi=species_dict['inchi'])
+    elif species_dict['xyz'] is not None:
+        xyz_entries = species_dict['xyz'] if isinstance(species_dict['xyz'], list) else [species_dict['xyz']]
+        for xyz in xyz_entries:
+            mol = perceive_molecule_from_xyz(xyz=xyz)
+            if mol is not None:
+                species = T3Species(label=species_dict['label'], mol=mol)
+                break
+        else:
+            errored = True
+    else:
+        errored = True
+    if errored and raise_error:
+        raise ValueError(f"The species corresponding to {species_dict['label']} does not have a specified structure.")
+    return species

@@ -12,7 +12,9 @@ from typing import Dict, List, Optional, Tuple
 
 from arc.common import get_git_branch, get_git_commit
 
-from t3.common import VERSION, dict_to_str, t3_path, time_lapse
+from t3.common import dict_to_str, t3_path, time_lapse
+from t3.version import __version__ as VERSION
+from t3.chem import T3Species, T3Reaction, T3Status
 
 
 class Logger(object):
@@ -41,7 +43,7 @@ class Logger(object):
                  verbose: Optional[int],
                  t0: datetime.datetime,
                  ):
-        
+
         self.project = project
         self.project_directory = project_directory
         self.verbose = verbose
@@ -166,188 +168,93 @@ class Logger(object):
 
     def log_species_to_calculate(self,
                                  species_keys: List[int],
-                                 species_dict: Dict[int, dict]):
+                                 species_dict: Dict[int, T3Species],
+                                 ):
         """
-        Report the species to be calculated in the next iteration.
-        The 'QM label' is used for reporting, it is principally the
-        RMG species label as entered by the user, or the label determined
-        by RMG if it does not contain forbidden characters and is
-        descriptive (i.e., NOT "S(1056)").
-    
-        Args:
-            species_keys (List[int]): Entries are T3 species indices.
-            species_dict (dict): The T3 species dictionary.
+        Log the species to be calculated.
 
-        Todo:
-            Log the reasons one by one with line breaks and enumerate
+        Args:
+            species_keys (List[int]): The T3 species indices to calculate.
+            species_dict (Dict[int, T3Species]): The T3 species dictionary.
         """
-        if len(species_keys):
-            self.info('\n\nSpecies to calculate thermodynamic data for:')
-            max_label_length = max([len(spc_dict['QM label'])
-                                    for key, spc_dict in species_dict.items() if key in species_keys])
-            max_smiles_length = max([len(spc_dict['object'].molecule[0].to_smiles())
-                                    for key, spc_dict in species_dict.items() if key in species_keys])
-            space1 = ' ' * (max_label_length - len('Label') + 1)
-            space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
-            self.info(f'Label{space1} SMILES{space2}    Reason for calculating thermo')
-            self.info(f'-----{space1} ------{space2}    -----------------------------')
-            for key in species_keys:
-                spc_dict = species_dict[key]
-                smiles = spc_dict['object'].molecule[0].to_smiles()
-                space1 = ' ' * (max_label_length - len(spc_dict['QM label']) + 1)
-                space2 = ' ' * (max_smiles_length - len(smiles) + 1)
-                one = '1. ' if len(spc_dict['reasons']) > 1 else '   '
-                self.info(f"{spc_dict['QM label']}{space1} {smiles}{space2} {one}{spc_dict['reasons'][0]}")
-                for j, reason in enumerate(spc_dict['reasons']):
-                    if j:
-                        self.info(f"{' ' * (max_label_length + max_smiles_length + 4)}{j + 1}. {spc_dict['reasons'][j]}")
+        self.log(f'\nSpecies to be calculated ({len(species_keys)}):')
+        for key in species_keys:
+            self.log(f'{key}: {species_dict[key].qm_label} '
+                     f'(reasons: {species_dict[key].reasons})')
 
     def log_reactions_to_calculate(self,
                                    reaction_keys: List[int],
-                                   reaction_dict: Dict[int, dict]):
+                                   reaction_dict: Dict[int, T3Reaction],
+                                   ):
         """
-        Report reaction rate coefficients to be calculated in the next iteration.
-        The reaction 'QM label' is used for reporting.
+        Log the reactions to be calculated.
 
         Args:
-            reaction_keys (List[int]): Entries are T3 reaction indices.
-            reaction_dict (dict): The T3 reaction dictionary.
+            reaction_keys (List[int]): The T3 reaction indices to calculate.
+            reaction_dict (Dict[int, T3Reaction]): The T3 reactions dictionary.
         """
-        if len(reaction_keys):
-            self.info('\n\nReactions to calculate high-pressure limit rate coefficients for:')
-            max_label_length = max([len(rxn_dict['QM label'])
-                                    for key, rxn_dict in reaction_dict.items() if key in reaction_keys])
-            max_smiles_length = max([len(rxn_dict['SMILES label'])
-                                    for key, rxn_dict in reaction_dict.items() if key in reaction_keys])
-            max_label_length = max(max_label_length, max_smiles_length)
-            space1 = ' ' * (max_label_length - len('Label') + 1)
-            self.info(f'Label{space1} Reason for calculating rate coefficient')
-            self.info(f'-----{space1} ---------------------------------------')
-            for key in reaction_keys:
-                rxn_dict = reaction_dict[key]
-                space1 = ' ' * (max_label_length - len(rxn_dict['QM label']) + 1)
-                self.info(f"\n{rxn_dict['QM label']}{space1} {rxn_dict['reasons']}")
-                self.info(f"{rxn_dict['SMILES label']}\n")
-                if hasattr(rxn_dict['object'], 'family') and rxn_dict['object'].family is not None:
-                    label = rxn_dict['object'].family if isinstance(rxn_dict['object'].family, str) \
-                        else rxn_dict['object'].family.label
-                    self.info(f'RMG family: {label}\n')
+        self.log(f'\nReactions to be calculated ({len(reaction_keys)}):')
+        for key in reaction_keys:
+            self.log(f'{key}: {reaction_dict[key].qm_label} '
+                     f'(reasons: {reaction_dict[key].reasons})')
 
-    def log_species_summary(self, species_dict: Dict[int, dict]):
+    def log_species_summary(self,
+                            species_dict: Dict[int, T3Species],
+                            ):
         """
-        Report species summary.
-    
-        Args:
-            species_dict (dict): The T3 species dictionary.
-        """
-        if species_dict:
-            self.info('\n\n\nSPECIES SUMMARY')
-            converged_keys, unconverged_keys = _get_converged_and_unconverged_keys(species_dict)
-
-            max_label_length = max([len(spc_dict['QM label'])
-                                    for spc_dict in species_dict.values()] + [6])
-            max_smiles_length = max([len(spc_dict['object'].molecule[0].to_smiles())
-                                     for spc_dict in species_dict.values()] + [6])
-            if len(converged_keys):
-                self.info('\nSpecies for which thermodynamic data was calculate:\n')
-                space1 = ' ' * (max_label_length - len('label') + 1)
-                space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
-                self.info(f'Label{space1} SMILES{space2} Reason for calculating thermo for this species')
-                self.info(f'-----{space1} ------{space2} ----------------------------------------------')
-                for key in converged_keys:
-                    smiles = species_dict[key]['object'].molecule[0].to_smiles()
-                    space1 = ' ' * (max_label_length - len(species_dict[key]['QM label']) + 1)
-                    space2 = ' ' * (max_smiles_length - len(smiles) + 1)
-                    self.info(f"{species_dict[key]['QM label']}{space1} {smiles}{space2} {species_dict[key]['reasons']}")
-            else:
-                self.info('\nNo species thermodynamic calculation converged!')
-
-            if len(unconverged_keys):
-                self.info('\nSpecies for which thermodynamic data did not converge:')
-                space1 = ' ' * (max_label_length - len('label') + 1)
-                space2 = ' ' * (max_smiles_length - len('SMILES') + 1)
-                self.info(f'         Label{space1} SMILES{space2} Reason for calculating thermo for this species')
-                self.info(f'         -----{space1} ------{space2} ----------------------------------------------')
-                for key in unconverged_keys:
-                    smiles = species_dict[key]['object'].molecule[0].to_smiles()
-                    space1 = ' ' * (max_label_length - len(species_dict[key]['QM label']) + 1)
-                    space2 = ' ' * (max_smiles_length - len(smiles) + 1)
-                    self.info(f"(FAILED) {species_dict[key]['QM label']}{space1} "
-                              f"{smiles}{space2} {species_dict[key]['reasons']}")
-            else:
-                self.info('\nAll species calculated by ARC successfully converged')
-
-    def log_reactions_summary(self, reactions_dict: Dict[int, dict]):
-        """
-        Report rate coefficient summary.
+        Log a summary of the species.
 
         Args:
-            reactions_dict (dict): The T3 reactions dictionary.
+            species_dict (Dict[int, T3Species]): The T3 species dictionary.
         """
-        if reactions_dict:
-            self.info('\n\n\nRATE COEFFICIENTS SUMMARY')
-            converged_keys, unconverged_keys = _get_converged_and_unconverged_keys(reactions_dict)
+        self.log('\n\n\nSpecies Summary:\n'
+                 '----------------')
+        for key, species in species_dict.items():
+            smiles = f' "{species.mol.to_smiles()}"' if species.mol else ''
+            self.log(f'{key}: {species.qm_label}{smiles} '
+                     f'(status: {clean_t3_status(species)})')
 
-            max_label_length = max([len(rxn_dict['QM label'])
-                                    for rxn_dict in reactions_dict.values()] + [6])
-            if len(converged_keys):
-                self.info('\nReactions for which rate coefficients were calculate:\n')
-                space1 = ' ' * (max_label_length - len('label') + 1)
-                self.info(f'Label{space1} Reason for calculating rate coefficient for this reaction')
-                self.info(f'-----{space1} ---------------------------------------------------------')
-                for key in converged_keys:
-                    space1 = ' ' * (max_label_length - len(reactions_dict[key]['QM label']) + 1)
-                    self.info(f"{reactions_dict[key]['QM label']}{space1} {reactions_dict[key]['reasons']}")
-            else:
-                self.info('\nNo species thermodynamic calculation converged!')
+    def log_reactions_summary(self,
+                              reactions_dict: Dict[int, T3Reaction],
+                              ):
+        """
+        Log a summary of the reactions.
 
-            if len(unconverged_keys):
-                self.info('\nReactions for which rate coefficient calculations were unsuccessful:')
-                space1 = ' ' * (max_label_length - len('label') + 1)
-                self.info(f'         Label{space1} Reason for calculating rate coefficient for this reaction')
-                self.info(f'         -----{space1} ---------------------------------------------------------')
-                for key in unconverged_keys:
-                    space1 = ' ' * (max_label_length - len(reactions_dict[key]['QM label']) + 1)
-                    self.info(f"(FAILED) {reactions_dict[key]['QM label']}{space1} {reactions_dict[key]['reasons']}")
-            else:
-                self.info('\nAll rate coefficients calculated by ARC successfully converged.')
+        Args:
+            reactions_dict (Dict[int, T3Reaction]): The T3 reactions dictionary.
+        """
+        self.log('\n\nReactions Summary:\n'
+                 '------------------')
+        for key, reaction in reactions_dict.items():
+            self.log(f'{key}: {reaction.qm_label} '
+                     f'(status: {reaction.t3_status})')
 
     def log_unconverged_species_and_reactions(self,
                                               species_keys: List[int],
-                                              species_dict: Dict[int, dict],
+                                              species_dict: Dict[int, T3Species],
                                               reaction_keys: List[int],
-                                              reaction_dict: Dict[int, dict],
+                                              reaction_dict: Dict[int, T3Reaction],
                                               ):
         """
-        Report unconverged species and reactions.
-    
+        Log the unconverged species and reactions.
+
         Args:
-            species_keys (List[int]): Entries are T3 species indices.
-            species_dict (dict): The T3 species dictionary.
-            reaction_keys (List[int]): Entries are T3 reaction indices.
-            reaction_dict (dict): The T3 reaction dictionary.
+            species_keys (List[int]): The T3 species indices that did not converge.
+            species_dict (Dict[int, T3Species]): The T3 species dictionary.
+            reaction_keys (List[int]): The T3 reaction indices that did not converge.
+            reaction_dict (Dict[int, T3Reaction]): The T3 reactions dictionary.
         """
-        if len(species_keys):
-            self.info('\nThermodynamic calculations for the following species did NOT converge:')
-            max_label_length = max([len(spc_dict['QM label'])
-                                    for key, spc_dict in species_dict.items() if key in species_keys] + [6])
-            space1 = ' ' * (max_label_length - len('label') + 1)
-            self.info(f'Label{space1} SMILES')
-            self.info(f'-----{space1} ------')
+        if species_keys:
+            self.log('\nThe following species did not converge:')
             for key in species_keys:
-                label = species_dict[key]['QM label']
-                space1 = ' ' * (max_label_length - len(label))
-                self.info(f"{label}{space1} {species_dict[key]['object'].molecule[0].to_smiles()}")
-            self.info('\n')
-        elif len(species_dict.keys()):
-            self.info('\nAll species thermodynamic calculations in this iteration successfully converged.\n')
-        if len(reaction_keys):
-            self.info('\nRate coefficient calculations for the following reactions did NOT converge:')
+                smiles = f' "{species_dict[key].mol.to_smiles()}"' if species_dict[key].mol else ''
+                self.log(f'{key}: {species_dict[key].qm_label}{smiles} '
+                         f'(reasons: {species_dict[key].reasons})')
+        if reaction_keys:
+            self.log('\nThe following reactions did not converge:')
             for key in reaction_keys:
-                self.info(reaction_dict[key]['QM label'])
-            self.info('\n')
-        elif len(reaction_dict.keys()):
-            self.info('\nAll reaction rate coefficients calculations in this iteration successfully converged.\n')
+                self.log(f'{key}: {reaction_dict[key].qm_label} '
+                         f'(reasons: {reaction_dict[key].reasons})')
 
     def log_args(self, schema: dict):
         """
@@ -362,20 +269,39 @@ class Logger(object):
                   f'{dict_to_str(schema)}')
 
 
-def _get_converged_and_unconverged_keys(object_dict: Dict[int, dict]) -> Tuple[List[int], List[int]]:
+    def _get_converged_and_unconverged_keys(self,
+                                            mapping: dict,
+                                            ) -> Tuple[List[int], List[int]]:
+        """
+        Get the converged and unconverged keys from a dictionary of species or reactions.
+
+        Args:
+            mapping (dict): The dictionary of species or reactions.
+
+        Returns:
+            Tuple[List[int], List[int]]: The converged and unconverged keys, respectively.
+        """
+        converged, unconverged = list(), list()
+        for key, obj in mapping.items():
+            if obj.t3_status == T3Status.CONVERGED:
+                converged.append(key)
+            else:
+                unconverged.append(key)
+        return converged, unconverged
+
+
+def clean_t3_status(t3_object) -> str:
     """
-    Get converged keys and unconverged keys from a dictionary representing species or reactions.
+    Returns a formatted status string for a T3 Species or Reaction.
+    Prioritizes the 'SA observable' flag, otherwise cleans the T3Status enum to Title Case.
 
     Args:
-        object_dict (dict): A dictionary representing ``species_dict`` or ``reactions_dict``.
+        t3_object (Union[T3Species, T3Reaction]): The object to check.
 
     Returns:
-        Tuple[List[int], List[int]]: ``converged_keys`` and ``unconverged_keys``.
+        str: The cleaned status string (e.g., "SA observable", "Converged").
     """
-    converged_keys, unconverged_keys = list(), list()
-    for key, sub_dict in object_dict.items():
-        if 'converged' in sub_dict.keys() and sub_dict['converged']:
-            converged_keys.append(key)
-        else:
-            unconverged_keys.append(key)
-    return converged_keys, unconverged_keys
+    status = str(t3_object.t3_status)
+    if "T3Status." in status:
+        status = status.replace("T3Status.", "")
+    return status.title()

@@ -1,0 +1,71 @@
+# Jet stirred reactor (JSR / PSR / CSTR) example
+#
+# An isothermal, isobaric, well-mixed open reactor with continuous feed and
+# outflow.  The CanteraJSR adapter sets the inlet mass flow rate so that the
+# residence time of the reactor equals the reactor entry's termination_time:
+#
+#     mdot = m_reactor / tau
+#
+# The reactor volume is controlled by the module-level VOLUME constant in
+# t3/simulate/cantera_jsr.py (defaults to 100 cm^3, matching common
+# experimental setups).  The steady-state composition is independent of
+# VOLUME for a fixed inlet state and tau — only the absolute mass flow scales.
+
+project: jsr_example
+
+t3:
+  options:
+    max_T3_iterations: 5
+    max_RMG_walltime: '00:00:10:00'
+  sensitivity:
+    adapter: CanteraJSR
+    atol: 1e-6
+    rtol: 1e-4
+    SA_threshold: 0.01
+    top_SA_species: 10
+    top_SA_reactions: 10
+
+rmg:
+  database:
+    thermo_libraries:
+      - primaryThermoLibrary
+      - BurkeH2O2
+    kinetics_libraries:
+      - BurkeH2O2inN2
+  species:
+    - label: H2
+      smiles: '[H][H]'
+      concentration: 0.04        # dilute fuel, typical JSR loading
+    - label: O2
+      smiles: '[O][O]'
+      concentration: 0.02
+    - label: N2
+      smiles: 'N#N'
+      concentration: 0.94
+      reactive: false
+      balance: true
+    - label: OH
+      smiles: '[OH]'
+      SA_observable: true
+    - label: H
+      smiles: '[H]'
+      SA_observable: true
+  reactors:
+    - type: gas batch constant T P
+      T: 1000                          # JSR temperature, K
+      P: 1                             # JSR pressure, bar
+      termination_conversion:
+        H2: 0.9
+      termination_time: [2, 's']       # residence time tau
+  model:
+    core_tolerance: [0.01, 0.005, 0.001]
+
+qm:
+  adapter: ARC
+  level_of_theory: b3lyp/6-31g(d,p)
+  job_types:
+    rotors: false
+    fine: false
+    freq: true
+    opt: true
+    sp: true

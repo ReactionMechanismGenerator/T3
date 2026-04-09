@@ -11,14 +11,10 @@ Other than subtle differences described here,
 both approaches are equivalent as they can define
 the same parameters which will be processed via the same routines.
 
-> **Note:**
-    Most examples in these documentation pages are in a **Python API** format rather than a [yaml](https://yaml.org/)
-    input file** format.
-
-  T3 also has a function for writing a corresponding
-  YAML input file after defining parameters via the API,
-  see the [How-to guides](how_to.md#save-an-input-file-from-the-api)
-  for more details.
+T3 also has a function for writing a corresponding
+YAML input file after defining parameters via the API,
+see the [How-to guides](how_to.md#save-an-input-file-from-the-api)
+for more details.
 
 ## Activate the environment
 
@@ -33,6 +29,43 @@ or, if you have set up the recommended aliases, simply type:
 ``` bash
 t3e
 ```
+
+## Running with an input file
+
+From the directory containing your `input.yml`:
+
+```bash
+python ~/Code/T3/T3.py input.yml
+```
+
+Or using the alias (if configured):
+
+```bash
+t3
+```
+
+## Running with the Python API
+
+```python
+from t3 import T3
+
+t3_object = T3(
+    project='my_project',
+    rmg={
+        'database': {'thermo_libraries': ['primaryThermoLibrary']},
+        'species': [
+            {'label': 'H2', 'smiles': '[H][H]', 'concentration': 0.67},
+            {'label': 'O2', 'smiles': '[O][O]', 'concentration': 0.33},
+        ],
+        'reactors': [{'type': 'gas batch constant T P', 'T': 1000, 'P': 1,
+                       'termination_conversion': {'H2': 0.9},
+                       'termination_time': [5, 's']}],
+        'model': {'core_tolerance': [0.01, 0.001]},
+    },
+)
+t3_object.execute()
+```
+
 
 ## Arguments
 
@@ -49,12 +82,11 @@ project's name under the ``Projects`` folder in the T3 repository.
 
 The ``verbose`` argument is optional. It is an integer representing the logging
 level used by T3. Allowed values are: ``10``: debug level (very verbose),
-``20``: info level (default), ``30``: warnings and errors only, ``40``: errors
-only. Pass ``None`` to this argument to avoid saving a log file.
+``20``: info level (default), ``30``: warnings and errors only.
 
 The primary arguments specify various options for the different respective packages
 (T3, RMG, and QM which currently only supports
-[ARC](https://reactionmechanismgenerator.github.io/ARC/index.html)
+[ARC](https://reactionmechanismgenerator.github.io/ARC/index.html)).
 Of these three, only the ``rmg`` argument is required. The ``qm`` argument must
 be specified if QM-based model refinement is desired
 (in most cases it is!). The ``t3`` argument contains optional T3-related
@@ -79,7 +111,6 @@ A few RMG arguments have different names altogether in T3. These arguments are:
 > **Note:**
     Some of the RMG default values have been changed in T3, see the [schema for details](https://github.com/ReactionMechanismGenerator/T3/blob/main/t3/schema.py)
 
-Use the below **reference guide** to learn more about these arguments.
 
 ## Reference guide
 
@@ -88,8 +119,9 @@ T3 has several types of reference guides:
 - The [tutorials](tutorials/1_no_qm.md) are a great place to start with,
   and provide an excellent basic reference guide. In T3's tutorials you can find
   complete, functioning, and worked-out examples with explanations.
-- The [commented input file](https://github.com/ReactionMechanismGenerator/T3/blob/main/examples/commented/input.yml) in T3's examples shows all available input arguments along with a brief explanation.
-- A [pydentic schema](https://github.com/ReactionMechanismGenerator/T3/blob/main/t3/schema.py) is used to validate the input file,
+- The [commented input file](input_reference.md) shows all available input arguments along with a brief explanation.
+- The [examples](examples.md) demonstrate specific T3 features with ready-to-run input files.
+- A [Pydantic schema](https://github.com/ReactionMechanismGenerator/T3/blob/main/t3/schema.py) is used to validate the input file,
   and could also be used as a reference for the various allowed arguments.
 
 ## Where next?

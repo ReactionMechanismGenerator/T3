@@ -1,0 +1,99 @@
+# Minimal Cantera YAML file for testing cantera_parser module
+
+generator: test
+cantera-version: 2.6.0
+
+units: {length: cm, time: s, quantity: mol, activation-energy: kcal/mol}
+
+phases:
+- name: gas
+  thermo: ideal-gas
+  elements: [H, O, N]
+  species: [H2, O2, H2O, OH, H, O]
+  kinetics: gas
+  state: {T: 300.0, P: 1 atm}
+
+species:
+- name: H2
+  composition: {H: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 3500.0]
+    data:
+    - [2.34433112, 7.98052075e-03, -1.9478151e-05, 2.01572094e-08, -7.37611761e-12,
+      -917.935173, 0.683010238]
+    - [3.3372792, -4.94024731e-05, 4.99456778e-07, -1.79566394e-10, 2.00255376e-14,
+      -950.158922, -3.20502331]
+  note: 'Thermo Source: Thermo library: primaryThermoLibrary | Transport Source: OneDMinN2'
+
+- name: O2
+  composition: {O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 3500.0]
+    data:
+    - [3.78245636, -2.99673416e-03, 9.84730201e-06, -9.68129509e-09, 3.24372837e-12,
+      -1063.94356, 3.65767573]
+    - [3.28253784, 1.48308754e-03, -7.57966669e-07, 2.09470555e-10, -2.16717794e-14,
+      -1088.45772, 5.45323129]
+  note: 'Thermo Source: Thermo library: BurkeH2O2 | Transport Source: PrimaryTransportLibrary'
+
+- name: H2O
+  composition: {H: 2, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 3500.0]
+    data:
+    - [4.19864056, -2.0364341e-03, 6.52040211e-06, -5.48797062e-09, 1.77197817e-12,
+      -30293.7267, -0.849032208]
+    - [3.03399249, 2.17691804e-03, -1.64072518e-07, -9.7041987e-11, 1.68200992e-14,
+      -30004.2971, 4.9667701]
+  note: 'Thermo Source: Thermo group additivity estimation: group(O2s-Cs+) | Transport Source: NOx2018'
+
+- name: OH
+  composition: {H: 1, O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 3500.0]
+    data:
+    - [3.99201543, -2.40131752e-03, 4.61793841e-06, -3.88113333e-09, 1.3641147e-12,
+      3615.08056, -0.103925458]
+    - [3.09288767, 5.48429716e-04, 1.26505228e-07, -8.79461556e-11, 1.17412376e-14,
+      3858.657, 4.4766961]
+  note: 'Thermo Source: QM calculation: CBS-QB3 | Transport Source: GRI-Mech'
+
+- name: H
+  composition: {H: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 3500.0]
+    data:
+    - [2.5, 7.05332819e-13, -1.99591964e-15, 2.30081632e-18, -9.27732332e-22,
+      25473.6599, -0.446682853]
+    - [2.5, 1e-13, 0.0, 0.0, 0.0, 25473.6599, -0.446682853]
+  note: 'Thermo Source: Thermo library: primaryThermoLibrary | Transport Source: OneDMinN2'
+
+- name: O
+  composition: {O: 1}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 3500.0]
+    data:
+    - [3.1682671, -3.27931884e-03, 6.64306396e-06, -6.12806624e-09, 2.11265971e-12,
+      29122.2592, 2.05193346]
+    - [2.56942078, -8.59741137e-05, 4.19484589e-08, -1.00177799e-11, 1.22833691e-15,
+      29217.5791, 4.78433864]
+  note: 'Thermo Source: Thermo library: primaryThermoLibrary | Transport Source: OneDMinN2'
+
+reactions:
+- equation: H2 + O <=> H + OH
+  rate-constant: {A: 5.08e+04, b: 2.67, Ea: 6.292}
+  note: 'Library reaction: BurkeH2O2'
+
+- equation: O2 + H <=> OH + O
+  rate-constant: {A: 2.65e+16, b: -0.6707, Ea: 17.041}
+  note: 'Template reaction: H_Abstraction'
+
+- equation: H2O + H <=> OH + H2
+  rate-constant: {A: 2.16e+08, b: 1.51, Ea: 3.43}
+  note: 'PDep reaction: Network #1'
