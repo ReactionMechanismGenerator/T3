@@ -116,6 +116,16 @@ def test_t3_sensitivity_schema():
     assert t3_sensitivity.ME_methods == ['CSE', 'MSC']
     assert t3_sensitivity.top_SA_species == 10
     assert t3_sensitivity.top_SA_reactions == 10
+    assert t3_sensitivity.max_sa_workers == 24  # default
+
+    # adapter may now be None (idt-style sweeps don't need a SA adapter)
+    t3_sensitivity_no_adapter = T3Sensitivity(adapter=None, max_sa_workers=8)
+    assert t3_sensitivity_no_adapter.adapter is None
+    assert t3_sensitivity_no_adapter.max_sa_workers == 8
+
+    with pytest.raises(ValidationError):
+        # max_sa_workers must be >= 1
+        T3Sensitivity(max_sa_workers=0)
 
     with pytest.raises(ValidationError):
         # check that adapter is constrained to at most 255 characters
@@ -363,6 +373,57 @@ def test_rmg_species_schema():
                    smiles='O',
                    constant=True,
                    )
+
+
+def test_rmg_species_role_fields():
+    """Test the new fuel/oxidizer/diluent role fields and their cross-field validation."""
+    # A valid fuel species with equivalence ratios.
+    fuel = RMGSpecies(label='propane',
+                      smiles='CCC',
+                      role='fuel',
+                      equivalence_ratios=[0.5, 1.0, 1.5],
+                      concentration=1.0,
+                      )
+    assert fuel.role == 'fuel'
+    assert fuel.equivalence_ratios == [0.5, 1.0, 1.5]
+
+    # A valid oxidizer species with a fraction.
+    o2 = RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer', oxidizer_fraction=0.5)
+    assert o2.role == 'oxidizer'
+    assert o2.oxidizer_fraction == 0.5
+
+    # A valid diluent species with a custom ratio.
+    n2 = RMGSpecies(label='N2', smiles='N#N', role='diluent', diluent_to_oxidizer_ratio=3.76)
+    assert n2.role == 'diluent'
+    assert n2.diluent_to_oxidizer_ratio == 3.76
+
+    # equivalence_ratios is rejected on a non-fuel species.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer',
+                   equivalence_ratios=[1.0])
+
+    # oxidizer_fraction is rejected on a non-oxidizer species.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='N2', smiles='N#N', role='diluent', oxidizer_fraction=0.5)
+
+    # diluent_to_oxidizer_ratio is rejected on a non-diluent species.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer',
+                   diluent_to_oxidizer_ratio=3.76)
+
+    # A fuel species without equivalence_ratios is rejected.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='propane', smiles='CCC', role='fuel')
+
+    # An invalid role string is rejected.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='X', smiles='C', role='catalyst')
+
+    # oxidizer_fraction must be in (0, 1].
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer', oxidizer_fraction=1.5)
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer', oxidizer_fraction=0)
 
 
 def test_rmg_reactors_schema():
