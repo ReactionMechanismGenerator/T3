@@ -79,6 +79,15 @@ make
 
 conda deactivate
 
+# Create or update t3_env
+cd ..
+cd T3 || { echo "Cannot find T3 directory"; exit 1; }
+if { $COMMAND_PKG env list | grep 't3_env'; } >/dev/null 2>&1; then
+    $COMMAND_PKG env update -n t3_env -f environment.yml
+else
+    $COMMAND_PKG env create -f environment.yml
+fi;
+
 # Switch to t3_env and clone/install ARC
 if [ "$COMMAND_PKG" == "micromamba" ]; then
     micromamba activate t3_env
