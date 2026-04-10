@@ -161,9 +161,24 @@ def rmg_job_converged(project_directory: str) -> Tuple[bool, Optional[str]]:
     return rmg_converged, error
 
 
+_DEFAULT_RMG_TIMEOUT_S = 6 * 3600  # 6 hours
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_walltime_to_seconds(walltime: str) -> int:
+    """Parse a 'DD:HH:MM:SS' walltime string to total seconds. Returns 0 for '00:00:00:00'."""
+    parts = walltime.split(':')
+    if len(parts) != 4:
+        return 0
+    days, hours, minutes, seconds = (int(p) for p in parts)
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
 def run_rmg_incore(rmg_input_file_path: str,
                    verbose: Optional[int] = None,
                    max_iterations: Optional[int] = None,
+                   walltime: Optional[str] = None,
                    ) -> bool:
     """
     Run RMG incore under the rmg_env.
@@ -172,10 +187,14 @@ def run_rmg_incore(rmg_input_file_path: str,
         rmg_input_file_path (str): The path to the RMG input file.
         max_iterations (int, optional): Max RMG iterations.
         verbose (int, optional): Level of verbosity.
+        walltime (str, optional): Max walltime in 'DD:HH:MM:SS' format. Defaults to 6 hours.
 
     Returns:
         bool: Whether an exception was raised.
     """
+    timeout_s = _parse_walltime_to_seconds(walltime) if walltime else 0
+    if timeout_s <= 0:
+        timeout_s = _DEFAULT_RMG_TIMEOUT_S
     project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
     verbose = f' -v {verbose}' if verbose is not None else ''
     max_iterations = f' -m {max_iterations}' if max_iterations is not None else ''
@@ -192,8 +211,13 @@ else
     echo "Micromamba/Mamba/Conda required" >&2
     exit 1
 fi' '''
-    stdout, stderr = execute_command(shell_script, shell=True, no_fail=True, executable='/bin/bash')
-    stderr_text = ''.join(stderr) if isinstance(stderr, list) else (stderr or '')
+    try:
+        result = subprocess.run(shell_script, shell=True, executable='/bin/bash',
+                                capture_output=True, text=True, timeout=timeout_s)
+        stderr_text = result.stderr or ''
+    except subprocess.TimeoutExpired:
+        logger.error(f'RMG incore timed out after {timeout_s}s')
+        return True
     if 'RMG threw an exception and did not converge.' in stderr_text:
         return True
     return False
@@ -271,6 +295,7 @@ def rmg_runner(rmg_input_file_path: str,
                t3_project_name: Optional[str] = None,
                rmg_execution_type: Optional[str] = None,
                restart_rmg: bool = False,
+               walltime: Optional[str] = None,
                ) -> bool:
     """
     Run an RMG job as a subprocess under the rmg_env.
@@ -286,6 +311,7 @@ def rmg_runner(rmg_input_file_path: str,
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
         rmg_execution_type (str, optional): The RMG execution type (incore or local). Also set via settings.py.
         restart_rmg (bool, optional): Whether to restart RMG from seed.
+        walltime (str, optional): Max walltime in 'DD:HH:MM:SS' format. Defaults to 6 hours.
 
     Returns:
         bool: Whether an exception was raised.
@@ -299,6 +325,7 @@ def rmg_runner(rmg_input_file_path: str,
         rmg_exception_encountered = run_rmg_incore(rmg_input_file_path=rmg_input_file_path,
                                                    verbose=verbose,
                                                    max_iterations=max_iterations,
+                                                   walltime=walltime,
                                                    )
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':

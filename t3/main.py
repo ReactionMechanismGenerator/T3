@@ -582,6 +582,7 @@ class T3(object):
                                                t3_project_name=self.project,
                                                rmg_execution_type=self.rmg['rmg_execution_type'],
                                                restart_rmg=restart_rmg,
+                                               walltime=self.t3['options']['max_RMG_walltime'],
                                                )
         if rmg_exception_encountered:
             self.rmg_exceptions_counter += 1
