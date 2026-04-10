@@ -38,6 +38,12 @@ ignore = [
     "W291",   # trailing whitespace
 ]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # unused imports in __init__.py are re-exports
 "t3/runners/rmg_incore_sa.py" = ["E701"]  # subprocess script, compact one-liners are fine

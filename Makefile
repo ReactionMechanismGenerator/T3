@@ -10,7 +10,7 @@ test:
 	pytest tests/ --cov -ra -vv
 
 test-main:
-	pytest tests/test_main.py -ra -vv
+	pytest tests/test_main.py --cov -ra -vv
 
 test-functional:
-	pytest tests/test_functional.py -ra -vv
+	pytest tests/test_functional.py --cov -ra -vv
