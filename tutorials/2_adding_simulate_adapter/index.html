@@ -15,21 +15,28 @@
         <link rel="canonical" href="https://reactionmechanismgenerator.github.io/T3/tutorials/2_adding_simulate_adapter/">
       
       
+        <link rel="prev" href="../1_no_qm/">
+      
+      
+        <link rel="next" href="../../how_to/">
+      
+      
+        
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.2.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>2. Adding a Simulate Adapter - T3</title>
+        <title>2. Adding a Cantera simulation adapter - T3</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.046329b4.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.85d0ee34.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -52,11 +59,10 @@
     
       <link rel="stylesheet" href="https://reactionmechanismgenerator.github.io/T3/css/custom.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
-    
     
     
   </head>
@@ -70,14 +76,13 @@
     <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="amber">
   
     
-    
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
         
-        <a href="#2-adding-a-simulate-adapter" class="md-skip">
+        <a href="#2-adding-a-cantera-simulation-adapter" class="md-skip">
           Skip to content
         </a>
       
@@ -96,12 +101,12 @@
     <a href="../.." title="T3" class="md-header__button md-logo" aria-label="T3" data-md-component="logo">
       
   
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
       
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
@@ -113,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              2. Adding a Simulate Adapter
+              2. Adding a Cantera simulation adapter
             
           </span>
         </div>
@@ -124,32 +129,35 @@
     
     
     
-      <label class="md-header__button md-icon" for="__search">
-        
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
-      </label>
-      <div class="md-search" data-md-component="search" role="dialog">
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
   <label class="md-search__overlay" for="__search"></label>
   <div class="md-search__inner" role="search">
     <form class="md-search__form" name="search">
       <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
       <label class="md-search__icon md-icon" for="__search">
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
       </label>
       <nav class="md-search__options" aria-label="Search">
         
         <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
       </nav>
       
     </form>
     <div class="md-search__output">
-      <div class="md-search__scrollwrap" data-md-scrollfix>
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
             Initializing search
@@ -160,13 +168,14 @@
     </div>
   </div>
 </div>
+      
     
     
       <div class="md-header__source">
         <a href="https://github.com/ReactionMechanismGenerator/t3" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M186.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1zM480 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2zm-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3zm-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
   </div>
   <div class="md-source__repository">
     T3
@@ -202,7 +211,7 @@
     <a href="../.." title="T3" class="md-nav__button md-logo" aria-label="T3" data-md-component="logo">
       
   
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
 
     </a>
     T3
@@ -212,7 +221,7 @@
       <a href="https://github.com/ReactionMechanismGenerator/t3" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M186.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1zM480 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2zm-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3zm-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
   </div>
   <div class="md-source__repository">
     T3
@@ -227,13 +236,21 @@
   
   
   
+  
     <li class="md-nav__item">
       <a href="../.." class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Home
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -243,6 +260,7 @@
     
       
       
+  
   
   
   
@@ -250,9 +268,16 @@
       <a href="../../installation/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Installation
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -262,6 +287,7 @@
     
       
       
+  
   
   
   
@@ -269,9 +295,16 @@
       <a href="../../running/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Running T3
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -283,33 +316,48 @@
       
   
   
+    
+  
+  
   
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
-        
+          
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Tutorials
+  
+
+    
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Tutorials
+            
+  
+    Tutorials
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -318,16 +366,187 @@
   
   
   
+  
     <li class="md-nav__item">
       <a href="../1_no_qm/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     1. Simple system, no QM
+  
+
+    
   </span>
+  
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Adding a Cantera simulation adapter
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Adding a Cantera simulation adapter
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-create-the-adapter-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Create the adapter file
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-define-the-adapter-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Define the adapter class
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-register-the-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Register the adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete file
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-register-the-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Register the import
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-use-the-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Use the adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-of-existing-cantera-adapters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison of existing Cantera adapters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -345,13 +564,21 @@
   
   
   
+  
     <li class="md-nav__item">
       <a href="../../how_to/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
-    How to guides
+    
+  
+    How-to guides
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -361,6 +588,61 @@
     
       
       
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../input_reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
   
   
   
@@ -368,9 +650,16 @@
       <a href="../../output/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Output
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -380,6 +669,7 @@
     
       
       
+  
   
   
   
@@ -387,9 +677,16 @@
       <a href="../../release/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Release notes
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -400,24 +697,6 @@
       
       
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../../credits/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Credits
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
   
   
   
@@ -425,9 +704,16 @@
       <a href="../../contribute/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Contribute
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -437,6 +723,7 @@
     
       
       
+  
   
   
   
@@ -444,28 +731,16 @@
       <a href="../../cite/" class="md-nav__link">
         
   
-  <span class="md-ellipsis">
-    How to cite
-  </span>
   
-
-      </a>
-    </li>
+  <span class="md-ellipsis">
+    
+  
+    How to cite
   
 
     
-      
-      
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../licence/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Licence
   </span>
+  
   
 
       </a>
@@ -493,6 +768,102 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#step-1-create-the-adapter-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Create the adapter file
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-2-define-the-adapter-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Define the adapter class
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-3-register-the-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Register the adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete file
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-4-register-the-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Register the import
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-5-use-the-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Use the adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-of-existing-cantera-adapters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison of existing Cantera adapters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -501,400 +872,217 @@
           
           
             <div class="md-content" data-md-component="content">
+              
               <article class="md-content__inner md-typeset">
                 
                   
 
+
   
   
 
 
-<h1 id="2-adding-a-simulate-adapter">2. Adding a Simulate Adapter<a class="headerlink" href="#2-adding-a-simulate-adapter" title="Permanent link">&para;</a></h1>
-<p>This tutorial demonstrates how to create a new simulate adapter for T3 to use when simulating
-a mechanism. The currently implemented Cantera, RMG, and RMS adapters provide good examples for this process, 
-though this tutorial explains the steps in more detail by walking through each piece of the code block below. 
-First, create a file under <code>T3/t3/simulate/</code> where we will write the new simulate adapter class.
-Next, add the required imports as shown below. Additional packages may be needed depending on the task, but at
-a minimum, these are required.</p>
-<div class="codehilite"><pre><span></span><code><span class="hll"><span class="kn">from</span> <span class="nn">t3.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
-</span><span class="hll"><span class="kn">from</span> <span class="nn">t3.simulate.adapter</span> <span class="kn">import</span> <span class="n">SimulateAdapter</span>
-</span><span class="hll"><span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
-</span><span class="hll">
-</span><span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
+<h1 id="2-adding-a-cantera-simulation-adapter">2. Adding a Cantera simulation adapter<a class="headerlink" href="#2-adding-a-cantera-simulation-adapter" title="Permanent link">&para;</a></h1>
+<p>This tutorial walks through creating a new Cantera-based simulation adapter for T3.
+We will implement a <strong>constant-volume, isothermal</strong> batch reactor (<code>CanteraConstantTV</code>),
+which is not currently part of T3 but is straightforward to add using the existing
+<code>CanteraBase</code> class.</p>
+<p>All Cantera adapters in T3 share a common base class that handles mechanism loading,
+condition generation, time integration, sensitivity analysis, and data storage.
+A new adapter only needs to:</p>
+<ol>
+<li>Set the <code>cantera_reactor_type</code> class attribute.</li>
+<li>Implement <code>create_reactor()</code> to return the appropriate Cantera reactor.</li>
+<li>Optionally override <code>get_idt_by_T()</code> if the default behavior is not appropriate.</li>
+</ol>
+<h2 id="step-1-create-the-adapter-file">Step 1: Create the adapter file<a class="headerlink" href="#step-1-create-the-adapter-file" title="Permanent link">&para;</a></h2>
+<p>Create a new file at <code>T3/t3/simulate/cantera_constant_tv.py</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Cantera Simulator Adapter module</span>
+<span class="sd">Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor at constant T-V</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">cantera</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ct</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">t3.simulate.cantera_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">CanteraBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">t3.simulate.factory</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_simulate_adapter</span>
+</code></pre></div>
+
+<p>These imports are the minimum required for any Cantera adapter:</p>
+<ul>
+<li><code>cantera</code> provides the reactor objects.</li>
+<li><code>CanteraBase</code> provides all shared simulation logic.</li>
+<li><code>register_simulate_adapter</code> registers the adapter so T3 can find it by name.</li>
+</ul>
+<h2 id="step-2-define-the-adapter-class">Step 2: Define the adapter class<a class="headerlink" href="#step-2-define-the-adapter-class" title="Permanent link">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CanteraConstantTV</span><span class="p">(</span><span class="n">CanteraBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.</span>
-<span class="sd">        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.</span>
-<span class="sd">        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.</span>
-<span class="sd">        logger (Logger): Instance of T3&#39;s Logger class.</span>
-<span class="sd">        atol (float): The absolute tolerance used when integrating.</span>
-<span class="sd">        rtol (float): The relative tolerance used when integrating.</span>
-<span class="sd">        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: [&#39;OH&#39;]</span>
-<span class="sd">        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.</span>
-<span class="sd">        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.</span>
-<span class="sd">        global_observables (Optional[List[str]]): List of global observables [&#39;IgD&#39;, &#39;ESR&#39;, &#39;SL&#39;] used by Cantera adapters.</span>
-
-<span class="sd">    Attributes:</span>
-<span class="sd">        &lt;varies by class&gt; </span>
+<span class="sd">    Simulates ideal gases in a batch reactor at constant temperature and volume.</span>
+<span class="sd">    Uses ``ct.IdealGasReactor`` with ``energy=&#39;off&#39;`` to maintain constant T,</span>
+<span class="sd">    and the default constant-volume behavior of ``IdealGasReactor``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
-                 <span class="n">t3</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">rmg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">paths</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">logger</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Logger</span><span class="p">],</span>
-                 <span class="n">atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-16</span><span class="p">,</span>
-                 <span class="n">rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
-                 <span class="n">observable_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-                 <span class="n">sa_atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
-                 <span class="n">sa_rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
-                 <span class="n">global_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
-                 <span class="p">):</span>
+    <span class="n">cantera_reactor_type</span> <span class="o">=</span> <span class="s1">&#39;IdealGasReactor&#39;</span>
 
-        <span class="c1"># initialize attributes</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">t3</span> <span class="o">=</span> <span class="n">t3</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rmg</span> <span class="o">=</span> <span class="n">rmg</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="n">paths</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">atol</span> <span class="o">=</span> <span class="n">atol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rtol</span> <span class="o">=</span> <span class="n">rtol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">observable_list</span> <span class="o">=</span> <span class="n">observable_list</span> <span class="ow">or</span> <span class="nb">list</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sa_atol</span> <span class="o">=</span> <span class="n">sa_atol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sa_rtol</span> <span class="o">=</span> <span class="n">sa_rtol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">global_observables</span> <span class="o">=</span> <span class="n">global_observables</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_reactor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a constant-volume reactor with the energy equation disabled (isothermal).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">ct</span><span class="o">.</span><span class="n">IdealGasReactor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
 
-        <span class="c1"># run any additional setup required by the class</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">set_up</span><span class="p">()</span>
-
-
-    <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
-
-
-    <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-    <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Obtain the sensitivity analysis coefficients.</span>
+<span class="sd">        Since this adapter simulates at constant T, there is no ignition.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py</span>
+<span class="sd">            idt_dict (dict): Dictionary whose values are empty lists.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-    <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
-<span class="sd">        and then finds the point of maximum slope.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            idt_dict (dict): Dictionary whose keys include &#39;idt&#39; and &#39;idt_index&#39; and whose values are lists of</span>
-<span class="sd">                             the ignition delay time in seconds and index at which idt occurs respectively.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-
-<span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;NewSimulator&quot;</span><span class="p">,</span> <span class="n">NewSimulator</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;idt&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(),</span> <span class="s1">&#39;idt_index&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">()}</span>
 </code></pre></div>
 
-<p>The new class must inherit from the abstract adapter class in <code>T3/t3/simulate/adapter.py</code>. All simulate adapters
-accept the same arguments, allowing them to be used in a standardized way. Thus, the <code>Args</code> section in the docstring
-and the <code>__init__</code> method will be constant for all adapters.</p>
-<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
-<span class="kn">from</span> <span class="nn">t3.simulate.adapter</span> <span class="kn">import</span> <span class="n">SimulateAdapter</span>
-<span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
-
-<span class="hll"><span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
-</span><span class="hll"><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span class="hll"><span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
-</span><span class="hll">
-</span><span class="hll"><span class="sd">    Args:</span>
-</span><span class="hll"><span class="sd">        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.</span>
-</span><span class="hll"><span class="sd">        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.</span>
-</span><span class="hll"><span class="sd">        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.</span>
-</span><span class="hll"><span class="sd">        logger (Logger): Instance of T3&#39;s Logger class.</span>
-</span><span class="hll"><span class="sd">        atol (float): The absolute tolerance used when integrating.</span>
-</span><span class="hll"><span class="sd">        rtol (float): The relative tolerance used when integrating.</span>
-</span><span class="hll"><span class="sd">        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: [&#39;OH&#39;]</span>
-</span><span class="hll"><span class="sd">        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.</span>
-</span><span class="hll"><span class="sd">        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.</span>
-</span><span class="hll"><span class="sd">        global_observables (Optional[List[str]]): List of global observables [&#39;IgD&#39;, &#39;ESR&#39;, &#39;SL&#39;] used by Cantera adapters.</span>
-</span><span class="hll">
-</span><span class="hll"><span class="sd">    Attributes:</span>
-</span><span class="hll"><span class="sd">        &lt;varies by class&gt; </span>
-</span><span class="hll"><span class="sd">    &quot;&quot;&quot;</span>
-</span><span class="hll">
-</span><span class="hll">    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">t3</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">rmg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">paths</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">logger</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Logger</span><span class="p">],</span>
-</span><span class="hll">                 <span class="n">atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-16</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">observable_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">sa_atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">sa_rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
-</span><span class="hll">                 <span class="n">global_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span class="hll">                 <span class="p">):</span>
-</span><span class="hll">
-</span><span class="hll">        <span class="c1"># initialize attributes</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">t3</span> <span class="o">=</span> <span class="n">t3</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">rmg</span> <span class="o">=</span> <span class="n">rmg</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="n">paths</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">atol</span> <span class="o">=</span> <span class="n">atol</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">rtol</span> <span class="o">=</span> <span class="n">rtol</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">observable_list</span> <span class="o">=</span> <span class="n">observable_list</span> <span class="ow">or</span> <span class="nb">list</span><span class="p">()</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">sa_atol</span> <span class="o">=</span> <span class="n">sa_atol</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">sa_rtol</span> <span class="o">=</span> <span class="n">sa_rtol</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">global_observables</span> <span class="o">=</span> <span class="n">global_observables</span>
-</span><span class="hll">
-</span><span class="hll">        <span class="c1"># run any additional setup required by the class</span>
-</span><span class="hll">        <span class="bp">self</span><span class="o">.</span><span class="n">set_up</span><span class="p">()</span>
-</span><span class="hll">
-</span><span class="hll">
-</span>    <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
-
-
-    <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-    <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Obtain the sensitivity analysis coefficients.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-    <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
-<span class="sd">        and then finds the point of maximum slope.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            idt_dict (dict): Dictionary whose keys include &#39;idt&#39; and &#39;idt_index&#39; and whose values are lists of</span>
-<span class="sd">                             the ignition delay time in seconds and index at which idt occurs respectively.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-<span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;NewSimulator&quot;</span><span class="p">,</span> <span class="n">NewSimulator</span><span class="p">)</span>
+<p>Key points:</p>
+<ul>
+<li><strong><code>cantera_reactor_type</code></strong>: A string identifying the Cantera reactor class. Used
+  internally for logging and identification.</li>
+<li><strong><code>create_reactor()</code></strong>: The only required method. It returns a Cantera reactor instance.
+  The <code>self.model</code> attribute (a <code>ct.Solution</code> object) is set up by <code>CanteraBase</code> during
+  initialization with the mechanism and initial conditions.</li>
+<li><strong><code>get_idt_by_T()</code></strong>: The default implementation in <code>CanteraBase</code> computes ignition
+  delay from the maximum <code>dT/dt</code>. Since a constant-T reactor has no temperature rise,
+  we override it to return empty lists.</li>
+</ul>
+<h2 id="step-3-register-the-adapter">Step 3: Register the adapter<a class="headerlink" href="#step-3-register-the-adapter" title="Permanent link">&para;</a></h2>
+<p>At the bottom of the file, register the adapter with the factory:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;CanteraConstantTV&quot;</span><span class="p">,</span> <span class="n">CanteraConstantTV</span><span class="p">)</span>
 </code></pre></div>
 
-<p>The next step is to implement the following methods that were inherited by the abstract class: <code>set_up()</code>,
-<code>simulate()</code>, <code>get_sa_coefficients()</code>, and  <code>get_idt_by_T()</code>. These methods are present in all simulators, and 
- if they return anything, do so in a standard format. This standardizes the use of different simulators, making it 
- easy for the user to simulate their mechanism with different adapters. </p>
-<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
-<span class="kn">from</span> <span class="nn">t3.simulate.adapter</span> <span class="kn">import</span> <span class="n">SimulateAdapter</span>
-<span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
+<p>The first argument is the string name that users will use in their input files.</p>
+<h2 id="complete-file">Complete file<a class="headerlink" href="#complete-file" title="Permanent link">&para;</a></h2>
+<p>Here is the complete <code>cantera_constant_tv.py</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Cantera Simulator Adapter module</span>
+<span class="sd">Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor at constant T-V</span>
+<span class="sd">&quot;&quot;&quot;</span>
 
-<span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cantera</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ct</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">t3.simulate.cantera_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">CanteraBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">t3.simulate.factory</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_simulate_adapter</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CanteraConstantTV</span><span class="p">(</span><span class="n">CanteraBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.</span>
-<span class="sd">        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.</span>
-<span class="sd">        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.</span>
-<span class="sd">        logger (Logger): Instance of T3&#39;s Logger class.</span>
-<span class="sd">        atol (float): The absolute tolerance used when integrating.</span>
-<span class="sd">        rtol (float): The relative tolerance used when integrating.</span>
-<span class="sd">        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: [&#39;OH&#39;]</span>
-<span class="sd">        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.</span>
-<span class="sd">        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.</span>
-<span class="sd">        global_observables (Optional[List[str]]): List of global observables [&#39;IgD&#39;, &#39;ESR&#39;, &#39;SL&#39;] used by Cantera adapters.</span>
-
-<span class="sd">    Attributes:</span>
-<span class="sd">        &lt;varies by class&gt; </span>
+<span class="sd">    Simulates ideal gases in a batch reactor at constant temperature and volume.</span>
+<span class="sd">    Uses ``ct.IdealGasReactor`` with ``energy=&#39;off&#39;`` to maintain constant T,</span>
+<span class="sd">    and the default constant-volume behavior of ``IdealGasReactor``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
-                 <span class="n">t3</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">rmg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">paths</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">logger</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Logger</span><span class="p">],</span>
-                 <span class="n">atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-16</span><span class="p">,</span>
-                 <span class="n">rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
-                 <span class="n">observable_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-                 <span class="n">sa_atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
-                 <span class="n">sa_rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
-                 <span class="n">global_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
-                 <span class="p">):</span>
+    <span class="n">cantera_reactor_type</span> <span class="o">=</span> <span class="s1">&#39;IdealGasReactor&#39;</span>
 
-        <span class="c1"># initialize attributes</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">t3</span> <span class="o">=</span> <span class="n">t3</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rmg</span> <span class="o">=</span> <span class="n">rmg</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="n">paths</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">atol</span> <span class="o">=</span> <span class="n">atol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rtol</span> <span class="o">=</span> <span class="n">rtol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">observable_list</span> <span class="o">=</span> <span class="n">observable_list</span> <span class="ow">or</span> <span class="nb">list</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sa_atol</span> <span class="o">=</span> <span class="n">sa_atol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sa_rtol</span> <span class="o">=</span> <span class="n">sa_rtol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">global_observables</span> <span class="o">=</span> <span class="n">global_observables</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_reactor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a constant-volume reactor with the energy equation disabled (isothermal).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">ct</span><span class="o">.</span><span class="n">IdealGasReactor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
 
-        <span class="c1"># run any additional setup required by the class</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">set_up</span><span class="p">()</span>
-
-
-<span class="hll">    <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span class="hll"><span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
-</span><span class="hll"><span class="sd">        &quot;&quot;&quot;</span>
-</span><span class="hll">        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
-</span><span class="hll">
-</span><span class="hll">
-</span><span class="hll">    <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span class="hll"><span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
-</span><span class="hll"><span class="sd">        &quot;&quot;&quot;</span>
-</span><span class="hll">        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-</span><span class="hll">
-</span><span class="hll">
-</span><span class="hll">    <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span class="hll"><span class="sd">        Obtain the sensitivity analysis coefficients.</span>
-</span><span class="hll">
-</span><span class="hll"><span class="sd">        Returns:</span>
-</span><span class="hll"><span class="sd">             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py</span>
-</span><span class="hll"><span class="sd">        &quot;&quot;&quot;</span>
-</span><span class="hll">        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-</span><span class="hll">
-</span><span class="hll">
-</span><span class="hll">    <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span class="hll"><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span class="hll"><span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
-</span><span class="hll"><span class="sd">        and then finds the point of maximum slope.</span>
-</span><span class="hll">
-</span><span class="hll"><span class="sd">        Returns:</span>
-</span><span class="hll"><span class="sd">            idt_dict (dict): Dictionary whose keys include &#39;idt&#39; and &#39;idt_index&#39; and whose values are lists of</span>
-</span><span class="hll"><span class="sd">                             the ignition delay time in seconds and index at which idt occurs respectively.</span>
-</span><span class="hll"><span class="sd">        &quot;&quot;&quot;</span>
-</span>        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-
-<span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;NewSimulator&quot;</span><span class="p">,</span> <span class="n">NewSimulator</span><span class="p">)</span>
-</code></pre></div>
-
-<p>Finally, register the adapter with the factory at the bottom of the file. 
-Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.py</code>.</p>
-<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">t3.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
-<span class="kn">from</span> <span class="nn">t3.simulate.adapter</span> <span class="kn">import</span> <span class="n">SimulateAdapter</span>
-<span class="kn">from</span> <span class="nn">t3.simulate.factory</span> <span class="kn">import</span> <span class="n">register_simulate_adapter</span>
-
-<span class="k">class</span> <span class="nc">NewSimulator</span><span class="p">(</span><span class="n">SimulateAdapter</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Briefly summarize what conditions and/or assumptions are used in this simulator.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        t3 (dict): The T3.t3 attribute, which is a dictionary containing the t3 block from the input yaml or API.</span>
-<span class="sd">        rmg (dict): The T3.rmg attribute, which is a dictionary containing the rmg block from the input yaml or API.</span>
-<span class="sd">        paths (dict): The T3.paths attribute, which is a dictionary containing relevant paths.</span>
-<span class="sd">        logger (Logger): Instance of T3&#39;s Logger class.</span>
-<span class="sd">        atol (float): The absolute tolerance used when integrating.</span>
-<span class="sd">        rtol (float): The relative tolerance used when integrating.</span>
-<span class="sd">        observable_list (Optional[list]): Species used for SA. Entries are species labels as strings. Example: [&#39;OH&#39;]</span>
-<span class="sd">        sa_atol (float, optional): The absolute tolerance used when performing sensitivity analysis.</span>
-<span class="sd">        sa_atol (float, optional): The relative tolerance used when performing sensitivity analysis.</span>
-<span class="sd">        global_observables (Optional[List[str]]): List of global observables [&#39;IgD&#39;, &#39;ESR&#39;, &#39;SL&#39;] used by Cantera adapters.</span>
-
-<span class="sd">    Attributes:</span>
-<span class="sd">        &lt;varies by class&gt; </span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
-                 <span class="n">t3</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">rmg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">paths</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-                 <span class="n">logger</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Logger</span><span class="p">],</span>
-                 <span class="n">atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-16</span><span class="p">,</span>
-                 <span class="n">rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
-                 <span class="n">observable_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-                 <span class="n">sa_atol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
-                 <span class="n">sa_rtol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
-                 <span class="n">global_observables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
-                 <span class="p">):</span>
-
-        <span class="c1"># initialize attributes</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">t3</span> <span class="o">=</span> <span class="n">t3</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rmg</span> <span class="o">=</span> <span class="n">rmg</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="n">paths</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">atol</span> <span class="o">=</span> <span class="n">atol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rtol</span> <span class="o">=</span> <span class="n">rtol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">observable_list</span> <span class="o">=</span> <span class="n">observable_list</span> <span class="ow">or</span> <span class="nb">list</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sa_atol</span> <span class="o">=</span> <span class="n">sa_atol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sa_rtol</span> <span class="o">=</span> <span class="n">sa_rtol</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">global_observables</span> <span class="o">=</span> <span class="n">global_observables</span>
-
-        <span class="c1"># run any additional setup required by the class</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">set_up</span><span class="p">()</span>
-
-
-    <span class="k">def</span> <span class="nf">set_up</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Set up the class, possibly by reading an input file, initializing values, and/or setting up the domain.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>    
-
-
-    <span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Simulate a job to obtain species profiles. Run sensitivity analysis if requested.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-
-
-    <span class="k">def</span> <span class="nf">get_sa_coefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Obtain the sensitivity analysis coefficients.</span>
+<span class="sd">        Since this adapter simulates at constant T, there is no ignition.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">             sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py</span>
+<span class="sd">            idt_dict (dict): Dictionary whose values are empty lists.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;idt&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(),</span> <span class="s1">&#39;idt_index&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">()}</span>
 
 
-    <span class="k">def</span> <span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Finds the ignition point by approximating dT/dt as a first order forward difference</span>
-<span class="sd">        and then finds the point of maximum slope.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            idt_dict (dict): Dictionary whose keys include &#39;idt&#39; and &#39;idt_index&#39; and whose values are lists of</span>
-<span class="sd">                             the ignition delay time in seconds and index at which idt occurs respectively.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-<span class="hll">        <span class="o">&lt;</span><span class="n">Implement</span> <span class="n">code</span> <span class="n">here</span><span class="o">&gt;</span>
-</span><span class="hll">
-</span><span class="hll">
-</span>
-<span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;NewSimulator&quot;</span><span class="p">,</span> <span class="n">NewSimulator</span><span class="p">)</span>
+<span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;CanteraConstantTV&quot;</span><span class="p">,</span> <span class="n">CanteraConstantTV</span><span class="p">)</span>
 </code></pre></div>
+
+<h2 id="step-4-register-the-import">Step 4: Register the import<a class="headerlink" href="#step-4-register-the-import" title="Permanent link">&para;</a></h2>
+<p>Add the import to <code>T3/t3/simulate/__init__.py</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">t3.simulate.cantera_constant_tv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CanteraConstantTV</span>
+</code></pre></div>
+
+<p>This ensures the adapter is registered when T3 starts.</p>
+<h2 id="step-5-use-the-adapter">Step 5: Use the adapter<a class="headerlink" href="#step-5-use-the-adapter" title="Permanent link">&para;</a></h2>
+<p>The new adapter can now be used in T3 input files:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">t3</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">sensitivity</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CanteraConstantTV</span>
+<span class="w">    </span><span class="nt">SA_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
+</code></pre></div>
+
+<h2 id="comparison-of-existing-cantera-adapters">Comparison of existing Cantera adapters<a class="headerlink" href="#comparison-of-existing-cantera-adapters" title="Permanent link">&para;</a></h2>
+<p>For reference, here is how the existing adapters differ:</p>
+<table>
+<thead>
+<tr>
+<th>Adapter</th>
+<th>Reactor Class</th>
+<th><code>energy</code></th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CanteraConstantTP</code></td>
+<td><code>IdealGasConstPressureReactor</code></td>
+<td><code>'off'</code></td>
+<td>Constant T, constant P</td>
+</tr>
+<tr>
+<td><code>CanteraConstantHP</code></td>
+<td><code>IdealGasConstPressureReactor</code></td>
+<td>(default: on)</td>
+<td>Adiabatic, constant P</td>
+</tr>
+<tr>
+<td><code>CanteraConstantUV</code></td>
+<td><code>IdealGasReactor</code></td>
+<td>(default: on)</td>
+<td>Adiabatic, constant V</td>
+</tr>
+<tr>
+<td><code>CanteraPFR</code></td>
+<td><code>IdealGasConstPressureReactor</code></td>
+<td><code>'off'</code></td>
+<td>Isothermal PFR (Lagrangian)</td>
+</tr>
+<tr>
+<td><code>CanteraPFRTProfile</code></td>
+<td><code>IdealGasConstPressureReactor</code></td>
+<td><code>'off'</code></td>
+<td>PFR with prescribed <code>T(z)</code> (Lagrangian, no SA)</td>
+</tr>
+<tr>
+<td><code>CanteraJSR</code></td>
+<td><code>IdealGasReactor</code> (in flow network)</td>
+<td><code>'off'</code></td>
+<td>Isothermal, isobaric jet stirred reactor (steady-state, open)</td>
+</tr>
+<tr>
+<td><strong>CanteraConstantTV</strong></td>
+<td><code>IdealGasReactor</code></td>
+<td><code>'off'</code></td>
+<td><strong>Constant T, constant V</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The pattern is consistent: choose the Cantera reactor class that matches your
+volume/pressure constraint, then set <code>energy='off'</code> for isothermal operation
+or leave it on for adiabatic.</p>
+<h2 id="adding-tests">Adding tests<a class="headerlink" href="#adding-tests" title="Permanent link">&para;</a></h2>
+<p>It is recommended to add tests for the new adapter under <code>T3/tests/test_simulate/</code>.
+Follow the pattern in <code>test_cantera_constant_tp.py</code>:</p>
+<ul>
+<li>Test that the adapter is registered in the factory.</li>
+<li>Test <code>set_up()</code> with a sample mechanism.</li>
+<li>Test <code>simulate()</code> produces reasonable species profiles.</li>
+<li>Test <code>get_sa_coefficients()</code> returns the expected SA dictionary format.</li>
+</ul>
+
+
+
+
+
+
+
 
 
 
@@ -905,6 +1093,7 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
             </div>
           
           
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
         
       </main>
@@ -923,7 +1112,8 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
   
 </div>
       
-        <div class="md-social">
+        
+<div class="md-social">
   
     
     
@@ -933,7 +1123,7 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
       
     
     <a href="https://github.com/ReactionMechanismGenerator/T3" target="_blank" rel="noopener" title="github.com" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M186.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1zM480 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2zm-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3zm-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
     </a>
   
     
@@ -944,7 +1134,7 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
       
     
     <a href="https://www.linkedin.com/in/alongd/" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
     </a>
   
 </div>
@@ -958,10 +1148,14 @@ Also, initialize the simulator by importing it in <code>T3/t3/simulate/__init__.
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["instant"], "search": "../../assets/javascripts/workers/search.dfff1995.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.dff1b7c8.min.js"></script>
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["instant"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js"></script>
       

@@ -21,8 +21,11 @@
         <link rel="next" href="../running/">
       
       
+        
+      
+      
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.2.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -30,10 +33,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.046329b4.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.85d0ee34.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -56,11 +59,10 @@
     
       <link rel="stylesheet" href="https://reactionmechanismgenerator.github.io/T3/css/custom.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
-    
     
     
   </head>
@@ -73,7 +75,6 @@
     
     <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="amber">
   
-    
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
@@ -100,12 +101,12 @@
     <a href=".." title="T3" class="md-header__button md-logo" aria-label="T3" data-md-component="logo">
       
   
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
       
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
@@ -128,32 +129,35 @@
     
     
     
-      <label class="md-header__button md-icon" for="__search">
-        
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
-      </label>
-      <div class="md-search" data-md-component="search" role="dialog">
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
   <label class="md-search__overlay" for="__search"></label>
   <div class="md-search__inner" role="search">
     <form class="md-search__form" name="search">
       <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
       <label class="md-search__icon md-icon" for="__search">
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
         
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
       </label>
       <nav class="md-search__options" aria-label="Search">
         
         <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
       </nav>
       
     </form>
     <div class="md-search__output">
-      <div class="md-search__scrollwrap" data-md-scrollfix>
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
             Initializing search
@@ -164,13 +168,14 @@
     </div>
   </div>
 </div>
+      
     
     
       <div class="md-header__source">
         <a href="https://github.com/ReactionMechanismGenerator/t3" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M186.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1zM480 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2zm-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3zm-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
   </div>
   <div class="md-source__repository">
     T3
@@ -206,7 +211,7 @@
     <a href=".." title="T3" class="md-nav__button md-logo" aria-label="T3" data-md-component="logo">
       
   
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
 
     </a>
     T3
@@ -216,7 +221,7 @@
       <a href="https://github.com/ReactionMechanismGenerator/t3" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M186.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1zM480 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2zm-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3zm-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
   </div>
   <div class="md-source__repository">
     T3
@@ -231,13 +236,21 @@
   
   
   
+  
     <li class="md-nav__item">
       <a href=".." class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Home
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -252,6 +265,7 @@
     
   
   
+  
     <li class="md-nav__item md-nav__item--active">
       
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
@@ -263,9 +277,16 @@
         <label class="md-nav__link md-nav__link--active" for="__toc">
           
   
+  
   <span class="md-ellipsis">
+    
+  
     Installation
+  
+
+    
   </span>
+  
   
 
           <span class="md-nav__icon md-icon"></span>
@@ -274,9 +295,16 @@
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Installation
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -297,39 +325,35 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#package-manager-and-cloning-from-github" class="md-nav__link">
-    Package Manager and Cloning from Github
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
   </a>
   
-    <nav class="md-nav" aria-label="Package Manager and Cloning from Github">
+    <nav class="md-nav" aria-label="Prerequisites">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#unix-like-platforms" class="md-nav__link">
-    Unix-like platforms
-  </a>
-  
-    <nav class="md-nav" aria-label="Unix-like platforms">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-install-curl-or-wget" class="md-nav__link">
-    1. Install curl or wget
-  </a>
-  
-    <nav class="md-nav" aria-label="1. Install curl or wget">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1" class="md-nav__link">
-    Option 1
+  <a href="#1-install-system-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Install system packages
+      
+    </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#option-2" class="md-nav__link">
-    Option 2
+  <a href="#2-install-a-conda-package-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Install a conda package manager
+      
+    </span>
   </a>
   
 </li>
@@ -338,44 +362,104 @@
     </nav>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#2-install-compiler" class="md-nav__link">
-    2. Install compiler
+      
+        <li class="md-nav__item">
+  <a href="#install-t3-and-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install T3 and dependencies
+      
+    </span>
   </a>
   
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-download-python-package-manager" class="md-nav__link">
-    3. Download Python Package Manager
-  </a>
-  
-    <nav class="md-nav" aria-label="3. Download Python Package Manager">
+    <nav class="md-nav" aria-label="Install T3 and dependencies">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#option-1_1" class="md-nav__link">
-    Option 1
+  <a href="#option-1-automated-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1: Automated installation
+      
+    </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#option-2_1" class="md-nav__link">
-    Option 2
+  <a href="#option-2-manual-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2: Manual installation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Option 2: Manual installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#clone-repositories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clone repositories
+      
+    </span>
   </a>
   
 </li>
         
-      </ul>
-    </nav>
+          <li class="md-nav__item">
+  <a href="#create-the-t3-conda-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create the T3 conda environment
+      
+    </span>
+  </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-clone-t3-repository" class="md-nav__link">
-    4. Clone T3 Repository
+  <a href="#install-pyrdl-required-by-arc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install PyRDL (required by ARC)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compile-arc-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile ARC extensions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-the-rmg-conda-environment-and-compile-rmg-py" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create the RMG conda environment and compile RMG-Py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#set-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set environment variables
+      
+    </span>
   </a>
   
 </li>
@@ -391,69 +475,34 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#setting-up-path" class="md-nav__link">
-    Setting up Path
+  <a href="#verify-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify the installation
+      
+    </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Setting up Path">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1_2" class="md-nav__link">
-    Option 1
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-2_2" class="md-nav__link">
-    Option 2
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-dependencies" class="md-nav__link">
-    Install dependencies
-  </a>
-  
-    <nav class="md-nav" aria-label="Install dependencies">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1_3" class="md-nav__link">
-    Option 1
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-2_3" class="md-nav__link">
-    Option 2
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
+  <a href="#optional-convenient-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
       
-        <li class="md-nav__item">
-  <a href="#add-t3-aliases-to-your-bashrc" class="md-nav__link">
-    Add T3 aliases to your .bashrc
+        Optional: convenient aliases
+      
+    </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
   <a href="#updating-t3" class="md-nav__link">
-    Updating T3
+    <span class="md-ellipsis">
+      
+        Updating T3
+      
+    </span>
   </a>
   
 </li>
@@ -471,13 +520,21 @@
   
   
   
+  
     <li class="md-nav__item">
       <a href="../running/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Running T3
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -490,6 +547,9 @@
   
   
   
+  
+    
+    
     
     
     
@@ -497,16 +557,22 @@
       
         
         
-        
-        
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
+          
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Tutorials
+  
+
+    
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -515,7 +581,11 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Tutorials
+            
+  
+    Tutorials
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -524,13 +594,49 @@
   
   
   
+  
     <li class="md-nav__item">
       <a href="../tutorials/1_no_qm/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     1. Simple system, no QM
+  
+
+    
   </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/2_adding_simulate_adapter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Adding a Cantera simulation adapter
+  
+
+    
+  </span>
+  
   
 
       </a>
@@ -551,13 +657,21 @@
   
   
   
+  
     <li class="md-nav__item">
       <a href="../how_to/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
-    How to guides
+    
+  
+    How-to guides
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -567,6 +681,61 @@
     
       
       
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input_reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
   
   
   
@@ -574,9 +743,16 @@
       <a href="../output/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Output
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -586,6 +762,7 @@
     
       
       
+  
   
   
   
@@ -593,9 +770,16 @@
       <a href="../release/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Release notes
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -606,24 +790,6 @@
       
       
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../credits/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Credits
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
   
   
   
@@ -631,9 +797,16 @@
       <a href="../contribute/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Contribute
+  
+
+    
   </span>
+  
   
 
       </a>
@@ -643,6 +816,7 @@
     
       
       
+  
   
   
   
@@ -650,28 +824,16 @@
       <a href="../cite/" class="md-nav__link">
         
   
-  <span class="md-ellipsis">
-    How to cite
-  </span>
   
-
-      </a>
-    </li>
+  <span class="md-ellipsis">
+    
+  
+    How to cite
   
 
     
-      
-      
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../licence/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Licence
   </span>
+  
   
 
       </a>
@@ -706,39 +868,35 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#package-manager-and-cloning-from-github" class="md-nav__link">
-    Package Manager and Cloning from Github
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
   </a>
   
-    <nav class="md-nav" aria-label="Package Manager and Cloning from Github">
+    <nav class="md-nav" aria-label="Prerequisites">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#unix-like-platforms" class="md-nav__link">
-    Unix-like platforms
-  </a>
-  
-    <nav class="md-nav" aria-label="Unix-like platforms">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-install-curl-or-wget" class="md-nav__link">
-    1. Install curl or wget
-  </a>
-  
-    <nav class="md-nav" aria-label="1. Install curl or wget">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1" class="md-nav__link">
-    Option 1
+  <a href="#1-install-system-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Install system packages
+      
+    </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#option-2" class="md-nav__link">
-    Option 2
+  <a href="#2-install-a-conda-package-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Install a conda package manager
+      
+    </span>
   </a>
   
 </li>
@@ -747,44 +905,104 @@
     </nav>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#2-install-compiler" class="md-nav__link">
-    2. Install compiler
+      
+        <li class="md-nav__item">
+  <a href="#install-t3-and-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install T3 and dependencies
+      
+    </span>
   </a>
   
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-download-python-package-manager" class="md-nav__link">
-    3. Download Python Package Manager
-  </a>
-  
-    <nav class="md-nav" aria-label="3. Download Python Package Manager">
+    <nav class="md-nav" aria-label="Install T3 and dependencies">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#option-1_1" class="md-nav__link">
-    Option 1
+  <a href="#option-1-automated-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 1: Automated installation
+      
+    </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#option-2_1" class="md-nav__link">
-    Option 2
+  <a href="#option-2-manual-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option 2: Manual installation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Option 2: Manual installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#clone-repositories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clone repositories
+      
+    </span>
   </a>
   
 </li>
         
-      </ul>
-    </nav>
+          <li class="md-nav__item">
+  <a href="#create-the-t3-conda-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create the T3 conda environment
+      
+    </span>
+  </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-clone-t3-repository" class="md-nav__link">
-    4. Clone T3 Repository
+  <a href="#install-pyrdl-required-by-arc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install PyRDL (required by ARC)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compile-arc-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile ARC extensions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-the-rmg-conda-environment-and-compile-rmg-py" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create the RMG conda environment and compile RMG-Py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#set-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set environment variables
+      
+    </span>
   </a>
   
 </li>
@@ -800,69 +1018,34 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#setting-up-path" class="md-nav__link">
-    Setting up Path
+  <a href="#verify-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify the installation
+      
+    </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Setting up Path">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1_2" class="md-nav__link">
-    Option 1
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-2_2" class="md-nav__link">
-    Option 2
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-dependencies" class="md-nav__link">
-    Install dependencies
-  </a>
-  
-    <nav class="md-nav" aria-label="Install dependencies">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1_3" class="md-nav__link">
-    Option 1
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-2_3" class="md-nav__link">
-    Option 2
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
+  <a href="#optional-convenient-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
       
-        <li class="md-nav__item">
-  <a href="#add-t3-aliases-to-your-bashrc" class="md-nav__link">
-    Add T3 aliases to your .bashrc
+        Optional: convenient aliases
+      
+    </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
   <a href="#updating-t3" class="md-nav__link">
-    Updating T3
+    <span class="md-ellipsis">
+      
+        Updating T3
+      
+    </span>
   </a>
   
 </li>
@@ -877,167 +1060,195 @@
           
           
             <div class="md-content" data-md-component="content">
+              
               <article class="md-content__inner md-typeset">
                 
                   
+
 
   
   
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<p>T3 was only tested on <em>Linux (Ubuntu_ 22.04.1 LTS)</em> and <em>MacOS</em>.
-We don't expect it to work on Windows.</p>
-<p>It can be installed on a server, as well as on your local desktop / laptop, in order to submit jobs to the server/s.</p>
-<h2 id="package-manager-and-cloning-from-github">Package Manager and Cloning from Github<a class="headerlink" href="#package-manager-and-cloning-from-github" title="Permanent link">&para;</a></h2>
-<h3 id="unix-like-platforms">Unix-like platforms<a class="headerlink" href="#unix-like-platforms" title="Permanent link">&para;</a></h3>
-<h4 id="1-install-curl-or-wget">1. Install <code>curl</code> or <code>wget</code><a class="headerlink" href="#1-install-curl-or-wget" title="Permanent link">&para;</a></h4>
-<p>You can install either package.</p>
-<h5 id="option-1"><em>Option 1</em><a class="headerlink" href="#option-1" title="Permanent link">&para;</a></h5>
-<p><code>bash
-   sudo apt install curl</code></p>
-<h5 id="option-2"><em>Option 2</em><a class="headerlink" href="#option-2" title="Permanent link">&para;</a></h5>
-<p><code>bash
-  sudo apt install wget</code></p>
-<h4 id="2-install-compiler">2. Install compiler<a class="headerlink" href="#2-install-compiler" title="Permanent link">&para;</a></h4>
+<p>T3 was tested on <strong>Linux</strong> (Ubuntu 22.04 LTS and later).</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<h3 id="1-install-system-packages">1. Install system packages<a class="headerlink" href="#1-install-system-packages" title="Permanent link">&para;</a></h3>
+<p>You need <code>git</code>, a C/C++ compiler, and either <code>curl</code> or <code>wget</code>.</p>
 <ul>
 <li>
-<p>Ubuntu or Debian</p>
+<p><strong>Ubuntu / Debian</strong>:</p>
 <p><code>bash
-sudo apt install git gcc g++ make</code></p>
+sudo apt install git gcc g++ make curl</code></p>
 </li>
 <li>
-<p>Fedora or Red Hat</p>
+<p><strong>Fedora / Red Hat</strong>:</p>
 <p><code>bash
-sudo dnf install git gcc gcc-c++ make</code></p>
+sudo dnf install git gcc gcc-c++ make curl</code></p>
+</li>
+<li>
+<p><strong>macOS</strong> (with <a href="https://brew.sh">Homebrew</a>):</p>
+<p><code>bash
+xcode-select --install</code></p>
 </li>
 </ul>
-<h4 id="3-download-python-package-manager">3. Download Python Package Manager<a class="headerlink" href="#3-download-python-package-manager" title="Permanent link">&para;</a></h4>
-<h5 id="option-1_1"><em>Option 1</em><a class="headerlink" href="#option-1_1" title="Permanent link">&para;</a></h5>
-<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-L<span class="w"> </span>-O<span class="w"> </span><span class="s2">&quot;https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-</span><span class="k">$(</span>uname<span class="k">)</span><span class="s2">-</span><span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span><span class="s2">.sh&quot;</span>
-bash<span class="w"> </span>Mambaforge-<span class="k">$(</span>uname<span class="k">)</span>-<span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span>.sh
+<h3 id="2-install-a-conda-package-manager">2. Install a conda package manager<a class="headerlink" href="#2-install-a-conda-package-manager" title="Permanent link">&para;</a></h3>
+<p>We recommend <a href="https://github.com/conda-forge/miniforge">Miniforge</a>
+(which includes <code>mamba</code> for faster environment solving):</p>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-L<span class="w"> </span>-O<span class="w"> </span><span class="s2">&quot;https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-</span><span class="k">$(</span>uname<span class="k">)</span><span class="s2">-</span><span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span><span class="s2">.sh&quot;</span>
+bash<span class="w"> </span>Miniforge3-<span class="k">$(</span>uname<span class="k">)</span>-<span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span>.sh
 </code></pre></div>
 
-<h5 id="option-2_1"><em>Option 2</em><a class="headerlink" href="#option-2_1" title="Permanent link">&para;</a></h5>
-<div class="codehilite"><pre><span></span><code>wget<span class="w"> </span><span class="s2">&quot;https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-</span><span class="k">$(</span>uname<span class="k">)</span><span class="s2">-</span><span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span><span class="s2">.sh&quot;</span>
-bash<span class="w"> </span>Mambaforge-<span class="k">$(</span>uname<span class="k">)</span>-<span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span>.sh
-</code></pre></div>
-
-<h4 id="4-clone-t3-repository">4. Clone T3 Repository<a class="headerlink" href="#4-clone-t3-repository" title="Permanent link">&para;</a></h4>
-<p>Clone T3's repository by typing the following command in the desired folder (e.g., under ~/Code/):</p>
+<p>Follow the prompts and restart your terminal when done.</p>
+<h2 id="install-t3-and-dependencies">Install T3 and dependencies<a class="headerlink" href="#install-t3-and-dependencies" title="Permanent link">&para;</a></h2>
+<p>T3 requires four co-installed components:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Conda env</th>
+<th>Why T3 needs it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>T3</strong> itself</td>
+<td><code>t3_env</code></td>
+<td>the orchestrator</td>
+</tr>
+<tr>
+<td><strong>ARC</strong></td>
+<td><code>t3_env</code></td>
+<td>QM job submission and post-processing</td>
+</tr>
+<tr>
+<td><strong>RMG-Py</strong></td>
+<td><code>rmg_env</code></td>
+<td>mechanism generation and Arkane PDep SA — T3 spawns these as subprocesses</td>
+</tr>
+<tr>
+<td><strong>RMG-database</strong></td>
+<td>(filesystem only)</td>
+<td>thermo / kinetics / transport data used by both RMG and ARC</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Why two conda environments?</p>
+<p>T3 itself never imports <code>rmg-py</code>; it only shells out to RMG and Arkane.
+Keeping <code>rmg_env</code> separate from <code>t3_env</code> lets the two have very different
+dependency trees without conflicting, and lets you upgrade T3 without
+rebuilding RMG.  Both environments must exist for T3 to run end-to-end.</p>
+</div>
+<p>Two installation options are available.</p>
+<h3 id="option-1-automated-installation">Option 1: Automated installation<a class="headerlink" href="#option-1-automated-installation" title="Permanent link">&para;</a></h3>
+<p>Clone T3 and install everything with one command:</p>
 <div class="codehilite"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/ReactionMechanismGenerator/T3.git
+<span class="nb">cd</span><span class="w"> </span>T3
+make<span class="w"> </span>install
 </code></pre></div>
 
-<h2 id="setting-up-path">Setting up Path<a class="headerlink" href="#setting-up-path" title="Permanent link">&para;</a></h2>
-<ul>
-<li>To set up T3 to your local path in .bashrc, you have two options:</li>
-</ul>
-<h3 id="option-1_2">Option 1<a class="headerlink" href="#option-1_2" title="Permanent link">&para;</a></h3>
-<p>Terminal Command (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):</p>
-<p><code>bash
-  echo 'PYTHONPATH=$PYTHONPATH:~/Path/to/T3/' &gt;&gt; ~/.bashrc</code></p>
-<h3 id="option-2_2">Option 2<a class="headerlink" href="#option-2_2" title="Permanent link">&para;</a></h3>
-<p>Editing .bashrc directly (NOTE: Make sure to change "~/Path/to/T3/" accordingly"):</p>
-<ul>
-<li>In terminal, enter the command:</li>
-</ul>
-<p><code>bash
-  sudo gedit ~/.bashrc</code></p>
-<ul>
-<li>Then in the opened file, on a new line, enter the following:</li>
-</ul>
-<p><code>text
-  export PYTHONPATH=$PYTHONPATH:~/Path/to/T3/</code></p>
-<h2 id="install-dependencies">Install dependencies<a class="headerlink" href="#install-dependencies" title="Permanent link">&para;</a></h2>
-<p>T3 requires RMG-Py, RMG-databse and ARC to function correctly. In order to install the necessary dependencies, you can follow either option below.</p>
-<h3 id="option-1_3">Option 1<a class="headerlink" href="#option-1_3" title="Permanent link">&para;</a></h3>
-<ul>
-<li>
-<p>Navigate to the T3 folder, depending on where you cloned it to.</p>
-</li>
-<li>
-<p>Open a terminal in the T3 folder, and type the following:</p>
-</li>
-</ul>
-<p><code>bash
-  make install all</code></p>
-<blockquote>
-<p><strong>Note</strong>: This can take some time to finish.</p>
-</blockquote>
-<ul>
-<li>You have now installed all the required dependencies.</li>
-</ul>
-<h3 id="option-2_3">Option 2<a class="headerlink" href="#option-2_3" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Install the latest versions of RMG-Py and the RMG-database on the same machine where T3 is installed. Follow the instructions on <a href="http://reactionmechanismgenerator.github.io/RMG-Py/users/rmg/installation/anacondaDeveloper.html">RMG's Documentation</a>.</li>
-<li>
-<p>Make sure to install RMG's <strong>developer version</strong> which includes important recent features. Note that the installation instructions suggest Anaconda, but Mambaforge can be used in it's place.</p>
-</li>
-<li>
-<p>Be sure to add RMG-Py to your PATH and PYTHONPATH as explained in the instructions.</p>
-</li>
-<li>
-<p>Install the latest version of ARC on the same machine where T3 is installed.
-  Follow the instructions on <a href="https://reactionmechanismgenerator.github.io/ARC/installation.html">ARC's documentation</a></p>
-</li>
-<li>
-<p>Make sure to add ARC to your PATH and PYTHONPATH, as well as to define your servers as explained in ARC's documentation.</p>
-</li>
-<li>
-<p>Create the Anaconda/Mambaforge environment for T3 by executing the following command in the T3 folder:</p>
-</li>
-</ul>
-<div class="codehilite"><pre><span></span><code>$<span class="w"> </span>mamba<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
-
-INFO:<span class="w">     </span>Collecting<span class="w"> </span>package<span class="w"> </span>metadata<span class="w"> </span><span class="o">(</span>repodata.json<span class="o">)</span>:<span class="w"> </span><span class="k">done</span>
-INFO:<span class="w">     </span>Solving<span class="w"> </span>environment:<span class="w"> </span><span class="k">done</span>
-INFO:<span class="w">     </span>
-INFO:<span class="w">     </span>Downloading<span class="w"> </span>and<span class="w"> </span>Extracting<span class="w"> </span>Packages
-INFO:<span class="w">     </span>...
-INFO:<span class="w">     </span>Preparing<span class="w"> </span>transaction:<span class="w"> </span><span class="k">done</span>
-INFO:<span class="w">     </span>Verifying<span class="w"> </span>transaction:<span class="w"> </span><span class="k">done</span>
-INFO:<span class="w">     </span>Executing<span class="w"> </span>transaction:<span class="w"> </span><span class="k">done</span>
-INFO:<span class="w">     </span><span class="c1">#</span>
-INFO:<span class="w">     </span><span class="c1"># To activate this environment, use</span>
-INFO:<span class="w">     </span><span class="c1">#</span>
-INFO:<span class="w">     </span><span class="c1">#     $ conda activate t3_env</span>
-INFO:<span class="w">     </span><span class="c1">#</span>
-INFO:<span class="w">     </span><span class="c1"># To deactivate an active environment, use</span>
-INFO:<span class="w">     </span><span class="c1">#</span>
-INFO:<span class="w">     </span><span class="c1">#     $ conda deactivate</span>
+<p>This clones ARC, RMG-Py, and RMG-database into the parent folder if they
+are not already there, creates both <code>t3_env</code> and <code>rmg_env</code>, compiles
+RMG-Py and ARC, and installs a custom updated version of PyRDL.
+It may take a while (RMG-Py's Cython compile is the slow step).</p>
+<h3 id="option-2-manual-installation">Option 2: Manual installation<a class="headerlink" href="#option-2-manual-installation" title="Permanent link">&para;</a></h3>
+<h4 id="clone-repositories">Clone repositories<a class="headerlink" href="#clone-repositories" title="Permanent link">&para;</a></h4>
+<p>Clone all four repositories (e.g., under <code>~/Code/</code>):</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/ReactionMechanismGenerator/T3.git
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/ReactionMechanismGenerator/ARC.git
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/ReactionMechanismGenerator/RMG-Py.git
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/ReactionMechanismGenerator/RMG-database.git
 </code></pre></div>
 
-<ul>
-<li>Activate the T3 environment every time before running T3:</li>
-</ul>
-<p><code>bash
-  conda activate t3_env</code></p>
-<h2 id="add-t3-aliases-to-your-bashrc">Add T3 aliases to your .bashrc<a class="headerlink" href="#add-t3-aliases-to-your-bashrc" title="Permanent link">&para;</a></h2>
-<p>Some optional yet convenient aliases are listed below
-(make sure to change "/Path/to/T3/" accordingly).
-Add these to your <code>.bashrc</code> file, which can be edited by typing, e.g., <code>sudo nano ~/.bashrc</code>:</p>
-<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">t3_path</span><span class="o">=</span><span class="nv">$HOME</span><span class="sb">`</span>/Path/to/T3<span class="s1">&#39;</span>
-<span class="s1">alias t3e=&#39;</span>conda<span class="w"> </span>activate<span class="w"> </span>t3_env<span class="s1">&#39;</span>
-<span class="s1">alias t3=&#39;</span>python<span class="w"> </span><span class="nv">$t3_path</span>/T3.py<span class="w"> </span>input.yml<span class="s1">&#39;</span>
-<span class="s1">alias t3code=&#39;</span><span class="nb">cd</span><span class="w"> </span><span class="nv">$t3_path</span><span class="err">&#39;</span>
+<h4 id="create-the-t3-conda-environment">Create the T3 conda environment<a class="headerlink" href="#create-the-t3-conda-environment" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code/T3
+mamba<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+conda<span class="w"> </span>activate<span class="w"> </span>t3_env
 </code></pre></div>
 
-<p>Then, after sourcing <code>.bashrc</code> or restarting the terminal,
-simply typing <code>t3e</code> will activate the environment,
-typing <code>t3code</code> will change the directory into the T3 repository,
-and finally typing <code>t3</code> from any folder with
-a valid T3 input file will execute T3 in that folder.</p>
+<h4 id="install-pyrdl-required-by-arc">Install PyRDL (required by ARC)<a class="headerlink" href="#install-pyrdl-required-by-arc" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code/ARC
+bash<span class="w"> </span>devtools/install_pyrdl.sh<span class="w"> </span>t3_env
+</code></pre></div>
+
+<h4 id="compile-arc-extensions">Compile ARC extensions<a class="headerlink" href="#compile-arc-extensions" title="Permanent link">&para;</a></h4>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code/ARC
+make<span class="w"> </span>compile
+</code></pre></div>
+
+<h4 id="create-the-rmg-conda-environment-and-compile-rmg-py">Create the RMG conda environment and compile RMG-Py<a class="headerlink" href="#create-the-rmg-conda-environment-and-compile-rmg-py" title="Permanent link">&para;</a></h4>
+<p>T3 spawns RMG and Arkane as subprocesses inside <code>rmg_env</code>, so this step is
+<strong>required</strong> even though T3 itself never imports <code>rmg-py</code>.</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code/RMG-Py
+mamba<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+conda<span class="w"> </span>activate<span class="w"> </span>rmg_env
+make
+conda<span class="w"> </span>deactivate
+</code></pre></div>
+
+<h4 id="set-environment-variables">Set environment variables<a class="headerlink" href="#set-environment-variables" title="Permanent link">&para;</a></h4>
+<p>Add the following to your <code>~/.bashrc</code> (or <code>~/.zshrc</code> on macOS):</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">PYTHONPATH</span><span class="o">=</span><span class="nv">$PYTHONPATH</span>:~/Code/T3:~/Code/ARC:~/Code/RMG-Py
+<span class="nb">export</span><span class="w"> </span><span class="nv">RMG_DB_PATH</span><span class="o">=</span>~/Code/RMG-database
+</code></pre></div>
+
+<p>Then reload your shell:</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">source</span><span class="w"> </span>~/.bashrc
+</code></pre></div>
+
+<h2 id="verify-the-installation">Verify the installation<a class="headerlink" href="#verify-the-installation" title="Permanent link">&para;</a></h2>
+<p>Activate the environment and run the test suite:</p>
+<div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>activate<span class="w"> </span>t3_env
+<span class="nb">cd</span><span class="w"> </span>~/Code/T3
+pytest<span class="w"> </span>tests/<span class="w"> </span>-x<span class="w"> </span>-q
+</code></pre></div>
+
+<p>All tests should pass. If you encounter import errors, verify that
+<code>PYTHONPATH</code> and <code>RMG_DB_PATH</code> are set correctly.</p>
+<h2 id="optional-convenient-aliases">Optional: convenient aliases<a class="headerlink" href="#optional-convenient-aliases" title="Permanent link">&para;</a></h2>
+<p>Add these to your <code>~/.bashrc</code> (adjust paths accordingly):</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">t3_path</span><span class="o">=</span><span class="nv">$HOME</span><span class="s1">&#39;/Code/T3&#39;</span>
+<span class="nb">alias</span><span class="w"> </span><span class="nv">t3e</span><span class="o">=</span><span class="s1">&#39;conda activate t3_env&#39;</span>
+<span class="nb">alias</span><span class="w"> </span><span class="nv">t3</span><span class="o">=</span><span class="s1">&#39;python $t3_path/T3.py input.yml&#39;</span>
+<span class="nb">alias</span><span class="w"> </span><span class="nv">t3code</span><span class="o">=</span><span class="s1">&#39;cd $t3_path&#39;</span>
+</code></pre></div>
+
+<p>After sourcing <code>~/.bashrc</code> or restarting the terminal:</p>
+<ul>
+<li><code>t3e</code> activates the environment</li>
+<li><code>t3code</code> changes to the T3 repository directory</li>
+<li><code>t3</code> runs T3 with <code>input.yml</code> in the current folder</li>
+</ul>
 <h2 id="updating-t3">Updating T3<a class="headerlink" href="#updating-t3" title="Permanent link">&para;</a></h2>
-<p>The T3 repository is being updated frequently.
-Make sure to update your instance of T3 to enjoy new features
-and get recent bug fixes. To get the most recent developer version,
-execute the following commands (make sure to change <code>~/Path/to/T3/</code> accordingly:</p>
-<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Path/to/T3/
-git<span class="w"> </span>fetch<span class="w"> </span>origin
+<p>Pull the latest changes from the main branch:</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code/T3
 git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
 </code></pre></div>
 
-<p>The above will update your <strong>main</strong> branch of T3.</p>
+<p>You may also want to update ARC, RMG-Py, and RMG-database:</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code/ARC<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
+<span class="nb">cd</span><span class="w"> </span>~/Code/RMG-Py<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
+<span class="nb">cd</span><span class="w"> </span>~/Code/RMG-database<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
+</code></pre></div>
+
+<p>Recompile ARC and RMG-Py with the latest changes:</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/Code/ARC
+make<span class="w"> </span>compile
+
+<span class="nb">cd</span><span class="w"> </span>~/Code/RMG-Py
+conda<span class="w"> </span>activate<span class="w"> </span>rmg_env
+make
+conda<span class="w"> </span>deactivate
+</code></pre></div>
+
+
+
+
+
+
+
 
 
 
@@ -1048,6 +1259,7 @@ git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </
             </div>
           
           
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
         
       </main>
@@ -1066,7 +1278,8 @@ git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </
   
 </div>
       
-        <div class="md-social">
+        
+<div class="md-social">
   
     
     
@@ -1076,7 +1289,7 @@ git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </
       
     
     <a href="https://github.com/ReactionMechanismGenerator/T3" target="_blank" rel="noopener" title="github.com" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M186.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1zM480 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2zm-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3zm-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M202.1 328.7c0 20.9-10.9 55.1-36.7 55.1s-36.7-34.2-36.7-55.1 10.9-55.1 36.7-55.1 36.7 34.2 36.7 55.1M496 278.2c0 31.9-3.2 65.7-17.5 95-37.9 76.6-142.1 74.8-216.7 74.8-75.8 0-186.2 2.7-225.6-74.8-14.6-29-20.2-63.1-20.2-95 0-41.9 13.9-81.5 41.5-113.6-5.2-15.8-7.7-32.4-7.7-48.8 0-21.5 4.9-32.3 14.6-51.8 45.3 0 74.3 9 108.8 36 29-6.9 58.8-10 88.7-10 27 0 54.2 2.9 80.4 9.2 34-26.7 63-35.2 107.8-35.2 9.8 19.5 14.6 30.3 14.6 51.8 0 16.4-2.6 32.7-7.7 48.2 27.5 32.4 39 72.3 39 114.2m-64.3 50.5c0-43.9-26.7-82.6-73.5-82.6-18.9 0-37 3.4-56 6-14.9 2.3-29.8 3.2-45.1 3.2-15.2 0-30.1-.9-45.1-3.2-18.7-2.6-37-6-56-6-46.8 0-73.5 38.7-73.5 82.6 0 87.8 80.4 101.3 150.4 101.3h48.2c70.3 0 150.6-13.4 150.6-101.3m-82.6-55.1c-25.8 0-36.7 34.2-36.7 55.1s10.9 55.1 36.7 55.1 36.7-34.2 36.7-55.1-10.9-55.1-36.7-55.1"/></svg>
     </a>
   
     
@@ -1087,7 +1300,7 @@ git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </
       
     
     <a href="https://www.linkedin.com/in/alongd/" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
     </a>
   
 </div>
@@ -1101,10 +1314,14 @@ git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
-    <script id="__config" type="application/json">{"base": "..", "features": ["instant"], "search": "../assets/javascripts/workers/search.dfff1995.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.dff1b7c8.min.js"></script>
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["instant"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js"></script>
       
