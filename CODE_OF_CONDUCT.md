@@ -1,4 +1,6 @@
-# The RMG-ARC Tandem Tool (T3) Code of Conduct
+# The Tandem Tool (T3) for automated chemical kinetic model development
+
+# Code of Conduct
 
 ## Our Pledge
 
