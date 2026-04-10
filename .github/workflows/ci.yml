@@ -87,7 +87,8 @@ jobs:
           cache-environment: true
           generate-run-shell: false
           create-args: >-
-            --channel-priority flexible
+            python=3.11
+            --channel-priority strict
 
       # 8. Compile RMG-Py (Cython extensions, in rmg_env)
       - name: Compile RMG-Py
