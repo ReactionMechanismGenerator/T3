@@ -1,6 +1,4 @@
-# The Tandem Tool (T3) for automated chemical kinetic model development
-
-# Code of Conduct
+# T3 Code of Conduct
 
 ## Our Pledge
 

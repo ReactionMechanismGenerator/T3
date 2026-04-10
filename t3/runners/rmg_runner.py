@@ -4,9 +4,11 @@ Should be executed locally on the head node using the t3 environment.
 """
 
 import datetime
+import logging
 import os
 import shlex
 import shutil
+import subprocess
 import time
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -171,7 +173,10 @@ def _parse_walltime_to_seconds(walltime: str) -> int:
     parts = walltime.split(':')
     if len(parts) != 4:
         return 0
-    days, hours, minutes, seconds = (int(p) for p in parts)
+    try:
+        days, hours, minutes, seconds = (int(p) for p in parts)
+    except ValueError:
+        return 0
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
@@ -217,6 +222,9 @@ fi' '''
         stderr_text = result.stderr or ''
     except subprocess.TimeoutExpired:
         logger.error(f'RMG incore timed out after {timeout_s}s')
+        return True
+    if result.returncode != 0:
+        logger.error(f'RMG incore exited with code {result.returncode}')
         return True
     if 'RMG threw an exception and did not converge.' in stderr_text:
         return True

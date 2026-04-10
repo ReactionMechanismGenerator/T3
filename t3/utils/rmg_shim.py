@@ -5,6 +5,7 @@ data objects that the simulation adapters pass to Cantera, without taking an
 in-process dependency on rmgpy itself.
 """
 
+import logging
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -690,6 +691,9 @@ def write_atomic(path: str, content: str) -> None:
             f.write(content)
         os.replace(tmp_path, path)
     except Exception:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+        try:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+        except OSError:
+            logging.getLogger(__name__).warning(f'Failed to clean up temp file: {tmp_path}')
         raise

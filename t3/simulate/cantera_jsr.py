@@ -114,6 +114,8 @@ class CanteraJSR(CanteraBase):
         self._jsr_exhaust = ct.Reservoir(self.model)
         self.cantera_reactor = ct.IdealGasReactor(self.model, energy='off', volume=VOLUME)
 
+        if residence_time <= 0:
+            raise ValueError(f'Invalid residence time: {residence_time}')
         self._jsr_mfc = ct.MassFlowController(
             upstream=self._jsr_inlet,
             downstream=self.cantera_reactor,

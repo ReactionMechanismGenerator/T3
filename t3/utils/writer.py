@@ -42,11 +42,11 @@ def write_rmg_input_file(rmg: dict,
     # database
     database = rmg['database']
     # the following args type could be either str or list, detect str and format accordingly
-    if isinstance(database['kinetics_depositories'], str) and database['kinetics_depositories'][0] != "'":
+    if isinstance(database['kinetics_depositories'], str) and database['kinetics_depositories'] and database['kinetics_depositories'][0] != "'":
         database['kinetics_depositories'] = f"'{database['kinetics_depositories']}'"
-    if isinstance(database['kinetics_estimator'], str) and database['kinetics_estimator'][0] != "'":
+    if isinstance(database['kinetics_estimator'], str) and database['kinetics_estimator'] and database['kinetics_estimator'][0] != "'":
         database['kinetics_estimator'] = f"'{database['kinetics_estimator']}'"
-    if isinstance(database['kinetics_families'], str) and database['kinetics_families'][0] != "'":
+    if isinstance(database['kinetics_families'], str) and database['kinetics_families'] and database['kinetics_families'][0] != "'":
         database['kinetics_families'] = f"'{database['kinetics_families']}'"
     database_template = """database(
     thermoLibraries=${thermo_libraries},
@@ -374,25 +374,30 @@ def write_pdep_network_file(network_name: str,
             if 'reactants =' in line:
                 parse_isomers = (False, False)
             if parse_tp:
-                if 'Tmin' in line:
+                if 'Tmin' in line and '(' in line:
                     #     Tmin = (300, 'K'),
                     t_min = line.split('(')[1].split(',')[0]
-                elif 'Tmax' in line:
+                elif 'Tmax' in line and '(' in line:
                     #     Tmax = (2200, 'K'),
                     t_max = line.split('(')[1].split(',')[0]
-                elif 'Pmin' in line:
+                elif 'Pmin' in line and '(' in line:
                     #     Pmin = (0.01, 'bar'),
                     p_min = line.split('(')[1].split(',')[0]
-                elif 'Pmax' in line:
+                elif 'Pmax' in line and '(' in line:
                     #     Pmax = (100, 'bar'),
                     p_max = line.split('(')[1].split(',')[0]
-            if all(parse_isomers) and "'," in line:
+            if all(parse_isomers) and "'," in line and "'" in line:
                 #         'C=O(26)',
-                isomer_labels.append(line.split("'")[1])
+                parts = line.split("'")
+                if len(parts) >= 2:
+                    isomer_labels.append(parts[1])
             if 'method = ' in line:
                 #     method = 'chemically-significant eigenvalues',
                 splits = line.split("'")
-                new_lines.append(f"{splits[0]}'{METHOD_MAP[method]}'{splits[2]}")
+                if len(splits) >= 3:
+                    new_lines.append(f"{splits[0]}'{METHOD_MAP[method]}'{splits[2]}")
+                else:
+                    new_lines.append(line)
             elif 'rmgmode' in line:
                 new_lines.append(line)
                 if any(param is None for param in [t_min, t_max, p_min, p_max]):

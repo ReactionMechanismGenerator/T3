@@ -477,7 +477,7 @@ class RMGOptions(BaseModel):
     @classmethod
     def check_units(cls, value):
         """RMGOptions.units validator"""
-        if value.lower() is not None and value != 'si':
+        if value.lower() != 'si':
             raise ValueError(f'Currently RMG only supports SI units, got "{value}"')
         return value.lower()
 

@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     from t3.logger import Logger
 
 
-_LOCK_TIMEOUT_S = 3600  # 1 hour wait for lock acquisition
-_LOCK_STALE_S = 3600    # 1 hour before breaking a stale lock
+_LOCK_TIMEOUT_S = 300   # 5 min wait for lock acquisition
+_LOCK_STALE_S = 300     # 5 min before breaking a stale lock
 _LOCK_POLL_S = 10.0     # Poll every 10 seconds
 
 

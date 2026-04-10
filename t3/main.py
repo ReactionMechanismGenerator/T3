@@ -1152,13 +1152,13 @@ class T3(object):
                     try:
                         if label == t3_reaction.get_reaction_smiles_label():
                             return key
-                    except Exception:
+                    except (AttributeError, ValueError):
                         pass
                 elif label_type == 'Chemkin':
                     try:
                         if label == t3_reaction.to_chemkin():
                             return key
-                    except Exception:
+                    except (AttributeError, ValueError):
                         pass
         return None
 
