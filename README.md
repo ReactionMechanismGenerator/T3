@@ -1,8 +1,3 @@
-<p align="center">
-  <a href="https://reactionmechanismgenerator.github.io/T3/"><img src="https://github.com/ReactionMechanismGenerator/T3/blob/main/grf/T3_logo_small.gif" alt="T3"></a>
-</p>
-
-# The Tandem Tool (T3) for automated chemical kinetic model development
 
 [![CI](https://github.com/ReactionMechanismGenerator/T3/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ReactionMechanismGenerator/T3/actions/workflows/ci.yml)
 [![Docs](https://github.com/ReactionMechanismGenerator/T3/actions/workflows/gh-pages.yml/badge.svg)](https://reactionmechanismgenerator.github.io/T3/)
@@ -10,6 +5,8 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
 ![python](https://img.shields.io/badge/Python-3.12+-blue.svg)
+
+# The Tandem Tool (T3) for automated chemical kinetic model development
 
 **T3** automates the development of detailed chemical kinetic models.
 Given a set of initial species and conditions, it produces a validated model with
