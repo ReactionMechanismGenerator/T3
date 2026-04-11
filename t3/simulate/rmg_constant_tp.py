@@ -132,7 +132,6 @@ class RMGConstantTP(SimulateAdapter):
 
             if not success:
                 self.logger.error(f"RMG SA subprocess failed.\nDetails: {error_msg}")
-                raise RuntimeError(f"RMG SA subprocess failed: {error_msg}")
             else:
                 self.logger.info("RMG SA subprocess completed successfully.")
         else:
