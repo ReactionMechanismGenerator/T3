@@ -5,6 +5,7 @@ Used to run mechanism analysis with RMG via subprocess execution.
 
 import datetime
 import itertools
+import logging
 import os
 import numpy as np
 from typing import List, Optional, TYPE_CHECKING
@@ -279,6 +280,12 @@ class RMGConstantTP(SimulateAdapter):
                 species_lists.append(new_species_list)
 
         for species_list in species_lists:
+            total = sum(s['concentration'] for s in species_list
+                        if isinstance(s['concentration'], (int, float)))
+            if total > 1.0 or total <= 0:
+                logging.getLogger(__name__).warning(
+                    f'Species concentrations sum to {total:.4f}, expected (0, 1]. '
+                    f'Cantera will normalize mole fractions.')
             species_list.sort(key=lambda spc: spc['concentration'][0] if isinstance(spc['concentration'], (tuple, list))
             else spc['concentration'], reverse=True)
         return species_lists

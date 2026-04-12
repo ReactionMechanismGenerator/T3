@@ -8,6 +8,7 @@ This makes it straightforward for users to create a new adapter for a
 different reactor configuration.
 """
 
+import logging
 import cantera as ct
 import numpy as np
 from abc import abstractmethod
@@ -331,6 +332,9 @@ class CanteraBase(SimulateAdapter):
                     non_inert_mask = np.ones(self.num_ct_species, dtype=bool)
                     non_inert_mask[self.inert_index_list] = False
 
+                    if not np.all(np.isfinite(mass_frac_sa)):
+                        logging.getLogger(__name__).warning(
+                            'NaN/inf detected in mass fraction SA matrix — check for numerical issues')
                     kin_correction = mass_frac_sa[non_inert_mask, :self.num_ct_reactions].sum(axis=0)
                     thermo_correction = mass_frac_sa[non_inert_mask, self.num_ct_reactions:].sum(axis=0)
 
@@ -462,9 +466,17 @@ class CanteraBase(SimulateAdapter):
             time, data_list, reaction_sensitivity_data, thermodynamic_sensitivity_data = condition_data
             T_data = data_list[0]
 
-            dTdt = np.diff(T_data.data) / np.diff(time.data)
-            idt_dict['idt_index'].append(int(np.argmax(dTdt)))
-            idt_dict['idt'].append(time.data[idt_dict['idt_index'][i]])
+            dt = np.diff(time.data)
+            dt = np.where(dt == 0, np.finfo(float).tiny, dt)
+            dTdt = np.diff(T_data.data) / dt
+            valid = np.isfinite(dTdt)
+            if valid.any():
+                masked = np.where(valid, dTdt, -np.inf)
+                idx = int(np.argmax(masked))
+            else:
+                idx = 0
+            idt_dict['idt_index'].append(idx)
+            idt_dict['idt'].append(time.data[min(idx + 1, len(time.data) - 1)])
 
         return idt_dict
 

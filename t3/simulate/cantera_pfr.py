@@ -129,6 +129,7 @@ class CanteraPFR(CanteraBase):
             # Velocity: u = u_0 * mean_MW_0 / mean_MW  (P, T, A all cancel)
             total_residence_time = self.conditions[idx].reaction_time.value_si
             u_0 = LENGTH / total_residence_time
+            mean_MW = np.where(mean_MW > 0, mean_MW, np.finfo(float).tiny)
             u = u_0 * mean_MW[0] / mean_MW
 
             # Axial distance [m] via cumulative integration
@@ -203,6 +204,8 @@ class CanteraPFR(CanteraBase):
                 sim.advance_to_steady_state()
 
                 # Residence time in this cell
+                if mass_flow_rate <= 0:
+                    raise ValueError(f'Invalid mass flow rate: {mass_flow_rate}')
                 cell_residence_time = reactor.mass / mass_flow_rate
                 cumulative_time += cell_residence_time
 

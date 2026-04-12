@@ -107,6 +107,11 @@ T_INLET = 300.0        # K, inlet temperature
 T_HOT = 900.0          # K, isothermal plateau temperature
 T_OUTLET = 500.0       # K, outlet temperature
 
+if not (0 < RAMP_UP_END < ISO_END < LENGTH):
+    raise ValueError(
+        f'Temperature profile constants must satisfy 0 < RAMP_UP_END ({RAMP_UP_END}) < ISO_END ({ISO_END}) < LENGTH ({LENGTH})'
+    )
+
 
 def temperature_profile(z):
     """
@@ -307,7 +312,11 @@ class CanteraPFRTProfile(CanteraBase):
                 # Local velocity at the new (T, rho) and the corresponding
                 # time step to traverse one segment.
                 rho = self.model.density
+                if rho * AREA <= 0:
+                    raise ValueError(f'Invalid density ({rho}) or area ({AREA}) in PFR T-profile cell {n}')
                 u = mass_flow_rate / (rho * AREA)
+                if u <= 0:
+                    raise ValueError(f'Invalid velocity ({u}) in PFR T-profile cell {n}')
                 dt = dz / u
 
                 sim.advance(sim.time + dt)

@@ -1,4 +1,4 @@
-# The RMG-ARC Tandem Tool (T3) Code of Conduct
+# T3 Code of Conduct
 
 ## Our Pledge
 

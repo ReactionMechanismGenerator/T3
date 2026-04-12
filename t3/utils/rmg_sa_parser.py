@@ -93,7 +93,10 @@ def parse_rmg_sa_csv(csv_path: str) -> Tuple[List[float], Dict[str, Dict[int, Li
                 value = float(row[col_idx])
                 if kind == 'kinetics':
                     # param_raw is e.g. 'k10' -> extract integer 10
-                    rxn_idx = int(param_raw.lstrip('k'))
+                    try:
+                        rxn_idx = int(param_raw.lstrip('k'))
+                    except ValueError:
+                        continue
                     kinetics.setdefault(obs_label, {}).setdefault(rxn_idx, []).append(value)
                 else:
                     spc_label = _strip_rmg_index(param_raw)

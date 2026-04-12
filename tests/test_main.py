@@ -1017,7 +1017,6 @@ def test_add_reaction():
                      set_paths=True,
                      )
     rmg_species, rmg_reactions = t3.load_species_and_reactions_from_yaml_file()
-    print(f"DEBUG: len(rmg_reactions) = {len(rmg_reactions)}")
 
     # Filter for valid/balanced reactions to use in test
     valid_reactions = []
@@ -1031,7 +1030,6 @@ def test_add_reaction():
         except Exception:
             pass
 
-    print(f"DEBUG: len(valid_reactions) = {len(valid_reactions)}")
     assert len(valid_reactions) > 0, "No valid balanced reactions found in the test dataset!"
 
     # Use valid reactions for adding
