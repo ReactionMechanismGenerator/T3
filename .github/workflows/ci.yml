@@ -19,7 +19,7 @@ jobs:
     name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/ruff-action@v3
         with:
           args: "check ."
@@ -34,13 +34,13 @@ jobs:
     steps:
       # 1. Checkout T3 (The repo running this CI)
       - name: Checkout T3
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: T3
 
       # 2. Checkout ARC (Dependency)
       - name: Checkout ARC
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ReactionMechanismGenerator/ARC
           ref: linear_ts
@@ -48,7 +48,7 @@ jobs:
 
       # 3. Checkout RMG Database
       - name: Checkout RMG Database
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ReactionMechanismGenerator/RMG-database
           path: RMG-database
@@ -57,7 +57,7 @@ jobs:
 
       # 4. Checkout RMG-Py (needed at runtime for the rmg_env subprocess)
       - name: Checkout RMG-Py
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ReactionMechanismGenerator/RMG-Py
           path: RMG-Py
@@ -77,7 +77,7 @@ jobs:
 
       # 6. Setup T3 Environment
       - name: Set up micromamba (t3_env)
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           environment-name: t3_env
           environment-file: T3/environment.yml
@@ -86,7 +86,7 @@ jobs:
 
       # 7. Setup RMG Environment (rmg_env) — required by all T3 tests that
       - name: Set up micromamba (rmg_env)
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           environment-name: rmg_env
           environment-file: RMG-Py/environment.yml
@@ -148,7 +148,7 @@ jobs:
 
       # 9. Upload Coverage
       - name: Upload coverage data
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: T3/coverage.xml
