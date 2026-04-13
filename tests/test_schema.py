@@ -8,7 +8,9 @@ schema test module
 import pytest
 from pydantic import ValidationError
 
-from t3.schema import (T3Options,
+from t3.schema import (IDTCriterionEnum,
+                       IDTSAMethodEnum,
+                       T3Options,
                        T3Sensitivity,
                        T3Uncertainty,
                        RMGDatabase,
@@ -190,6 +192,55 @@ def test_t3_sensitivity_schema():
     with pytest.raises(ValidationError):
         # check that top_SA_reactions is constrained to >= 0
         T3Sensitivity(top_SA_reactions=-1)
+
+
+def test_idt_criterion_enum():
+    """Test IDTCriterionEnum values, defaults, and validation."""
+    assert IDTCriterionEnum.max_dOHdt.value == 'max_dOHdt'
+    assert IDTCriterionEnum.max_dTdt.value == 'max_dTdt'
+    assert IDTCriterionEnum.max_radical_dt.value == 'max_radical_dt'
+
+    # Default
+    s = T3Sensitivity()
+    assert s.idt_criterion == IDTCriterionEnum.max_dOHdt
+
+    # Accept all valid values (both enum members and plain strings)
+    for val in ('max_dOHdt', 'max_dTdt', 'max_radical_dt'):
+        s = T3Sensitivity(idt_criterion=val)
+        assert s.idt_criterion.value == val
+
+    # Serializes to plain string
+    d = T3Sensitivity(idt_criterion='max_dTdt').model_dump()
+    assert d['idt_criterion'] == 'max_dTdt'
+    assert isinstance(d['idt_criterion'], str)
+
+    # Rejects invalid criterion
+    with pytest.raises(ValidationError):
+        T3Sensitivity(idt_criterion='invalid_criterion')
+
+
+def test_idt_sa_method_enum():
+    """Test IDTSAMethodEnum values, defaults, and validation."""
+    assert IDTSAMethodEnum.brute_force.value == 'brute_force'
+    assert IDTSAMethodEnum.adjoint.value == 'adjoint'
+
+    # Accept all valid values
+    for val in ('brute_force', 'adjoint'):
+        s = T3Sensitivity(idt_sa_method=val)
+        assert s.idt_sa_method.value == val
+
+    # Serializes to plain string
+    d = T3Sensitivity(idt_sa_method='adjoint').model_dump()
+    assert d['idt_sa_method'] == 'adjoint'
+    assert isinstance(d['idt_sa_method'], str)
+
+    # Default
+    s = T3Sensitivity()
+    assert s.idt_sa_method == IDTSAMethodEnum.brute_force
+
+    # Rejects invalid method
+    with pytest.raises(ValidationError):
+        T3Sensitivity(idt_sa_method='finite_difference')
 
 
 def test_t3_uncertainty_schema():
