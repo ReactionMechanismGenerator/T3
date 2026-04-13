@@ -7,7 +7,7 @@ import os
 from enum import Enum
 from typing import Annotated, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_validator, model_validator
 
 from arc.common import read_yaml_file
 
@@ -99,6 +99,19 @@ class T3Options(BaseModel):
         return value
 
 
+class IDTCriterionEnum(str, Enum):
+    """IDT criterion for determining ignition delay time."""
+    max_dOHdt = 'max_dOHdt'
+    max_dTdt = 'max_dTdt'
+    max_radical_dt = 'max_radical_dt'
+
+
+class IDTSAMethodEnum(str, Enum):
+    """SA method for IDT sensitivity analysis."""
+    brute_force = 'brute_force'
+    adjoint = 'adjoint'
+
+
 class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
@@ -115,9 +128,21 @@ class T3Sensitivity(BaseModel):
     top_SA_reactions: Annotated[int, Field(ge=0)] = 10
     T_list: Optional[List[Annotated[float, Field(gt=0)]]] = None
     P_list: Optional[List[Annotated[float, Field(gt=0)]]] = None
+    idt_criterion: IDTCriterionEnum = IDTCriterionEnum.max_dOHdt
+    idt_sa_method: IDTSAMethodEnum = IDTSAMethodEnum.brute_force
+    delta_h: Annotated[float, Field(gt=0)] = 0.1
+    delta_k: Annotated[float, Field(gt=0, lt=1)] = 0.05
+    adaptive_perturbation: bool = False
+    experimental_idt_path: Optional[str] = None
 
     class Config:
         extra = "forbid"
+
+    @field_serializer('idt_criterion', 'idt_sa_method')
+    @classmethod
+    def serialize_enums(cls, v):
+        """Serialize enum fields to plain strings for YAML and logging compatibility."""
+        return v.value if isinstance(v, Enum) else v
 
     @field_validator('adapter')
     @classmethod
