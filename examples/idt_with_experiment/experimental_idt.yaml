@@ -1,0 +1,23 @@
+# Experimental ignition delay time data for H2/O2 in Ar
+# Replace with real data and citation for your system.
+citation: "Placeholder et al., Combustion and Flame 250 (2023) 112600"
+fuel: H2
+oxidizer: O2
+diluent: Ar
+data:
+  # T in K, P in bar (post-reflected-shock conditions), idt in seconds
+  - {T: 1000, P: 2, phi: 1.0, idt: 3.2e-3}
+  - {T: 1050, P: 2, phi: 1.0, idt: 1.8e-3}
+  - {T: 1100, P: 2, phi: 1.0, idt: 9.5e-4}
+  - {T: 1150, P: 2, phi: 1.0, idt: 5.1e-4}
+  - {T: 1200, P: 2, phi: 1.0, idt: 2.7e-4}
+  - {T: 1300, P: 2, phi: 1.0, idt: 8.3e-5}
+  - {T: 1400, P: 2, phi: 1.0, idt: 2.9e-5}
+  - {T: 1000, P: 10, phi: 1.0, idt: 2.1e-3}
+  - {T: 1100, P: 10, phi: 1.0, idt: 6.2e-4}
+  - {T: 1200, P: 10, phi: 1.0, idt: 1.8e-4}
+  - {T: 1300, P: 10, phi: 1.0, idt: 5.5e-5}
+  - {T: 1400, P: 10, phi: 1.0, idt: 1.9e-5}
+  - {T: 1000, P: 2, phi: 0.5, idt: 4.5e-3}
+  - {T: 1200, P: 2, phi: 0.5, idt: 3.8e-4}
+  - {T: 1400, P: 2, phi: 0.5, idt: 4.1e-5}

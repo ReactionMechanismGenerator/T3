@@ -1,0 +1,69 @@
+# Shock tube IDT with experimental comparison
+#
+# This example demonstrates how to run an IDT-focused T3 iteration
+# and compare the predicted ignition delay times against experimental data.
+# The experimental comparison is for tracking model quality per iteration;
+# T3 does NOT optimize to match experiments.
+
+project: idt_with_experiment_example
+
+t3:
+  options:
+    max_T3_iterations: 5
+    max_RMG_walltime: '00:00:10:00'
+  sensitivity:
+    adapter: CanteraConstantUV
+    atol: 1e-6
+    rtol: 1e-4
+    SA_threshold: 0.01
+    global_observables: ['IDT']
+    top_SA_species: 10
+    top_SA_reactions: 10
+    idt_criterion: max_dOHdt          # or 'max_dTdt' or 'max_radical_dt'
+    idt_sa_method: brute_force         # or 'adjoint' for Cantera built-in SA
+    experimental_idt_path: examples/idt_with_experiment/experimental_idt.yaml
+
+rmg:
+  database:
+    thermo_libraries:
+      - primaryThermoLibrary
+      - BurkeH2O2
+    kinetics_libraries:
+      - BurkeH2O2inN2
+  species:
+    - label: H2
+      smiles: '[H][H]'
+      concentration: 0.04
+    - label: O2
+      smiles: '[O][O]'
+      concentration: 0.02
+    - label: Ar
+      smiles: '[Ar]'
+      concentration: 0.94
+      reactive: false
+      balance: true
+    - label: OH
+      smiles: '[OH]'
+      SA_observable: true
+    - label: H
+      smiles: '[H]'
+      SA_observable: true
+  reactors:
+    - type: gas batch constant T P
+      T: [1000, 1400]    # range: T3 will expand to ~25 points in 1/T space
+      P: [2, 10]         # range: T3 will expand logarithmically
+      termination_conversion:
+        H2: 0.9
+      termination_time: [10, 'ms']
+  model:
+    core_tolerance: [0.01, 0.005, 0.001]
+
+qm:
+  adapter: ARC
+  level_of_theory: b3lyp/6-31g(d,p)
+  job_types:
+    rotors: false
+    fine: false
+    freq: true
+    opt: true
+    sp: true
