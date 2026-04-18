@@ -451,3 +451,274 @@ def save_yaml_file(path: str,
         yaml_str = yaml.dump(data=content, default_flow_style=False, sort_keys=False)
         with open(path, 'w') as f:
             f.write(yaml_str)
+
+
+def remove_numeric_parentheses(input_string: str) -> str:
+    """
+    Strip a trailing numeric parenthetical from a string (e.g., ``"OH(12)" -> "OH"``).
+
+    Args:
+        input_string (str): The input string.
+
+    Returns:
+        str: The string without a trailing numeric parenthetical.
+    """
+    return re.sub(r'\(\d+\)$', '', input_string)
+
+
+def numpy_to_list(data):
+    """
+    Convert a NumPy array to a list. Pass-through for non-array inputs.
+
+    Args:
+        data: The data to convert.
+
+    Returns:
+        The converted data (list if ndarray, otherwise unchanged).
+    """
+    if isinstance(data, np.ndarray):
+        return data.tolist()
+    return data
+
+
+# ---------------------------------------------------------------------------
+# Equivalence-ratio / fuel-oxidizer-diluent helpers
+# ---------------------------------------------------------------------------
+
+def get_atom_counts(smiles: Optional[str] = None,
+                    adjlist: Optional[str] = None,
+                    inchi: Optional[str] = None,
+                    ) -> Dict[str, int]:
+    """
+    Count C / H / N / O / other atoms in a molecule.
+
+    Args:
+        smiles (Optional[str]): A SMILES string.
+        adjlist (Optional[str]): An RMG adjacency list string.
+        inchi (Optional[str]): An InChI string.
+
+    Returns:
+        Dict[str, int]: ``{'C': c, 'H': h, 'N': n, 'O': o, 'other': k}``.
+
+    Raises:
+        ValueError: If no identifier is provided.
+    """
+    if smiles is None and adjlist is None and inchi is None:
+        raise ValueError('Must provide at least one of smiles, adjlist, or inchi.')
+    # Imported here to avoid a circular import (t3.chem imports from t3.common).
+    from t3.chem import T3Species
+    kwargs = {k: v for k, v in (('smiles', smiles), ('adjlist', adjlist), ('inchi', inchi)) if v is not None}
+    spc = T3Species(**kwargs)
+    counts = {'C': 0, 'H': 0, 'N': 0, 'O': 0, 'other': 0}
+    for atom in spc.mol.atoms:
+        if atom.is_carbon():
+            counts['C'] += 1
+        elif atom.is_hydrogen():
+            counts['H'] += 1
+        elif atom.is_nitrogen():
+            counts['N'] += 1
+        elif atom.is_oxygen():
+            counts['O'] += 1
+        else:
+            counts['other'] += 1
+    return counts
+
+
+def get_oxidizer_stoichiometry(fuel_smiles: Optional[str] = None,
+                               fuel_adjlist: Optional[str] = None,
+                               fuel_inchi: Optional[str] = None,
+                               oxidizer_smiles: Optional[str] = None,
+                               oxidizer_adjlist: Optional[str] = None,
+                               oxidizer_inchi: Optional[str] = None,
+                               ) -> float:
+    """
+    Compute how many oxidizer molecules per fuel molecule are needed for complete
+    combustion to ``CO2 + H2O + N2``.
+
+    Derivation: for fuel ``C_a H_b N_c O_d`` and an oxidizer with ``k_O`` oxygen
+    atoms and ``k_H`` hydrogen atoms per molecule, atom-balancing the reaction
+    ``fuel + n*oxidizer -> a CO2 + (b/2 + n*k_H/2) H2O + (c/2) N2`` yields::
+
+        n = (2a + b/2 - d) / (k_O - k_H/2)
+
+    The denominator is the **net active O atoms** each oxidizer molecule supplies
+    after consuming its own hydrogen as ``H2O``.
+
+    Worked examples:
+        - CH4 + 2 O2:                  n = (2 + 2) / 2 = 2
+        - C3H8 + 5 O2:                 n = (6 + 4) / 2 = 5
+        - C3H8 + 10 H2O2:              n = (6 + 4) / (2 - 1) = 10
+        - 4 NH3 + 3 O2:                n = (0 + 1.5) / 2 = 0.75
+        - 2 NH3 + 3 H2O2 -> N2 + 6H2O: n = (0 + 1.5) / 1 = 1.5
+        - C2H5OH + 3 O2:               n = (4 + 3 - 1) / 2 = 3
+        - CH4 + 4 N2O:                 n = (2 + 2) / 1 = 4
+
+    Args:
+        fuel_smiles (Optional[str]): SMILES of the fuel.
+        fuel_adjlist (Optional[str]): Adjacency list of the fuel.
+        fuel_inchi (Optional[str]): InChI of the fuel.
+        oxidizer_smiles (Optional[str]): SMILES of the oxidizer.
+        oxidizer_adjlist (Optional[str]): Adjacency list of the oxidizer.
+        oxidizer_inchi (Optional[str]): InChI of the oxidizer.
+
+    Returns:
+        float: Stoichiometric coefficient ``n_oxidizer / n_fuel`` for complete combustion.
+
+    Raises:
+        ValueError: If the fuel contains atoms other than C/H/N/O, or if the
+                    oxidizer cannot supply net active O (``k_O - k_H/2 <= 0``).
+    """
+    fuel_atoms = get_atom_counts(smiles=fuel_smiles, adjlist=fuel_adjlist, inchi=fuel_inchi)
+    if fuel_atoms['other']:
+        raise ValueError(f'Cannot calculate oxidizer stoichiometry for a fuel with '
+                         f'{fuel_atoms["other"]} atoms which are not C/H/N/O.')
+    ox_atoms = get_atom_counts(smiles=oxidizer_smiles, adjlist=oxidizer_adjlist, inchi=oxidizer_inchi)
+    net_active_o = ox_atoms['O'] - ox_atoms['H'] / 2.0
+    if net_active_o <= 0:
+        raise ValueError(f'Oxidizer supplies no net active oxygen atoms '
+                         f'(O={ox_atoms["O"]}, H={ox_atoms["H"]}). Cannot use as oxidizer.')
+    o_demand = 2 * fuel_atoms['C'] + fuel_atoms['H'] / 2.0 - fuel_atoms['O']
+    return o_demand / net_active_o
+
+
+def determine_concentrations_by_equivalence_ratios(
+        species: List[dict],
+) -> Optional[Dict]:
+    """
+    Build per-equivalence-ratio concentration columns for a fuel/oxidizer/diluent
+    mixture (single or multi-component on each role).
+
+    The driving axis is the ``equivalence_ratios`` list on the (single) ``role='fuel'``
+    species. The function returns one concentration value per ``φ`` for every species
+    that participates in the mixture.
+
+    Convention (standard combustion definition)::
+
+        φ = (n_fuel / n_oxidizer)_actual / (n_fuel / n_oxidizer)_stoich
+
+    With ``[fuel]`` held constant, the total oxidizer-equivalent demand at a given
+    ``φ`` is ``(n_ox_per_fuel * [fuel]) / φ``. So **lean (φ < 1) ⇒ excess oxidizer**
+    and **rich (φ > 1) ⇒ less oxidizer**.
+
+    Multi-oxidizer mixtures: each oxidizer carries an ``oxidizer_fraction`` (must sum
+    to 1.0); the total oxidizer-equivalent demand is split by fraction. Each oxidizer's
+    own per-fuel stoichiometry is used to convert from "active O equivalents" to
+    "molecules of that specific oxidizer".
+
+    Multi-diluent mixtures: each diluent carries a ``diluent_to_oxidizer_ratio``
+    (defaults to 3.76 for an air-like N2/O2 mix). The diluent concentration at each
+    ``φ`` is ``ratio * total_oxidizer_concentration``.
+
+    Inert species (``role=None`` with a non-zero, scalar ``concentration``) become a
+    constant column repeated ``len(equivalence_ratios)`` times.
+
+    Args:
+        species (List[dict]): The list of species dicts following the schema format.
+
+    Returns:
+        Optional[Dict]: ``None`` if no fuel role is present or the fuel has no
+            ``equivalence_ratios``. Otherwise::
+
+                {
+                    'equivalence_ratios': [φ1, φ2, ...],
+                    'concentrations': {
+                        <species_label>: [c_at_φ1, c_at_φ2, ...],
+                        ...
+                    },
+                }
+
+    Raises:
+        ValueError: If more than one species has ``role='fuel'``; if the fuel
+            ``equivalence_ratios`` list is empty; if multiple oxidizer fractions don't
+            sum to 1.0; if no oxidizer is defined while a fuel with equivalence_ratios is.
+    """
+    fuels, oxidizers, diluents, inerts = [], [], [], []
+    for spc in species:
+        role = spc.get('role')
+        if role == 'fuel':
+            fuels.append(spc)
+        elif role == 'oxidizer':
+            oxidizers.append(spc)
+        elif role == 'diluent':
+            diluents.append(spc)
+        elif role is None and spc.get('concentration', 0):
+            inerts.append(spc)
+    if not fuels:
+        return None
+    if len(fuels) > 1:
+        raise ValueError(f'Exactly one species may have role="fuel"; got {len(fuels)}: '
+                         f'{[s["label"] for s in fuels]}')
+    fuel = fuels[0]
+    eq_ratios = fuel.get('equivalence_ratios')
+    if eq_ratios is None:
+        return None
+    if not eq_ratios:
+        raise ValueError(f'Fuel {fuel["label"]!r} has an empty equivalence_ratios list.')
+    if not oxidizers:
+        raise ValueError(f'Fuel {fuel["label"]!r} declares equivalence_ratios but no '
+                         f'species has role="oxidizer".')
+
+    # 1. Fuel concentration is constant across φ.
+    fuel_conc = fuel.get('concentration') or 1.0
+    if isinstance(fuel_conc, (list, tuple)):
+        # User provided a range (unusual for a φ-driven sweep); collapse to its mean.
+        fuel_conc = sum(fuel_conc) / len(fuel_conc)
+
+    # 2. Validate oxidizer fractions.
+    fractions = [(o.get('oxidizer_fraction') if o.get('oxidizer_fraction') is not None else 1.0)
+                 for o in oxidizers]
+    if len(oxidizers) == 1:
+        fractions = [1.0]
+    else:
+        total = sum(fractions)
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError(f'Oxidizer fractions must sum to 1.0; got {total} '
+                             f'for {[o["label"] for o in oxidizers]}.')
+
+    # 3. Per-oxidizer stoichiometry (mol oxidizer per mol fuel for complete combustion).
+    per_ox_stoich = []
+    for ox in oxidizers:
+        per_ox_stoich.append(get_oxidizer_stoichiometry(
+            fuel_smiles=fuel.get('smiles'),
+            fuel_adjlist=fuel.get('adjlist'),
+            fuel_inchi=fuel.get('inchi'),
+            oxidizer_smiles=ox.get('smiles'),
+            oxidizer_adjlist=ox.get('adjlist'),
+            oxidizer_inchi=ox.get('inchi'),
+        ))
+
+    # 4. Build per-φ columns.
+    concentrations: Dict[str, List[float]] = {fuel['label']: [fuel_conc] * len(eq_ratios)}
+
+    # Each oxidizer's concentration at φ:
+    #     conc_i = fuel_conc * stoich_i * fraction_i / φ
+    # where fraction_i is interpreted as "this oxidizer supplies fraction_i of the
+    # total active-O demand" (i.e., it scales the moles of THIS oxidizer linearly).
+    for ox, stoich, frac in zip(oxidizers, per_ox_stoich, fractions):
+        col = [fuel_conc * stoich * frac / phi for phi in eq_ratios]
+        concentrations[ox['label']] = col
+
+    # Total per-φ oxidizer concentration (for diluent ratio computation).
+    total_ox_per_phi = [0.0] * len(eq_ratios)
+    for ox in oxidizers:
+        for i, c in enumerate(concentrations[ox['label']]):
+            total_ox_per_phi[i] += c
+
+    # Each diluent's concentration at φ = ratio * total_oxidizer_at_φ.
+    for dil in diluents:
+        ratio = dil.get('diluent_to_oxidizer_ratio')
+        if ratio is None:
+            ratio = 3.76  # Air-like N2/O2 default; user can override per-diluent.
+        concentrations[dil['label']] = [ratio * total for total in total_ox_per_phi]
+
+    # Inert columns are constant across φ.
+    for inert in inerts:
+        c = inert['concentration']
+        if isinstance(c, (list, tuple)):
+            c = sum(c) / len(c)
+        concentrations[inert['label']] = [c] * len(eq_ratios)
+
+    return {
+        'equivalence_ratios': list(eq_ratios),
+        'concentrations': concentrations,
+    }

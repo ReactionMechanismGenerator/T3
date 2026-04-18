@@ -1,0 +1,85 @@
+generator: ck2yaml
+input-files: [chem_annotated.inp, tran.dat]
+cantera-version: 2.6.0
+date: Thu, 05 Oct 2023 14:11:31 +0300
+
+units: {length: cm, time: s, quantity: mol, activation-energy: J/mol}
+
+
+reactions:
+
+# Arrhenius
+- equation: H(3) + H3N2(6) <=> H2(4) + H2N2(7)  # Reaction 10
+  rate-constant: {A: 7476.0, b: 2.796, Ea: 4.684}
+  note: |-
+    Reaction index: Chemkin #10; RMG #322
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H3N2(6), H2N2(7); H(3), H2(4);
+
+
+# Troe
+- equation: NH2(5) + NH2(5) (+M) <=> H4N2(1) (+M)  # Reaction 3
+  type: falloff
+  low-P-rate-constant: {A: 1.6e+34, b: -5.49, Ea: 1.987}
+  high-P-rate-constant: {A: 5.6e+14, b: -0.414, Ea: 0.066}
+  Troe: {A: 0.31, T3: 1.0e-30, T1: 1.0e+30}
+  efficiencies: {N2(2): 1.0, Ar: 0.5, ammonia(9): 2.93}
+  note: |-
+    Reaction index: Chemkin #3; RMG #125
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(5), H4N2(1); NH2(5), H4N2(1);
+    Reaction library: 'primaryNitrogenLibrary'
+
+
+# Lindemann
+- equation: H4N2(1) (+M) <=> H(3) + H3N2(6) (+M)  # Reaction 5
+  type: falloff
+  low-P-rate-constant: {A: 1.95e+47, b: -8.5, Ea: 82.384}
+  high-P-rate-constant: {A: 5.69e+14, b: -0.28, Ea: 81.034}
+  note: |-
+    Reaction index: Chemkin #5; RMG #126
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: H4N2(1), H(3); H4N2(1), H3N2(6);
+    Reaction library: 'primaryNitrogenLibrary'
+
+
+# 3rd body
+- equation: NH2(5) + NH2(5) + M <=> H2(4) + H2N2(7) + M  # Reaction 7
+  type: three-body
+  rate-constant: {A: 1.74e+08, b: 1.02, Ea: 11.784}
+  note: |-
+    Reaction index: Chemkin #7; RMG #187
+    Library reaction: primaryNitrogenLibrary
+    Flux pairs: NH2(5), H2N2(7); NH2(5), H2(4);
+
+
+# PLOG
+- equation: NH2(5) + NH2(5) <=> H(3) + H3N2(6)  # Reaction 6
+  type: pressure-dependent-Arrhenius
+  rate-constants:
+  - {P: 0.1 atm, A: 9.2e+11, b: -0.01, Ea: 10.014}
+  - {P: 1.0 atm, A: 1.2e+12, b: -0.03, Ea: 10.084}
+  - {P: 10.0 atm, A: 4.7e+12, b: -0.2, Ea: 10.62}
+  note: |-
+    Reaction index: Chemkin #6; RMG #473
+    Library reaction: Nitrogen_Dean_and_Bozzelli
+    Flux pairs: NH2(5), H3N2(6); NH2(5), H(3);
+
+
+# Chebyshev
+- equation: H4N2(1) <=> H2(4) + H2N2(7)  # Reaction 11
+  type: Chebyshev
+  temperature-range: [340.0, 2500.0]
+  pressure-range: [0.007 atm, 29.608 atm]
+  data:
+  - [-6.823, 0.2943, -0.07467, 0.02156]
+  - [13.96, 0.4017, -0.06942, 0.01479]
+  - [-0.4696, 0.1761, -6.242e-03, 4.085e-04]
+  - [-0.2516, 0.04881, 9.199e-03, -8.436e-04]
+  - [-0.116, 5.018e-03, 5.064e-03, -3.472e-05]
+  - [-0.04623, -2.717e-03, 1.152e-03, 8.955e-06]
+  note: |-
+    Reaction index: Chemkin #11; RMG #1723
+    PDep reaction: PDepNetwork #24
+    Flux pairs: H4N2(1), H2(4); H4N2(1), H2N2(7);
+

@@ -49,7 +49,7 @@ def test_fix_undeclared_duplicate_reactions():
     shutil.copyfile(os.path.join(TEST_DATA_BASE_PATH, 'models', 'dups', '1.yaml'), model_path_1)
     tb_1 = fix.get_traceback(model_path_1)
     model_path_2 = copy_model(os.path.join(TEST_DATA_BASE_PATH, 'models', 'dups', '1.yaml'))
-    fix.fix_undeclared_duplicate_reactions(model_path_2, tb_1)
+    fix.fix_undeclared_duplicate_reactions(model_path_2, tb_1, marked_dups=[])
     tb = fix.get_traceback(model_path_2)
     assert tb is None
     os.remove(model_path_1)

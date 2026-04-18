@@ -18,6 +18,7 @@ from arc.job.local import (_determine_job_id,
                            parse_running_jobs_ids)
 
 from t3.imports import local_t3_path, settings, submit_scripts
+from t3.utils.fix_cantera import fix_cantera
 
 if TYPE_CHECKING:
     from t3.logger import Logger
@@ -304,6 +305,7 @@ def rmg_runner(rmg_input_file_path: str,
                rmg_execution_type: Optional[str] = None,
                restart_rmg: bool = False,
                walltime: Optional[str] = None,
+               fix_cantera_model: bool = True,
                ) -> bool:
     """
     Run an RMG job as a subprocess under the rmg_env.
@@ -320,6 +322,7 @@ def rmg_runner(rmg_input_file_path: str,
         rmg_execution_type (str, optional): The RMG execution type (incore or local). Also set via settings.py.
         restart_rmg (bool, optional): Whether to restart RMG from seed.
         walltime (str, optional): Max walltime in 'DD:HH:MM:SS' format. Defaults to 6 hours.
+        fix_cantera_model (bool, optional): Whether to fix the Cantera model file after the RMG run completes.
 
     Returns:
         bool: Whether an exception was raised.
@@ -335,11 +338,13 @@ def rmg_runner(rmg_input_file_path: str,
                                                    max_iterations=max_iterations,
                                                    walltime=walltime,
                                                    )
+        if fix_cantera_model:
+            fix_cantera_model_files(rmg_path=os.path.dirname(rmg_input_file_path))
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':
         runner_counter = 0
         rmg_errors = list()
-        converged, restart_rmg, run_rmg = False, restart_rmg, True
+        converged, run_rmg = False, True
         while run_rmg:
             runner_counter += 1
             project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
@@ -372,9 +377,11 @@ def rmg_runner(rmg_input_file_path: str,
                       and not(len(rmg_errors) >= 2 and error is not None and error == rmg_errors[-2])
             restart_rmg = False if error is not None and 'Could not find one or more of the required files/directories ' \
                                                          'for restarting from a seed mechanism' in error else True
+        if fix_cantera_model:
+            fix_cantera_model_files(rmg_path=os.path.dirname(rmg_input_file_path))
         return not converged
     else:
-        logger.warning(f'Expected wither "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'
+        logger.warning(f'Expected either "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'
                        f'Not executing RMG.')
         return True
 
@@ -436,8 +443,8 @@ def backup_rmg_files(project_directory: str):
     """
     restart_backup_dir = os.path.join(project_directory,
                                       f'restart_backup_{datetime.datetime.now().strftime("%b%d_%Y_%H-%M-%S")}')
-    os.mkdir(restart_backup_dir)
-    os.mkdir(os.path.join(restart_backup_dir, 'chemkin'))
+    chemkin_folder_path = os.path.join(restart_backup_dir, 'chemkin')
+    os.makedirs(chemkin_folder_path, exist_ok=True)
     files = ['RMG.log',
              os.path.join('chemkin', 'chem_annotated.inp'),
              os.path.join('chemkin', 'chem_edge_annotated.inp'),
@@ -451,6 +458,18 @@ def backup_rmg_files(project_directory: str):
         if os.path.exists(os.path.join(project_directory, folder)):
             shutil.copytree(src=os.path.join(project_directory, folder),
                             dst=os.path.join(restart_backup_dir, folder))
+
+
+def fix_cantera_model_files(rmg_path: str) -> None:
+    """
+    Fix Cantera model files emitted by RMG (resolve mislabeled duplicates, drop
+    invalid-rate-coefficient reactions, etc.).
+
+    Args:
+        rmg_path (str): The path to the RMG folder.
+    """
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera', 'chem_annotated.yaml'))
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera', 'chem.yaml'))
 
 
 def run_arkane_job(input_file: str,

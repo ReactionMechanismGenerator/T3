@@ -62,7 +62,7 @@ t3:
     adapter: CanteraConstantTP  # *required* (this is how SA is requested)
                                 # Available adapters: 'CanteraConstantTP', 'CanteraConstantHP',
                                 # 'CanteraConstantUV', 'CanteraPFR', 'CanteraPFRTProfile',
-                                # 'CanteraJSR', 'RMGConstantTP'
+                                # 'CanteraJSR', 'CanteraIDT', 'CanteraRCM', 'RMGConstantTP'
     atol: 1e-6  # optional, default: 1e-6
     rtol: 1e-4  # optional, default: 1e-4
     global_observables: ['IDT', 'ESR', 'SL']  # optional, only implemented in Cantera adapters,
@@ -79,10 +79,30 @@ t3:
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
     top_SA_reactions: 10  # optional, used per observable to determine rates to calculate as well as
                           # thermo of species participating in these reactions, default: 10
+    max_sa_workers: 24  # optional, max worker processes for brute-force SA in the Cantera IDT
+                        # adapter (one perturbation per worker), default: 24
     T_list: [800, 1000, 1200]  # optional, explicit temperature list for SA runs (overrides
                                # range-based generation), Units: K, default: None
     P_list: [1, 10]  # optional, explicit pressure list for SA runs (overrides range-based
                      # generation), Units: bar, default: None
+
+    # IDT-specific SA options (only apply when adapter is CanteraIDT or CanteraRCM):
+    idt_criterion: max_dOHdt  # optional, how to define the ignition delay time.
+                              # 'max_dOHdt' (default): time of max d[OH]/dt (falls back to d[H]/dt
+                              #   if OH is absent from the mechanism)
+                              # 'max_dTdt': time of max dT/dt
+                              # 'max_radical_dt': auto-detect highest-conc radical, use max d[radical]/dt
+    idt_sa_method: brute_force  # optional, SA method for IDT.
+                                # 'brute_force' (default): perturb each parameter, re-simulate
+                                # 'adjoint': Cantera built-in adjoint SA (faster, single sim per condition)
+    delta_h: 0.1  # optional, enthalpy perturbation for brute-force thermo SA, Units: kJ/mol, default: 0.1
+    delta_k: 0.05  # optional, fractional rate perturbation for brute-force kinetics SA, default: 0.05
+    adaptive_perturbation: false  # optional, enable adaptive perturbation sizing. When true,
+                                  # delta_h scales relative to |H298| and failed workers retry with
+                                  # halved perturbation. default: false
+    experimental_idt_path: null  # optional, path to a YAML file with experimental IDT data for
+                                 # comparison (not optimization). See examples/idt_with_experiment/.
+                                 # default: null
 
   # uncertainty analysis (optional block, T3 can run w/o UA)
   # either local or global UA type must be specified to execute an UA
@@ -157,6 +177,39 @@ rmg:
       # note: 'constant' is only allowed in liquid phase simulations
       # note: 'solvent' is only allowed in liquid phase simulations
 
+  # fuel / oxidizer / diluent roles (used by the IDT adapter and the equivalence-ratio sweep)
+  # When 'role' is set, the species concentrations are recomputed per phi from the fuel
+  # concentration, the oxidizer's stoichiometric demand, and the diluent_to_oxidizer_ratio.
+  # Exactly one species must carry role='fuel'. Multiple oxidizers / diluents are allowed;
+  # oxidizer_fraction must sum to 1 across oxidizers when more than one oxidizer is given.
+  #
+  # Role-specific field restrictions (setting a field on the wrong role raises a validation error):
+  #   equivalence_ratios       — only on role='fuel'    (required for fuel)
+  #   oxidizer_fraction        — only on role='oxidizer'
+  #   diluent_to_oxidizer_ratio — only on role='diluent'
+  # Example below: an NH3 fuel in an O2/N2O oxidizer diluted with N2:
+  #
+  # species:
+  #   - label: NH3
+  #     smiles: 'N'
+  #     concentration: 1.0
+  #     role: fuel
+  #     equivalence_ratios: [0.5, 1.0, 1.5]  # required on the fuel, drives the phi sweep
+  #   - label: O2
+  #     smiles: '[O][O]'
+  #     role: oxidizer
+  #     oxidizer_fraction: 0.8  # fraction of total oxidizer demand carried by this oxidizer
+  #   - label: N2O
+  #     smiles: 'N#[N+][O-]'
+  #     role: oxidizer
+  #     oxidizer_fraction: 0.2
+  #   - label: N2
+  #     adjlist: |
+  #       1 N u0 p1 c0 {2,T}
+  #       2 N u0 p1 c0 {1,T}
+  #     role: diluent
+  #     diluent_to_oxidizer_ratio: 3.76  # default 3.76 (air-like); set to 0 for an undiluted mixture
+
   # reactors (List[dict]) (a required block)
   # reactor type: 'gas batch constant T P' or 'liquid batch constant T V'
   # at least one termination criterion must be given per reactor
@@ -171,6 +224,9 @@ rmg:
       termination_time: [5, 's']  # allowed units: 'micro-s', 'ms', 's', 'hours', 'days'
       termination_rate_ratio: 0.01
       conditions_per_iteration: 12  # optional, default: 12 (nSims in RMG)
+      idt_mode: matrix  # optional, only used by the Cantera IDT adapter, default: 'matrix'
+                        # 'matrix' = full T_list x P_list x phi_list cartesian product
+                        # 'row'    = zip(T_list, P_list, phi_list) (lists must be same length)
 
   # model (a required block)
   model:

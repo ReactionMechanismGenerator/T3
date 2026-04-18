@@ -95,8 +95,8 @@ adapter that reproduces its idealized chemistry:
 
 | Experimental setup | Adapter | Notes |
 |---|---|---|
-| Shock tube (reflected shock) | `CanteraConstantUV` | Standard treatment: closed, adiabatic, constant-volume batch reactor. Use `IDT` as a global observable for ignition delay measurements. |
-| Rapid compression machine (RCM) | `CanteraConstantUV` | Same idealization as a reflected shock once the piston is at top-dead-center. Heat loss is not modeled. |
+| Shock tube (reflected shock) | `CanteraConstantUV` or `CanteraIDT` | Standard treatment: closed, adiabatic, constant-volume batch reactor (`IdealGasReactor`). Use `CanteraConstantUV` for general simulations, or `CanteraIDT` when you need IDT-specific sensitivity analysis (brute-force or adjoint). Use `IDT` as a global observable for ignition delay measurements. |
+| Rapid compression machine (RCM) | `CanteraConstantUV` or `CanteraRCM` | Same physics but at constant pressure (`IdealGasConstPressureReactor`). Use `CanteraRCM` when you need IDT-specific sensitivity analysis. Heat loss is not modeled. |
 | Constant-volume bomb | `CanteraConstantUV` | Adiabatic version. |
 | Flow reactor (isothermal) | `CanteraPFR` | Lagrangian PFR: a parcel of gas advected at constant T, P. |
 | Flow reactor with measured wall temperature | `CanteraPFRTProfile` | Lagrangian PFR with a hard-coded axial temperature profile `T(z)` (energy equation off).  The geometry, the breakpoints, and the profile shape are set by module-level constants in `t3/simulate/cantera_pfr_t_profile.py` (defaults to an 80 cm reactor: a 20 cm raised-cosine ramp 300 → 900 K, a 40 cm 900 K plateau, and a 20 cm raised-cosine ramp 900 → 500 K).  Pressure stays at the inlet value; density evolves with `T`.  Supports SA -- the SA coefficients are returned as a function of axial position `z` (the reactor is steady-state in the lab frame), via an extra `'distance'` key in the `sa_dict`. |

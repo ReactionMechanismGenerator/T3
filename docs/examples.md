@@ -54,7 +54,7 @@ constant-volume batch reactor.
 
 **Features demonstrated:**
 
-- `CanteraConstantUV` adapter — closed adiabatic constant-V batch
+- `CanteraConstantUV` adapter — closed adiabatic constant-V batch (same `IdealGasReactor` as a shock tube post-reflected-shock state). For IDT-specific sensitivity analysis use `CanteraIDT` instead.
 - Dilute mixture in argon (`balance: true` on Ar, `reactive: false`)
 - `global_observables: ['IDT']` — IDT is the primary measurement of a shock tube
 - Short `termination_time` in milliseconds, matching typical IDT magnitudes
@@ -206,6 +206,23 @@ Demonstrates a liquid-phase simulation with a solvent species.
 - `reactive: false` on N<sub>2</sub> (non-reactive dissolved gas)
 - `all_core_species: true` to calculate thermo for every core species
 - Liquid-phase specific species constraints
+
+
+## IDT with experimental comparison
+
+**Directory:** `examples/idt_with_experiment/`
+
+Demonstrates running IDT-focused sensitivity analysis with experimental data
+comparison. T3 computes predicted IDTs and compares them against experimental
+measurements, reporting per-point log-errors and RMSE.
+
+**Features demonstrated:**
+
+- `global_observables: ['IDT']` for IDT-based SA
+- `idt_criterion: max_dOHdt` (configurable: `max_dTdt`, `max_radical_dt`)
+- `idt_sa_method: adjoint` (`brute_force` or `adjoint` for Cantera built-in SA)
+- `experimental_idt_path` pointing to a YAML file with experimental data
+- Experimental YAML format with citation, T/P/phi/idt fields
 
 
 ## Input reference

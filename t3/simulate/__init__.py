@@ -8,7 +8,9 @@ from t3.simulate.cantera_base import CanteraBase
 from t3.simulate.cantera_constant_tp import CanteraConstantTP
 from t3.simulate.cantera_constant_hp import CanteraConstantHP
 from t3.simulate.cantera_constant_uv import CanteraConstantUV
+from t3.simulate.cantera_idt import CanteraIDT
 from t3.simulate.cantera_jsr import CanteraJSR
 from t3.simulate.cantera_pfr import CanteraPFR
 from t3.simulate.cantera_pfr_t_profile import CanteraPFRTProfile
+from t3.simulate.cantera_rcm import CanteraRCM
 from t3.simulate.rmg_constant_tp import RMGConstantTP

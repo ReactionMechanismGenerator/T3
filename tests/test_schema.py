@@ -8,7 +8,9 @@ schema test module
 import pytest
 from pydantic import ValidationError
 
-from t3.schema import (T3Options,
+from t3.schema import (IDTCriterionEnum,
+                       IDTSAMethodEnum,
+                       T3Options,
                        T3Sensitivity,
                        T3Uncertainty,
                        RMGDatabase,
@@ -116,6 +118,16 @@ def test_t3_sensitivity_schema():
     assert t3_sensitivity.ME_methods == ['CSE', 'MSC']
     assert t3_sensitivity.top_SA_species == 10
     assert t3_sensitivity.top_SA_reactions == 10
+    assert t3_sensitivity.max_sa_workers == 24  # default
+
+    # adapter may now be None (idt-style sweeps don't need a SA adapter)
+    t3_sensitivity_no_adapter = T3Sensitivity(adapter=None, max_sa_workers=8)
+    assert t3_sensitivity_no_adapter.adapter is None
+    assert t3_sensitivity_no_adapter.max_sa_workers == 8
+
+    with pytest.raises(ValidationError):
+        # max_sa_workers must be >= 1
+        T3Sensitivity(max_sa_workers=0)
 
     with pytest.raises(ValidationError):
         # check that adapter is constrained to at most 255 characters
@@ -180,6 +192,55 @@ def test_t3_sensitivity_schema():
     with pytest.raises(ValidationError):
         # check that top_SA_reactions is constrained to >= 0
         T3Sensitivity(top_SA_reactions=-1)
+
+
+def test_idt_criterion_enum():
+    """Test IDTCriterionEnum values, defaults, and validation."""
+    assert IDTCriterionEnum.max_dOHdt.value == 'max_dOHdt'
+    assert IDTCriterionEnum.max_dTdt.value == 'max_dTdt'
+    assert IDTCriterionEnum.max_radical_dt.value == 'max_radical_dt'
+
+    # Default
+    s = T3Sensitivity()
+    assert s.idt_criterion == IDTCriterionEnum.max_dOHdt
+
+    # Accept all valid values (both enum members and plain strings)
+    for val in ('max_dOHdt', 'max_dTdt', 'max_radical_dt'):
+        s = T3Sensitivity(idt_criterion=val)
+        assert s.idt_criterion.value == val
+
+    # Serializes to plain string
+    d = T3Sensitivity(idt_criterion='max_dTdt').model_dump()
+    assert d['idt_criterion'] == 'max_dTdt'
+    assert isinstance(d['idt_criterion'], str)
+
+    # Rejects invalid criterion
+    with pytest.raises(ValidationError):
+        T3Sensitivity(idt_criterion='invalid_criterion')
+
+
+def test_idt_sa_method_enum():
+    """Test IDTSAMethodEnum values, defaults, and validation."""
+    assert IDTSAMethodEnum.brute_force.value == 'brute_force'
+    assert IDTSAMethodEnum.adjoint.value == 'adjoint'
+
+    # Accept all valid values
+    for val in ('brute_force', 'adjoint'):
+        s = T3Sensitivity(idt_sa_method=val)
+        assert s.idt_sa_method.value == val
+
+    # Serializes to plain string
+    d = T3Sensitivity(idt_sa_method='adjoint').model_dump()
+    assert d['idt_sa_method'] == 'adjoint'
+    assert isinstance(d['idt_sa_method'], str)
+
+    # Default
+    s = T3Sensitivity()
+    assert s.idt_sa_method == IDTSAMethodEnum.brute_force
+
+    # Rejects invalid method
+    with pytest.raises(ValidationError):
+        T3Sensitivity(idt_sa_method='finite_difference')
 
 
 def test_t3_uncertainty_schema():
@@ -363,6 +424,57 @@ def test_rmg_species_schema():
                    smiles='O',
                    constant=True,
                    )
+
+
+def test_rmg_species_role_fields():
+    """Test the new fuel/oxidizer/diluent role fields and their cross-field validation."""
+    # A valid fuel species with equivalence ratios.
+    fuel = RMGSpecies(label='propane',
+                      smiles='CCC',
+                      role='fuel',
+                      equivalence_ratios=[0.5, 1.0, 1.5],
+                      concentration=1.0,
+                      )
+    assert fuel.role == 'fuel'
+    assert fuel.equivalence_ratios == [0.5, 1.0, 1.5]
+
+    # A valid oxidizer species with a fraction.
+    o2 = RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer', oxidizer_fraction=0.5)
+    assert o2.role == 'oxidizer'
+    assert o2.oxidizer_fraction == 0.5
+
+    # A valid diluent species with a custom ratio.
+    n2 = RMGSpecies(label='N2', smiles='N#N', role='diluent', diluent_to_oxidizer_ratio=3.76)
+    assert n2.role == 'diluent'
+    assert n2.diluent_to_oxidizer_ratio == 3.76
+
+    # equivalence_ratios is rejected on a non-fuel species.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer',
+                   equivalence_ratios=[1.0])
+
+    # oxidizer_fraction is rejected on a non-oxidizer species.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='N2', smiles='N#N', role='diluent', oxidizer_fraction=0.5)
+
+    # diluent_to_oxidizer_ratio is rejected on a non-diluent species.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer',
+                   diluent_to_oxidizer_ratio=3.76)
+
+    # A fuel species without equivalence_ratios is rejected.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='propane', smiles='CCC', role='fuel')
+
+    # An invalid role string is rejected.
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='X', smiles='C', role='catalyst')
+
+    # oxidizer_fraction must be in (0, 1].
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer', oxidizer_fraction=1.5)
+    with pytest.raises(ValidationError):
+        RMGSpecies(label='O2', smiles='[O][O]', role='oxidizer', oxidizer_fraction=0)
 
 
 def test_rmg_reactors_schema():

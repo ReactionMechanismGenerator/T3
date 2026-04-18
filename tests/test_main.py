@@ -54,8 +54,15 @@ t3_minimal = {'options': {'all_core_reactions': False,
               'sensitivity': {'ME_methods': ['CSE', 'MSC'],
                               'SA_threshold': 0.01,
                               'adapter': 'CanteraConstantTP',
+                              'adaptive_perturbation': False,
                               'atol': 1e-06,
+                              'delta_h': 0.1,
+                              'delta_k': 0.05,
+                              'experimental_idt_path': None,
                               'global_observables': None,
+                              'idt_criterion': 'max_dOHdt',
+                              'idt_sa_method': 'brute_force',
+                              'max_sa_workers': 24,
                               'pdep_SA_threshold': 0.001,
                               'rtol': 0.0001,
                               'P_list': None,
@@ -109,6 +116,7 @@ rmg_minimal = {'memory': None,
                              'T': 1000.0,
                              'V': None,
                              'conditions_per_iteration': 12,
+                             'idt_mode': 'matrix',
                              'termination_conversion': {'H2': 0.9},
                              'termination_rate_ratio': None,
                              'termination_time': (5.0, 's'),
@@ -127,6 +135,10 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
                             },
                            {'SA_observable': False,
                             'UA_observable': False,
@@ -142,6 +154,10 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
                             },
                            {'SA_observable': True,
                             'UA_observable': False,
@@ -157,6 +173,10 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
                             },
                            {'SA_observable': True,
                             'UA_observable': False,
@@ -172,7 +192,11 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
-                            },],
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
+                            }],
                'species_constraints': None,
                }
 rmg_minimal_defaults = rmg_minimal.copy()
@@ -296,9 +320,13 @@ def test_set_paths():
              'RMG log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
              'RMG job log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/job.log',
              'RMS': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
+             'figs': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/Figures',
              'SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA',
              'SA input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
              'SA coefficients': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_coefficients.yml',
+             'SA dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
+             'SA IDT dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
+             'SA IDT dict top X': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
              'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
              'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera/chem_annotated.yaml',
              'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
@@ -327,68 +355,69 @@ def test_restart():
             os.makedirs(empty_dir)
 
     # empty project directory
-    # results in iteration=0, run_rmg=True
+    # results in iteration=0, run_rmg=True, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r0'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (0, True)
+    assert t3.restart() == (0, True, False)
 
     # empty 'iteration_1' folder in project directory
-    # results in iteration=1, run_rmg=True
+    # results in iteration=1, run_rmg=True, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r1'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (1, True)
+    assert t3.restart() == (1, True, False)
 
     # 'iteration_2' folder with an 'RMG.log' indicating a non-converged job
-    # results in iteration=2, run_rmg=True
+    # results in iteration=2, run_rmg=False, restart_rmg=True (RMG started but didn't terminate)
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r2'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (2, True)
+    assert t3.restart() == (2, False, True)
 
     # 'iteration_3' folder with an 'RMG.log' indicating a converged job
-    # results in iteration=3, run_rmg=False
+    # results in iteration=3, run_rmg=False, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r3'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (3, False)
+    assert t3.restart() == (3, False, False)
 
     # 'iteration_4' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a non-converged job
-    # results in iteration=4, run_rmg=False
+    # results in iteration=4, run_rmg=False, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r4'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (4, False)
+    assert t3.restart() == (4, False, False)
 
     # 'iteration_5' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a non-converged job
-    # results in iteration=5, run_rmg=False
+    # results in iteration=5, run_rmg=False, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r5'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (5, False)
+    assert t3.restart() == (5, False, False)
 
-    # 'iteration_6' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a non-converged job
-    # and an ARC 'restart.yml' file
-    # results in a complete ARC run, iteration=6+1=7, run_rmg=True
+    # 'iteration_6' folder with an 'RMG.log' indicating a converged job, an 'arc.log' indicating
+    # a converged ARC run, and an ARC 'restart.yml' file (left over from a previous interrupted run).
+    # Because arc.log already contains the termination line, the state machine sees ARC as
+    # terminated and returns (6, False, False); restart_arc is NOT triggered.
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r6'),
             t3=t3_minimal,
@@ -399,19 +428,11 @@ def test_restart():
                                qm_label='Imipramine_1_peroxy_0',
                                smiles='C',
                                reasons=['reason'],
-                               t3_status=T3Status.CONVERGED if False else T3Status.PENDING,  # logic check?
-                               t3_index=0,
-                               created_at_iteration=2)}
-    # Correction: 'converged' was None in original test, so status PENDING.
-    t3.species = {0: T3Species(label='Imipramine_1_peroxy',
-                               qm_label='Imipramine_1_peroxy_0',
-                               smiles='C',
-                               reasons=['reason'],
                                t3_status=T3Status.PENDING,
                                t3_index=0,
                                created_at_iteration=2)}
     t3.dump_species_and_reactions()
-    assert t3.restart() == (7, True)
+    assert t3.restart() == (6, False, False)
     t3.process_arc_run()
     assert t3.species[0].is_converged is True
     with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log'), 'r') as f:
@@ -427,7 +448,7 @@ def test_restart():
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (8, True)
+    assert t3.restart() == (7, False, False)
 
     # restore r6 log file
     with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log'), 'w') as f:
@@ -1102,7 +1123,7 @@ def test_dump_species():
     t3.dump_species_and_reactions()
     assert os.path.isfile(os.path.join(dump_species_path, 't3.log'))
     assert os.path.isfile(os.path.join(dump_species_path, 'species.yml'))
-    assert t3.restart() == (5, True)
+    assert t3.restart() == (5, True, False)
 
 
 def test_load_species():
