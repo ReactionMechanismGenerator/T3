@@ -60,28 +60,11 @@ jobs:
           cache-environment: true
           generate-run-shell: true
 
-      # 6. Install Julia
-      - name: Install Julia 1.10
-        shell: micromamba-shell {0}
-        run: |
-          echo "::group::Install juliaup + Julia 1.10"
-          curl -fsSL https://install.julialang.org | sh -s -- -y
-          export PATH="$HOME/.juliaup/bin:$PATH"
-          juliaup add 1.10
-          juliaup default 1.10
-          echo "PATH=$HOME/.juliaup/bin:$PATH" >> "$GITHUB_ENV"
-          echo "::endgroup::"
-          julia --version
-
-      # 7. Install & Compile ARC (Dependency)
+      # 6. Install & Compile ARC (Dependency)
       - name: Install and Compile ARC
         shell: micromamba-shell {0}
         working-directory: ARC
         run: |
-          echo "::group::Install PyRDL (The ARC Way)"
-          bash devtools/install_pyrdl.sh t3_env
-          echo "::endgroup::"
-
           echo "::group::Compile ARC extensions"
           make compile
           echo "::endgroup::"
@@ -90,14 +73,14 @@ jobs:
           pip install -e .
           echo "::endgroup::"
 
-      # 8. Install T3 (Self)
+      # 7. Install T3 (Self)
       - name: Install T3
         shell: micromamba-shell {0}
         working-directory: T3
         run: |
           pip install -e .
 
-      # 9. Run T3 Tests
+      # 8. Run T3 Tests
       - name: Run Tests
         shell: micromamba-shell {0}
         working-directory: T3
@@ -109,7 +92,7 @@ jobs:
           # Run pytest on the T3 tests directory
           pytest tests/ --cov=t3 --cov-report=xml -ra -vv
 
-      # 10. Upload Coverage
+      # 9. Upload Coverage
       - name: Upload coverage data
         uses: codecov/codecov-action@v3
         with:
