@@ -365,13 +365,13 @@ def test_get_flux_graph(hocho_simulation_data):
                                                  )
     for i, (time, profile) in enumerate(profiles.items()):
         assert almost_equal(profile['P'], 1e5, places=2)  # Pa
-        assert almost_equal(profile['T'], 1000)
-        assert len(profile['ROPs']) == 152
+        assert almost_equal(profile['T'], 1200)
+        assert len(profile['ROPs']) == 36
         flux_graph, nodes_to_explore, min_rop, max_rop = flux.get_flux_graph(profile=profile, observables=['H4N2(1)'])
         if i == 0:
             assert nodes_to_explore == {'H2(4)', '2 H3N2(6)', 'ammonia(9)', 'H(3)', 'H2N2(7)', '2 NH2(5)',
                                         'HN2(10)', 'N2(2)', 'NH2(5)', 'H3N2(6)'}
-            assert almost_equal(min_rop, 3.27e-21, ratio=100)
+            assert almost_equal(min_rop, 5.14e-14, ratio=100)
             assert almost_equal(max_rop, 20.3659, places=3)
             assert list(flux_graph.keys()) == ['H4N2(1)', 'NH2(5)', 'HN2(10)', 'H(3)', 'H2N2(7)', 'H2(4)', 'ammonia(9)', 'H3N2(6)']
             assert flux_graph['H4N2(1)']['H4N2(1) + NH2(5) <=> H3N2(6) + ammonia(9)'][0] == ['H3N2(6)', 'ammonia(9)']
