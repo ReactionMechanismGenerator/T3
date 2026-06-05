@@ -5,7 +5,7 @@ used for input validation
 
 import os
 from enum import Enum
-from typing import Annotated, Dict, List, Optional, Tuple, Union
+from typing import Annotated
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
@@ -39,14 +39,14 @@ class T3Options(BaseModel):
     all_core_reactions: bool = False
     fit_missing_GAV: bool = False
     max_T3_iterations: Annotated[int, Field(gt=0)] = 10
-    max_RMG_exceptions_allowed: Optional[Annotated[int, Field(ge=0)]] = 10
+    max_RMG_exceptions_allowed: Annotated[int, Field(ge=0)] | None = 10
     max_RMG_walltime: Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')] = '00:00:00:00'
-    max_T3_walltime: Optional[Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')]] = None
-    max_rmg_processes: Optional[Annotated[int, Field(ge=1)]] = None
-    max_rmg_iterations: Optional[Annotated[int, Field(ge=1)]] = None
+    max_T3_walltime: Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')] | None = None
+    max_rmg_processes: Annotated[int, Field(ge=1)] | None = None
+    max_rmg_iterations: Annotated[int, Field(ge=1)] | None = None
     library_name: Annotated[str, Field(max_length=255)] = 'T3lib'
-    shared_library_name: Optional[Annotated[str, Field(max_length=255)]] = None
-    external_library_path: Optional[Annotated[str, Field(max_length=255)]] = None
+    shared_library_name: Annotated[str, Field(max_length=255)] | None = None
+    external_library_path: Annotated[str, Field(max_length=255)] | None = None
     num_sa_per_temperature_range: Annotated[int, Field(ge=1)] = 3
     num_sa_per_pressure_range: Annotated[int, Field(ge=1)] = 3
     num_sa_per_volume_range: Annotated[int, Field(ge=1)] = 3
@@ -106,14 +106,14 @@ class T3Sensitivity(BaseModel):
     adapter: Annotated[str, Field(max_length=255)] = 'RMGConstantTP'
     atol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-6
     rtol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-4
-    global_observables: Optional[List[Annotated[str, Field(min_length=2, max_length=3)]]] = None
+    global_observables: list[Annotated[str, Field(min_length=2, max_length=3)]] | None = None
     SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] = 0.01
-    pdep_SA_threshold: Optional[Annotated[float, Field(gt=0, lt=0.5)]] = 0.001
-    ME_methods: List[Annotated[str, Field(min_length=2, max_length=3)]] = ['CSE', 'MSC']
+    pdep_SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] | None = 0.001
+    ME_methods: list[Annotated[str, Field(min_length=2, max_length=3)]] = ['CSE', 'MSC']
     top_SA_species: Annotated[int, Field(ge=0)] = 10
     top_SA_reactions: Annotated[int, Field(ge=0)] = 10
-    T_list: Optional[List[Annotated[float, Field(gt=0)]]] = None
-    P_list: Optional[List[Annotated[float, Field(gt=0)]]] = None
+    T_list: list[Annotated[float, Field(gt=0)]] | None = None
+    P_list: list[Annotated[float, Field(gt=0)]] | None = None
 
     class Config:
         extra = "forbid"
@@ -161,16 +161,16 @@ class T3Uncertainty(BaseModel):
     """
     A class for validating input.T3.uncertainty arguments
     """
-    adapter: Optional[Annotated[str, Field(max_length=255)]] = None
+    adapter: Annotated[str, Field(max_length=255)] | None = None
     local_analysis: bool = False
     global_analysis: bool = False
     correlated: bool = True
     local_number: Annotated[int, Field(gt=0)] = 10
     global_number: Annotated[int, Field(gt=0)] = 5
-    termination_time: Optional[Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')]] = None
+    termination_time: Annotated[str, Field(pattern=r'\d+:\d\d:\d\d:\d\d')] | None = None
     PCE_run_time: Annotated[int, Field(gt=0)] = 1800
-    PCE_error_tolerance: Optional[Annotated[float, Field(gt=0)]] = None
-    PCE_max_evals: Optional[Annotated[int, Field(gt=0)]] = None
+    PCE_error_tolerance: Annotated[float, Field(gt=0)] | None = None
+    PCE_max_evals: Annotated[int, Field(gt=0)] | None = None
     logx: bool = False
 
     class Config:
@@ -181,14 +181,14 @@ class RMGDatabase(BaseModel):
     """
     A class for validating input.RMG.database arguments
     """
-    thermo_libraries: Optional[List[str]] = None
-    kinetics_libraries: Optional[List[str]] = None
-    chemistry_sets: Optional[List[str]] = None
+    thermo_libraries: list[str] | None = None
+    kinetics_libraries: list[str] | None = None
+    chemistry_sets: list[str] | None = None
     use_low_credence_libraries: bool = False
-    transport_libraries: List[str] = ['OneDMinN2', 'PrimaryTransportLibrary', 'NOx2018', 'GRI-Mech']
-    seed_mechanisms: List[str] = list()
-    kinetics_depositories: Union[List[str], str] = 'default'
-    kinetics_families: Union[str, List[str]] = 'default'
+    transport_libraries: list[str] = ['OneDMinN2', 'PrimaryTransportLibrary', 'NOx2018', 'GRI-Mech']
+    seed_mechanisms: list[str] = list()
+    kinetics_depositories: list[str] | str = 'default'
+    kinetics_families: str | list[str] = 'default'
     kinetics_estimator: str = 'rate rules'
 
     class Config:
@@ -221,10 +221,10 @@ class RMGSpecies(BaseModel):
     A class for validating input.RMG.species arguments
     """
     label: str
-    concentration: Union[Annotated[float, Field(ge=0)], Tuple[Annotated[float, Field(ge=0)], Annotated[float, Field(ge=0)]]] = 0
-    smiles: Optional[str] = None
-    inchi: Optional[str] = None
-    adjlist: Optional[str] = None
+    concentration: Annotated[float, Field(ge=0)] | tuple[Annotated[float, Field(ge=0)], Annotated[float, Field(ge=0)]] = 0
+    smiles: str | None = None
+    inchi: str | None = None
+    adjlist: str | None = None
     reactive: bool = True
     observable: bool = False
     SA_observable: bool = False
@@ -232,8 +232,8 @@ class RMGSpecies(BaseModel):
     constant: bool = False
     balance: bool = False
     solvent: bool = False
-    xyz: Optional[Union[List[Union[dict, str]], dict, str]] = None
-    seed_all_rads: Optional[List[RadicalTypeEnum]] = None
+    xyz: list[dict | str] | dict | str | None = None
+    seed_all_rads: list[RadicalTypeEnum] | None = None
 
     class Config:
         extra = "forbid"
@@ -284,12 +284,12 @@ class RMGReactor(BaseModel):
     A class for validating input.RMG.reactors arguments
     """
     type: str
-    T: Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]
-    P: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
-    V: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
-    termination_conversion: Optional[Dict[str, Annotated[float, Field(gt=0, lt=1)]]] = None
-    termination_time: Optional[Tuple[Annotated[float, Field(gt=0)], TerminationTimeEnum]] = None
-    termination_rate_ratio: Optional[Annotated[float, Field(gt=0, lt=1)]] = None
+    T: Annotated[float, Field(gt=0)] | list[Annotated[float, Field(gt=0)]]
+    P: Annotated[float, Field(gt=0)] | list[Annotated[float, Field(gt=0)]] | None = None
+    V: Annotated[float, Field(gt=0)] | list[Annotated[float, Field(gt=0)]] | None = None
+    termination_conversion: dict[str, Annotated[float, Field(gt=0, lt=1)]] | None = None
+    termination_time: tuple[Annotated[float, Field(gt=0)], TerminationTimeEnum] | None = None
+    termination_rate_ratio: Annotated[float, Field(gt=0, lt=1)] | None = None
     conditions_per_iteration: Annotated[int, Field(gt=0)] = 12
 
     class Config:
@@ -362,38 +362,38 @@ class RMGModel(BaseModel):
     A class for validating input.RMG.model arguments
     """
     # primary_tolerances:
-    core_tolerance: Union[Annotated[float, Field(gt=0, lt=1)], List[Annotated[float, Field(gt=0, lt=1)]]]
+    core_tolerance: Annotated[float, Field(gt=0, lt=1)] | list[Annotated[float, Field(gt=0, lt=1)]]
     atol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-16
     rtol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-8
     # filtering:
     filter_reactions: bool = True
-    filter_threshold: Union[Annotated[float, Field(gt=0)], Annotated[int, Field(gt=0)]] = 1e+8
+    filter_threshold: Annotated[float, Field(gt=0)] | Annotated[int, Field(gt=0)] = 1e+8
     # pruning:
-    tolerance_interrupt_simulation: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
-    min_core_size_for_prune: Optional[Annotated[int, Field(gt=0)]] = None
-    min_species_exist_iterations_for_prune: Optional[Annotated[int, Field(gt=0)]] = None
-    tolerance_keep_in_edge: Optional[Annotated[float, Field(gt=0)]] = None
-    maximum_edge_species: Optional[Annotated[int, Field(gt=0)]] = None
-    tolerance_thermo_keep_species_in_edge: Optional[Annotated[float, Field(gt=0)]] = None
+    tolerance_interrupt_simulation: Annotated[float, Field(gt=0)] | list[Annotated[float, Field(gt=0)]] | None = None
+    min_core_size_for_prune: Annotated[int, Field(gt=0)] | None = None
+    min_species_exist_iterations_for_prune: Annotated[int, Field(gt=0)] | None = None
+    tolerance_keep_in_edge: Annotated[float, Field(gt=0)] | None = None
+    maximum_edge_species: Annotated[int, Field(gt=0)] | None = None
+    tolerance_thermo_keep_species_in_edge: Annotated[float, Field(gt=0)] | None = None
     # staging:
-    max_num_species: Optional[Annotated[int, Field(gt=0)]] = None
+    max_num_species: Annotated[int, Field(gt=0)] | None = None
     # dynamics:
-    tolerance_move_edge_reaction_to_core: Optional[Annotated[float, Field(gt=0)]] = None
-    tolerance_move_edge_reaction_to_core_interrupt: Optional[Annotated[float, Field(gt=0)]] = None
-    dynamics_time_scale: Optional[tuple] = None
+    tolerance_move_edge_reaction_to_core: Annotated[float, Field(gt=0)] | None = None
+    tolerance_move_edge_reaction_to_core_interrupt: Annotated[float, Field(gt=0)] | None = None
+    dynamics_time_scale: tuple | None = None
     # multiple_objects:
     max_num_objs_per_iter: Annotated[int, Field(gt=0)] = 1
     terminate_at_max_objects: bool = False
     # misc:
-    ignore_overall_flux_criterion: Optional[bool] = None
-    tolerance_branch_reaction_to_core: Optional[Annotated[float, Field(gt=0)]] = None
-    branching_index: Optional[Annotated[float, Field(gt=0)]] = None
-    branching_ratio_max: Optional[Annotated[float, Field(gt=0)]] = None
+    ignore_overall_flux_criterion: bool | None = None
+    tolerance_branch_reaction_to_core: Annotated[float, Field(gt=0)] | None = None
+    branching_index: Annotated[float, Field(gt=0)] | None = None
+    branching_ratio_max: Annotated[float, Field(gt=0)] | None = None
     # surface algorithm
-    tolerance_move_edge_reaction_to_surface: Optional[Annotated[float, Field(gt=0)]] = None
-    tolerance_move_surface_species_to_core: Optional[Annotated[float, Field(gt=0)]] = None
-    tolerance_move_surface_reaction_to_core: Optional[Annotated[float, Field(gt=0)]] = None
-    tolerance_move_edge_reaction_to_surface_interrupt: Optional[Annotated[float, Field(gt=0)]] = None
+    tolerance_move_edge_reaction_to_surface: Annotated[float, Field(gt=0)] | None = None
+    tolerance_move_surface_species_to_core: Annotated[float, Field(gt=0)] | None = None
+    tolerance_move_surface_reaction_to_core: Annotated[float, Field(gt=0)] | None = None
+    tolerance_move_edge_reaction_to_surface_interrupt: Annotated[float, Field(gt=0)] | None = None
 
     class Config:
         extra = "forbid"
@@ -489,8 +489,8 @@ class RMGPDep(BaseModel):
     method: Annotated[str, Field(min_length=2, max_length=3)]
     max_grain_size: Annotated[float, Field(gt=0)] = 2
     max_number_of_grains: Annotated[int, Field(gt=0)] = 250
-    T: List[Union[Annotated[int, Field(gt=0)], Annotated[float, Field(gt=0)]]] = [300, 2500, 10]
-    P: List[Union[Annotated[int, Field(gt=0)], Annotated[float, Field(gt=0)]]] = [0.01, 100, 10]
+    T: list[Annotated[int, Field(gt=0)] | Annotated[float, Field(gt=0)]] = [300, 2500, 10]
+    P: list[Annotated[int, Field(gt=0)] | Annotated[float, Field(gt=0)]] = [0.01, 100, 10]
     interpolation: str = 'Chebyshev'
     T_basis_set: Annotated[int, Field(gt=0)] = 6
     P_basis_set: Annotated[int, Field(gt=0)] = 4
@@ -567,7 +567,7 @@ class RMGSpeciesConstraints(BaseModel):
     """
     A class for validating input.RMG.species_constraints arguments
     """
-    allowed: List[str] = ['input species', 'seed mechanisms', 'reaction libraries']
+    allowed: list[str] = ['input species', 'seed mechanisms', 'reaction libraries']
     max_C_atoms: Annotated[int, Field(ge=0)]
     max_O_atoms: Annotated[int, Field(ge=0)]
     max_N_atoms: Annotated[int, Field(ge=0)]
@@ -598,9 +598,9 @@ class T3(BaseModel):
     """
     A class for validating input.T3 arguments
     """
-    options: Optional[T3Options] = Field(default_factory=T3Options)
-    sensitivity: Optional[T3Sensitivity] = None
-    uncertainty: Optional[T3Uncertainty] = None
+    options: T3Options | None = Field(default_factory=T3Options)
+    sensitivity: T3Sensitivity | None = None
+    uncertainty: T3Uncertainty | None = None
 
     class Config:
         extra = "forbid"
@@ -610,16 +610,16 @@ class RMG(BaseModel):
     """
     A class for validating input.RMG arguments
     """
-    rmg_execution_type: Optional[str] = None
-    memory: Optional[Annotated[int, Field(ge=0)]] = None
-    cpus: Optional[Annotated[int, Field(gt=0)]] = None
+    rmg_execution_type: str | None = None
+    memory: Annotated[int, Field(ge=0)] | None = None
+    cpus: Annotated[int, Field(gt=0)] | None = None
     database: RMGDatabase
-    reactors: List[RMGReactor]
-    species: List[RMGSpecies]
+    reactors: list[RMGReactor]
+    species: list[RMGSpecies]
     model: RMGModel
-    pdep: Optional[RMGPDep] = None
-    options: Optional[RMGOptions] = Field(default_factory=RMGOptions)
-    species_constraints: Optional[RMGSpeciesConstraints] = None
+    pdep: RMGPDep | None = None
+    options: RMGOptions | None = Field(default_factory=RMGOptions)
+    species_constraints: RMGSpeciesConstraints | None = None
 
     class Config:
         extra = "forbid"
@@ -719,9 +719,9 @@ class InputBase(BaseModel):
     An InputBase class for validating input arguments
     """
     project: Annotated[str, Field(max_length=255)]
-    project_directory: Optional[Annotated[str, Field(max_length=255)]] = None
+    project_directory: Annotated[str, Field(max_length=255)] | None = None
     verbose: Annotated[int, Field(ge=10, le=30, multiple_of=10)] = 20
-    t3: Optional[T3] = Field(default_factory=T3)
+    t3: T3 | None = Field(default_factory=T3)
     rmg: RMG
     qm: QM = Field(default_factory=QM)
 

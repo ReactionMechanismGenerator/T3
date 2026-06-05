@@ -5,7 +5,7 @@ Shim module to replace rmgpy dependencies in T3 simulation adapters.
 import os
 import tempfile
 from dataclasses import dataclass, field
-from typing import List, Tuple, Union, Optional, Any, Dict
+from typing import Any
 
 
 class Quantity:
@@ -29,10 +29,10 @@ class GenericData:
     def __init__(self,
                  label: str,
                  data: Any,
-                 units: Optional[str] = None,
-                 species: Optional[Any] = None,
-                 reaction: Optional[Any] = None,
-                 index: Optional[int] = None):
+                 units: str | None = None,
+                 species: Any | None = None,
+                 reaction: Any | None = None,
+                 index: int | None = None):
         self.label = label
         self.data = data
         self.units = units
@@ -47,11 +47,11 @@ class Reaction:
     """
     def __init__(self,
                  label: str = '',
-                 reactants: Optional[List[Any]] = None,
-                 products: Optional[List[Any]] = None,
-                 kinetics: Optional[Any] = None,
+                 reactants: list[Any] | None = None,
+                 products: list[Any] | None = None,
+                 kinetics: Any | None = None,
                  comment: str = '',
-    index: Optional[int] = None):
+    index: int | None = None):
         self.label = label
         self.reactants = reactants or []
         self.products = products or []
@@ -111,7 +111,7 @@ class PDepNetwork:
     """
     Shim for rmgpy.rmg.pdep.PDepNetwork
     """
-    def __init__(self, index: Optional[int] = None):
+    def __init__(self, index: int | None = None):
         self.index = index
 
 
@@ -120,10 +120,10 @@ class PDepReaction(Reaction):
     Shim for rmgpy.rmg.pdep.PDepReaction
     """
     def __init__(self,
-                 index: Optional[int] = None,
-                 reactants: Optional[List[Any]] = None,
-                 products: Optional[List[Any]] = None,
-                 network: Optional[PDepNetwork] = None,
+                 index: int | None = None,
+                 reactants: list[Any] | None = None,
+                 products: list[Any] | None = None,
+                 network: PDepNetwork | None = None,
                  comment: str = '',
                  **kwargs):
         super().__init__(reactants=reactants, products=products, index=index, comment=comment, **kwargs)
@@ -136,7 +136,7 @@ class CanteraCondition:
     Shim for the condition object returned by generate_cantera_conditions.
     """
     def __init__(self, reactor_type: str, reaction_time: Quantity, mol_frac: dict,
-                 T0: Optional[Quantity] = None, P0: Optional[Quantity] = None, V0: Optional[Quantity] = None):
+                 T0: Quantity | None = None, P0: Quantity | None = None, V0: Quantity | None = None):
         self.reactor_type = reactor_type
         self.reaction_time = reaction_time
         self.mol_frac = mol_frac
@@ -145,13 +145,13 @@ class CanteraCondition:
         self.V0 = V0
 
 
-def generate_cantera_conditions(reactor_type_list: List[str],
+def generate_cantera_conditions(reactor_type_list: list[str],
                                 reaction_time_list: tuple,
-                                mol_frac_list: List[dict],
-                                T0_list: Optional[tuple] = None,
-                                P0_list: Optional[tuple] = None,
-                                V0_list: Optional[tuple] = None,
-                                ) -> List[CanteraCondition]:
+                                mol_frac_list: list[dict],
+                                T0_list: tuple | None = None,
+                                P0_list: tuple | None = None,
+                                V0_list: tuple | None = None,
+                                ) -> list[CanteraCondition]:
     """
     Generates a list of CanteraCondition objects (shim).
     Handles the combinatorics of input lists.
@@ -264,9 +264,9 @@ def _quote_multiline_u(text: str) -> str:
 
 @dataclass
 class NASAPolynomial:
-    coeffs: List[float] = field(default_factory=list)
-    Tmin: Optional[Tuple[float, str]] = None
-    Tmax: Optional[Tuple[float, str]] = None
+    coeffs: list[float] = field(default_factory=list)
+    Tmin: tuple[float, str] | None = None
+    Tmax: tuple[float, str] | None = None
 
     def __repr__(self):
         return (
@@ -277,12 +277,12 @@ class NASAPolynomial:
 
 @dataclass
 class NASA:
-    polynomials: List[NASAPolynomial] = field(default_factory=list)
-    Tmin: Optional[Tuple[float, str]] = None
-    Tmax: Optional[Tuple[float, str]] = None
-    E0: Optional[Tuple[float, str]] = None
-    Cp0: Optional[Tuple[float, str]] = None
-    CpInf: Optional[Tuple[float, str]] = None
+    polynomials: list[NASAPolynomial] = field(default_factory=list)
+    Tmin: tuple[float, str] | None = None
+    Tmax: tuple[float, str] | None = None
+    E0: tuple[float, str] | None = None
+    Cp0: tuple[float, str] | None = None
+    CpInf: tuple[float, str] | None = None
     comment: str = ""
 
     def __repr__(self):
@@ -304,15 +304,15 @@ class NASA:
 
 @dataclass
 class ThermoData:
-    Tdata: Optional[Tuple[List[float], str]] = None
-    Cpdata: Optional[Tuple[List[float], str]] = None
-    H298: Optional[Tuple[float, str]] = None
-    S298: Optional[Tuple[float, str]] = None
-    Tmin: Optional[Tuple[float, str]] = None
-    Tmax: Optional[Tuple[float, str]] = None
-    Cp0: Optional[Tuple[float, str]] = None
-    Cp0: Optional[Tuple[float, str]] = None
-    CpInf: Optional[Tuple[float, str]] = None
+    Tdata: tuple[list[float], str] | None = None
+    Cpdata: tuple[list[float], str] | None = None
+    H298: tuple[float, str] | None = None
+    S298: tuple[float, str] | None = None
+    Tmin: tuple[float, str] | None = None
+    Tmax: tuple[float, str] | None = None
+    Cp0: tuple[float, str] | None = None
+    Cp0: tuple[float, str] | None = None
+    CpInf: tuple[float, str] | None = None
     comment: str = ""
 
     def __repr__(self):
@@ -339,14 +339,14 @@ class ThermoData:
 
 @dataclass
 class Wilhoit:
-    coeffs: List[float]
-    Cp0: Tuple[float, str]
-    CpInf: Tuple[float, str]
-    H0: Tuple[float, str]
-    S0: Tuple[float, str]
-    B: Tuple[float, str]
-    Tmin: Tuple[float, str]
-    Tmax: Tuple[float, str]
+    coeffs: list[float]
+    Cp0: tuple[float, str]
+    CpInf: tuple[float, str]
+    H0: tuple[float, str]
+    S0: tuple[float, str]
+    B: tuple[float, str]
+    Tmin: tuple[float, str]
+    Tmax: tuple[float, str]
 
     def __repr__(self):
         return (
@@ -362,14 +362,14 @@ class Wilhoit:
 
 @dataclass
 class Arrhenius:
-    A: Optional[Union[float, Tuple]] = None
+    A: float | tuple | None = None
     n: float = 0.0
-    Ea: Optional[Union[float, Tuple]] = None
-    T0: Optional[Union[float, Tuple]] = None
-    Tmin: Optional[Tuple[float, str]] = None
-    Tmax: Optional[Tuple[float, str]] = None
-    Pmin: Optional[Tuple[float, str]] = None
-    Pmax: Optional[Tuple[float, str]] = None
+    Ea: float | tuple | None = None
+    T0: float | tuple | None = None
+    Tmin: tuple[float, str] | None = None
+    Tmax: tuple[float, str] | None = None
+    Pmin: tuple[float, str] | None = None
+    Pmax: tuple[float, str] | None = None
     comment: str = ""
 
     def __repr__(self):
@@ -392,7 +392,7 @@ class Arrhenius:
 
 @dataclass
 class MultiArrhenius:
-    arrhenius: List[Arrhenius]
+    arrhenius: list[Arrhenius]
 
     def __repr__(self):
         arr_str = ",\n            ".join([repr(x) for x in self.arrhenius])
@@ -401,8 +401,8 @@ class MultiArrhenius:
 
 @dataclass
 class PDepArrhenius:
-    pressures: Tuple[List[float], str]
-    arrhenius: List[Arrhenius]
+    pressures: tuple[list[float], str]
+    arrhenius: list[Arrhenius]
 
     def __repr__(self):
         arr_str = ",\n            ".join([repr(x) for x in self.arrhenius])
@@ -414,12 +414,12 @@ class PDepArrhenius:
 
 @dataclass
 class Chebyshev:
-    coeffs: List[List[float]]
+    coeffs: list[list[float]]
     kunits: str
-    Tmin: Tuple[float, str]
-    Tmax: Tuple[float, str]
-    Pmin: Tuple[float, str]
-    Pmax: Tuple[float, str]
+    Tmin: tuple[float, str]
+    Tmax: tuple[float, str]
+    Pmin: tuple[float, str]
+    Pmax: tuple[float, str]
     comment: str = ""
 
     def __repr__(self):
@@ -435,7 +435,7 @@ class Chebyshev:
 @dataclass
 class ThirdBody:
     arrheniusLow: Arrhenius
-    efficiencies: Optional[Dict[str, float]] = None
+    efficiencies: dict[str, float] | None = None
     comment: str = ""
 
     def __repr__(self):
@@ -450,7 +450,7 @@ class ThirdBody:
 class Lindemann:
     arrheniusHigh: Arrhenius
     arrheniusLow: Arrhenius
-    efficiencies: Optional[Dict[str, float]] = None
+    efficiencies: dict[str, float] | None = None
     comment: str = ""
 
     def __repr__(self):
@@ -476,10 +476,10 @@ class Troe:
     arrheniusHigh: Arrhenius
     arrheniusLow: Arrhenius
     alpha: float
-    T3: Optional[Tuple[float, str]] = None
-    T1: Optional[Tuple[float, str]] = None
-    T2: Optional[Tuple[float, str]] = None
-    efficiencies: Optional[Dict[str, float]] = None
+    T3: tuple[float, str] | None = None
+    T1: tuple[float, str] | None = None
+    T2: tuple[float, str] | None = None
+    efficiencies: dict[str, float] | None = None
     comment: str = ""
 
     def __repr__(self):
@@ -502,10 +502,10 @@ class Troe:
 
 @dataclass
 class KineticsData:
-    Tdata: Tuple[List[float], str]
-    kdata: Tuple[List[float], str]
-    Tmin: Optional[Tuple[float, str]] = None
-    Tmax: Optional[Tuple[float, str]] = None
+    Tdata: tuple[list[float], str]
+    kdata: tuple[list[float], str]
+    Tmin: tuple[float, str] | None = None
+    Tmax: tuple[float, str] | None = None
 
     def __repr__(self):
         return (
@@ -522,7 +522,7 @@ class KineticsData:
 class Entry:
     index: int
     label: str
-    molecule: Optional[Union[str, List[str]]] = None
+    molecule: str | list[str] | None = None
     thermo: Any = None
     kinetics: Any = None
     shortDesc: str = ""
@@ -577,7 +577,7 @@ class Library:
     name: str = ""
     shortDesc: str = ""
     longDesc: str = ""
-    entries: List[Entry] = field(default_factory=list)
+    entries: list[Entry] = field(default_factory=list)
 
 
 # ==============================================================================
@@ -655,7 +655,7 @@ def parse_rmg_library(content: str) -> Library:
 
 def write_library_to_string(lib: Library) -> str:
     """Writes the shim Library object back to a valid RMG-style python string."""
-    output: List[str] = []
+    output: list[str] = []
     output.append("#!/usr/bin/env python")
     output.append("# encoding: utf-8")
     output.append("")

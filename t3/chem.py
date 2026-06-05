@@ -8,7 +8,7 @@ underlying chemical definitions found in ARC.
 
 from __future__ import annotations
 from enum import Enum
-from typing import Optional, Dict, Any, Union, List
+from typing import Any
 
 from arc.species.species import ARCSpecies, rmg_mol_from_dict_repr
 from arc.reaction.reaction import ARCReaction
@@ -90,16 +90,16 @@ class T3Species(ARCSpecies):
     })
 
     def __init__(self,
-                 label: Optional[str] = None,
-                 key: Optional[int] = None,
-                 species_dict: Optional[dict] = None,
-                 thermo_method: Optional[Union[ThermoMethod, str]] = None,
-                 thermo_source: Optional[str] = None,
+                 label: str | None = None,
+                 key: int | None = None,
+                 species_dict: dict | None = None,
+                 thermo_method: ThermoMethod | str | None = None,
+                 thermo_source: str | None = None,
                  thermo_comment: str = "",
-                 t3_status: Union[T3Status, str] = T3Status.PENDING,
+                 t3_status: T3Status | str = T3Status.PENDING,
                  created_at_iteration: int = 0,
-                 reasons: Optional[Union[List[str], str]] = None,
-                 thermo: Optional[Any] = None,
+                 reasons: list[str] | str | None = None,
+                 thermo: Any | None = None,
                  *args,
                  **kwargs):
 
@@ -128,7 +128,7 @@ class T3Species(ARCSpecies):
                 T3Species._index_counter = key + 1
 
         self.created_at_iteration = created_at_iteration
-        self.rmg_label : Dict[int, str] = t3_extras.get('rmg_label') or {self.created_at_iteration: label}
+        self.rmg_label : dict[int, str] = t3_extras.get('rmg_label') or {self.created_at_iteration: label}
         self.formula = self.mol.get_formula()
         self.qm_label = t3_extras.get('qm_label') or f"s{self.key}_{self.formula}"
         self.thermo = thermo
@@ -137,7 +137,7 @@ class T3Species(ARCSpecies):
             self.from_dict(species_dict=species_dict)
 
         if thermo_method is None:
-            self.thermo_method: Optional[ThermoMethod] = None
+            self.thermo_method: ThermoMethod | None = None
             self.thermo_source = thermo_source
         elif isinstance(thermo_method, ThermoMethod):
             self.thermo_method = thermo_method
@@ -208,7 +208,7 @@ class T3Species(ARCSpecies):
         return data
 
     @classmethod
-    def from_dict(cls, species_dict: Dict[str, Any]) -> 'T3Species':
+    def from_dict(cls, species_dict: dict[str, Any]) -> 'T3Species':
         """
         Reconstruct a T3Species from a dictionary.
         """
@@ -289,20 +289,20 @@ class T3Reaction(ARCReaction):
 
     def __init__(self,
                  # Source Tracking
-                 kinetics_method: Optional[Union[KineticsMethod, str]] = None,
-                 kinetics_source: Optional[str] = None,
+                 kinetics_method: KineticsMethod | str | None = None,
+                 kinetics_source: str | None = None,
                  kinetics_comment: str = "",
                  # T3 State
-                 t3_status: Union[T3Status, str] = T3Status.PENDING,
-                 t3_index: Optional[int] = None,
-                 rmg_index: Optional[int] = None,
+                 t3_status: T3Status | str = T3Status.PENDING,
+                 t3_index: int | None = None,
+                 rmg_index: int | None = None,
                  created_at_iteration: int = 0,
-                 reasons: Optional[Union[List[str], str]] = None,
-                 qm_label: Optional[str] = None,
-                 rmg_label: Optional[str] = None,
-                 reactant_keys: Optional[List[int]] = None,
-                 product_keys: Optional[List[int]] = None,
-                 is_pressure_dependent: Optional[bool] = None,
+                 reasons: list[str] | str | None = None,
+                 qm_label: str | None = None,
+                 rmg_label: str | None = None,
+                 reactant_keys: list[int] | None = None,
+                 product_keys: list[int] | None = None,
+                 is_pressure_dependent: bool | None = None,
                  # ARCReaction arguments
                  *args,
                  **kwargs):
@@ -322,7 +322,7 @@ class T3Reaction(ARCReaction):
         self.is_pressure_dependent = is_pressure_dependent
 
         if kinetics_method is None:
-            self.kinetics_method: Optional[KineticsMethod] = None
+            self.kinetics_method: KineticsMethod | None = None
             self.kinetics_source = kinetics_source
         elif isinstance(kinetics_method, KineticsMethod):
             self.kinetics_method = kinetics_method
@@ -394,7 +394,7 @@ class T3Reaction(ARCReaction):
     @classmethod
     def from_dict(cls,
                   reaction_dict: dict,
-                  species_list: Optional[list] = None) -> 'T3Reaction':
+                  species_list: list | None = None) -> 'T3Reaction':
         """
         Reconstruct a T3Reaction from a dictionary.
 

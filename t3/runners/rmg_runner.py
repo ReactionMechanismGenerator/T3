@@ -7,7 +7,7 @@ import datetime
 import os
 import shutil
 import time
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING
 
 from arc.job.local import (_determine_job_id,
                            change_mode,
@@ -37,11 +37,11 @@ else:
 
 
 def write_submit_script(project_directory: str,
-                        cpus: Optional[int] = None,
-                        memory: Optional[int] = None,
-                        verbose: Optional[str] = None,
-                        max_iterations: Optional[str] = None,
-                        t3_project_name: Optional[str] = None,
+                        cpus: int | None = None,
+                        memory: int | None = None,
+                        verbose: str | None = None,
+                        max_iterations: str | None = None,
+                        t3_project_name: str | None = None,
                         ) -> None:
     """
     Write an RMG submit script.
@@ -78,8 +78,8 @@ def write_submit_script(project_directory: str,
 def submit_job(project_directory: str,
                logger: 'Logger',
                cluster_soft: str,
-               memory: Optional[int] = None,
-               ) -> Tuple[Optional[str], Optional[str]]:
+               memory: int | None = None,
+               ) -> tuple[str | None, str | None]:
     """
     Submit an RMG job.
 
@@ -113,7 +113,7 @@ def submit_job(project_directory: str,
     return job_status, job_id
 
 
-def check_running_jobs_ids(cluster_soft: str) -> List[str]:
+def check_running_jobs_ids(cluster_soft: str) -> list[str]:
     """
     Check which jobs are still running on the server for this user.
 
@@ -128,7 +128,7 @@ def check_running_jobs_ids(cluster_soft: str) -> List[str]:
     return running_job_ids
 
 
-def rmg_job_converged(project_directory: str) -> Tuple[bool, Optional[str]]:
+def rmg_job_converged(project_directory: str) -> tuple[bool, str | None]:
     """
     Determine whether an RMG job has converged.
 
@@ -162,8 +162,8 @@ def rmg_job_converged(project_directory: str) -> Tuple[bool, Optional[str]]:
 
 
 def run_rmg_incore(rmg_input_file_path: str,
-                   verbose: Optional[int] = None,
-                   max_iterations: Optional[int] = None,
+                   verbose: int | None = None,
+                   max_iterations: int | None = None,
                    ) -> bool:
     """
     Run RMG incore under the rmg_env.
@@ -195,12 +195,12 @@ def run_rmg_incore(rmg_input_file_path: str,
 
 def run_rmg_in_local_queue(project_directory: str,
                            logger: 'Logger',
-                           memory: Optional[int] = None,
-                           cpus: Optional[int] = None,
-                           max_iterations: Optional[int] = None,
+                           memory: int | None = None,
+                           cpus: int | None = None,
+                           max_iterations: int | None = None,
                            restart_rmg: bool = False,
-                           verbose: Optional[int] = None,
-                           t3_project_name: Optional[str] = None,
+                           verbose: int | None = None,
+                           t3_project_name: str | None = None,
                            ):
     """
     Run RMG on the queue of the local server (under the rmg_env).
@@ -258,12 +258,12 @@ def run_rmg_in_local_queue(project_directory: str,
 def rmg_runner(rmg_input_file_path: str,
                job_log_path: str,
                logger: 'Logger',
-               memory: Optional[int] = None,
-               cpus: Optional[int] = None,
-               verbose: Optional[int] = None,
-               max_iterations: Optional[int] = None,
-               t3_project_name: Optional[str] = None,
-               rmg_execution_type: Optional[str] = None,
+               memory: int | None = None,
+               cpus: int | None = None,
+               verbose: int | None = None,
+               max_iterations: int | None = None,
+               t3_project_name: str | None = None,
+               rmg_execution_type: str | None = None,
                restart_rmg: bool = False,
                ) -> bool:
     """
@@ -340,7 +340,7 @@ def rmg_runner(rmg_input_file_path: str,
 
 def get_new_memory_for_an_rmg_run(job_log_path: str,
                                   logger: 'Logger',
-                                  ) -> Optional[int]:
+                                  ) -> int | None:
     """
     If an RMG job crashed due to too few or too much memory, compute a new desired memory for the run.
     Note that only on HTCondor there's a cap memory constraint rule that the job must consume at least 20%
@@ -415,7 +415,7 @@ def backup_rmg_files(project_directory: str):
 def run_arkane_job(input_file: str,
                    output_directory: str,
                    plot: bool = False,
-                   logger: Optional['Logger'] = None,
+                   logger: 'Logger' | None = None,
                    ) -> bool:
     """
     Run an Arkane job.
@@ -459,9 +459,9 @@ def run_rmg_sa_incore(rmg_input_file_path: str,
                       chemkin_file_path: str,
                       species_dict_path: str,
                       output_path: str,
-                      observables: Optional[List[str]] = None,
+                      observables: list[str] | None = None,
                       threshold: float = 1e-3,
-                      ) -> Tuple[bool, Optional[str]]:
+                      ) -> tuple[bool, str | None]:
     """
     Run RMG Sensitivity Analysis incore under the rmg_env.
     """

@@ -19,7 +19,6 @@ import inspect
 import os
 import re
 import shutil
-from typing import List, Optional, Tuple, Union
 
 from arc.common import (get_number_with_ordinal_indicator,
                         get_ordinal_indicator,
@@ -94,9 +93,9 @@ class T3(object):
     def __init__(self,
                  project: str,
                  rmg: dict,
-                 t3: Optional[dict] = None,
-                 qm: Optional[dict] = None,
-                 project_directory: Optional[str] = None,
+                 t3: dict | None = None,
+                 qm: dict | None = None,
+                 project_directory: str | None = None,
                  verbose: int = 20,
                  clean_dir: bool = False,
                  ):
@@ -176,7 +175,7 @@ class T3(object):
         return result
 
     def write_t3_input_file(self,
-                            path: Optional[str] = None,
+                            path: str | None = None,
                             all_args: bool = False,
                             ) -> None:
         """
@@ -290,8 +289,8 @@ class T3(object):
         delete_root_rmg_log(project_directory=self.project_directory)
 
     def set_paths(self,
-                  iteration: Optional[int] = None,
-                  project_directory: Optional[str] = None,
+                  iteration: int | None = None,
+                  project_directory: str | None = None,
                   ):
         """
         Set various file and folder paths (but don't create the folders).
@@ -337,7 +336,7 @@ class T3(object):
                 if self.t3['options']['shared_library_name'] is not None else None,
         }
 
-    def restart(self) -> Tuple[int, bool]:
+    def restart(self) -> tuple[int, bool]:
         """
         Restart T3 by looking for existing iteration folders.
         Restarts ARC if it ran and did not terminate.
@@ -411,8 +410,8 @@ class T3(object):
                     del self.qm[key]
 
     def run_arc(self,
-                input_file_path: Optional[str] = None,
-                arc_kwargs: Optional[dict] = None,
+                input_file_path: str | None = None,
+                arc_kwargs: dict | None = None,
                 ):
         """
         Run ARC.
@@ -672,7 +671,7 @@ class T3(object):
             self.logger.log_reactions_to_calculate(reaction_keys, self.reactions)
         return additional_calcs_required
 
-    def determine_species_based_on_sa(self) -> List[int]:
+    def determine_species_based_on_sa(self) -> list[int]:
         """
         Determine species to calculate based on sensitivity analysis.
 
@@ -733,7 +732,7 @@ class T3(object):
 
         return species_keys
 
-    def determine_reactions_based_on_sa(self) -> List[int]:
+    def determine_reactions_based_on_sa(self) -> list[int]:
         """
         Determine reaction rate coefficients to calculate based on sensitivity analysis.
 
@@ -771,8 +770,8 @@ class T3(object):
         return reaction_keys
 
     def determine_species_from_pdep_network(self,
-                                            pdep_rxns_to_explore: List[Tuple[T3Reaction, int, str]],
-                                            ) -> List[int]:
+                                            pdep_rxns_to_explore: list[tuple[T3Reaction, int, str]],
+                                            ) -> list[int]:
         """
         Determine species to calculate based on a pressure dependent network
         by spawning network sensitivity analyses.
@@ -905,7 +904,7 @@ class T3(object):
 
         return species_keys
 
-    def determine_species_and_reactions_based_on_collision_violators(self) -> Tuple[List[int], List[int]]:
+    def determine_species_and_reactions_based_on_collision_violators(self) -> tuple[list[int], list[int]]:
         """
         Determine species to calculate based on collision rate violating reactions.
 
@@ -995,7 +994,7 @@ class T3(object):
                 self.logger.info(f'Regenerating the RMG model with a tolerance move to core '
                                  f'of {factor * core_tolerance[self.iteration]}.')
 
-    def species_requires_refinement(self, species: Optional[T3Species]) -> bool:
+    def species_requires_refinement(self, species: T3Species | None) -> bool:
         """
         Determine whether a species thermochemical properties
         should be calculated based on the data uncertainty.
@@ -1014,7 +1013,7 @@ class T3(object):
             return True
         return False
 
-    def reaction_requires_refinement(self, reaction: Optional[T3Reaction]) -> Optional[bool]:
+    def reaction_requires_refinement(self, reaction: T3Reaction | None) -> bool | None:
         """
         Determine whether a reaction rate coefficient
         should be calculated based on the data uncertainty.
@@ -1062,10 +1061,10 @@ class T3(object):
         return False
 
     def get_species_key(self,
-                        species: Optional[T3Species] = None,
-                        label: Optional[str] = None,
+                        species: T3Species | None = None,
+                        label: str | None = None,
                         label_type: str = 'QM',
-                        ) -> Optional[int]:
+                        ) -> int | None:
         """
         Get a species key (the T3 species index) if the species exists in self.species.
         Either ``species`` or ``label`` must be given.
@@ -1097,10 +1096,10 @@ class T3(object):
         return None
 
     def get_reaction_key(self,
-                         reaction: Optional[T3Reaction] = None,
-                         label: Optional[str] = None,
+                         reaction: T3Reaction | None = None,
+                         label: str | None = None,
                          label_type: str = 'QM',
-                         ) -> Optional[int]:
+                         ) -> int | None:
         """
         Get a reaction key (the T3 reaction index) if the reaction exists in self.reactions.
         Either ``reaction`` or ``label`` must be given.
@@ -1135,7 +1134,7 @@ class T3(object):
                         pass
         return None
 
-    def load_species_and_reactions_from_yaml_file(self) -> Tuple[List[T3Species], List[T3Reaction]]:
+    def load_species_and_reactions_from_yaml_file(self) -> tuple[list[T3Species], list[T3Reaction]]:
         """
         Load Species and Reaction objects from the annotated Cantera YAML file.
 
@@ -1152,8 +1151,8 @@ class T3(object):
 
     def add_species(self,
                     species: T3Species,
-                    reasons: Union[List[str], str],
-                    ) -> Optional[int]:
+                    reasons: list[str] | str,
+                    ) -> int | None:
         """
         Add a species to self.species and to self.qm['species'].
         If the species already exists in self.species, only the reasons to compute will be appended.
@@ -1216,8 +1215,8 @@ class T3(object):
 
     def add_reaction(self,
                      reaction: T3Reaction,
-                     reasons: Union[List[str], str],
-                     ) -> Optional[int]:
+                     reasons: list[str] | str,
+                     ) -> int | None:
         """
         Add a reaction to self.reactions and to self.qm['reactions'].
         If the reaction already exists in self.reactions, only the reasons to compute will be appended.
@@ -1366,7 +1365,7 @@ class T3(object):
 
 def get_reaction_by_index(index: int,
                           reactions: list,
-                          ) -> Optional[T3Reaction]:
+                          ) -> T3Reaction | None:
     """
     Get a reaction from a list of reactions by its index.
 
@@ -1387,7 +1386,7 @@ def get_reaction_by_index(index: int,
 def legalize_species_label(species: T3Species,
                            return_label: bool = False,
                            check_arc_label: bool = True,
-                           ) -> Optional[str]:
+                           ) -> str | None:
     """
     ARC uses the species label as the folder name on the server and the local machine.
     Make sure a label is legal, correct it if it's not.
@@ -1417,7 +1416,7 @@ def legalize_species_label(species: T3Species,
 
 def get_species_label_by_structure(adj: str,
                                    species_list: list,
-                                   ) -> Union[str, None]:
+                                   ) -> str | None:
     """
     Get a species from a list of species by its structure (adjacency list).
 

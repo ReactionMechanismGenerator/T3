@@ -5,7 +5,6 @@ Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor a
 
 import cantera as ct
 import numpy as np
-from typing import List, Optional
 
 from t3.utils.slim_rmg import generate_cantera_conditions, GenericData
 
@@ -65,10 +64,10 @@ class CanteraConstantUV(SimulateAdapter):
                  logger: Logger,
                  atol: float = 1e-16,
                  rtol: float = 1e-8,
-                 observable_list: Optional[list] = None,
+                 observable_list: list | None = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None
+                 global_observables: list[str] | None = None
                  ):
 
         self.t3 = t3
@@ -156,12 +155,12 @@ class CanteraConstantUV(SimulateAdapter):
         self.generate_conditions(reactor_type_list, reaction_time_list, mol_frac_list, Tlist, Plist)
 
     def generate_conditions(self,
-                            reactor_type_list: List[tuple],
-                            reaction_time_list: List[tuple],
-                            mol_frac_list: List[dict],
-                            T0_list: Optional[tuple] = None,
-                            P0_list: Optional[tuple] = None,
-                            V0_list: Optional[tuple] = None,
+                            reactor_type_list: list[tuple],
+                            reaction_time_list: list[tuple],
+                            mol_frac_list: list[dict],
+                            T0_list: tuple | None = None,
+                            P0_list: tuple | None = None,
+                            V0_list: tuple | None = None,
                             ):
         """
         Saves all the reaction conditions.
@@ -482,7 +481,7 @@ class CanteraConstantUV(SimulateAdapter):
 
     def get_t50(self,
                 species: str,
-                criteria: Optional[str] = 'mass_frac',
+                criteria: str | None = 'mass_frac',
                 ):
         """
         Finds the half-life in seconds of the given species on either a mole fraction or mass fraction basis. Uses the

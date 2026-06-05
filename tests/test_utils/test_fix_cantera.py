@@ -8,7 +8,7 @@ t3 tests test_flux module
 import os
 import shutil
 
-from t3.common import t3_path, TEST_DATA_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH
 from tests.common import copy_model
 import t3.utils.fix_cantera as fix
 

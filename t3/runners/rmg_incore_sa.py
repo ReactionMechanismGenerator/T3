@@ -5,6 +5,10 @@
 A script for running RMG Sensitivity Analysis (SA) incore using the rmg_env.
 """
 
+# This script runs in rmg_env (Python 3.9); keep annotations lazy so PEP 604/585
+# syntax stays valid there.
+from __future__ import annotations
+
 import argparse
 import os
 import sys
@@ -12,7 +16,7 @@ import traceback
 import yaml
 import pandas as pd
 import shutil
-from typing import Dict, Any
+from typing import Any
 
 try:
     from rmgpy.rmg.main import RMG
@@ -35,7 +39,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def process_sa_csvs(output_dir: str) -> Dict[str, Any]:
+def process_sa_csvs(output_dir: str) -> dict[str, Any]:
     """Parse output CSVs to YAML dict."""
     solver_path = os.path.join(output_dir, 'solver')
     if not os.path.exists(solver_path):

@@ -6,7 +6,7 @@ import re
 import datetime
 import os
 import string
-from typing import TYPE_CHECKING, Dict, Tuple, Union, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from t3.chem import T3Species
@@ -27,7 +27,7 @@ VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 def get_species_by_label(label: str,
                          species_list: list['T3Species'],
-                         ) -> Optional['T3Species']:
+                         ) -> 'T3Species' | None:
     """
     Get a species from a list of species by its label.
 
@@ -154,7 +154,7 @@ def time_lapse(t0: datetime.datetime) -> datetime.timedelta:
     return datetime.datetime.now() - t0
 
 
-def convert_termination_time_to_seconds(termination_time: Tuple[float, str]):
+def convert_termination_time_to_seconds(termination_time: tuple[float, str]):
     """
     Converts the termination_time tuple from the RMG reactor to seconds.
     This is necessary for the RMS adapters since the Julia solver expects
@@ -178,7 +178,7 @@ def convert_termination_time_to_seconds(termination_time: Tuple[float, str]):
     return t_final
 
 
-def get_values_within_range(value_range: Union[int, float, list, tuple],
+def get_values_within_range(value_range: int | float | list | tuple,
                             num: int,
                             use_log_scale: bool = False,
                             ) -> list:
@@ -209,7 +209,7 @@ def get_values_within_range(value_range: Union[int, float, list, tuple],
     return [min_val + i * interval for i in range(num)]
 
 
-def get_interval(value_range: Union[list, tuple],
+def get_interval(value_range: list | tuple,
                  num: int,
                  ) -> int:
     """
@@ -231,7 +231,7 @@ def get_interval(value_range: Union[list, tuple],
     return (max(value_range) - min(value_range)) / num_of_intervals
 
 
-def get_chem_to_rmg_rxn_index_map(chem_annotated_path: str) -> Dict[int, int]:
+def get_chem_to_rmg_rxn_index_map(chem_annotated_path: str) -> dict[int, int]:
     """
     Get a dictionary that maps "Chemkin" reaction indices to "RMG" reaction indices.
     A Chemkin file counts duplicate reactions by design, while RMG treats duplicate reactions as a single reaction

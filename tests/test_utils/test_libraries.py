@@ -8,7 +8,6 @@ t3 tests test_libraries module
 import logging
 import os
 import pytest
-from typing import List, Dict
 
 from arc.molecule.molecule import Molecule
 
@@ -48,7 +47,7 @@ def _create_mock_shim_kinetics_data() -> shim.Arrhenius:
     )
 
 
-def _write_thermo_lib_file(path: str, name: str, entries: List[shim.Entry]):
+def _write_thermo_lib_file(path: str, name: str, entries: list[shim.Entry]):
     """Writes a thermo library .py file using the shim."""
     lib = shim.Library(name=name, longDesc=f"Description for {name}")
     lib.entries = entries
@@ -57,8 +56,8 @@ def _write_thermo_lib_file(path: str, name: str, entries: List[shim.Entry]):
 
 
 def _write_kinetics_lib_folder(folder_path: str, name: str,
-                               entries: List[shim.Entry],
-                               dictionary: Dict[str, Molecule]):
+                               entries: list[shim.Entry],
+                               dictionary: dict[str, Molecule]):
     """Writes a kinetics library folder (reactions.py + dictionary.txt)."""
     os.makedirs(folder_path, exist_ok=True)
 

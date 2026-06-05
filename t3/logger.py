@@ -8,7 +8,6 @@ import datetime
 import os
 import shutil
 import time
-from typing import Dict, List, Optional, Tuple
 
 from arc.common import get_git_branch, get_git_commit
 
@@ -39,7 +38,7 @@ class Logger(object):
     def __init__(self,
                  project: str,
                  project_directory: str,
-                 verbose: Optional[int],
+                 verbose: int | None,
                  t0: datetime.datetime,
                  ):
         
@@ -166,8 +165,8 @@ class Logger(object):
         self.log(f'T3 execution terminated on {time.asctime()}\n', level='always')
 
     def log_species_to_calculate(self,
-                                 species_keys: List[int],
-                                 species_dict: Dict[int, T3Species],
+                                 species_keys: list[int],
+                                 species_dict: dict[int, T3Species],
                                  ):
         """
         Log the species to be calculated.
@@ -182,8 +181,8 @@ class Logger(object):
                      f'(reasons: {species_dict[key].reasons})')
 
     def log_reactions_to_calculate(self,
-                                   reaction_keys: List[int],
-                                   reaction_dict: Dict[int, T3Reaction],
+                                   reaction_keys: list[int],
+                                   reaction_dict: dict[int, T3Reaction],
                                    ):
         """
         Log the reactions to be calculated.
@@ -198,7 +197,7 @@ class Logger(object):
                      f'(reasons: {reaction_dict[key].reasons})')
 
     def log_species_summary(self,
-                            species_dict: Dict[int, T3Species],
+                            species_dict: dict[int, T3Species],
                             ):
         """
         Log a summary of the species.
@@ -214,7 +213,7 @@ class Logger(object):
                      f'(status: {clean_t3_status(species)})')
 
     def log_reactions_summary(self,
-                              reactions_dict: Dict[int, T3Reaction],
+                              reactions_dict: dict[int, T3Reaction],
                               ):
         """
         Log a summary of the reactions.
@@ -229,10 +228,10 @@ class Logger(object):
                      f'(status: {reaction.t3_status})')
 
     def log_unconverged_species_and_reactions(self,
-                                              species_keys: List[int],
-                                              species_dict: Dict[int, T3Species],
-                                              reaction_keys: List[int],
-                                              reaction_dict: Dict[int, T3Reaction],
+                                              species_keys: list[int],
+                                              species_dict: dict[int, T3Species],
+                                              reaction_keys: list[int],
+                                              reaction_dict: dict[int, T3Reaction],
                                               ):
         """
         Log the unconverged species and reactions.
@@ -270,7 +269,7 @@ class Logger(object):
 
     def _get_converged_and_unconverged_keys(self,
                                             mapping: dict,
-                                            ) -> Tuple[List[int], List[int]]:
+                                            ) -> tuple[list[int], list[int]]:
         """
         Get the converged and unconverged keys from a dictionary of species or reactions.
 

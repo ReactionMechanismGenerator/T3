@@ -3,10 +3,8 @@ T3 Cantera YAML Parser
 A lightweight parser for Cantera YAML files.
 """
 
-import logging
 import os
 import re
-from typing import Dict, List, Optional, Tuple
 
 from arc.common import read_yaml_file
 
@@ -14,8 +12,8 @@ from t3.chem import T3Species, T3Reaction
 
 
 def load_cantera_yaml_file(path: str,
-                           species_dict_path: Optional[str] = None,
-                           ) -> Tuple[List[T3Species], List[T3Reaction]]:
+                           species_dict_path: str | None = None,
+                           ) -> tuple[list[T3Species], list[T3Reaction]]:
     """
     Load a Cantera YAML file and return a list of species and reactions.
 
@@ -40,7 +38,7 @@ def load_cantera_yaml_file(path: str,
     # T3Species object.  ARC's check_label() may legalize the label during
     # T3Species.__init__ (e.g. 'OH(4)' → 'OH[4]'), so reaction equations
     # must be looked up via the original label, not the legalized one.
-    yaml_label_to_species: Dict[str, T3Species] = {}
+    yaml_label_to_species: dict[str, T3Species] = {}
 
     species_data = data.get('species', [])
     for spc_datum in species_data:
@@ -149,7 +147,7 @@ def load_cantera_yaml_file(path: str,
     return species_list, reactions_list
 
 
-def parse_thermo_comment(note: str) -> Tuple[Optional[str], Optional[str]]:
+def parse_thermo_comment(note: str) -> tuple[str | None, str | None]:
     """
     Parse a thermo comment note to extract the method and source.
     """
@@ -203,7 +201,7 @@ def parse_thermo_comment(note: str) -> Tuple[Optional[str], Optional[str]]:
     return thermo_method, thermo_source
 
 
-def parse_species_dictionary(path: str) -> Dict[str, str]:
+def parse_species_dictionary(path: str) -> dict[str, str]:
     """
     Parse an RMG species dictionary file.
 
@@ -240,7 +238,7 @@ def parse_species_dictionary(path: str) -> Dict[str, str]:
     return adjlists
 
 
-def get_species_by_label(label: str, species_list: List[T3Species]) -> Optional[T3Species]:
+def get_species_by_label(label: str, species_list: list[T3Species]) -> T3Species | None:
     """
     Get a species from a list by its label.
 

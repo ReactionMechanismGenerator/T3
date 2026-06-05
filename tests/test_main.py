@@ -24,7 +24,7 @@ from t3.main import (T3,
                      get_reaction_by_index,
                      get_species_label_by_structure)
 from t3.simulate.factory import simulate_factory
-from t3.utils.slim_rmg import Arrhenius, PDepNetwork, PDepReaction, NASA, ThermoData
+from t3.utils.slim_rmg import Arrhenius, PDepNetwork, PDepReaction, ThermoData
 from t3.utils.writer import write_rmg_input_file
 
 
