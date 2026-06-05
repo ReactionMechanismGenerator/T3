@@ -248,6 +248,7 @@ class CanteraConstantHP(SimulateAdapter):
             self.logger.info('Running a simulation using CanteraConstantHP...')
 
         species_names_list = [species.name for species in self.model.species()]
+        species_indices = [self.model.species_index(name) for name in species_names_list]
         self.all_data = list()
 
         for condition in self.conditions:
@@ -281,7 +282,10 @@ class CanteraConstantHP(SimulateAdapter):
                 times.append(self.cantera_simulation.time)
                 temperature.append(self.cantera_reactor.T)
                 pressure.append(self.cantera_reactor.thermo.P)
-                species_data.append(self.cantera_reactor.thermo[species_names_list].X)
+                # Index the full mole-fraction array rather than cantera's
+                # multi-species __getitem__, which calls ndarray.resize() and
+                # trips numpy 2.x refcheck ("cannot resize an array ...").
+                species_data.append(self.cantera_reactor.thermo.X[species_indices])
 
                 if self.sensitive_species:
                     # Cantera returns mass-based sensitivities rather than molar concentration or mole fraction based sensitivities.
