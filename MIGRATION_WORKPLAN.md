@@ -152,3 +152,38 @@ Full green:
   `rmg_env` as subprocesses. Their rmgpy imports are correct and intentional.
 - **RDKit** (`rdkit >= 2025.03`) — declared dependency for molecular operations.
 - **Julia/RMS/pyrms** — fully removed from T3's installation.
+
+---
+
+## 6. Python 3.14 migration (2026-06-05)
+
+T3 now targets **Python 3.14** (mirroring ARC, an in-process dependency that is
+3.14-only). See `docs/superpowers/specs/2026-06-05-t3-python-314-migration-design.md`.
+
+### Done
+- `environment.yml` / `pyproject.toml` / `requirements.txt`: python `=3.14`,
+  cython `>=3.1`, rdkit `>=2026.03`. Added the **danagroup** channel and pulled
+  `openbabel` + `py-rdl` from it (conda-forge has no py314 build of either).
+- cantera kept as a loose `>=3.2.0` core dep (conda-forge ships a py314 build).
+- **cantera/numpy-2.x fix**: the simulate adapters used cantera's multi-species
+  `thermo[names]` indexing, which calls `ndarray.resize()` and is rejected by
+  numpy 2.x. Switched to `thermo.X[species_indices]`.
+- **RMG SA glue fix**: `rmg_incore_sa.py` now reconciles `TerminationConversion`
+  species with the chemkin-loaded objects (was raising `KeyError(Species)`).
+- Flux test assertions refreshed (stale copy-paste values).
+
+### Skipped — pre-existing, NOT caused by the 3.14 migration
+These run RMG in the unchanged Python-3.9 `rmg_env`, so they fail identically
+before the bump. T3's SA *logic* is covered by the cantera SA tests.
+
+| Test | Reason |
+|------|--------|
+| `test_main::test_determine_reactions_based_on_sa_rmg` | RMG-Py DASSL cannot init the sensitivity system (IDID=-12); base sim is fine |
+| `test_main::test_determine_species_from_pdep_network` | PDep SA raises in the Arkane subprocess |
+| `test_rmg_constant_tp::test_get_sa_coefficients` | same RMG sensitivity-solver limitation |
+| `test_rmg_constant_tp::test_set_up_no_sa` | `RMGConstantTP.simulate()` has no no-SA simulation path (adapter gap) |
+| `test_functional::test_computing_thermo` | full-pipeline test depends on RMG SA |
+
+**Follow-ups (separate from the migration):** implement a no-SA simulation path
+in `RMGConstantTP`; investigate RMG-Py's DASSL sensitivity-init failure (try
+RMG-Py `main` vs the local `fixes` branch in `rmg_env`); refresh the PDep test.
