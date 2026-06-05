@@ -148,6 +148,15 @@ def main():
                     new_initials[spc] = val
             reactor.initial_mole_fractions = new_initials
 
+            # Reconcile termination criteria: TerminationConversion holds a
+            # Species object from the input file, but the reactor's species_index
+            # is keyed by the chemkin-loaded objects. Without this remap, RMG
+            # raises KeyError(Species) on species_index[term.species].
+            for term in getattr(reactor, 'termination', []):
+                term_spc = getattr(term, 'species', None)
+                if term_spc is not None and term_spc.label in species_map:
+                    term.species = species_map[term_spc.label]
+
             # Force Sensitivity from CLI if provided
             if sensitive_species:
                 reactor.sensitive_species = sensitive_species
