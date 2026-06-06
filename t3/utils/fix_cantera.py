@@ -131,19 +131,19 @@ def get_rxn_to_remove(model_path: str,
         return None
     arrow = ' <=> ' if ' <=> ' in rxn_str else ' => ' if ' => ' in rxn_str else ' <= '
     reactants, products = rxn_str.split(arrow)
-    reactants = reactants.split(' + ')
-    products = products.split(' + ')
-    # create rxn strings with all combinations of reactants and products, e.g., R1 + R2 <=> P1 + P2 and R2 + R1 <=> P1 + P2
-    rxn_strs = list()
-    for i in range(len(reactants)):
-        for j in range(len(products)):
-            rs = ' + '.join([reactants[i], [reactants[k] for k in range(len(reactants)) if k != i][0]])
-            ps = ' + '.join([products[j], [products[k] for k in range(len(products)) if k != j][0]])
-            rxn_strs.append(f'{rs}{arrow}{ps}')
-    if len(rxn_strs):
-        for i, rxn in enumerate(content['reactions']):
-            if rxn['equation'] in rxn_strs:
-                return i
+    # Match on reactant/product multisets so the order of species (and the arity:
+    # unimolecular, bimolecular, three-body, ...) doesn't matter.
+    want_reactants = sorted(s.strip() for s in reactants.split(' + '))
+    want_products = sorted(s.strip() for s in products.split(' + '))
+    for i, rxn in enumerate(content['reactions']):
+        equation = rxn.get('equation', '')
+        rxn_arrow = next((a for a in (' <=> ', ' => ', ' <= ') if a in equation), None)
+        if rxn_arrow is None:
+            continue
+        rxn_reactants, rxn_products = equation.split(rxn_arrow)
+        if sorted(s.strip() for s in rxn_reactants.split(' + ')) == want_reactants \
+                and sorted(s.strip() for s in rxn_products.split(' + ')) == want_products:
+            return i
     return None
 
 

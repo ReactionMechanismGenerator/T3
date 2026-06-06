@@ -245,7 +245,8 @@ class CanteraIDT(SimulateAdapter):
             t_ = net.step()
             time_history.append(reactor.thermo.state, t=t_)
             if use_radical_early_exit and counter % 100 == 0:
-                concentrations = np.asarray([row[0] for row in time_history(self.radical_label).X], dtype=np.float32)
+                concentrations = np.asarray(time_history.X[:, time_history.species_index(self.radical_label)],
+                                            dtype=np.float32)
                 max_c_idx = int(np.argmax(concentrations))
                 if (concentrations[max_c_idx] > concentrations[-1] * 1.2
                         and len(concentrations) > max_c_idx * 1.1
@@ -306,7 +307,7 @@ class CanteraIDT(SimulateAdapter):
             heavy = sum(v for el, v in spc.composition.items() if el not in ('H', 'He', 'Ar', 'Ne', 'Kr', 'Xe'))
             if heavy > 3:
                 continue
-            conc = np.asarray([row[0] for row in time_history(spc.name).X], dtype=np.float64)
+            conc = np.asarray(time_history.X[:, time_history.species_index(spc.name)], dtype=np.float64)
             peak = float(np.max(conc))
             if peak > best_peak:
                 best_peak = peak
@@ -612,7 +613,7 @@ class CanteraIDT(SimulateAdapter):
                 radical = self._find_best_radical(time_history) or radical
             if radical is None:
                 return None, dict(), dict()
-            conc = np.asarray([row[0] for row in time_history(radical).X], dtype=np.float64)
+            conc = np.asarray(time_history.X[:, time_history.species_index(radical)], dtype=np.float64)
             if all(c == 0 for c in conc):
                 return None, dict(), dict()
             dc_dt = np.diff(conc) / np.diff(times)
@@ -657,17 +658,21 @@ class CanteraIDT(SimulateAdapter):
             idt_sa_dict['thermo']['IDT'][r] = dict()
             idt_sa_dict['kinetics']['IDT'][r] = dict()
 
-            # Build working-point list (same as simulation)
-            if equivalence_ratios is None or concentration_combinations is None:
-                x = {spc['label']: spc['concentration'] for spc in self.rmg['species'] if spc['concentration']}
-                points = [(T, P, x, None) for T in T_list for P in P_list]
-            elif mode == 'row':
-                points = [(T_list[i], P_list[i], concentration_combinations[i],
-                           equivalence_ratios[i]) for i in range(len(equivalence_ratios))]
-            else:
-                points = [(T, P, X, equivalence_ratios[idx])
-                          for T in T_list for P in P_list
-                          for idx, X in enumerate(concentration_combinations)]
+            # Build the working-point list through the shared expander so the
+            # row-mode length guard and matrix/row logic match simulate().
+            combinations = self._build_combinations(
+                r=r,
+                T_list=T_list,
+                P_list=P_list,
+                equivalence_ratios=equivalence_ratios,
+                concentration_combinations=concentration_combinations,
+                infile=infile,
+                save_fig=False,
+                energy='on',
+                max_idt=1.0,
+                mode=mode,
+            )
+            points = [(T, P, X, phi) for (_, T, P, X, phi, *_) in combinations]
 
             # For max_radical_dt, run a quick prescan simulation at the median
             # condition to identify the best radical before the SA loop.
@@ -907,7 +912,7 @@ def compute_idt(time_history: ct.SolutionArray,
     # max_dOHdt or max_radical_dt: use radical concentration
     if radical_label is None:
         return None
-    concentration = np.asarray([row[0] for row in time_history(radical_label).X], dtype=np.float32)
+    concentration = np.asarray(time_history.X[:, time_history.species_index(radical_label)], dtype=np.float64)
     if all(c == 0 for c in concentration):
         return None
     dt = np.diff(times)
@@ -952,13 +957,15 @@ def get_t_and_p_lists(reactor: dict,
     """
     Expand the reactor's ``T`` and ``P`` fields into explicit numeric lists.
 
-    A scalar stays a 1-element list. A 2-element list is treated as a min/max range and
-    expanded (T linearly in 1/T, P logarithmically). A longer list is taken verbatim,
-    which is what ``idt_mode='row'`` relies on.
+    A scalar stays a 1-element list. In the default (``'matrix'``) mode a 2-element list
+    is treated as a min/max range and expanded (T linearly in 1/T, P logarithmically),
+    while a longer list is taken verbatim. In ``idt_mode='row'`` every list is taken
+    verbatim (no range expansion) so that T / P / equivalence_ratios stay index-aligned.
     """
+    row_mode = reactor.get('idt_mode', 'matrix') == 'row'
     if isinstance(reactor['T'], (int, float)):
         T_list = [float(reactor['T'])]
-    elif len(reactor['T']) == 2:
+    elif len(reactor['T']) == 2 and not row_mode:
         n = min(int(abs(reactor['T'][1] - reactor['T'][0]) / 10), num_t_points)
         n = max(n, 2)
         inverse_ts = np.linspace(1 / reactor['T'][1], 1 / reactor['T'][0], num=n)
@@ -967,7 +974,7 @@ def get_t_and_p_lists(reactor: dict,
         T_list = [float(t) for t in reactor['T']]
     if isinstance(reactor['P'], (int, float)):
         P_list = [float(reactor['P'])]
-    elif len(reactor['P']) == 2:
+    elif len(reactor['P']) == 2 and not row_mode:
         log_p = np.linspace(math.log10(reactor['P'][0]), math.log10(reactor['P'][1]), num=3)
         P_list = [10 ** p for p in log_p]
     else:

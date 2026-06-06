@@ -56,6 +56,32 @@ def test_fix_undeclared_duplicate_reactions():
     os.remove(model_path_2)
 
 
+def test_get_rxn_to_remove_unimolecular():
+    """get_rxn_to_remove must handle reactions with a single reactant or a single
+    product (e.g. unimolecular decomposition) without raising IndexError."""
+    from arc.common import save_yaml_file
+    model_path = os.path.join(TEST_DATA_BASE_PATH, 'models', 'temp_invalid_k.yaml')
+    content = {'reactions': [
+        {'equation': 'H + O2 <=> O + OH'},   # 0: bimolecular
+        {'equation': 'H2O2 <=> OH + OH'},     # 1: single reactant
+        {'equation': 'OH + OH <=> H2O2'},     # 2: single product
+    ]}
+    save_yaml_file(model_path, content)
+    try:
+        # single reactant
+        tb = "Invalid rate coefficient for reaction 'H2O2 <=> OH + OH'"
+        assert fix.get_rxn_to_remove(model_path=model_path, tb=tb) == 1
+        # single product
+        tb = "Invalid rate coefficient for reaction 'OH + OH <=> H2O2'"
+        assert fix.get_rxn_to_remove(model_path=model_path, tb=tb) == 2
+        # bimolecular still resolves, including reactant/product reordering
+        tb = "Invalid rate coefficient for reaction 'O2 + H <=> OH + O'"
+        assert fix.get_rxn_to_remove(model_path=model_path, tb=tb) == 0
+    finally:
+        if os.path.isfile(model_path):
+            os.remove(model_path)
+
+
 def test_get_traceback():
     """Test getting a traceback."""
     model_path = os.path.join(TEST_DATA_BASE_PATH, 'models', 'HOCHO.yaml')

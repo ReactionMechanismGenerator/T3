@@ -133,6 +133,7 @@ class T3Sensitivity(BaseModel):
     delta_h: Annotated[float, Field(gt=0)] = 0.1
     delta_k: Annotated[float, Field(gt=0, lt=1)] = 0.05
     adaptive_perturbation: bool = False
+    save_sa_yaml: bool = True
     experimental_idt_path: str | None = None
 
     class Config:

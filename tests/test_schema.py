@@ -243,6 +243,12 @@ def test_idt_sa_method_enum():
         T3Sensitivity(idt_sa_method='finite_difference')
 
 
+def test_t3_sensitivity_save_sa_yaml():
+    """save_sa_yaml is an accepted field, defaults to True, and can be disabled."""
+    assert T3Sensitivity().save_sa_yaml is True
+    assert T3Sensitivity(save_sa_yaml=False).save_sa_yaml is False
+
+
 def test_t3_uncertainty_schema():
     """Test creating an instance of T3Uncertainty"""
     t3_uncertainty = T3Uncertainty(adapter=None,

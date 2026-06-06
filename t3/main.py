@@ -20,7 +20,7 @@ import os
 import re
 import shutil
 from collections import deque
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 from arc.common import (get_number_with_ordinal_indicator,
                         get_ordinal_indicator,
@@ -39,7 +39,6 @@ from t3.common import (DATA_BASE_PATH,
                        PROJECTS_BASE_PATH,
                        VALID_CHARS,
                        delete_root_rmg_log,
-                       determine_concentrations_by_equivalence_ratios,
                        get_species_by_label,
                        sa_dict_from_yaml,
                        sa_dict_to_yaml,
@@ -109,7 +108,6 @@ class T3(object):
         qm = qm or {}
         self.sa_dict = None
         self.sa_dict_idt = None
-        self.equivalence_ratio_concentrations: Optional[Dict] = None
         self.sa_observables = list()
         self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
 
@@ -165,8 +163,6 @@ class T3(object):
                for i in range(len(self.rmg['model']['core_tolerance']) - 1)):
             self.logger.warning('The RMG tolerances are not in descending order.')
             self.logger.info(f'Got: {self.rmg["model"]["core_tolerance"]}')
-
-        self.update_species_concentrations()
 
     def as_dict(self) -> dict:
         """
@@ -1599,22 +1595,6 @@ class T3(object):
             self.rmg['database'][library_type] = [library_name] + self.rmg['database'][library_type]
         elif library_name in self.rmg['database'][library_type] and not exists_function(library_name):
             self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
-
-    def update_species_concentrations(self):
-        """
-        Compute per-equivalence-ratio concentration columns for fuel/oxidizer/diluent species
-        and store them on ``self.equivalence_ratio_concentrations``.
-
-        If no species declares ``role='fuel'`` (or the fuel has no equivalence_ratios),
-        this is a no-op and the attribute stays ``None``.
-        """
-        self.equivalence_ratio_concentrations = determine_concentrations_by_equivalence_ratios(
-            species=self.rmg['species'])
-        if self.equivalence_ratio_concentrations is not None:
-            phis = self.equivalence_ratio_concentrations['equivalence_ratios']
-            cols = self.equivalence_ratio_concentrations['concentrations']
-            self.logger.info(f'Computed equivalence-ratio concentration columns for '
-                             f'{len(phis)} φ values across {len(cols)} species.')
 
     def check_overtime(self) -> bool:
         """

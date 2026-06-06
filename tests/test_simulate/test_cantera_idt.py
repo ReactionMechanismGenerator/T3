@@ -530,6 +530,21 @@ def test_get_top_sa_coefficients():
                                                                   35: 0.005070908258511206}
 
 
+def test_get_t_and_p_lists_row():
+    """In idt_mode='row', T and P are taken verbatim (no range expansion)."""
+    t3 = run_minimal(project_directory=TEST_DIR)
+    t3.set_paths()
+    t3.rmg['reactors'] = [{'type': 'gas batch constant T P',
+                           'T': [1000, 1100],
+                           'P': [10, 20],
+                           'termination_rate_ratio': 0.01,
+                           'idt_mode': 'row'}]
+    ct_adapter = _make_idt_adapter(t3)
+    T_list, P_list = get_t_and_p_lists(ct_adapter.rmg['reactors'][0])
+    assert T_list == [1000.0, 1100.0]
+    assert P_list == [10.0, 20.0]
+
+
 def test_idt_mode_row():
     """Test that idt_mode='row' produces index-aligned (T, P, phi) tuples, not a full matrix."""
     t3 = run_minimal(project_directory=TEST_DIR_IDT)
@@ -612,6 +627,22 @@ def test_idt_criterion_max_dTdt():
     # Both should be in a physically reasonable range (1e-6 to 1 s)
     assert 1e-6 < idt_oh < 1.0
     assert 1e-6 < idt_dTdt < 1.0
+
+
+def test_compute_idt_radical_resize_safe():
+    """compute_idt must extract the radical concentration column without triggering the
+    numpy-2.x ``cannot resize`` SolutionArray error, and return a positive IDT."""
+    model = ct.Solution('h2o2.yaml')
+    model.TPX = 1100, 10 * 1e5, 'H2:2, O2:1, AR:4'
+    reactor = ct.IdealGasReactor(model)
+    net = ct.ReactorNet([reactor])
+    time_history = ct.SolutionArray(model, extra='t')
+    t = 0.0
+    while t < 1.0:
+        t = net.step()
+        time_history.append(reactor.thermo.state, t=t)
+    idt = compute_idt(time_history=time_history, radical_label='OH', criterion='max_dOHdt')
+    assert idt is not None and 1e-6 < idt < 1.0
 
 
 def test_no_radical_found():
