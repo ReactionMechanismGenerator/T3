@@ -61,7 +61,7 @@ jobs:
         with:
           repository: ReactionMechanismGenerator/RMG-Py
           path: RMG-Py
-          ref: xTB
+          ref: main
           fetch-depth: 1
 
       # 5. Clean Disk (Important for heavy conda envs)
@@ -109,10 +109,6 @@ jobs:
         shell: micromamba-shell {0}
         working-directory: ARC
         run: |
-          echo "::group::Install PyRDL (The ARC Way)"
-          bash devtools/install_pyrdl.sh t3_env
-          echo "::endgroup::"
-
           echo "::group::Compile ARC extensions"
           make compile
           echo "::endgroup::"

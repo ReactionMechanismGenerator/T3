@@ -2,7 +2,6 @@
 t3 tests common module
 """
 
-from typing import Optional
 import os
 import shutil
 
@@ -13,9 +12,9 @@ from t3.common import EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
 from t3.main import T3
 
 
-def run_minimal(project: Optional[str] = None,
-                project_directory: Optional[str] = None,
-                iteration: Optional[int] = None,
+def run_minimal(project: str | None = None,
+                project_directory: str | None = None,
+                iteration: int | None = None,
                 set_paths: bool = False,
                 ) -> T3:
     """
@@ -86,7 +85,7 @@ def check_expected_generated_radicals(radicals: list, expected_radicals: list):
 def almost_equal(a: float,
                  b: float,
                  places: int = 4,
-                 ratio: Optional[float] = None,
+                 ratio: float | None = None,
                  ) -> bool:
     """
     A helper function for testing almost equal assertions.

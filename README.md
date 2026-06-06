@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/ReactionMechanismGenerator/T3/branch/main/graph/badge.svg)](https://codecov.io/gh/ReactionMechanismGenerator/T3)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
-![python](https://img.shields.io/badge/Python-3.12+-blue.svg)
+![python](https://img.shields.io/badge/Python-3.14+-blue.svg)
 
 # The Tandem Tool (T3) for automated chemical kinetic model development
 
@@ -37,7 +37,7 @@ and [ARC](https://reactionmechanismgenerator.github.io/ARC/) for quantum mechani
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.14+
 - [Conda](https://docs.conda.io/en/latest/) (we recommend [Miniforge](https://github.com/conda-forge/miniforge))
 
 ### Quick start

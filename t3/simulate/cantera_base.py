@@ -12,7 +12,6 @@ import logging
 import cantera as ct
 import numpy as np
 from abc import abstractmethod
-from typing import List, Optional
 
 from t3.common import get_observable_label_from_header, get_parameter_from_header
 from t3.logger import Logger
@@ -82,10 +81,10 @@ class CanteraBase(SimulateAdapter):
                  logger: Logger,
                  atol: float = 1e-16,
                  rtol: float = 1e-8,
-                 observable_list: Optional[list] = None,
+                 observable_list: list | None = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None,
+                 global_observables: list[str] | None = None,
                  ):
 
         self.t3 = t3
@@ -181,12 +180,12 @@ class CanteraBase(SimulateAdapter):
         self.generate_conditions(reactor_type_list, reaction_time_list, mol_frac_list, Tlist, Plist)
 
     def generate_conditions(self,
-                            reactor_type_list: List[tuple],
-                            reaction_time_list: List[tuple],
-                            mol_frac_list: List[dict],
-                            T0_list: Optional[tuple] = None,
-                            P0_list: Optional[tuple] = None,
-                            V0_list: Optional[tuple] = None,
+                            reactor_type_list: list[tuple],
+                            reaction_time_list: list[tuple],
+                            mol_frac_list: list[dict],
+                            T0_list: tuple | None = None,
+                            P0_list: tuple | None = None,
+                            V0_list: tuple | None = None,
                             ):
         """
         Saves all the reaction conditions.
@@ -283,6 +282,7 @@ class CanteraBase(SimulateAdapter):
             self.logger.info(f'Running a simulation using {self.__class__.__name__}...')
 
         species_names_list = [species.name for species in self.model.species()]
+        species_indices = [self.model.species_index(name) for name in species_names_list]
         self.all_data = list()
 
         for condition in self.conditions:
@@ -306,7 +306,9 @@ class CanteraBase(SimulateAdapter):
                 times.append(self.cantera_simulation.time)
                 temperature.append(self.cantera_reactor.T)
                 pressure.append(self.cantera_reactor.thermo.P)
-                species_data.append(self.cantera_reactor.thermo[species_names_list].X)
+                # Index the full mole-fraction array rather than cantera's multi-species
+                # __getitem__, which calls ndarray.resize() and trips numpy 2.x refcheck.
+                species_data.append(self.cantera_reactor.thermo.X[species_indices])
 
                 if self.sensitive_species:
                     # Cantera returns mass-based sensitivities.  Convert to mole-fraction basis:
@@ -503,7 +505,7 @@ class CanteraBase(SimulateAdapter):
 
     def get_t50(self,
                 species: str,
-                criteria: Optional[str] = 'mass_frac',
+                criteria: str | None = 'mass_frac',
                 ):
         """
         Finds the half-life in seconds of the given species on either a mole fraction or mass fraction basis. Uses the

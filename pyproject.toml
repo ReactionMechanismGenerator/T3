@@ -7,7 +7,7 @@ name = "T3"
 dynamic = ["version"]
 description = "The Tandem Tool (T3) for automated chemical kinetic model development"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "pydantic",
     "pyyaml",
@@ -21,7 +21,7 @@ where = ["."]
 include = ["t3*"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 120
 exclude = [
     "tests/data",
