@@ -94,7 +94,7 @@ def test_load_cantera_yaml_file():
 def test_load_species_thermo_comments():
     """Test that thermo comments are correctly parsed for species."""
     species_list, _ = load_cantera_yaml_file(
-        path=os.path.join(TEST_DATA_BASE_PATH, 'determine_species', 'iteration_2', 'RMG', 'cantera', 'chem_annotated.yaml'),
+        path=os.path.join(TEST_DATA_BASE_PATH, 'determine_species', 'iteration_2', 'RMG', 'cantera_from_ck', 'chem_annotated.yaml'),
         species_dict_path=os.path.join(TEST_DATA_BASE_PATH, 'determine_species', 'iteration_2', 'RMG', 'chemkin', 'species_dictionary.txt'))
 
     for species in species_list:
