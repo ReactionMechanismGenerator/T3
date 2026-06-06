@@ -6,13 +6,11 @@ import re
 import datetime
 import os
 import string
-from typing import TYPE_CHECKING
 
 import numpy as np
 import yaml
 
-if TYPE_CHECKING:
-    from t3.chem import T3Species
+from arc.species.species import ARCSpecies
 
 t3_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))  # absolute path to the T3 folder
 DATA_BASE_PATH = os.path.join(t3_path, 'data')
@@ -26,8 +24,8 @@ VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 
 def get_species_by_label(label: str,
-                         species_list: list[T3Species],
-                         ) -> T3Species | None:
+                         species_list: list[ARCSpecies],
+                         ) -> ARCSpecies | None:
     """
     Get a species from a list of species by its label.
 
@@ -57,7 +55,7 @@ def get_species_by_label(label: str,
     return None
 
 
-def to_chemkin_label(species: T3Species) -> str:
+def to_chemkin_label(species: ARCSpecies) -> str:
     """
     Return a string identifier for the provided `species` that can be used in a
     Chemkin file. Although the Chemkin format allows up to 16 characters for a
@@ -505,10 +503,10 @@ def get_atom_counts(smiles: str | None = None,
     """
     if smiles is None and adjlist is None and inchi is None:
         raise ValueError('Must provide at least one of smiles, adjlist, or inchi.')
-    # Imported here to avoid a circular import (t3.chem imports from t3.common).
-    from t3.chem import T3Species
+    # Build directly from ARCSpecies (T3Species is just an ARCSpecies subclass) so that
+    # t3.common has no runtime dependency on t3.chem (which imports from t3.common).
     kwargs = {k: v for k, v in (('smiles', smiles), ('adjlist', adjlist), ('inchi', inchi)) if v is not None}
-    spc = T3Species(**kwargs)
+    spc = ARCSpecies(label='atom_counter', **kwargs)
     counts = {'C': 0, 'H': 0, 'N': 0, 'O': 0, 'other': 0}
     for atom in spc.mol.atoms:
         if atom.is_carbon():
