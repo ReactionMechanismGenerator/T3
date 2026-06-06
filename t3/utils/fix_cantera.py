@@ -4,8 +4,6 @@ A module to automatically fix issues with RMG-generated Cantera files, mainly re
 """
 import logging
 import os
-
-
 import shutil
 import time
 import traceback
@@ -50,7 +48,7 @@ def fix_cantera(model_path: str):
         return False
     shutil.copyfile(model_path, model_path + '.bak')
     done, fixed = False, False
-    marked_dups: List[List[int]] = list()
+    marked_dups: list[list[int]] = list()
     counter = 0
     while not done and counter < 1000:
         counter += 1
@@ -109,7 +107,7 @@ def remove_reaction_with_invalid_k(model_path: str, tb: str) -> bool:
 
 def get_rxn_to_remove(model_path: str,
                       tb: str,
-                      ) -> Optional[int]:
+                      ) -> int | None:
     """
     Get the reaction to remove from the traceback.
 
@@ -147,7 +145,7 @@ def get_rxn_to_remove(model_path: str,
     return None
 
 
-def fix_undeclared_duplicate_reactions(model_path: str, tb: str, marked_dups: List[List[int]]) -> bool:
+def fix_undeclared_duplicate_reactions(model_path: str, tb: str, marked_dups: list[list[int]]) -> bool:
     """
     Fix a Cantera model that has undeclared duplicate reactions.
 

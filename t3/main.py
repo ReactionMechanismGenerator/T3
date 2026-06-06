@@ -20,7 +20,6 @@ import os
 import re
 import shutil
 from collections import deque
-from typing import List, Optional, Tuple, Union
 
 from arc.common import (get_number_with_ordinal_indicator,
                         get_ordinal_indicator,
@@ -55,7 +54,7 @@ from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 from t3.utils.cantera_parser import load_cantera_yaml_file
 
 
-class T3(object):
+class T3:
     """
     The main T3 class.
 
@@ -378,7 +377,7 @@ class T3(object):
                 if self.t3['options']['shared_library_name'] is not None and self.t3['options']['external_library_path'] is not None else None,
         }
 
-    def restart(self) -> Tuple[int, bool, bool]:
+    def restart(self) -> tuple[int, bool, bool]:
         """
         Restart T3 by looking for existing iteration folders.
         Restarts ARC if it ran and did not terminate.
@@ -441,7 +440,7 @@ class T3(object):
         self.set_paths(iteration=i_max)
         return i_max
 
-    def check_rmg_status(self) -> Tuple[bool, bool]:
+    def check_rmg_status(self) -> tuple[bool, bool]:
         """
         Check whether RMG has begun running and whether it terminated successfully
         for the current iteration.
@@ -458,7 +457,7 @@ class T3(object):
             return True, False
         return False, False
 
-    def check_arc_status(self) -> Tuple[bool, bool]:
+    def check_arc_status(self) -> tuple[bool, bool]:
         """
         Check whether ARC has begun running and whether it terminated successfully
         for the current iteration.
@@ -712,7 +711,7 @@ class T3(object):
             bool: Whether additional calculations are required.
         """
         species_keys, reaction_keys, coll_vio_spc_keys, coll_vio_rxn_keys = list(), list(), list(), list()
-        rxn_idt_keys: Optional[List[int]] = None
+        rxn_idt_keys: list[int] | None = None
 
         self.rmg_species, self.rmg_reactions = self.load_species_and_reactions_from_yaml_file()
         self.logger.info(f'This RMG model has {len(self.rmg_species)} species '
@@ -890,7 +889,7 @@ class T3(object):
 
         return reaction_keys
 
-    def determine_params_based_on_sa_idt(self) -> Tuple[List[int], List[int]]:
+    def determine_params_based_on_sa_idt(self) -> tuple[list[int], list[int]]:
         """
         Determine species or reactions to calculate based on the IDT sensitivity analysis
         produced by the CanteraIDT adapter.
@@ -1124,7 +1123,7 @@ class T3(object):
             self.logger.info('No collision rate violating reactions identified in this model.')
             return species_keys, reaction_keys
 
-        with open(self.paths['RMG coll vio'], 'r') as f:
+        with open(self.paths['RMG coll vio']) as f:
             lines = f.readlines()
 
         for line in lines:
@@ -1628,7 +1627,7 @@ class T3(object):
                     shutil.rmtree(os.path.join(root, folder), ignore_errors=True)
 
 
-def _tail_lines(path: str, n: int = 500) -> List[str]:
+def _tail_lines(path: str, n: int = 500) -> list[str]:
     """
     Return the last ``n`` lines of ``path`` in reverse order (newest first),
     streaming the file so it never has to be fully loaded.
@@ -1640,7 +1639,7 @@ def _tail_lines(path: str, n: int = 500) -> List[str]:
     Returns:
         List[str]: Up to ``n`` lines, reversed (most recent first).
     """
-    with open(path, 'r') as f:
+    with open(path) as f:
         last = deque(f, maxlen=n)
     return list(reversed(last))
 

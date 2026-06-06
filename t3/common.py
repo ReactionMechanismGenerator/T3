@@ -26,8 +26,8 @@ VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 
 def get_species_by_label(label: str,
-                         species_list: list['T3Species'],
-                         ) -> 'T3Species | None':
+                         species_list: list[T3Species],
+                         ) -> T3Species | None:
     """
     Get a species from a list of species by its label.
 
@@ -57,7 +57,7 @@ def get_species_by_label(label: str,
     return None
 
 
-def to_chemkin_label(species: 'T3Species') -> str:
+def to_chemkin_label(species: T3Species) -> str:
     """
     Return a string identifier for the provided `species` that can be used in a
     Chemkin file. Although the Chemkin format allows up to 16 characters for a
@@ -86,22 +86,22 @@ def to_chemkin_label(species: 'T3Species') -> str:
             else:
                 return label
         elif species.mol is not None:
-            return '{0}'.format(species.mol.get_formula())
+            return f'{species.mol.get_formula()}'
     else:
         if len(label) > 0 and index >= 0 and not re.search(r'[^A-Za-z0-9\-_,\(\)\*#.:\[\]]+', label):
-            name = '{0}({1:d})'.format(label, index)
+            name = f'{label}({index:d})'
             if len(name) <= 16:
                 return name
 
         if species.mol is not None:
-            name = '{0}({1:d})'.format(species.mol.get_formula(), index)
+            name = f'{species.mol.get_formula()}({index:d})'
             if len(name) <= 16:
                 return name
             if index >= 0:
                 if 'X' in name:
-                    name = 'SX({0:d})'.format(index)
+                    name = f'SX({index:d})'
                 else:
-                    name = 'S({0:d})'.format(index)
+                    name = f'S({index:d})'
                 if len(name) <= 16:
                     return name
     return label
@@ -266,7 +266,7 @@ def get_chem_to_rmg_rxn_index_map(chem_annotated_path: str) -> dict[int, int]:
     """
     rxn_map = dict()
     if os.path.isfile(chem_annotated_path):
-        with open(chem_annotated_path, 'r') as f:
+        with open(chem_annotated_path) as f:
             lines = f.readlines()
         for line in lines:
             if 'Reaction index:' in line:
@@ -485,10 +485,10 @@ def numpy_to_list(data):
 # Equivalence-ratio / fuel-oxidizer-diluent helpers
 # ---------------------------------------------------------------------------
 
-def get_atom_counts(smiles: Optional[str] = None,
-                    adjlist: Optional[str] = None,
-                    inchi: Optional[str] = None,
-                    ) -> Dict[str, int]:
+def get_atom_counts(smiles: str | None = None,
+                    adjlist: str | None = None,
+                    inchi: str | None = None,
+                    ) -> dict[str, int]:
     """
     Count C / H / N / O / other atoms in a molecule.
 
@@ -524,12 +524,12 @@ def get_atom_counts(smiles: Optional[str] = None,
     return counts
 
 
-def get_oxidizer_stoichiometry(fuel_smiles: Optional[str] = None,
-                               fuel_adjlist: Optional[str] = None,
-                               fuel_inchi: Optional[str] = None,
-                               oxidizer_smiles: Optional[str] = None,
-                               oxidizer_adjlist: Optional[str] = None,
-                               oxidizer_inchi: Optional[str] = None,
+def get_oxidizer_stoichiometry(fuel_smiles: str | None = None,
+                               fuel_adjlist: str | None = None,
+                               fuel_inchi: str | None = None,
+                               oxidizer_smiles: str | None = None,
+                               oxidizer_adjlist: str | None = None,
+                               oxidizer_inchi: str | None = None,
                                ) -> float:
     """
     Compute how many oxidizer molecules per fuel molecule are needed for complete
@@ -582,8 +582,8 @@ def get_oxidizer_stoichiometry(fuel_smiles: Optional[str] = None,
 
 
 def determine_concentrations_by_equivalence_ratios(
-        species: List[dict],
-) -> Optional[Dict]:
+        species: list[dict],
+) -> dict | None:
     """
     Build per-equivalence-ratio concentration columns for a fuel/oxidizer/diluent
     mixture (single or multi-component on each role).
@@ -688,7 +688,7 @@ def determine_concentrations_by_equivalence_ratios(
         ))
 
     # 4. Build per-φ columns.
-    concentrations: Dict[str, List[float]] = {fuel['label']: [fuel_conc] * len(eq_ratios)}
+    concentrations: dict[str, list[float]] = {fuel['label']: [fuel_conc] * len(eq_ratios)}
 
     # Each oxidizer's concentration at φ:
     #     conc_i = fuel_conc * stoich_i * fraction_i / φ

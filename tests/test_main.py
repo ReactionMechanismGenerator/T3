@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# encoding: utf-8
 
 """
 t3 tests test_main module
@@ -295,7 +294,7 @@ def test_write_t3_input_file():
         t3 = run_minimal()
         t3.write_t3_input_file()
         assert os.path.isfile(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'))
-        with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'), 'r') as f:
+        with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml')) as f:
             assert f.readline() == 'project: T3_minimal_example\n'
     finally:
         shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
@@ -436,7 +435,7 @@ def test_restart():
     assert t3.restart() == (6, False, False)
     t3.process_arc_run()
     assert t3.species[0].is_converged is True
-    with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log'), 'r') as f:
+    with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log')) as f:
         lines = f.readlines()
         assert 'Starting project T3_ARC_restart_test\n' in lines
         assert 'All jobs terminated. Summary for project T3_ARC_restart_test:\n' in lines
@@ -481,7 +480,7 @@ def test_run_arc():
     try:
         t3 = run_minimal(iteration=1, set_paths=True)
         t3.run_arc(arc_kwargs=t3.qm)
-        with open(t3.paths['ARC log'], 'r') as f:
+        with open(t3.paths['ARC log']) as f:
             lines = f.readlines()
         for line in ['Starting project T3_minimal_example\n',
                      'Geometry optimization: b3lyp/6-31g(d,p), software: gaussian\n',
@@ -521,7 +520,7 @@ def test_process_arc_run():
         assert t3.species[0].is_converged is True
         assert t3.species[1].is_converged is False
         assert os.path.isfile(t3.paths['T3 thermo lib'])
-        with open(t3.paths['T3 thermo lib'], 'r') as f:
+        with open(t3.paths['T3 thermo lib']) as f:
             lines = f.readlines()
         for line in ['name = "T3"\n',
                      "Species imipramine_ol_2_ket_4 (run time: 1 day, 8:24:38)\n",
@@ -566,13 +565,13 @@ def test_run_rmg():
             walltime=t3.t3['options']['max_RMG_walltime'],
         )
         t3.run_rmg()
-        with open(t3.paths['RMG input'], 'r') as f:
+        with open(t3.paths['RMG input']) as f:
             lines = f.readlines()
         for line in ["    thermoLibraries=['primaryThermoLibrary'],\n",
                      "simulator(atol=1e-16, rtol=1e-08)\n",
                      ]:
             assert line in lines
-        with open(t3.paths['RMG log'], 'r') as f:
+        with open(t3.paths['RMG log']) as f:
             lines = f.readlines()
         for line in ["    thermoLibraries=['primaryThermoLibrary'],\n",
                      "simulator(atol=1e-16, rtol=1e-08)\n",

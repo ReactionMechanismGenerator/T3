@@ -79,7 +79,7 @@ def write_submit_script(project_directory: str,
 
 
 def submit_job(project_directory: str,
-               logger: 'Logger',
+               logger: Logger,
                cluster_soft: str,
                memory: int | None = None,
                ) -> tuple[str | None, str | None]:
@@ -147,7 +147,7 @@ def rmg_job_converged(project_directory: str) -> tuple[bool, str | None]:
     rmg_log_path = os.path.join(project_directory, 'RMG.log')
     rmg_err_path = os.path.join(project_directory, 'err.txt')
     if os.path.isfile(rmg_log_path):
-        with open(rmg_log_path, 'r') as f:
+        with open(rmg_log_path) as f:
             lines = f.readlines()
             len_lines = len(lines)
             for i in range(10):
@@ -155,7 +155,7 @@ def rmg_job_converged(project_directory: str) -> tuple[bool, str | None]:
                     rmg_converged = True
                     break
     if not rmg_converged and os.path.isfile(rmg_err_path):
-        with open(rmg_err_path, 'r') as f:
+        with open(rmg_err_path) as f:
             lines = f.readlines()
         for line in lines[::-1]:
             if 'Error' in line:
@@ -233,7 +233,7 @@ fi' '''
 
 
 def run_rmg_in_local_queue(project_directory: str,
-                           logger: 'Logger',
+                           logger: Logger,
                            memory: int | None = None,
                            cpus: int | None = None,
                            max_iterations: int | None = None,
@@ -269,7 +269,7 @@ def run_rmg_in_local_queue(project_directory: str,
 
     restart_string = "restartFromSeed(path='seed')"
     rmg_input_path = os.path.join(project_directory, 'input.py')
-    with open(rmg_input_path, 'r') as f:
+    with open(rmg_input_path) as f:
         content = f.read()
     seed_path = os.path.join(project_directory, 'seed')
     if restart_rmg:
@@ -282,7 +282,7 @@ def run_rmg_in_local_queue(project_directory: str,
                 os.rename(src=os.path.join(project_directory, 'restart_from_seed.py'),
                           dst=os.path.join(project_directory, 'input.py'))
             elif os.path.isfile(os.path.join(project_directory, 'input.py')):
-                with open(os.path.join(project_directory, 'input.py'), 'r') as f:
+                with open(os.path.join(project_directory, 'input.py')) as f:
                     content = f.read()
                 with open(os.path.join(project_directory, 'input.py'), 'w') as f:
                     f.write("restartFromSeed(path='seed')\n\n" + content)
@@ -296,7 +296,7 @@ def run_rmg_in_local_queue(project_directory: str,
 
 def rmg_runner(rmg_input_file_path: str,
                job_log_path: str,
-               logger: 'Logger',
+               logger: Logger,
                memory: int | None = None,
                cpus: int | None = None,
                verbose: int | None = None,
@@ -387,7 +387,7 @@ def rmg_runner(rmg_input_file_path: str,
 
 
 def get_new_memory_for_an_rmg_run(job_log_path: str,
-                                  logger: 'Logger',
+                                  logger: Logger,
                                   ) -> int | None:
     """
     If an RMG job crashed due to too few or too much memory, compute a new desired memory for the run.
@@ -404,7 +404,7 @@ def get_new_memory_for_an_rmg_run(job_log_path: str,
     global MEM
     new_mem = None
     if os.path.isfile(job_log_path):
-        with open(job_log_path, 'r') as f:
+        with open(job_log_path) as f:
             lines = f.readlines()
         for line in lines:
             # "Job Is Wasting Memory using less than 20 percent of requested Memory"
@@ -468,14 +468,14 @@ def fix_cantera_model_files(rmg_path: str) -> None:
     Args:
         rmg_path (str): The path to the RMG folder.
     """
-    fix_cantera(model_path=os.path.join(rmg_path, 'cantera', 'chem_annotated.yaml'))
-    fix_cantera(model_path=os.path.join(rmg_path, 'cantera', 'chem.yaml'))
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera_from_ck', 'chem_annotated.yaml'))
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera_from_ck', 'chem.yaml'))
 
 
 def run_arkane_job(input_file: str,
                    output_directory: str,
                    plot: bool = False,
-                   logger: 'Logger | None' = None,
+                   logger: Logger | None = None,
                    ) -> bool:
     """
     Run an Arkane job.
@@ -566,6 +566,6 @@ fi' '''
     error_msg = "Unknown error"
     err_file = os.path.join(project_directory, 'sa_err.txt')
     if os.path.isfile(err_file):
-        with open(err_file, 'r') as f:
+        with open(err_file) as f:
             error_msg = f.read()
     return False, error_msg

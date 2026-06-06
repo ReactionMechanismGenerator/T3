@@ -58,7 +58,7 @@ class T3Options(BaseModel):
         extra = "forbid"
 
     @model_validator(mode='after')
-    def enforce_collision_thermo(self) -> 'T3Options':
+    def enforce_collision_thermo(self) -> T3Options:
         """
         If collision_violators_rates is True, ensure collision_violators_thermo is also True.
         """
@@ -287,7 +287,7 @@ class RMGSpecies(BaseModel):
         return value
 
     @model_validator(mode='after')
-    def check_role_consistency(self) -> 'RMGSpecies':
+    def check_role_consistency(self) -> RMGSpecies:
         """
         Cross-field role validation:
         - equivalence_ratios may only be set on a fuel species.
@@ -488,7 +488,7 @@ class RMGModel(BaseModel):
         return int(value) if isinstance(value, float) else value
 
     @model_validator(mode='after')
-    def check_tolerance_interrupt_simulation(self) -> 'RMGModel':
+    def check_tolerance_interrupt_simulation(self) -> RMGModel:
         """
         RMGModel.tolerance_interrupt_simulation validator
         Sets tolerance_interrupt_simulation to match core_tolerance if not provided,
@@ -737,7 +737,7 @@ class RMG(BaseModel):
         return value
 
     @model_validator(mode='after')
-    def check_species_and_reactors(self) -> 'RMG':
+    def check_species_and_reactors(self) -> RMG:
         if self.reactors and self.species:
             reactor_types = {reactor.type for reactor in self.reactors}
             balance_species = [s.label for s in self.species if s.balance]
@@ -799,7 +799,7 @@ class InputBase(BaseModel):
         extra = "forbid"
 
     @model_validator(mode='after')
-    def validate_rmg_t3(self) -> 'InputBase':
+    def validate_rmg_t3(self) -> InputBase:
         """
         InputBase.validate_rmg_t3
         Validates cross-dependencies between RMG and T3 configurations.

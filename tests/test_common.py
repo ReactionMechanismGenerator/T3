@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# encoding: utf-8
 
 """
 t3 tests test_utils module
@@ -206,7 +205,7 @@ def test_save_yaml_file_top_keys():
         'beta': {'nested': True},
     }
     common.save_yaml_file(path=path, content=content, top_keys=['metadata', 'alpha'])
-    with open(path, 'r') as f:
+    with open(path) as f:
         lines = f.readlines()
     # Metadata block must start on the very first line
     assert lines[0].startswith('metadata:')
@@ -234,7 +233,7 @@ def test_save_yaml_file_no_top_keys():
     path = os.path.join(tmp_dir, 'test.yml')
     content = {'charlie': 3, 'alpha': 1, 'beta': 2}
     common.save_yaml_file(path=path, content=content)
-    with open(path, 'r') as f:
+    with open(path) as f:
         lines = f.readlines()
     top_level_keys = [line.split(':')[0] for line in lines
                       if line.strip() and not line[0].isspace() and ':' in line]
@@ -296,7 +295,7 @@ def test_save_yaml_file_top_keys_covering_all_keys():
     path = os.path.join(tmp_dir, 'all_top.yml')
     content = {'b': 2, 'a': 1}
     common.save_yaml_file(path=path, content=content, top_keys=['a', 'b'])
-    with open(path, 'r') as f:
+    with open(path) as f:
         lines = f.readlines()
     top_level_keys = [line.split(':')[0] for line in lines
                       if line.strip() and not line[0].isspace() and ':' in line]
@@ -312,7 +311,7 @@ def test_save_yaml_file_top_keys_missing_from_content():
     content = {'real': 1, 'also_real': 2}
     common.save_yaml_file(path=path, content=content,
                           top_keys=['ghost', 'real', 'phantom'])
-    with open(path, 'r') as f:
+    with open(path) as f:
         lines = f.readlines()
     top_level_keys = [line.split(':')[0] for line in lines
                       if line.strip() and not line[0].isspace() and ':' in line]

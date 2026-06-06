@@ -13,7 +13,6 @@ import logging
 import math
 import os
 import traceback
-from typing import Dict, List, Optional, Tuple
 
 import cantera as ct
 import matplotlib.pyplot as plt
@@ -64,10 +63,10 @@ class CanteraIDT(SimulateAdapter):
                  logger: Logger,
                  atol: float = 1e-16,
                  rtol: float = 1e-8,
-                 observable_list: Optional[list] = None,
+                 observable_list: list | None = None,
                  sa_atol: float = 1e-6,
                  sa_rtol: float = 1e-4,
-                 global_observables: Optional[List[str]] = None,
+                 global_observables: list[str] | None = None,
                  ):
         self.t3 = t3
         self.rmg = rmg
@@ -80,16 +79,16 @@ class CanteraIDT(SimulateAdapter):
         self.observable_list = observable_list or list()
         self.global_observables = global_observables
 
-        self.model: Optional[ct.Solution] = None
+        self.model: ct.Solution | None = None
         self.cantera_simulation = None
-        self.reactor_idt_dict: Optional[dict] = None
+        self.reactor_idt_dict: dict | None = None
         self.inert_list = ['He', 'Ne', 'Ar', 'Kr', 'Xe', 'N2']
-        self.inert_index_list: List[int] = list()
-        self.spc_identifier_lookup: Dict[str, int] = dict()
-        self.rxn_identifier_lookup: Dict[str, int] = dict()
-        self.num_ct_reactions: Optional[int] = None
-        self.num_ct_species: Optional[int] = None
-        self.species_names_without_indices: List[str] = list()
+        self.inert_index_list: list[int] = list()
+        self.spc_identifier_lookup: dict[str, int] = dict()
+        self.rxn_identifier_lookup: dict[str, int] = dict()
+        self.num_ct_reactions: int | None = None
+        self.num_ct_species: int | None = None
+        self.species_names_without_indices: list[str] = list()
         self.idt_sa_dict: dict = dict()
 
         sensitivity = self.t3.get('sensitivity', {})
@@ -181,16 +180,16 @@ class CanteraIDT(SimulateAdapter):
 
     def _build_combinations(self,
                             r: int,
-                            T_list: List[float],
-                            P_list: List[float],
-                            equivalence_ratios: Optional[List[float]],
-                            concentration_combinations: Optional[List[dict]],
+                            T_list: list[float],
+                            P_list: list[float],
+                            equivalence_ratios: list[float] | None,
+                            concentration_combinations: list[dict] | None,
                             infile: str,
                             save_fig: bool,
                             energy: str,
                             max_idt: float,
                             mode: str,
-                            ) -> List[tuple]:
+                            ) -> list[tuple]:
         """
         Expand T / P / φ into the list of working points to simulate.
         """
@@ -221,12 +220,12 @@ class CanteraIDT(SimulateAdapter):
                                  t: float,
                                  p: float,
                                  x: dict,
-                                 phi: Optional[float],
+                                 phi: float | None,
                                  infile: str,
                                  save_fig: bool = True,
                                  energy: str = 'on',
                                  max_idt: float = 1.0,
-                                 ) -> Optional[float]:
+                                 ) -> float | None:
         """
         Simulate one IdealGasReactor at fixed (T, P, X) and return the IDT in seconds.
         """
@@ -267,7 +266,7 @@ class CanteraIDT(SimulateAdapter):
         """Create the Cantera reactor for IDT simulation. Subclasses override this."""
         return ct.IdealGasReactor(model, energy=energy)
 
-    def determine_radical_label(self) -> Optional[str]:
+    def determine_radical_label(self) -> str | None:
         """
         Pick a radical species label used for IDT detection at init time.
 
@@ -294,7 +293,7 @@ class CanteraIDT(SimulateAdapter):
         # max_radical_dt: defer to simulation-time selection, but set a default fallback
         return oh or h
 
-    def _find_best_radical(self, time_history: ct.SolutionArray) -> Optional[str]:
+    def _find_best_radical(self, time_history: ct.SolutionArray) -> str | None:
         """
         Scan all species in the simulation history and return the label of the
         radical with the highest peak concentration. Candidates are non-inert
@@ -323,7 +322,7 @@ class CanteraIDT(SimulateAdapter):
                          X: dict,
                          energy: str = 'on',
                          max_idt: float = 1.0,
-                         ) -> Optional[str]:
+                         ) -> str | None:
         """
         Run a quick simulation (no SA) at a single condition to identify the
         best radical for ``max_radical_dt``. Returns the radical label, or
@@ -344,7 +343,7 @@ class CanteraIDT(SimulateAdapter):
         radical = self._find_best_radical(time_history)
         return radical or self.radical_label
 
-    def get_cantera_species_label(self, rmg_label: str) -> Optional[str]:
+    def get_cantera_species_label(self, rmg_label: str) -> str | None:
         """
         Look up the Cantera species name (which usually carries an ``(N)`` suffix) for an RMG label.
         """
@@ -355,7 +354,7 @@ class CanteraIDT(SimulateAdapter):
                 return self.model.species()[i].name
         return None
 
-    def get_concentration_combinations(self) -> Tuple[Optional[List[float]], Optional[List[dict]]]:
+    def get_concentration_combinations(self) -> tuple[list[float] | None, list[dict] | None]:
         """
         Build the per-φ concentration dictionaries that drive each IDT simulation.
 
@@ -375,9 +374,9 @@ class CanteraIDT(SimulateAdapter):
             return None, None
         equivalence_ratios = objects['equivalence_ratios']
         per_species_columns = objects['concentrations']
-        concentration_combinations: List[dict] = list()
+        concentration_combinations: list[dict] = list()
         for i in range(len(equivalence_ratios)):
-            concentration_dict: Dict[str, float] = dict()
+            concentration_dict: dict[str, float] = dict()
             for label, column in per_species_columns.items():
                 cantera_label = self.get_cantera_species_label(label)
                 if cantera_label is not None and column[i]:
@@ -397,7 +396,7 @@ class CanteraIDT(SimulateAdapter):
             concentration_combinations.append(concentration_dict)
         return equivalence_ratios, concentration_combinations
 
-    def get_sa_coefficients(self) -> Optional[dict]:
+    def get_sa_coefficients(self) -> dict | None:
         """
         Run the IDT sensitivity analysis. Dispatches to adjoint or brute-force based on
         ``self.idt_sa_method``. Tuning knobs (``top_SA_species``, ``top_SA_reactions``,
@@ -412,7 +411,7 @@ class CanteraIDT(SimulateAdapter):
             return self._get_sa_coefficients_adjoint()
         return self._get_sa_coefficients_brute_force()
 
-    def _sa_opts(self) -> Tuple[int, int, int, bool]:
+    def _sa_opts(self) -> tuple[int, int, int, bool]:
         """Read the SA tuning knobs from ``self.t3['sensitivity']``."""
         sens = self.t3.get('sensitivity', {}) or {}
         return (int(sens.get('top_SA_species', 10)),
@@ -420,7 +419,7 @@ class CanteraIDT(SimulateAdapter):
                 int(sens.get('max_sa_workers', 24)),
                 bool(sens.get('save_sa_yaml', True)))
 
-    def _get_sa_coefficients_brute_force(self) -> Optional[dict]:
+    def _get_sa_coefficients_brute_force(self) -> dict | None:
         """
         Brute-force IDT sensitivity analysis: for every species enthalpy and every
         reaction rate coefficient, perturb a copy of the mechanism and re-run all working
@@ -439,7 +438,7 @@ class CanteraIDT(SimulateAdapter):
         if self.adaptive_perturbation:
             py_logger.info('Adaptive perturbation sizing enabled')
 
-        sa_dict: Dict[str, Dict[str, dict]] = {'thermo': {'IDT': dict()}, 'kinetics': {'IDT': dict()}}
+        sa_dict: dict[str, dict[str, dict]] = {'thermo': {'IDT': dict()}, 'kinetics': {'IDT': dict()}}
         tasks = ([('thermo', i) for i in range(self.num_ct_species)]
                  + [('kinetics', i) for i in range(self.num_ct_reactions)])
         os.makedirs(self.paths['SA'], exist_ok=True)
@@ -449,7 +448,7 @@ class CanteraIDT(SimulateAdapter):
 
         with cf.ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Compute per-species adaptive delta_h if enabled
-            adaptive_delta_h_map: Dict[int, float] = dict()
+            adaptive_delta_h_map: dict[int, float] = dict()
             if self.adaptive_perturbation:
                 for i in range(self.num_ct_species):
                     h298 = get_h298(self.model, i)
@@ -477,7 +476,7 @@ class CanteraIDT(SimulateAdapter):
                 future_to_task[_submit(task, task_delta_h, task_delta_k)] = (task, task_delta_h, task_delta_k)
 
             # First pass: collect results, defer retries so the pool stays saturated.
-            to_retry: List[tuple] = list()
+            to_retry: list[tuple] = list()
             for future in cf.as_completed(future_to_task):
                 task, task_delta_h, task_delta_k = future_to_task[future]
                 try:
@@ -488,7 +487,7 @@ class CanteraIDT(SimulateAdapter):
                     to_retry.append((task, task_delta_h, task_delta_k))
 
             # Second pass: re-submit all failures at once, then harvest as they complete.
-            retry_future_to_task: Dict = dict()
+            retry_future_to_task: dict = dict()
             for task, task_delta_h, task_delta_k in to_retry:
                 kind, _ = task
                 retry_delta_h = task_delta_h / 2 if kind == 'thermo' else task_delta_h
@@ -531,12 +530,12 @@ class CanteraIDT(SimulateAdapter):
                                  t: float,
                                  p: float,
                                  x: dict,
-                                 phi: Optional[float],
+                                 phi: float | None,
                                  infile: str,
                                  energy: str = 'on',
                                  max_idt: float = 1.0,
-                                 sa_observable: Optional[str] = None,
-                                 ) -> Tuple[Optional[float], dict, dict]:
+                                 sa_observable: str | None = None,
+                                 ) -> tuple[float | None, dict, dict]:
         """
         Run a single IDT simulation with Cantera's built-in adjoint sensitivity analysis.
 
@@ -567,7 +566,7 @@ class CanteraIDT(SimulateAdapter):
 
         time_history = ct.SolutionArray(model, extra='t')
         # Store sensitivity matrix at each time step
-        sa_history: List[np.ndarray] = list()
+        sa_history: list[np.ndarray] = list()
 
         # Determine the observable for adjoint SA extraction.
         if sa_observable is not None:
@@ -624,8 +623,8 @@ class CanteraIDT(SimulateAdapter):
         idt = float(times[idt_idx])
         sa_at_idt = sa_history[idt_idx]
 
-        kinetics_sa: Dict[int, float] = dict()
-        thermo_sa: Dict[int, float] = dict()
+        kinetics_sa: dict[int, float] = dict()
+        thermo_sa: dict[int, float] = dict()
         for j in range(n_reactions):
             if abs(sa_at_idt[j]) > 1e-20:
                 kinetics_sa[j] = float(sa_at_idt[j])
@@ -635,7 +634,7 @@ class CanteraIDT(SimulateAdapter):
 
         return idt, kinetics_sa, thermo_sa
 
-    def _get_sa_coefficients_adjoint(self) -> Optional[dict]:
+    def _get_sa_coefficients_adjoint(self) -> dict | None:
         """
         Run adjoint (Cantera built-in) IDT sensitivity analysis. A single simulation per
         condition extracts dln[observable]/dln[k_i] at t=IDT.
@@ -796,7 +795,7 @@ class CanteraIDT(SimulateAdapter):
         """
         if not self.reactor_idt_dict:
             return {'idt': list(), 'idt_index': list()}
-        idts: List[float] = list()
+        idts: list[float] = list()
         for reactor_data in self.reactor_idt_dict.values():
             for phi_data in reactor_data.values():
                 for p_data in phi_data.values():
@@ -857,11 +856,11 @@ def worker(task: tuple,
 
 
 def compute_idt(time_history: ct.SolutionArray,
-                radical_label: Optional[str] = None,
+                radical_label: str | None = None,
                 criterion: str = 'max_dOHdt',
-                figs_path: Optional[str] = None,
-                fig_name: Optional[str] = None,
-                ) -> Optional[float]:
+                figs_path: str | None = None,
+                fig_name: str | None = None,
+                ) -> float | None:
     """
     Find the IDT using the specified criterion. Returns ``None`` if the trajectory
     looks degenerate (no real ignition).
@@ -953,7 +952,7 @@ def compute_idt(time_history: ct.SolutionArray,
 
 def get_t_and_p_lists(reactor: dict,
                       num_t_points: int = 25,
-                      ) -> Tuple[List[float], List[float]]:
+                      ) -> tuple[list[float], list[float]]:
     """
     Expand the reactor's ``T`` and ``P`` fields into explicit numeric lists.
 
@@ -985,7 +984,7 @@ def get_t_and_p_lists(reactor: dict,
 def plot_idt_vs_temperature(idt_dict: dict,
                             figs_path: str,
                             reactor_index: int = 0,
-                            exp_data: Optional[dict] = None,
+                            exp_data: dict | None = None,
                             ) -> None:
     """
     Plot ``IDT(1000/T)`` per φ and pressure condition. If ``exp_data`` is provided,
@@ -1025,7 +1024,7 @@ def plot_idt_vs_temperature(idt_dict: dict,
 def perturb_enthalpy(original_path: str,
                      perturbed_path: str,
                      species_index: int,
-                     logger: Optional[Logger] = None,
+                     logger: Logger | None = None,
                      delta_h: float = DELTA_H,
                      ) -> bool:
     """
@@ -1058,7 +1057,7 @@ def perturb_enthalpy(original_path: str,
 def perturb_reaction_rate_coefficient(original_path: str,
                                       perturbed_path: str,
                                       reaction_index: int,
-                                      logger: Optional[Logger] = None,
+                                      logger: Logger | None = None,
                                       delta_k: float = DELTA_K,
                                       ) -> bool:
     """
@@ -1285,7 +1284,7 @@ def get_pressure_from_cantera(p: str) -> float:
 
 def get_rate_coefficient(reaction_data: dict,
                          T: float,
-                         P: Optional[float] = 1,
+                         P: float | None = 1,
                          Ea_units: str = 'J/mol',
                          ) -> float:
     """
