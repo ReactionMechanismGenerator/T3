@@ -615,7 +615,9 @@ class CanteraIDT(SimulateAdapter):
             conc = np.asarray(time_history.X[:, time_history.species_index(radical)], dtype=np.float64)
             if all(c == 0 for c in conc):
                 return None, dict(), dict()
-            dc_dt = np.diff(conc) / np.diff(times)
+            dt = np.diff(times)
+            dt = np.where(dt == 0, np.finfo(float).tiny, dt)
+            dc_dt = np.diff(conc) / dt
             idt_idx = int(np.argmax(dc_dt))
             if idt_idx > len(times) - 10 or times[idt_idx] < 1e-12:
                 return None, dict(), dict()
@@ -1006,8 +1008,11 @@ def plot_idt_vs_temperature(idt_dict: dict,
                 ax.set_xlabel('1000/T (1/K)')
                 ax.set_ylabel('IDT (s)')
                 ax.set_title(f'IDT vs. 1000/T, phi = {phi}, P = {p:.2f} bar')
-                ax.scatter([1000 / t for t in sim_data.keys()], list(sim_data.values()),
-                           label='simulation', color='blue', marker='o', linestyle='-')
+                # Sort by temperature so the line is monotonic in 1000/T. Use ax.plot
+                # (not ax.scatter) so the markers are actually connected by a line.
+                sorted_temps = sorted(sim_data.keys())
+                ax.plot([1000 / t for t in sorted_temps], [sim_data[t] for t in sorted_temps],
+                        label='simulation', color='blue', marker='o', linestyle='-')
                 ax.set_yscale('log')
                 if exp_data is not None:
                     ax.scatter([1000 / t for t in exp_data[phi][p].keys()],
@@ -1015,7 +1020,7 @@ def plot_idt_vs_temperature(idt_dict: dict,
                                label='experiment', color='orange', marker='D')
                 ax.legend(loc='lower right')
                 fig.savefig(os.path.join(figs_path, fig_name))
-            except (AttributeError, ValueError) as e:
+            except (AttributeError, ValueError, TypeError) as e:
                 py_logger.debug(f'IDT vs T plot failed: {e}')
             finally:
                 plt.close(fig)

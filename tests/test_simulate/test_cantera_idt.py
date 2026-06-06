@@ -19,7 +19,8 @@ from t3.simulate.cantera_idt import (CanteraIDT, DELTA_H, DELTA_K, calculate_arr
                                      calculate_troe_rate_coefficient, calculate_chebyshev_rate_coefficient,
                                      calculate_plog_rate_coefficient, compute_idt, get_Ea_units, get_h298,
                                      get_pressure_from_cantera, get_t_and_p_lists, get_top_sa_coefficients,
-                                     perturb_enthalpy, perturb_reaction_rate_coefficient)
+                                     perturb_enthalpy, perturb_reaction_rate_coefficient,
+                                     plot_idt_vs_temperature)
 from t3.utils.fix_cantera import fix_cantera
 
 
@@ -642,6 +643,19 @@ def test_compute_idt_radical_resize_safe():
         time_history.append(reactor.thermo.state, t=t)
     idt = compute_idt(time_history=time_history, radical_label='OH', criterion='max_dOHdt')
     assert idt is not None and 1e-6 < idt < 1.0
+
+
+def test_plot_idt_vs_temperature_creates_png():
+    """plot_idt_vs_temperature draws a connected line+marker sim curve and writes a PNG
+    without crashing (regression: ax.scatter(linestyle=...) drew no line / could TypeError)."""
+    figs_path = tempfile.mkdtemp()
+    try:
+        idt_dict = {1.0: {10.0: {1000.0: 1e-3, 1200.0: 1e-4, 1100.0: 3e-4}}}
+        plot_idt_vs_temperature(idt_dict, figs_path=figs_path, reactor_index=0)
+        out = os.path.join(figs_path, 'IDT_vs_T', 'R0_1.0_10.00_bar.png')
+        assert os.path.isfile(out)
+    finally:
+        shutil.rmtree(figs_path, ignore_errors=True)
 
 
 def test_no_radical_found():
