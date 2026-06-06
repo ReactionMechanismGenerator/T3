@@ -155,6 +155,7 @@ class CanteraPFR(CanteraBase):
         self.logger.info(f'Running a PFR chain-of-reactors simulation using {self.__class__.__name__}...')
 
         species_names_list = [species.name for species in self.model.species()]
+        species_indices = [self.model.species_index(name) for name in species_names_list]
         self.all_data = list()
         self.distance_data = []
 
@@ -212,7 +213,9 @@ class CanteraPFR(CanteraBase):
                 times.append(cumulative_time)
                 temperature.append(reactor.T)
                 pressure.append(reactor.thermo.P)
-                species_data.append(reactor.thermo[species_names_list].X)
+                # Index the full mole-fraction array rather than cantera's multi-species
+                # __getitem__, which calls ndarray.resize() and trips numpy 2.x refcheck.
+                species_data.append(reactor.thermo.X[species_indices])
                 distances.append((n + 1) * dz)
 
             # Convert to numpy arrays
