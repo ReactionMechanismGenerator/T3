@@ -4,7 +4,7 @@ for working with RMG thermo and kinetics libraries
 """
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 import datetime
 import os
@@ -62,7 +62,7 @@ def _write_lock_file_atomic(race_path: str) -> bool:
     return True
 
 
-def _read_lock_timestamp(race_path: str) -> Optional[datetime.datetime]:
+def _read_lock_timestamp(race_path: str) -> datetime.datetime | None:
     """
     Best-effort read of a lock timestamp from `race_path`.
 
@@ -101,7 +101,7 @@ def _read_lock_timestamp(race_path: str) -> Optional[datetime.datetime]:
         return None
 
 
-def check_race_condition(race_path: str, logger: Optional["Logger"] = None) -> bool:
+def check_race_condition(race_path: str, logger: "Logger" | None = None) -> bool:
     """
     Acquire a filesystem lock using atomic file creation.
     Returns True if lock acquired, False if timed out or IO error.
@@ -162,7 +162,7 @@ def _extract_longdesc_append_block(long_desc: str) -> str:
     """
     Extracts the relevant block from an ARC long description to append.
     """
-    lines_to_append: List[str] = []
+    lines_to_append: list[str] = []
     append_line = False
     for line in long_desc.splitlines():
         if "Overall time since project initiation" in line:
@@ -174,7 +174,7 @@ def _extract_longdesc_append_block(long_desc: str) -> str:
     return "\n".join(lines_to_append).strip()
 
 
-def _first_adjlist(molecule_field: object) -> Optional[str]:
+def _first_adjlist(molecule_field: object) -> str | None:
     """
     Normalize shim Entry.molecule field (Optional[str | List[str]]) into a single adjacency list string.
     For List[str], returns the first element. Returns None if unavailable/invalid.
@@ -193,10 +193,10 @@ def _first_adjlist(molecule_field: object) -> Optional[str]:
 
 def load_rmg_species_dictionary_file(
     dict_path: str,
-    logger: Optional["Logger"] = None,
+    logger: "Logger" | None = None,
     *,
     strict: bool = False,
-) -> Dict[str, Molecule]:
+) -> dict[str, Molecule]:
     """
     Parses an RMG-style species dictionary file into a {label: Molecule} dictionary.
 
@@ -207,7 +207,7 @@ def load_rmg_species_dictionary_file(
     if not os.path.exists(dict_path):
         return {}
 
-    species_dict: Dict[str, Molecule] = {}
+    species_dict: dict[str, Molecule] = {}
     try:
         with open(dict_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -236,7 +236,7 @@ def load_rmg_species_dictionary_file(
     return species_dict
 
 
-def _update_species_dictionary_atomic(new_species: Dict[str, Molecule], path: str, logger: "Logger") -> None:
+def _update_species_dictionary_atomic(new_species: dict[str, Molecule], path: str, logger: "Logger") -> None:
     """
     Updates the species dictionary atomically.
     Aborts immediately if the existing file cannot be read to prevent data loss.
@@ -259,7 +259,7 @@ def _update_species_dictionary_atomic(new_species: Dict[str, Molecule], path: st
             raise
 
     clean_content = current_content.rstrip()
-    parts: List[str] = []
+    parts: list[str] = []
 
     if clean_content:
         parts.append(clean_content + "\n\n")
@@ -290,7 +290,7 @@ def _stable_lock_path(dest_path: str, lib_name: str, token: str) -> str:
 def append_to_rmg_libraries(
     library_name: str,
     shared_library_name: str,
-    paths: Dict[str, str],
+    paths: dict[str, str],
     logger: "Logger",
 ) -> None:
     """
@@ -317,7 +317,7 @@ def append_to_rmg_libraries(
                 continue
 
             lock_acquired = False
-            race_path: Optional[str] = None
+            race_path: str | None = None
 
             if use_lock:
                 race_path = _stable_lock_path(dest_path=dest_path, lib_name=lib_name, token=token)
@@ -442,13 +442,13 @@ def append_to_rmg_library(
     # 3. Calculate New Entries
     current_indices = [e.index for e in destination_lib.entries]
     max_index = max(current_indices) if current_indices else 0
-    entries_to_add: List[rmg_shim.Entry] = []
+    entries_to_add: list[rmg_shim.Entry] = []
 
     if lib_type == "thermo":
         existing_labels = {e.label for e in destination_lib.entries}
 
         # Only pre-existing species for clearer logging
-        dest_species_by_label: Dict[str, Molecule] = {}
+        dest_species_by_label: dict[str, Molecule] = {}
         for entry in destination_lib.entries:
             adj_list = _first_adjlist(entry.molecule)
             if not adj_list:
@@ -458,7 +458,7 @@ def append_to_rmg_library(
             except ValueError:
                 pass
 
-        batch_mols: List[Molecule] = []
+        batch_mols: list[Molecule] = []
         for entry in source_lib.entries:
             if entry.label in existing_labels:
                 logger.warning(f"Thermo entry {entry.label} skipped (duplicate label).")
@@ -525,7 +525,7 @@ def append_to_rmg_library(
         dest_species = load_rmg_species_dictionary_file(to_dict_path, logger=logger, strict=True)
         src_species = load_rmg_species_dictionary_file(from_dict_path, logger=logger, strict=True)
 
-        species_to_append: Dict[str, Molecule] = {}
+        species_to_append: dict[str, Molecule] = {}
         for label, mol in src_species.items():
             if label not in dest_species:
                 species_to_append[label] = mol
@@ -537,7 +537,7 @@ def append_to_rmg_library(
                     )
 
         dict_existed_before = os.path.exists(to_dict_path)
-        dict_backup_content: Optional[str] = None
+        dict_backup_content: str | None = None
 
         if species_to_append and dict_existed_before:
             try:

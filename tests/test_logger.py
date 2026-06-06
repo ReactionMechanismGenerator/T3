@@ -8,7 +8,6 @@ t3 tests test_logger module
 import datetime
 import os
 import shutil
-from typing import Optional
 
 from t3.common import TEST_DATA_BASE_PATH
 import t3.logger as logger
@@ -19,8 +18,8 @@ log_project_directory = os.path.join(TEST_DATA_BASE_PATH, 'log_file_testing_dir'
 
 def init_logger(project: str = 'project_name',
                 project_directory: str = log_project_directory,
-                verbose: Optional[int] = 10,
-                t0: Optional[datetime.datetime] = None,
+                verbose: int | None = 10,
+                t0: datetime.datetime | None = None,
                 ) -> logger.Logger:
     """Initialize the logger"""
     if t0 is None:

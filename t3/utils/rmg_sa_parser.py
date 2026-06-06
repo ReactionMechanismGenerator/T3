@@ -17,7 +17,6 @@ all T3 simulate adapters, without requiring rmgpy.
 import csv
 import os
 import re
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -47,7 +46,7 @@ def _strip_rmg_index(label: str) -> str:
     return label
 
 
-def parse_rmg_sa_csv(csv_path: str) -> Tuple[List[float], Dict[str, Dict[int, List[float]]], Dict[str, Dict[str, List[float]]]]:
+def parse_rmg_sa_csv(csv_path: str) -> tuple[list[float], dict[str, dict[int, list[float]]], dict[str, dict[str, list[float]]]]:
     """Parse a single RMG SA CSV file.
 
     Args:
@@ -59,17 +58,17 @@ def parse_rmg_sa_csv(csv_path: str) -> Tuple[List[float], Dict[str, Dict[int, Li
         - *kinetics* maps ``observable_label -> {reaction_index: [values]}``.
         - *thermo* maps ``observable_label -> {species_label: [values]}``.
     """
-    time_data: List[float] = []
-    kinetics: Dict[str, Dict[int, List[float]]] = {}
-    thermo: Dict[str, Dict[str, List[float]]] = {}
+    time_data: list[float] = []
+    kinetics: dict[str, dict[int, list[float]]] = {}
+    thermo: dict[str, dict[str, list[float]]] = {}
 
     with open(csv_path, 'r', newline='') as fh:
         reader = csv.reader(fh)
         headers = next(reader)
 
         # Identify the time column and SA columns
-        time_col: Optional[int] = None
-        sa_columns: List[Tuple[int, str, str, str]] = []  # (col_idx, obs_label, kind, param_raw)
+        time_col: int | None = None
+        sa_columns: list[tuple[int, str, str, str]] = []  # (col_idx, obs_label, kind, param_raw)
 
         for col_idx, header in enumerate(headers):
             header = header.strip()
@@ -117,7 +116,7 @@ def parse_rmg_sa_csvs(solver_dir: str) -> dict:
         (flat format, not yet per-condition lists).  Kinetics keys are
         RMG 1-based reaction indices (int).
     """
-    result: Dict[str, dict] = {'time': [], 'kinetics': {}, 'thermo': {}}
+    result: dict[str, dict] = {'time': [], 'kinetics': {}, 'thermo': {}}
 
     if not os.path.isdir(solver_dir):
         return result
@@ -150,7 +149,7 @@ def parse_rmg_sa_csvs(solver_dir: str) -> dict:
 
 
 def rmg_sa_csvs_to_sa_dict(solver_dir: str,
-                            chem_annotated_path: Optional[str] = None,
+                            chem_annotated_path: str | None = None,
                             ) -> dict:
     """Parse RMG SA CSVs and return a standardized per-condition sa_dict.
 
@@ -175,7 +174,7 @@ def rmg_sa_csvs_to_sa_dict(solver_dir: str,
     if chem_annotated_path and os.path.isfile(chem_annotated_path):
         chem_to_rmg = get_chem_to_rmg_rxn_index_map(chem_annotated_path)
         rmg_to_chem = {v: k for k, v in chem_to_rmg.items()}
-        remapped_kinetics: Dict[str, Dict[int, np.ndarray]] = {}
+        remapped_kinetics: dict[str, dict[int, np.ndarray]] = {}
         for obs, params in raw['kinetics'].items():
             remapped_kinetics[obs] = {}
             for rmg_idx, values in params.items():

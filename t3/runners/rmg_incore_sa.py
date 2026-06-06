@@ -12,7 +12,7 @@ import traceback
 import yaml
 import pandas as pd
 import shutil
-from typing import Dict, Any
+from typing import Any
 
 try:
     from rmgpy.rmg.main import RMG
@@ -35,7 +35,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def process_sa_csvs(output_dir: str) -> Dict[str, Any]:
+def process_sa_csvs(output_dir: str) -> dict[str, Any]:
     """Parse output CSVs to YAML dict."""
     solver_path = os.path.join(output_dir, 'solver')
     if not os.path.exists(solver_path):

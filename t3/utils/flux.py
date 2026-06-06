@@ -2,7 +2,6 @@
 t3 utils flux module
 """
 
-from typing import Dict, List, Optional, Set, Tuple
 
 import os
 
@@ -16,12 +15,12 @@ from t3.utils.fix_cantera import fix_cantera
 
 def generate_flux(model_path: str,
                   folder_path: str,
-                  observables: List[str],
-                  times: List[float],
-                  composition: Dict[str, float],
+                  observables: list[str],
+                  times: list[float],
+                  composition: dict[str, float],
                   T: float,
                   P: float,
-                  V: Optional[float] = 100,
+                  V: float | None = 100,
                   reactor_type: str = 'JSR',
                   energy: bool = False,
                   a_tol: float = 1e-16,
@@ -33,10 +32,10 @@ def generate_flux(model_path: str,
                   report_actual_flux: bool = False,
                   display_concentrations: bool = True,
                   display_r_n_p: bool = True,
-                  scaling: Optional[float] = None,
+                  scaling: float | None = None,
                   fix_cantera_model: bool = True,
-                  allowed_nodes: Optional[List[str]] = None,
-                  max_chemical_generations: Optional[int] = None,
+                  allowed_nodes: list[str] | None = None,
+                  max_chemical_generations: int | None = None,
                   ):
     """
     Generate a flux diagram for a given model and composition.
@@ -137,11 +136,11 @@ def generate_flux(model_path: str,
 
 def get_profiles_from_simulation(model_path: str,
                                  reactor_type: str,
-                                 times: List[float],
-                                 composition: Dict[str, float],
+                                 times: list[float],
+                                 composition: dict[str, float],
                                  T: float,
                                  P: float,
-                                 V: Optional[float] = 100,
+                                 V: float | None = 100,
                                  a_tol: float = 1e-16,
                                  r_tol: float = 1e-10,
                                  energy: bool = False,
@@ -196,7 +195,7 @@ def get_profiles_from_simulation(model_path: str,
     return profiles
 
 
-def get_rxn_stoichiometry(gas: ct.Solution) -> Dict[str, List[float]]:
+def get_rxn_stoichiometry(gas: ct.Solution) -> dict[str, list[float]]:
     """
     Get the stoichiometry of each species in all reactions in the model.
 
@@ -229,13 +228,13 @@ def mark_rxn_duplicity_correctly(gas: ct.Solution):
 
 def set_jsr(gas: ct.Solution,
             time: float,
-            composition: Dict[str, float],
+            composition: dict[str, float],
             T: float,
             P: float,
             V: float = 100,
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
-            ) -> Tuple[ct.ReactorNet, ct.IdealGasReactor]:
+            ) -> tuple[ct.ReactorNet, ct.IdealGasReactor]:
     """
     Define a jet stirred reactor.
 
@@ -277,13 +276,13 @@ def set_jsr(gas: ct.Solution,
 
 
 def set_batch_p(gas: ct.Solution,
-                composition: Dict[str, float],
+                composition: dict[str, float],
                 T: float,
                 P: float,
                 energy: bool,
                 a_tol: float = 1e-16,
                 r_tol: float = 1e-10,
-                ) -> Tuple[ct.ReactorNet, ct.IdealGasConstPressureReactor]:
+                ) -> tuple[ct.ReactorNet, ct.IdealGasConstPressureReactor]:
     """
     Define a batch reactor with constant pressure and constant volume.
 
@@ -309,9 +308,9 @@ def set_batch_p(gas: ct.Solution,
     return network, reactor
 
 
-def closest_bigger_number(array: List[float],
+def closest_bigger_number(array: list[float],
                           target: float,
-                          ) -> Tuple[Optional[float], Optional[int]]:
+                          ) -> tuple[float | None, int | None]:
     """
     Find the min number in an array that is greater than the target number.
 
@@ -331,15 +330,15 @@ def closest_bigger_number(array: List[float],
 
 
 def run_jsr(gas: ct.Solution,
-            times: List[float],
-            composition: Dict[str, float],
+            times: list[float],
+            composition: dict[str, float],
             T: float,
             P: float,
             V: float = 100,
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
             tau_tolerance: float = 0.005,
-            ) -> Dict[float, dict]:
+            ) -> dict[float, dict]:
     """
     Run a JSR reactor with constant pressure, constant temperature, and constant volume.
     This will address stiff equations in which small time steps are required.
@@ -392,15 +391,15 @@ def run_jsr(gas: ct.Solution,
 
 
 def run_batch_p(gas: ct.Solution,
-                times: List[float],
-                composition: Dict[str, float],
+                times: list[float],
+                composition: dict[str, float],
                 T: float,
                 P: float,
                 energy: bool,
                 max_steps: float = 1e5,
                 a_tol: float = 1e-16,
                 r_tol: float = 1e-10,
-                ) -> Dict[float, dict]:
+                ) -> dict[float, dict]:
     """
     Run a batch reactor with constant pressure and constant volume.
 
@@ -447,7 +446,7 @@ def run_batch_p(gas: ct.Solution,
 
 
 def get_top_rops(profiles: dict,
-                 observables: List[str],
+                 observables: list[str],
                  top_rops_to_plot: int = 10,
                  orders_of_magnitude_to_consider: int = 3,
                  ) -> dict:
@@ -481,7 +480,7 @@ def get_top_rops(profiles: dict,
 
 
 def generate_top_rop_bar_figs(profiles: dict,
-                              observables: List[str],
+                              observables: list[str],
                               folder_path: str,
                               ) -> None:
     """
@@ -514,7 +513,7 @@ def generate_top_rop_bar_figs(profiles: dict,
 
 
 def generate_flux_diagrams(profiles: dict,
-                           observables: List[str],
+                           observables: list[str],
                            folder_path: str,
                            explore_tol: float = 0.95,
                            dead_end_tol: float = 0.10,
@@ -522,9 +521,9 @@ def generate_flux_diagrams(profiles: dict,
                            report_flux_ratio: bool = True,
                            report_actual_flux: bool = False,
                            display_r_n_p: bool = True,
-                           scaling: Optional[float] = None,
-                           allowed_nodes: Optional[List[str]] = None,
-                           max_chemical_generations: Optional[int] = None,
+                           scaling: float | None = None,
+                           allowed_nodes: list[str] | None = None,
+                           max_chemical_generations: int | None = None,
                            ):
     """
     Generate flux diagrams.
@@ -580,8 +579,8 @@ def generate_flux_diagrams(profiles: dict,
 
 def create_digraph(flux_graph: dict,
                    profile: dict,
-                   observables: List[str],
-                   nodes_to_explore: Set[str],
+                   observables: list[str],
+                   nodes_to_explore: set[str],
                    time: float,
                    min_rop: float,
                    max_rop: float,
@@ -590,8 +589,8 @@ def create_digraph(flux_graph: dict,
                    report_flux_ratio: bool = True,
                    report_actual_flux: bool = False,
                    display_r_n_p: bool = True,
-                   scaling: Optional[float] = None,
-                   allowed_nodes: Optional[List[str]] = None,
+                   scaling: float | None = None,
+                   allowed_nodes: list[str] | None = None,
                    ) -> None:
     """
     Create a directed graph from the flux graph and save it as a .dot file.
@@ -696,17 +695,17 @@ def create_digraph(flux_graph: dict,
 def add_edges(graph: pydot.Dot,
               origin_node: pydot.Node,
               origin_label: str,
-              downstream_nodes: List[pydot.Node],
-              downstream_node_labels: List[str],
+              downstream_nodes: list[pydot.Node],
+              downstream_node_labels: list[str],
               width: float,
               rop: float,
               max_rop: float,
-              rxn: Optional[str] = None,
-              multipliers: Optional[List[float]] = None,
+              rxn: str | None = None,
+              multipliers: list[float] | None = None,
               report_flux_ratio: bool = True,
               report_actual_flux: bool = False,
               display_r_n_p: bool = True,
-              allowed_nodes: Optional[List[str]] = None,
+              allowed_nodes: list[str] | None = None,
               ):
     """
     Add edges to the graph.
@@ -801,9 +800,9 @@ def get_rxn_in_relevant_direction(rxn: str,
 def get_node(graph: pydot.Dot,
              label: str,
              nodes: dict,
-             observables: Optional[List[str]] = None,
-             width: Optional[float] = None,
-             concentration: Optional[float] = None,
+             observables: list[str] | None = None,
+             width: float | None = None,
+             concentration: float | None = None,
              display_concentrations: bool = True,
              ) -> pydot.Node:
     """
@@ -848,11 +847,11 @@ def get_node(graph: pydot.Dot,
 
 
 def get_flux_graph(profile: dict,
-                   observables: List[str],
+                   observables: list[str],
                    explore_tol: float = 0.95,
                    dead_end_tol: float = 0.10,
-                   max_chemical_generations: Optional[int] = None,
-                   ) -> Tuple[dict, Set[str], float, float]:
+                   max_chemical_generations: int | None = None,
+                   ) -> tuple[dict, set[str], float, float]:
     """
     Explore the ROP profiles and get the flux graph.
     Also get the list of nodes to continue exploring when drawing the graph and the min and max rop.
@@ -913,7 +912,7 @@ def get_flux_graph(profile: dict,
     return graph, nodes_to_explore, min_rop, max_rop
 
 
-def get_normalized_flux_profile(profile: dict) -> Tuple[dict, float]:
+def get_normalized_flux_profile(profile: dict) -> tuple[dict, float]:
     """
     Get the normalized flux profile.
 
@@ -934,8 +933,8 @@ def get_normalized_flux_profile(profile: dict) -> Tuple[dict, float]:
 
 
 def get_other_reactants_and_products(rxn: str,
-                                     spcs: List[str],
-                                     ) -> Tuple[str, str]:
+                                     spcs: list[str],
+                                     ) -> tuple[str, str]:
     """
     Get the reactants and products in a reaction except for the given species,
     the first is considered a reactant, and the second a product.
@@ -962,7 +961,7 @@ def get_other_reactants_and_products(rxn: str,
     return rs, ps
 
 
-def get_opposite_rxn_species(rxn: str, spc: str) -> List[str]:
+def get_opposite_rxn_species(rxn: str, spc: str) -> list[str]:
     """
     Get the species in a reaction opposite to the given species
     (if the given species is one of the reactants, get the products, and vice versa).
@@ -1007,7 +1006,7 @@ def count_species_in_well(well: str,
     return count
 
 
-def unpack_stoichiometry(labels: List[str]) -> Tuple[List[str], List[int]]:
+def unpack_stoichiometry(labels: list[str]) -> tuple[list[str], list[int]]:
     """
     Unpack stoichiometry.
 
@@ -1029,7 +1028,7 @@ def unpack_stoichiometry(labels: List[str]) -> Tuple[List[str], List[int]]:
     return new_labels, multipliers
 
 
-def continue_exploring(rops: Dict[str, float],
+def continue_exploring(rops: dict[str, float],
                        dead_end_tol: float = 0.10
                        ) -> bool:
     """

@@ -9,7 +9,6 @@ import logging
 import os
 import shutil
 import pytest
-from typing import List, Dict
 
 from arc.molecule.molecule import Molecule
 
@@ -58,7 +57,7 @@ def _create_mock_shim_kinetics_data() -> rmg_shim.Arrhenius:
     )
 
 
-def _write_thermo_lib_file(path: str, name: str, entries: List[rmg_shim.Entry]):
+def _write_thermo_lib_file(path: str, name: str, entries: list[rmg_shim.Entry]):
     """Writes a thermo library .py file using the rmg_shim."""
     lib = rmg_shim.Library(name=name, longDesc=f"Description for {name}")
     lib.entries = entries
@@ -67,8 +66,8 @@ def _write_thermo_lib_file(path: str, name: str, entries: List[rmg_shim.Entry]):
 
 
 def _write_kinetics_lib_folder(folder_path: str, name: str,
-                               entries: List[rmg_shim.Entry],
-                               dictionary: Dict[str, Molecule]):
+                               entries: list[rmg_shim.Entry],
+                               dictionary: dict[str, Molecule]):
     """Writes a kinetics library folder (reactions.py + dictionary.txt)."""
     os.makedirs(folder_path, exist_ok=True)
 

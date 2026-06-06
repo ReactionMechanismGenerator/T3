@@ -4,7 +4,6 @@ A module to automatically fix issues with RMG-generated Cantera files, mainly re
 """
 import os
 
-from typing import List, Optional
 
 import shutil
 import time
@@ -15,7 +14,7 @@ import cantera as ct
 from arc.common import read_yaml_file, save_yaml_file
 
 
-def get_traceback(model_path: str) -> Optional[str]:
+def get_traceback(model_path: str) -> str | None:
     """
     Try loading the Cantera model and return the traceback if it fails.
 
@@ -104,7 +103,7 @@ def fix_no_duplicate_found(model_path: str, tb: str):
     save_yaml_file(model_path, content)
 
 
-def get_dup_rxn_indices(tb: str) -> List[int]:
+def get_dup_rxn_indices(tb: str) -> list[int]:
     """
     Get the duplicate reactions from the traceback.
 
@@ -129,7 +128,7 @@ def get_dup_rxn_indices(tb: str) -> List[int]:
     return rxns
 
 
-def get_mistakenly_marked_dup_rxns(tb: str) -> List[int]:
+def get_mistakenly_marked_dup_rxns(tb: str) -> list[int]:
     """
     Get the duplicate reactions from the traceback.
 
