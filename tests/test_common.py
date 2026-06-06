@@ -12,7 +12,7 @@ from t3.chem import T3Species
 import t3.common as common
 from t3.common import TEST_DATA_BASE_PATH
 from t3.schema import RMGSpecies
-from tests.common import run_minimal
+from t3.utils.writer import get_species_obj_from_a_species_dict
 
 
 def test_dict_to_str():
@@ -32,21 +32,21 @@ label2:
 
 def test_get_species_by_label():
     """Test getting species by label"""
-    t3_species = [T3Species(label='H2O', t3_index=7, smiles='O'),
-                  T3Species(label='CH4', t3_index=1, smiles='C')]
+    t3_species = [T3Species(label='H2O', key=7, smiles='O'),
+                  T3Species(label='CH4', key=1, smiles='C')]
     label = 'H2O'
     species = common.get_species_by_label(label, t3_species)
     assert species.label == label
-    assert species.t3_index == 7
-    
+    assert species.key == 7
+
     species = common.get_species_by_label('CH4', t3_species)
     assert species.label == 'CH4'
-    assert species.t3_index == 1
+    assert species.key == 1
 
 
 def test_get_rmg_species_from_a_species_dict():
     """Test getting an RMG species from a species dictionary"""
-    species = common.get_species_obj_from_a_species_dict(
+    species = get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'smiles': 'C=O'}).dict())
     assert isinstance(species, T3Species)
     assert species.label == 'spc'
@@ -56,13 +56,13 @@ def test_get_rmg_species_from_a_species_dict():
 2 O u0 p2 c0 {1,D}
 3 H u0 p0 c0 {1,S}
 4 H u0 p0 c0 {1,S}"""
-    species = common.get_species_obj_from_a_species_dict(
+    species = get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'adjlist': adj}).dict())
     assert isinstance(species, T3Species)
     assert species.label == 'spc'
     assert species.mol.to_smiles() == 'C=O'
 
-    species = common.get_species_obj_from_a_species_dict(
+    species = get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'inchi': 'InChI=1S/CH2O/c1-2/h1H2'}).dict())
     assert isinstance(species, T3Species)
     assert species.label == 'spc'
@@ -72,18 +72,18 @@ def test_get_rmg_species_from_a_species_dict():
 C  0.0000000  0.0000000 -0.5593030
 H  0.0000000  0.9470590 -1.1411940
 H  0.0000000 -0.9470590 -1.1411940"""
-    species = common.get_species_obj_from_a_species_dict(
+    species = get_species_obj_from_a_species_dict(
         species_dict=RMGSpecies(**{'label': 'spc', 'xyz': [xyz]}).dict())
     assert isinstance(species, T3Species)
     assert species.label == 'spc'
     assert species.mol.to_smiles() == 'C=O'
 
-    species = common.get_species_obj_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
-                                                         raise_error=False)
+    species = get_species_obj_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
+                                                  raise_error=False)
     assert species is None
     with pytest.raises(ValueError):
-        common.get_species_obj_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
-                                                   raise_error=True)
+        get_species_obj_from_a_species_dict(species_dict=RMGSpecies(**{'label': 'spc'}).dict(),
+                                            raise_error=True)
 
 
 def test_convert_termination_time_to_seconds():

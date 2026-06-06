@@ -33,7 +33,7 @@ from arc.species.species import check_label
 from arc.species.converter import check_xyz_dict
 from arc.settings.settings import RMG_DB_PATH
 
-from t3.chem import T3Species, T3Reaction, T3Status, KineticsMethod
+from t3.chem import T3Species, T3Reaction, T3Status, KineticsMethod, ThermoMethod
 from t3.common import (DATA_BASE_PATH,
                        PROJECTS_BASE_PATH,
                        VALID_CHARS,
@@ -85,7 +85,7 @@ class T3(object):
         reactions (Dict[int, T3Reaction]): The T3 reactions dictionary. Keys are T3 reaction indices.
         paths (dict): Various directory and file paths.
         executed_networks (list): PDep networks for which SA was already executed. Entries are tuples of isomer labels.
-        rmg_species (List[ARCSpecies]): Entries are RMG species objects in the model core for a certain T3 iteration.
+        rmg_species (List[T3Species]): Entries are RMG species objects in the model core for a certain T3 iteration.
         rmg_reactions (List[T3Reaction]): Entries are RMG reaction objects in the model core for a certain T3 iteration.
         sa_observables (list): Entries are RMG species labels for the SA observables.
         sa_dict (dict): Dictionary with keys of `kinetics`, `thermo`, and `time`.
@@ -100,7 +100,8 @@ class T3(object):
                  verbose: int = 20,
                  clean_dir: bool = False,
                  ):
-
+        t3 = t3 or {}
+        qm = qm or {}
         self.sa_dict = None
         self.sa_observables = list()
         self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
@@ -215,7 +216,7 @@ class T3(object):
             self.process_arc_run()
             # don't request these species and reactions again
             iteration_start += 1
-        # ARC species and reactions will be loaded again if restarting and they were already sent to ARC, set to list()
+        # ARC species and reactions will be loaded again if restarting and if they were already sent to ARC
         self.qm['species'], self.qm['reactions'] = list(), list()
 
         additional_calcs_required = False
@@ -703,7 +704,7 @@ class T3(object):
                     reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
                     if reaction is None:
                         continue
-                    for species in reaction.reactants + reaction.products:
+                    for species in reaction.r_species + reaction.p_species:
                         if self.species_requires_refinement(species=species):
                             num = f'{i+1}{get_ordinal_indicator(i+1)} ' if i else ''
                             reason = f'(i {self.iteration}) participates in the {num}most sensitive reaction ' \
@@ -711,7 +712,7 @@ class T3(object):
                             key = self.add_species(species=species, reasons=reason)
                             if key is not None:
                                 species_keys.append(key)
-                    if reaction.kinetics.is_pressure_dependent() \
+                    if getattr(reaction, 'is_pressure_dependent', False) \
                             and reaction not in [rxn_tup[0] for rxn_tup in pdep_rxns_to_explore] \
                             and self.t3['sensitivity']['pdep_SA_threshold'] is not None:
                         pdep_rxns_to_explore.append((reaction, i, observable_label))
@@ -849,15 +850,15 @@ class T3(object):
 
             if sa_coefficients_path is not None:
                 sa_dict = read_yaml_file(sa_coefficients_path)
-                reactants_label = ' + '.join([reactant.to_chemkin() for reactant in reaction.reactants])
-                products_label = ' + '.join([product.to_chemkin() for product in reaction.products])
+                reactants_label = ' + '.join([reactant.to_chemkin() for reactant in reaction.r_species])
+                products_label = ' + '.join([product.to_chemkin() for product in reaction.p_species])
                 chemkin_reaction_str = f'{reactants_label} <=> {products_label}'
                 labels_map = dict()  # Keys are network species labels, values are Chemkin labels of the RMG species.
                 for network_label, adj in sa_dict['structures'].items():
                     labels_map[network_label] = get_species_label_by_structure(adj=adj, species_list=self.rmg_species)
 
-                reactants_label = ' + '.join([key_by_val(labels_map, reactant.label) for reactant in reaction.reactants])
-                products_label = ' + '.join([key_by_val(labels_map, product.label) for product in reaction.products])
+                reactants_label = ' + '.join([key_by_val(labels_map, reactant.label) for reactant in reaction.r_species])
+                products_label = ' + '.join([key_by_val(labels_map, product.label) for product in reaction.p_species])
                 network_reaction_str = f'{reactants_label} <=> {products_label}'
                 if network_reaction_str not in sa_dict:
                     self.logger.error(f'Could not locate reaction {network_reaction_str} '
@@ -961,7 +962,7 @@ class T3(object):
                 products = [get_species_by_label(label, self.rmg_species) for label in product_labels]
                 if not len(reactants) or not len(products):
                     self.logger.error(f'Could not identify reaction {rxn_to_log}!')
-                reaction = T3Reaction(reactants=reactants, products=products)
+                reaction = T3Reaction(r_species=reactants, p_species=products)
                 if self.reaction_requires_refinement(reaction) \
                         and not any(self.species_requires_refinement(species=spc) for spc in reactants + products):
                     # only consider a rate violating reaction if all the thermo was first fixed
@@ -1008,11 +1009,8 @@ class T3(object):
         """
         if species is None:
             return False
-        thermo = species.thermo if species.thermo else species.rmg_thermo
-        thermo_comment = thermo.comment.split('Solvation')[0]
-        if (self.get_species_key(species=species) is None
-            or self.species[self.get_species_key(species=species)].t3_status != T3Status.CONVERGED) \
-                and ('group additivity' in thermo_comment or '+ radical(' in thermo_comment):
+        if species.t3_status != T3Status.CONVERGED \
+                and species.thermo_method in [ThermoMethod.GAV, ThermoMethod.UNKNOWN, ThermoMethod.ML]:
             return True
         return False
 
@@ -1088,6 +1086,8 @@ class T3(object):
             if species is not None and species.is_isomorphic(t3_species):
                 return key
             if label is not None:
+                if label == t3_species.label:
+                    return key
                 if label_type == 'QM' and label == t3_species.qm_label:
                     return key
                 if label_type == 'RMG' and label == t3_species.label:
@@ -1119,7 +1119,7 @@ class T3(object):
             raise ValueError(f"label type must be either 'RMG', 'Chemkin' or 'QM', got: '{label_type}'.")
         for key, t3_reaction in self.reactions.items():
             if reaction is not None and reaction.is_isomorphic(t3_reaction):
-                return key
+                 return key
             if label is not None:
                 if label_type == 'QM' and label == t3_reaction.qm_label:
                     return key
@@ -1142,6 +1142,7 @@ class T3(object):
         Returns:
             Tuple[List[T3Species], List[T3Reaction]]: The loaded Species and Reaction objects.
         """
+        species, reactions = [], []
         try:
             species, reactions = load_cantera_yaml_file(self.paths['cantera annotated'],
                                                         species_dict_path=self.paths['species dict'])
@@ -1172,7 +1173,7 @@ class T3(object):
             species.created_at_iteration = self.iteration
             species.reasons = reasons
 
-            qm_species = get_species_with_qm_label(species=species, key=key, arc_species=True)
+            qm_species = get_species_with_qm_label(species=species, key=key)
             species.qm_label = qm_species.label
 
             self.species[key] = species
@@ -1195,8 +1196,10 @@ class T3(object):
                         if self.qm['adapter'] == 'ARC':
                             # Update the qm_species with XYZ
                             qm_species.xyz = xyzs
+                            qm_species.conformers = xyzs  # ARC uses conformers list
                             # Also update the stored T3Species
                             species.xyz = xyzs
+                            species.conformers = xyzs
                         else:
                             raise NotImplementedError(f"Passing XYZ information to {self.qm['adapter']} "
                                                       f"is not yet implemented.")
@@ -1230,6 +1233,9 @@ class T3(object):
         Todo:
             Add tests.
         """
+        if not isinstance(reaction, T3Reaction):
+            raise TypeError(f"reaction must be a T3Reaction object, got: {type(reaction)}.")
+
         reasons = [reasons] if isinstance(reasons, str) else reasons
         rxn_key = self.get_reaction_key(reaction=reaction)
         if rxn_key is None:
@@ -1240,7 +1246,7 @@ class T3(object):
                 self.logger.debug(f'Could not generate a Chemkin label for reaction {reaction}. Got:\n{e}')
 
             rxn_key = len(list(self.reactions.keys()))
-            for spc in reaction.reactants + reaction.products:
+            for spc in reaction.r_species + reaction.p_species:
                 if self.get_species_key(species=spc) is None:
                     self.add_species(species=spc, reasons=f'(i {self.iteration}) Participates in a reaction for which '
                                                           f'a rate coefficient is computed.')
@@ -1249,27 +1255,27 @@ class T3(object):
             reaction.created_at_iteration = self.iteration
             reaction.reasons = reasons
 
-            reaction.reactants = [self.species[self.get_species_key(species=spc)] for spc in reaction.reactants]
-            reaction.products = [self.species[self.get_species_key(species=spc)] for spc in reaction.products]
-            
-            reaction.reactant_keys = [self.get_species_key(species=spc) for spc in reaction.reactants]
-            reaction.product_keys = [self.get_species_key(species=spc) for spc in reaction.products]
+            reaction.r_species = [self.species[self.get_species_key(species=spc)] for spc in reaction.r_species]
+            reaction.p_species = [self.species[self.get_species_key(species=spc)] for spc in reaction.p_species]
+
+            reaction.reactant_keys = [self.get_species_key(species=spc) for spc in reaction.r_species]
+            reaction.product_keys = [self.get_species_key(species=spc) for spc in reaction.p_species]
 
             reaction.rmg_label = reaction.label or str(reaction)
 
-            qm_label = ' <=> '.join([' + '.join([spc.label for spc in species_list])
-                                     for species_list in [reaction.reactants, reaction.products]])
-            
+            qm_label = ' <=> ' .join([' + ' .join([spc.label for spc in species_list])
+                                     for species_list in [reaction.r_species, reaction.p_species]])
+
             reaction.label = qm_label
             reaction.qm_label = qm_label
-            
+
             self.reactions[rxn_key] = reaction
-            
+
             qm_reaction = reaction.copy()
-            qm_reaction.reactants = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
-                                     for spc in reaction.reactants]
-            qm_reaction.products = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
-                                    for spc in reaction.products]
+            qm_reaction.r_species = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
+                                     for spc in reaction.r_species]
+            qm_reaction.p_species = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
+                                     for spc in reaction.p_species]
             qm_reaction.label = qm_label
             
             self.qm['reactions'].append(qm_reaction)
@@ -1432,7 +1438,6 @@ def get_species_label_by_structure(adj: str,
 
 def get_species_with_qm_label(species: T3Species,
                               key: int,
-                              arc_species: bool = False,
                               ) -> T3Species:
     """
     Get a copy of the species with an updated QM label.
@@ -1441,7 +1446,6 @@ def get_species_with_qm_label(species: T3Species,
     Args:
          species (T3Species): The species to consider.
          key (int): The respective species key, if exists.
-         arc_species (bool, optional): Whether to return an T3Species object instance.
 
     Returns:
         T3Species: A copy of the original species with a formatted QM species label.

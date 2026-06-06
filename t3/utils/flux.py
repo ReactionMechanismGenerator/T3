@@ -141,7 +141,7 @@ def get_profiles_from_simulation(model_path: str,
                                  composition: Dict[str, float],
                                  T: float,
                                  P: float,
-                                 V: Optional[float] = None,
+                                 V: Optional[float] = 100,
                                  a_tol: float = 1e-16,
                                  r_tol: float = 1e-10,
                                  energy: bool = False,
@@ -232,7 +232,7 @@ def set_jsr(gas: ct.Solution,
             composition: Dict[str, float],
             T: float,
             P: float,
-            V: float,
+            V: float = 100,
             a_tol: float = 1e-16,
             r_tol: float = 1e-10,
             ) -> Tuple[ct.ReactorNet, ct.IdealGasReactor]:
@@ -267,7 +267,7 @@ def set_jsr(gas: ct.Solution,
     pr = ct.PressureController(
         upstream=stirred_reactor,
         downstream=exhaust,
-        master=mfc,
+        primary=mfc,
     )
     pr.pressure_coeff = 0.01
     network = ct.ReactorNet([stirred_reactor])
@@ -435,17 +435,10 @@ def run_batch_p(gas: ct.Solution,
             break
         cantera_reaction_rops = gas.net_rates_of_progress
         for spc in gas.species():
-            dups = list()
             for i, rxn in enumerate(gas.reactions()):
                 if stoichiometry[spc.name][i]:
-                    if rxn.equation not in rops[spc.name].keys():
-                        rops[spc.name][rxn.equation] = list()
-                    if rxn.duplicate and rxn.equation in dups:
-                        rops[spc.name][rxn.equation][-1] += cantera_reaction_rops[i] * stoichiometry[spc.name][i]
-                    else:
-                        rops[spc.name][rxn.equation].append(cantera_reaction_rops[i] * stoichiometry[spc.name][i])
-                    if rxn.duplicate and rxn.equation not in dups:
-                        dups.append(rxn.equation)
+                    rops[spc.name][rxn.equation] = rops[spc.name].get(rxn.equation, 0.0) + \
+                        cantera_reaction_rops[i] * stoichiometry[spc.name][i]
         profile = {'P': gas.P, 'T': gas.T, 'X': {s.name: x for s, x in zip(gas.species(), gas.X)}, 'ROPs': rops}
         profiles[t] = profile
     return profiles
@@ -693,7 +686,7 @@ def create_digraph(flux_graph: dict,
     graph_png_path = os.path.join(folder_path, f'flux_diagram_{time}_s.png')
     graph.write(graph_dot_path)
     try:
-        graph.write_png(graph_png_path)
+        graph.write(graph_png_path, format='png')
     except AssertionError:
         print(f'Could not create a flux diagram for observables {observables} at {time} s.')
 

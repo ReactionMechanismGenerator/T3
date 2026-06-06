@@ -41,6 +41,96 @@ class GenericData:
         self.index = index
 
 
+class Reaction:
+    """
+    Shim for rmgpy.reaction.Reaction
+    """
+    def __init__(self,
+                 label: str = '',
+                 reactants: Optional[List[Any]] = None,
+                 products: Optional[List[Any]] = None,
+                 kinetics: Optional[Any] = None,
+                 comment: str = '',
+    index: Optional[int] = None):
+        self.label = label
+        self.reactants = reactants or []
+        self.products = products or []
+        self.kinetics = kinetics
+        self.comment = comment
+        self.index = index
+        self.is_pressure_dependent = False
+
+    def __repr__(self):
+        return f"<Reaction '{self.label}'>"
+
+    def is_isomorphic(self, other_reaction) -> bool:
+        """
+        Check if this reaction is isomorphic to another reaction.
+        """
+        # Get species object lists
+        other_reactants = getattr(other_reaction, 'r_species', getattr(other_reaction, 'reactants', []))
+        other_products = getattr(other_reaction, 'p_species', getattr(other_reaction, 'products', []))
+        
+        # Check forward
+        if self._check_species_lists(self.reactants, other_reactants) and \
+           self._check_species_lists(self.products, other_products):
+            return True
+        
+        # Check reverse (assuming all reversible for simplicity in shim, or check attribute?)
+        # T3Reaction has arrow/reversible. Reaction shim does not strictly have arrow.
+        # But let's be generous for checking duplicates.
+        if self._check_species_lists(self.reactants, other_products) and \
+           self._check_species_lists(self.products, other_reactants):
+            return True
+            
+        return False
+
+    def _check_species_lists(self, list1, list2) -> bool:
+        if len(list1) != len(list2):
+            return False
+        l2 = list(list2)
+        for s1 in list1:
+            match = None
+            for s2 in l2:
+                # Use is_isomorphic if available, else equality
+                if hasattr(s1, 'is_isomorphic'):
+                    if s1.is_isomorphic(s2):
+                        match = s2
+                        break
+                elif s1 == s2:
+                    match = s2
+                    break
+            if match:
+                l2.remove(match)
+            else:
+                return False
+        return True
+
+
+class PDepNetwork:
+    """
+    Shim for rmgpy.rmg.pdep.PDepNetwork
+    """
+    def __init__(self, index: Optional[int] = None):
+        self.index = index
+
+
+class PDepReaction(Reaction):
+    """
+    Shim for rmgpy.rmg.pdep.PDepReaction
+    """
+    def __init__(self,
+                 index: Optional[int] = None,
+                 reactants: Optional[List[Any]] = None,
+                 products: Optional[List[Any]] = None,
+                 network: Optional[PDepNetwork] = None,
+                 comment: str = '',
+                 **kwargs):
+        super().__init__(reactants=reactants, products=products, index=index, comment=comment, **kwargs)
+        self.network = network
+        self.is_pressure_dependent = True
+
+
 class CanteraCondition:
     """
     Shim for the condition object returned by generate_cantera_conditions.
@@ -174,9 +264,9 @@ def _quote_multiline_u(text: str) -> str:
 
 @dataclass
 class NASAPolynomial:
-    coeffs: List[float]
-    Tmin: Tuple[float, str]
-    Tmax: Tuple[float, str]
+    coeffs: List[float] = field(default_factory=list)
+    Tmin: Optional[Tuple[float, str]] = None
+    Tmax: Optional[Tuple[float, str]] = None
 
     def __repr__(self):
         return (
@@ -187,9 +277,9 @@ class NASAPolynomial:
 
 @dataclass
 class NASA:
-    polynomials: List[NASAPolynomial]
-    Tmin: Tuple[float, str]
-    Tmax: Tuple[float, str]
+    polynomials: List[NASAPolynomial] = field(default_factory=list)
+    Tmin: Optional[Tuple[float, str]] = None
+    Tmax: Optional[Tuple[float, str]] = None
     E0: Optional[Tuple[float, str]] = None
     Cp0: Optional[Tuple[float, str]] = None
     CpInf: Optional[Tuple[float, str]] = None
@@ -214,14 +304,16 @@ class NASA:
 
 @dataclass
 class ThermoData:
-    Tdata: Tuple[List[float], str]
-    Cpdata: Tuple[List[float], str]
-    H298: Tuple[float, str]
-    S298: Tuple[float, str]
+    Tdata: Optional[Tuple[List[float], str]] = None
+    Cpdata: Optional[Tuple[List[float], str]] = None
+    H298: Optional[Tuple[float, str]] = None
+    S298: Optional[Tuple[float, str]] = None
     Tmin: Optional[Tuple[float, str]] = None
     Tmax: Optional[Tuple[float, str]] = None
     Cp0: Optional[Tuple[float, str]] = None
+    Cp0: Optional[Tuple[float, str]] = None
     CpInf: Optional[Tuple[float, str]] = None
+    comment: str = ""
 
     def __repr__(self):
         args = [
@@ -236,6 +328,8 @@ class ThermoData:
             args.append(f"Tmax={fmt_val(self.Tmax)}")
         if self.Cp0 is not None:
             args.append(f"Cp0={fmt_val(self.Cp0)}")
+        if self.comment:
+            args.append(f"comment={self.comment!r}")
         if self.CpInf is not None:
             args.append(f"CpInf={fmt_val(self.CpInf)}")
 
@@ -268,14 +362,15 @@ class Wilhoit:
 
 @dataclass
 class Arrhenius:
-    A: Union[float, Tuple]
-    n: float
-    Ea: Union[float, Tuple]
-    T0: Union[float, Tuple]
+    A: Optional[Union[float, Tuple]] = None
+    n: float = 0.0
+    Ea: Optional[Union[float, Tuple]] = None
+    T0: Optional[Union[float, Tuple]] = None
     Tmin: Optional[Tuple[float, str]] = None
     Tmax: Optional[Tuple[float, str]] = None
     Pmin: Optional[Tuple[float, str]] = None
     Pmax: Optional[Tuple[float, str]] = None
+    comment: str = ""
 
     def __repr__(self):
         args = [
@@ -325,6 +420,7 @@ class Chebyshev:
     Tmax: Tuple[float, str]
     Pmin: Tuple[float, str]
     Pmax: Tuple[float, str]
+    comment: str = ""
 
     def __repr__(self):
         coeffs_str = "[" + ",\n            ".join([repr(row) for row in self.coeffs]) + "]"
@@ -340,6 +436,7 @@ class Chebyshev:
 class ThirdBody:
     arrheniusLow: Arrhenius
     efficiencies: Optional[Dict[str, float]] = None
+    comment: str = ""
 
     def __repr__(self):
         args = [f"arrheniusLow={self.arrheniusLow}"]
@@ -354,9 +451,20 @@ class Lindemann:
     arrheniusHigh: Arrhenius
     arrheniusLow: Arrhenius
     efficiencies: Optional[Dict[str, float]] = None
+    comment: str = ""
 
     def __repr__(self):
         args = [f"arrheniusHigh={self.arrheniusHigh}", f"arrheniusLow={self.arrheniusLow}"]
+        if self.efficiencies is not None:
+            eff_str = "{" + ", ".join([f"{repr(k)}: {v}" for k, v in sorted(self.efficiencies.items())]) + "}"
+            args.append(f"efficiencies={eff_str}")
+        return f"Lindemann(\n        {',\n        '.join(args)},\n    )"
+
+    def __repr__(self):
+        args = [
+            f"arrheniusHigh={self.arrheniusHigh}",
+            f"arrheniusLow={self.arrheniusLow}",
+        ]
         if self.efficiencies is not None:
             eff_str = "{" + ", ".join([f"{repr(k)}: {v}" for k, v in sorted(self.efficiencies.items())]) + "}"
             args.append(f"efficiencies={eff_str}")
@@ -372,6 +480,7 @@ class Troe:
     T1: Optional[Tuple[float, str]] = None
     T2: Optional[Tuple[float, str]] = None
     efficiencies: Optional[Dict[str, float]] = None
+    comment: str = ""
 
     def __repr__(self):
         args = [

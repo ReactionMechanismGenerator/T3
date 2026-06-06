@@ -3,11 +3,8 @@
 install:
 	bash devtools/install_all.sh
 
-install-arc:
-	bash devtools/install_arc.sh
-
-install-pyrms:
-	bash devtools/install_pyrms.sh
+install-pyrdl:
+	bash devtools/install_pyrdl.sh
 
 test:
 	pytest tests/ --cov -ra -vv

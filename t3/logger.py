@@ -209,8 +209,9 @@ class Logger(object):
         self.log(f'\n\n\nSpecies Summary:\n'
                  f'----------------')
         for key, species in species_dict.items():
-            self.log(f'{key}: {species.qm_label} '
-                     f'(status: {species.t3_status})')
+            smiles = f' "{species.mol.to_smiles()}"' if species.mol else ''
+            self.log(f'{key}: {species.qm_label}{smiles} '
+                     f'(status: {clean_t3_status(species)})')
 
     def log_reactions_summary(self,
                               reactions_dict: Dict[int, T3Reaction],
@@ -245,7 +246,8 @@ class Logger(object):
         if species_keys:
             self.log(f'\nThe following species did not converge:')
             for key in species_keys:
-                self.log(f'{key}: {species_dict[key].qm_label} '
+                smiles = f' "{species_dict[key].mol.to_smiles()}"' if species_dict[key].mol else ''
+                self.log(f'{key}: {species_dict[key].qm_label}{smiles} '
                          f'(reasons: {species_dict[key].reasons})')
         if reaction_keys:
             self.log(f'\nThe following reactions did not converge:')
@@ -285,3 +287,20 @@ class Logger(object):
             else:
                 unconverged.append(key)
         return converged, unconverged
+
+
+def clean_t3_status(t3_object) -> str:
+    """
+    Returns a formatted status string for a T3 Species or Reaction.
+    Prioritizes the 'SA observable' flag, otherwise cleans the T3Status enum to Title Case.
+
+    Args:
+        t3_object (Union[T3Species, T3Reaction]): The object to check.
+
+    Returns:
+        str: The cleaned status string (e.g., "SA observable", "Converged").
+    """
+    status = str(t3_object.t3_status)
+    if "T3Status." in status:
+        status = status.replace("T3Status.", "")
+    return status.title()

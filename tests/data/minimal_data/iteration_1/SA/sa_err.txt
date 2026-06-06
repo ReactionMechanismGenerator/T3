@@ -1,0 +1,7 @@
+RMG SA Failed: Species(index=1, label="H2", molecule=[Molecule(smiles="[H][H]")], molecular_weight=(2.01594,'amu'), energy_transfer_model=SingleExponentialDown(alpha0=(3.5886,'kJ/mol'), T0=(300,'K'), n=0.85))
+Traceback (most recent call last):
+  File "/home/alon/Code/T3/t3/runners/rmg_incore_sa.py", line 185, in main
+    reactor.simulate(
+  File "rmgpy/solver/base.pyx", line 572, in rmgpy.solver.base.ReactionSystem.simulate
+  File "rmgpy/solver/base.pyx", line 1229, in rmgpy.solver.base.ReactionSystem.simulate
+KeyError: Species(index=1, label="H2", molecule=[Molecule(smiles="[H][H]")], molecular_weight=(2.01594,'amu'), energy_transfer_model=SingleExponentialDown(alpha0=(3.5886,'kJ/mol'), T0=(300,'K'), n=0.85))

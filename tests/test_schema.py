@@ -399,7 +399,7 @@ def test_rmg_reactors_schema():
                              T=[800, 1750],
                              P=[1e0, 1e1],
                              termination_conversion={'ethane': 0.2},
-                             termination_time=[5, 'hrs'],
+                             termination_time=(5, 'hrs'),
                              termination_rate_ratio=0.01,
                              conditions_per_iteration=12
                              )

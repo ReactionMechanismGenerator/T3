@@ -7,7 +7,9 @@ import shutil
 
 from mako.template import Template
 
-from t3.common import get_species_obj_from_a_species_dict
+from arc.species.perceive import perceive_molecule_from_xyz
+
+from t3.chem import T3Species
 from t3.utils.generator import generate_radicals
 
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
@@ -429,3 +431,43 @@ def to_camel_case(uv: str) -> str:
         else:
             capitalize = True
     return ccv
+
+
+def get_species_obj_from_a_species_dict(species_dict: dict,
+                                        raise_error: bool = False,
+                                        ) -> T3Species | None:
+    """
+    Get an RMG Species instance that corresponds to a species specified under the rmg.species
+    section of the T3 input file (a species dictionary).
+
+    Args:
+        species_dict (dict): The species dictionary to process.
+        raise_error (bool, optional): Whether to raise an error if a Species instance cannot be generated.
+                                      Default: ``False``.
+
+    Raises:
+        ValueError: If the species dictionary does not have a specified structure (if ``raise_error`` is ``True``).
+
+    Returns:
+        Species: The corresponding RMG species instance.
+    """
+    species, errored = None, False
+    if species_dict['adjlist'] is not None:
+        species = T3Species(label=species_dict['label'], adjlist=species_dict['adjlist'])
+    elif species_dict['smiles'] is not None:
+        species = T3Species(label=species_dict['label'], smiles=species_dict['smiles'])
+    elif species_dict['inchi'] is not None:
+        species = T3Species(label=species_dict['label'], inchi=species_dict['inchi'])
+    elif species_dict['xyz'] is not None:
+        for xyz in species_dict['xyz']:
+            mol = perceive_molecule_from_xyz(xyz=xyz)
+            if mol is not None:
+                species = T3Species(label=species_dict['label'], mol=mol)
+                break
+        else:
+            errored = True
+    else:
+        errored = True
+    if errored and raise_error:
+        raise ValueError(f"The species corresponding to {species_dict['label']} does not have a specified structure.")
+    return species

@@ -28,10 +28,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ReactionMechanismGenerator/ARC
-          ref: libraries  # TMP
+          ref: main
           path: ARC
 
-      # 3. Clean Disk (Important for heavy conda envs)
+      # 3. Checkout RMG Database (New Step)
+      - name: Checkout RMG Database
+        uses: actions/checkout@v4
+        with:
+          repository: ReactionMechanismGenerator/RMG-database
+          path: RMG-database
+          ref: main
+          fetch-depth: 1
+
+      # 4. Clean Disk (Important for heavy conda envs)
       - name: Clean Ubuntu Image
         uses: jlumbroso/free-disk-space@main
         with:
@@ -42,7 +51,7 @@ jobs:
           large-packages: true
           swap-storage: true
 
-      # 4. Setup T3 Environment
+      # 5. Setup T3 Environment
       - name: Set up micromamba (t3_env)
         uses: mamba-org/setup-micromamba@v2
         with:
@@ -51,7 +60,7 @@ jobs:
           cache-environment: true
           generate-run-shell: true
 
-      # 5. Install Julia
+      # 6. Install Julia
       - name: Install Julia 1.10
         shell: micromamba-shell {0}
         run: |
@@ -64,7 +73,7 @@ jobs:
           echo "::endgroup::"
           julia --version
 
-      # 6. Install & Compile ARC (Dependency)
+      # 7. Install & Compile ARC (Dependency)
       - name: Install and Compile ARC
         shell: micromamba-shell {0}
         working-directory: ARC
@@ -81,25 +90,26 @@ jobs:
           pip install -e .
           echo "::endgroup::"
 
-      # 7. Install T3 (Self)
+      # 8. Install T3 (Self)
       - name: Install T3
         shell: micromamba-shell {0}
         working-directory: T3
         run: |
           pip install -e .
 
-      # 8. Run T3 Tests
+      # 9. Run T3 Tests
       - name: Run Tests
         shell: micromamba-shell {0}
         working-directory: T3
         run: |
           echo "Running T3 Tests..."
           export PYTHONPATH="$PYTHONPATH:$(pwd):${{ github.workspace }}/ARC"
+          export RMG_DB_PATH="${{ github.workspace }}/RMG-database"
           
           # Run pytest on the T3 tests directory
           pytest tests/ --cov=t3 --cov-report=xml -ra -vv
 
-      # 9. Upload Coverage
+      # 10. Upload Coverage
       - name: Upload coverage data
         uses: codecov/codecov-action@v3
         with:

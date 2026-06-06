@@ -88,12 +88,12 @@ species:
 reactions:
 - equation: H2 + O <=> H + OH
   rate-constant: {A: 5.08e+04, b: 2.67, Ea: 6.292}
-  note: 'Source: Library BurkeH2O2 | Kinetics comment: H + OH'
+  note: 'Library reaction: BurkeH2O2'
 
 - equation: O2 + H <=> OH + O
   rate-constant: {A: 2.65e+16, b: -0.6707, Ea: 17.041}
-  note: 'Source: Template family H_Abstraction | Kinetics estimation'
+  note: 'Template reaction: H_Abstraction'
 
 - equation: H2O + H <=> OH + H2
   rate-constant: {A: 2.16e+08, b: 1.51, Ea: 3.43}
-  note: 'Pressure dependent reaction | Source: PDep Network #1'
+  note: 'PDep reaction: Network #1'

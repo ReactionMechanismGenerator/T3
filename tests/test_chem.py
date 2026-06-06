@@ -125,15 +125,12 @@ class TestT3Species:
         spc = T3Species(label='test', smiles='C', t3_status=T3Status.CONVERGED)
         assert spc.is_converged is True
 
-    def test_species_t3_index(self):
+    def test_species_key_assignment(self):
         """Test setting T3 index."""
-        spc = T3Species(label='test', smiles='C', t3_index=5)
-        assert spc.t3_index == 5
-
-    def test_species_rmg_index(self):
-        """Test setting RMG index."""
-        spc = T3Species(label='test', smiles='C', rmg_index=10)
-        assert spc.rmg_index == 10
+        spc = T3Species(label='test', smiles='C')
+        assert spc.key
+        spc = T3Species(label='test', smiles='C', key=5)
+        assert spc.key == 5
 
     def test_species_created_at_iteration(self):
         """Test setting created_at_iteration."""
@@ -158,19 +155,19 @@ class TestT3Species:
             smiles='C',
             thermo_method=ThermoMethod.QM,
             thermo_source='CBS-QB3',
-            t3_index=1,
-            rmg_index=5,
+            key=5,
             t3_status=T3Status.CONVERGED,
             created_at_iteration=2,
         )
         data = spc.as_dict()
 
         assert data['label'] == 'CH4'
-        assert data['thermo_method'] == ThermoMethod.QM
+        assert data['rmg_label'] == {2: 'CH4'}
+        assert data['qm_label'] == 's5_CH4'
+        assert data['thermo_method'] == ThermoMethod.QM.value
         assert data['thermo_source'] == 'CBS-QB3'
-        assert data['t3_index'] == 1
-        assert data['rmg_index'] == 5
-        assert data['t3_status'] == T3Status.CONVERGED
+        assert data['key'] == 5
+        assert data['t3_status'] == T3Status.CONVERGED.value
         assert data['created_at_iteration'] == 2
 
     def test_species_from_dict(self):
@@ -178,35 +175,75 @@ class TestT3Species:
         original_data = {
             'label': 'CH4',
             'smiles': 'C',
-            'thermo_method': ThermoMethod.QM,
+            'thermo_method': 'QM',
             'thermo_source': 'CBS-QB3',
-            't3_index': 1,
-            't3_status': T3Status.CONVERGED,
+            'key': 1,
+            't3_status': 'Converged',
+            'created_at_iteration': 0,
+            'rmg_label': {'0': 'CH4'},
         }
         spc = T3Species.from_dict(original_data.copy())
-
         assert spc.label == 'CH4'
+        assert spc.qm_label == 's1_CH4'
+        assert spc.rmg_label == {0: 'CH4'}
         assert spc.thermo_method == ThermoMethod.QM
-        assert spc.t3_index == 1
+        assert spc.thermo_source == 'CBS-QB3'
+        assert spc.key == 1
         assert spc.t3_status == T3Status.CONVERGED
+        assert spc.created_at_iteration == 0
+
+    def test_species_dict_round_trip(self):
+        """
+        Test a full cycle: Species -> Dict -> Species.
+        Ensures all attributes, including T3 metadata and history, are preserved.
+        """
+        original_spc = T3Species(
+            label='CH4(6)',
+            smiles='C',
+            key=5,
+            thermo_method=ThermoMethod.QM,
+            thermo_source='CBS-QB3',
+            thermo_comment='Calculated using Gaussian',
+            t3_status=T3Status.CONVERGED,
+            created_at_iteration=2,
+            reasons=['Validation', 'Sensitivity'],
+        )
+        original_spc.rmg_label[1] = 'CH4(12)'
+        spc_dict = original_spc.as_dict()
+        reconstructed_spc = T3Species.from_dict(spc_dict)
+
+        assert reconstructed_spc.label == original_spc.label
+        assert reconstructed_spc.qm_label == 's5_CH4'  # Auto-generated from key+formula
+        assert reconstructed_spc.key == 5
+        assert reconstructed_spc.rmg_label == {2: 'CH4(6)', 1: 'CH4(12)'}
+        assert isinstance(list(reconstructed_spc.rmg_label.keys())[0], int)
+        assert reconstructed_spc.thermo_method == ThermoMethod.QM
+        assert reconstructed_spc.t3_status == T3Status.CONVERGED
+        assert reconstructed_spc.thermo_source == 'CBS-QB3'
+        assert reconstructed_spc.thermo_comment == 'Calculated using Gaussian'
+        assert reconstructed_spc.created_at_iteration == 2
+        assert reconstructed_spc.reasons == ['Validation', 'Sensitivity']
+        assert reconstructed_spc.mol.to_smiles() == 'C'
+
+
+
 
     def test_species_repr(self):
         """Test __repr__ method."""
         spc = T3Species(
-            label='CH4',
+            label='CH4(5)',
             smiles='C',
             thermo_method=ThermoMethod.QM,
             thermo_source='CBS-QB3',
-            t3_index=1,
+            key=1,
             t3_status=T3Status.CONVERGED,
         )
         repr_str = repr(spc)
-
+        print(repr_str)
         assert 'T3Species' in repr_str
         assert 'CH4' in repr_str
-        assert 'index: 1' in repr_str
-        assert 'QM' in repr_str
-        assert 'converged' in repr_str
+        assert '[QM]' in repr_str
+        assert 'status: converged' in repr_str
 
     def test_species_repr_no_method(self):
         """Test __repr__ without thermo method."""

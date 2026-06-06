@@ -288,7 +288,7 @@ class RMGReactor(BaseModel):
     P: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
     V: Optional[Union[Annotated[float, Field(gt=0)], List[Annotated[float, Field(gt=0)]]]] = None
     termination_conversion: Optional[Dict[str, Annotated[float, Field(gt=0, lt=1)]]] = None
-    termination_time: Optional[List[Union[Annotated[float, Field(gt=0)], TerminationTimeEnum]]] = None
+    termination_time: Optional[Tuple[Annotated[float, Field(gt=0)], TerminationTimeEnum]] = None
     termination_rate_ratio: Optional[Annotated[float, Field(gt=0, lt=1)]] = None
     conditions_per_iteration: Annotated[int, Field(gt=0)] = 12
 
@@ -350,12 +350,11 @@ class RMGReactor(BaseModel):
             raise ValueError(f'The specified termination time must be a list of 2 entries: '
                              f'the value (a float) and the units (a string). Got: {value}')
         if value[1] == TerminationTimeEnum.micro_s:
-            value[0] *= 1000
-            value[1] = TerminationTimeEnum.ms
+            value= (value[0] * 1000, TerminationTimeEnum.ms)
         elif value[1] == TerminationTimeEnum.hrs:
-            value[1] = TerminationTimeEnum.hours
-        value[1] = value[1].value  # convert the Enum class into a string
-        return tuple(value)
+            value = (value[0] ,TerminationTimeEnum.hours)
+        value = (value[0], value[1].value)  # convert the Enum class into a string
+        return value
 
 
 class RMGModel(BaseModel):
@@ -724,7 +723,7 @@ class InputBase(BaseModel):
     verbose: Annotated[int, Field(ge=10, le=30, multiple_of=10)] = 20
     t3: Optional[T3] = Field(default_factory=T3)
     rmg: RMG
-    qm: Optional[QM] = Field(default_factory=QM)
+    qm: QM = Field(default_factory=QM)
 
     class Config:
         extra = "forbid"

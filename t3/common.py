@@ -6,11 +6,10 @@ import re
 import datetime
 import os
 import string
-from typing import Dict, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Tuple, Union, Optional
 
-from arc.species.perceive import perceive_molecule_from_xyz
-
-from t3.chem import T3Species
+if TYPE_CHECKING:
+    from t3.chem import T3Species
 
 
 VERSION = '0.2.0'
@@ -27,8 +26,8 @@ VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 
 def get_species_by_label(label: str,
-                         species_list: list[T3Species],
-                         ) -> T3Species | None:
+                         species_list: list['T3Species'],
+                         ) -> Optional['T3Species']:
     """
     Get a species from a list of species by its label.
 
@@ -43,6 +42,13 @@ def get_species_by_label(label: str,
     for species in species_list:
         if species.label == label or to_chemkin_label(species) == label:
             return species
+    # ARC's check_label() legalizes '(' → '[' and ')' → ']'.
+    # Try matching with that normalization so RMG-format labels still resolve.
+    if '(' in label:
+        bracket_label = label.replace('(', '[').replace(')', ']')
+        for species in species_list:
+            if species.label == bracket_label:
+                return species
     if '(' in label and ')' in label:
         # try by the RMG species index
         for species in species_list:
@@ -51,7 +57,7 @@ def get_species_by_label(label: str,
     return None
 
 
-def to_chemkin_label(species: T3Species) -> str:
+def to_chemkin_label(species: 'T3Species') -> str:
     """
     Return a string identifier for the provided `species` that can be used in a
     Chemkin file. Although the Chemkin format allows up to 16 characters for a
@@ -133,46 +139,6 @@ def delete_root_rmg_log(project_directory: str) -> None:
     rmg_log_path = os.path.join(project_directory, 'RMG.log')
     if os.path.isfile(rmg_log_path):
         os.remove(rmg_log_path)
-
-
-def get_species_obj_from_a_species_dict(species_dict: dict,
-                                        raise_error: bool = False,
-                                        ) -> T3Species | None:
-    """
-    Get an RMG Species instance that corresponds to a species specified under the rmg.species
-    section of the T3 input file (a species dictionary).
-
-    Args:
-        species_dict (dict): The species dictionary to process.
-        raise_error (bool, optional): Whether to raise an error if a Species instance cannot be generated.
-                                      Default: ``False``.
-
-    Raises:
-        ValueError: If the species dictionary does not have a specified structure (if ``raise_error`` is ``True``).
-
-    Returns:
-        Species: The corresponding RMG species instance.
-    """
-    species, errored = None, False
-    if species_dict['adjlist'] is not None:
-        species = T3Species(label=species_dict['label'], adjlist=species_dict['adjlist'])
-    elif species_dict['smiles'] is not None:
-        species = T3Species(label=species_dict['label'], smiles=species_dict['smiles'])
-    elif species_dict['inchi'] is not None:
-        species = T3Species(label=species_dict['label'], inchi=species_dict['inchi'])
-    elif species_dict['xyz'] is not None:
-        for xyz in species_dict['xyz']:
-            mol = perceive_molecule_from_xyz(xyz=xyz)
-            if mol is not None:
-                species = T3Species(label=species_dict['label'], mol=mol)
-                break
-        else:
-            errored = True
-    else:
-        errored = True
-    if errored and raise_error:
-        raise ValueError(f"The species corresponding to {species_dict['label']} does not have a specified structure.")
-    return species
 
 
 def time_lapse(t0: datetime.datetime) -> datetime.timedelta:

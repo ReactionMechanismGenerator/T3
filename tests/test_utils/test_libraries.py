@@ -7,18 +7,19 @@ t3 tests test_libraries module
 
 import logging
 import os
+import pytest
 from typing import List, Dict
 
-import pytest
 from arc.molecule.molecule import Molecule
-from arc.species.species import ARCSpecies
 
 import t3.utils.slim_rmg as shim
+from t3.chem import T3Species
 from t3.utils.libraries import (
     append_to_rmg_libraries,
     load_rmg_species_dictionary_file,
     _update_species_dictionary_atomic,
 )
+
 
 # Setup a standard logger that mimics T3's logger interface
 logging.basicConfig(level=logging.INFO)
@@ -86,7 +87,7 @@ def test_append_to_thermo_library(tmp_path):
     """
     # 1. Setup Data
     # Existing species in Destination
-    spc_exist = ARCSpecies(label='C2H4', smiles='C=C')
+    spc_exist = T3Species(label='C2H4', smiles='C=C')
     entry_exist = shim.Entry(
         index=1,
         label=spc_exist.label,
@@ -95,7 +96,7 @@ def test_append_to_thermo_library(tmp_path):
     )
 
     # New species in Source (One duplicate C2H4, one new C3H8)
-    spc_new = ARCSpecies(label='C3H8', smiles='CCC')
+    spc_new = T3Species(label='C3H8', smiles='CCC')
 
     # Source entries
     entry_dup = shim.Entry(

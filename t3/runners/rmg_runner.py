@@ -453,3 +453,52 @@ def run_arkane_job(input_file: str,
     if os.path.isfile(output_file):
         return True
     return False
+
+
+def run_rmg_sa_incore(rmg_input_file_path: str,
+                      chemkin_file_path: str,
+                      species_dict_path: str,
+                      output_path: str,
+                      observables: Optional[List[str]] = None,
+                      threshold: float = 1e-3,
+                      ) -> Tuple[bool, Optional[str]]:
+    """
+    Run RMG Sensitivity Analysis incore under the rmg_env.
+    """
+    project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
+    script_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'rmg_incore_sa.py')
+
+    rmg_input_file_path = os.path.abspath(rmg_input_file_path)
+    chemkin_file_path = os.path.abspath(chemkin_file_path)
+    species_dict_path = os.path.abspath(species_dict_path)
+    output_path = os.path.abspath(output_path)
+
+    obs_str = ""
+    if observables:
+        obs_str = f"-obs {' '.join(observables)}"
+
+    commands = ['CONDA_BASE=$(conda info --base)',
+                'source $CONDA_BASE/etc/profile.d/conda.sh',
+                'conda activate rmg_env',
+                f'cd {project_directory}',
+                f'python {script_path} '
+                f'-i {rmg_input_file_path} '
+                f'-c {chemkin_file_path} '
+                f'-d {species_dict_path} '
+                f'-o {output_path} '
+                f'-t {threshold} '
+                f'{obs_str} '
+                f'> >(tee -a sa_out.txt) 2> >(tee -a sa_err.txt >&2)',
+                ]
+
+    execute_command(commands, shell=True, no_fail=True, executable='/bin/bash')
+
+    if os.path.isfile(output_path):
+        return True, None
+
+    error_msg = "Unknown error"
+    err_file = os.path.join(project_directory, 'sa_err.txt')
+    if os.path.isfile(err_file):
+        with open(err_file, 'r') as f:
+            error_msg = f.read()
+    return False, error_msg
