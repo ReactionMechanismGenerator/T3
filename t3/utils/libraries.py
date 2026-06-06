@@ -101,7 +101,7 @@ def _read_lock_timestamp(race_path: str) -> datetime.datetime | None:
         return None
 
 
-def check_race_condition(race_path: str, logger: "Logger" | None = None) -> bool:
+def check_race_condition(race_path: str, logger: "Logger | None" = None) -> bool:
     """
     Acquire a filesystem lock using atomic file creation.
     Returns True if lock acquired, False if timed out or IO error.
@@ -193,7 +193,7 @@ def _first_adjlist(molecule_field: object) -> str | None:
 
 def load_rmg_species_dictionary_file(
     dict_path: str,
-    logger: "Logger" | None = None,
+    logger: "Logger | None" = None,
     *,
     strict: bool = False,
 ) -> dict[str, Molecule]:

@@ -27,7 +27,7 @@ VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
 def get_species_by_label(label: str,
                          species_list: list['T3Species'],
-                         ) -> 'T3Species' | None:
+                         ) -> 'T3Species | None':
     """
     Get a species from a list of species by its label.
 

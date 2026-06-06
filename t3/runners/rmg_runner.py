@@ -456,7 +456,7 @@ def backup_rmg_files(project_directory: str):
 def run_arkane_job(input_file: str,
                    output_directory: str,
                    plot: bool = False,
-                   logger: 'Logger' | None = None,
+                   logger: 'Logger | None' = None,
                    ) -> bool:
     """
     Run an Arkane job.
