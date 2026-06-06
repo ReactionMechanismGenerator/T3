@@ -2,10 +2,11 @@ name: t3_env
 
 channels:
   - conda-forge
+  - danagroup
 
 dependencies:
   # ─── core ─────────────────────────────────────
-  - python >=3.12
+  - python =3.14
   - numpy >=2.1
   - pip
 
@@ -15,7 +16,7 @@ dependencies:
   - cairocffi
   - cmake
   - coverage
-  - cython >=3.0
+  - cython >=3.1
   - graphviz
   - ipython
   - jupyter
@@ -23,7 +24,8 @@ dependencies:
   - mako
   - matplotlib
   - networkx
-  - openbabel >=3
+  - danagroup::openbabel >=3
+  - danagroup::py-rdl
   - pandas
   - paramiko >=2.6.0
   - py3dmol >=0.8.0
@@ -33,7 +35,7 @@ dependencies:
   - pytest
   - pytest-cov
   - pyyaml
-  - rdkit >=2025.03
+  - rdkit >=2026.03
   - scipy
   - sphinx
   - sphinx_rtd_theme
