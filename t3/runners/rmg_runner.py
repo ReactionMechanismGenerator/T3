@@ -18,6 +18,7 @@ from arc.job.local import (_determine_job_id,
                            parse_running_jobs_ids)
 
 from t3.imports import local_t3_path, settings, submit_scripts
+from t3.utils.fix_cantera import fix_cantera
 
 if TYPE_CHECKING:
     from t3.logger import Logger
@@ -78,7 +79,7 @@ def write_submit_script(project_directory: str,
 
 
 def submit_job(project_directory: str,
-               logger: 'Logger',
+               logger: Logger,
                cluster_soft: str,
                memory: int | None = None,
                ) -> tuple[str | None, str | None]:
@@ -146,7 +147,7 @@ def rmg_job_converged(project_directory: str) -> tuple[bool, str | None]:
     rmg_log_path = os.path.join(project_directory, 'RMG.log')
     rmg_err_path = os.path.join(project_directory, 'err.txt')
     if os.path.isfile(rmg_log_path):
-        with open(rmg_log_path, 'r') as f:
+        with open(rmg_log_path) as f:
             lines = f.readlines()
             len_lines = len(lines)
             for i in range(10):
@@ -154,7 +155,7 @@ def rmg_job_converged(project_directory: str) -> tuple[bool, str | None]:
                     rmg_converged = True
                     break
     if not rmg_converged and os.path.isfile(rmg_err_path):
-        with open(rmg_err_path, 'r') as f:
+        with open(rmg_err_path) as f:
             lines = f.readlines()
         for line in lines[::-1]:
             if 'Error' in line:
@@ -232,7 +233,7 @@ fi' '''
 
 
 def run_rmg_in_local_queue(project_directory: str,
-                           logger: 'Logger',
+                           logger: Logger,
                            memory: int | None = None,
                            cpus: int | None = None,
                            max_iterations: int | None = None,
@@ -268,7 +269,7 @@ def run_rmg_in_local_queue(project_directory: str,
 
     restart_string = "restartFromSeed(path='seed')"
     rmg_input_path = os.path.join(project_directory, 'input.py')
-    with open(rmg_input_path, 'r') as f:
+    with open(rmg_input_path) as f:
         content = f.read()
     seed_path = os.path.join(project_directory, 'seed')
     if restart_rmg:
@@ -281,7 +282,7 @@ def run_rmg_in_local_queue(project_directory: str,
                 os.rename(src=os.path.join(project_directory, 'restart_from_seed.py'),
                           dst=os.path.join(project_directory, 'input.py'))
             elif os.path.isfile(os.path.join(project_directory, 'input.py')):
-                with open(os.path.join(project_directory, 'input.py'), 'r') as f:
+                with open(os.path.join(project_directory, 'input.py')) as f:
                     content = f.read()
                 with open(os.path.join(project_directory, 'input.py'), 'w') as f:
                     f.write("restartFromSeed(path='seed')\n\n" + content)
@@ -295,7 +296,7 @@ def run_rmg_in_local_queue(project_directory: str,
 
 def rmg_runner(rmg_input_file_path: str,
                job_log_path: str,
-               logger: 'Logger',
+               logger: Logger,
                memory: int | None = None,
                cpus: int | None = None,
                verbose: int | None = None,
@@ -304,6 +305,7 @@ def rmg_runner(rmg_input_file_path: str,
                rmg_execution_type: str | None = None,
                restart_rmg: bool = False,
                walltime: str | None = None,
+               fix_cantera_model: bool = True,
                ) -> bool:
     """
     Run an RMG job as a subprocess under the rmg_env.
@@ -320,6 +322,7 @@ def rmg_runner(rmg_input_file_path: str,
         rmg_execution_type (str, optional): The RMG execution type (incore or local). Also set via settings.py.
         restart_rmg (bool, optional): Whether to restart RMG from seed.
         walltime (str, optional): Max walltime in 'DD:HH:MM:SS' format. Defaults to 6 hours.
+        fix_cantera_model (bool, optional): Whether to fix the Cantera model file after the RMG run completes.
 
     Returns:
         bool: Whether an exception was raised.
@@ -335,11 +338,13 @@ def rmg_runner(rmg_input_file_path: str,
                                                    max_iterations=max_iterations,
                                                    walltime=walltime,
                                                    )
+        if fix_cantera_model:
+            fix_cantera_model_files(rmg_path=os.path.dirname(rmg_input_file_path))
         return rmg_exception_encountered
     elif rmg_execution_type == 'local':
         runner_counter = 0
         rmg_errors = list()
-        converged, restart_rmg, run_rmg = False, restart_rmg, True
+        converged, run_rmg = False, True
         while run_rmg:
             runner_counter += 1
             project_directory = os.path.abspath(os.path.dirname(rmg_input_file_path))
@@ -372,15 +377,17 @@ def rmg_runner(rmg_input_file_path: str,
                       and not(len(rmg_errors) >= 2 and error is not None and error == rmg_errors[-2])
             restart_rmg = False if error is not None and 'Could not find one or more of the required files/directories ' \
                                                          'for restarting from a seed mechanism' in error else True
+        if fix_cantera_model:
+            fix_cantera_model_files(rmg_path=os.path.dirname(rmg_input_file_path))
         return not converged
     else:
-        logger.warning(f'Expected wither "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'
+        logger.warning(f'Expected either "incore" or "local" execution type for RMG, got {rmg_execution_type}.\n'
                        f'Not executing RMG.')
         return True
 
 
 def get_new_memory_for_an_rmg_run(job_log_path: str,
-                                  logger: 'Logger',
+                                  logger: Logger,
                                   ) -> int | None:
     """
     If an RMG job crashed due to too few or too much memory, compute a new desired memory for the run.
@@ -397,7 +404,7 @@ def get_new_memory_for_an_rmg_run(job_log_path: str,
     global MEM
     new_mem = None
     if os.path.isfile(job_log_path):
-        with open(job_log_path, 'r') as f:
+        with open(job_log_path) as f:
             lines = f.readlines()
         for line in lines:
             # "Job Is Wasting Memory using less than 20 percent of requested Memory"
@@ -436,8 +443,8 @@ def backup_rmg_files(project_directory: str):
     """
     restart_backup_dir = os.path.join(project_directory,
                                       f'restart_backup_{datetime.datetime.now().strftime("%b%d_%Y_%H-%M-%S")}')
-    os.mkdir(restart_backup_dir)
-    os.mkdir(os.path.join(restart_backup_dir, 'chemkin'))
+    chemkin_folder_path = os.path.join(restart_backup_dir, 'chemkin')
+    os.makedirs(chemkin_folder_path, exist_ok=True)
     files = ['RMG.log',
              os.path.join('chemkin', 'chem_annotated.inp'),
              os.path.join('chemkin', 'chem_edge_annotated.inp'),
@@ -453,10 +460,22 @@ def backup_rmg_files(project_directory: str):
                             dst=os.path.join(restart_backup_dir, folder))
 
 
+def fix_cantera_model_files(rmg_path: str) -> None:
+    """
+    Fix Cantera model files emitted by RMG (resolve mislabeled duplicates, drop
+    invalid-rate-coefficient reactions, etc.).
+
+    Args:
+        rmg_path (str): The path to the RMG folder.
+    """
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera_from_ck', 'chem_annotated.yaml'))
+    fix_cantera(model_path=os.path.join(rmg_path, 'cantera_from_ck', 'chem.yaml'))
+
+
 def run_arkane_job(input_file: str,
                    output_directory: str,
                    plot: bool = False,
-                   logger: 'Logger | None' = None,
+                   logger: Logger | None = None,
                    ) -> bool:
     """
     Run an Arkane job.
@@ -547,6 +566,6 @@ fi' '''
     error_msg = "Unknown error"
     err_file = os.path.join(project_directory, 'sa_err.txt')
     if os.path.isfile(err_file):
-        with open(err_file, 'r') as f:
+        with open(err_file) as f:
             error_msg = f.read()
     return False, error_msg

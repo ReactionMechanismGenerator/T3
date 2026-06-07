@@ -19,6 +19,7 @@ import inspect
 import os
 import re
 import shutil
+from collections import deque
 
 from arc.common import (get_number_with_ordinal_indicator,
                         get_ordinal_indicator,
@@ -53,7 +54,7 @@ from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 from t3.utils.cantera_parser import load_cantera_yaml_file
 
 
-class T3(object):
+class T3:
     """
     The main T3 class.
 
@@ -105,6 +106,7 @@ class T3(object):
         t3 = t3 or {}
         qm = qm or {}
         self.sa_dict = None
+        self.sa_dict_idt = None
         self.sa_observables = list()
         self.t0 = datetime.datetime.now()  # initialize the timer as datetime object
 
@@ -207,7 +209,7 @@ class T3(object):
         """
         Execute T3.
         """
-        iteration_start, run_rmg_at_start = self.restart()
+        iteration_start, run_rmg_at_start, restart_rmg = self.restart()
 
         if iteration_start == 0 \
                 and self.qm \
@@ -233,8 +235,11 @@ class T3(object):
             self.set_paths()
 
             # RMG
-            if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
-                self.run_rmg(restart_rmg=run_rmg_at_start)
+            if self._should_run_rmg(iteration=self.iteration,
+                                    iteration_start=iteration_start,
+                                    run_rmg_at_start=run_rmg_at_start,
+                                    restart_rmg=restart_rmg):
+                self.run_rmg(restart_rmg=restart_rmg)
 
             # SA
             if self.t3['sensitivity'] is not None:
@@ -244,22 +249,49 @@ class T3(object):
                         if species['observable'] or species['SA_observable']:
                             self.sa_observables.append(species['label'])
 
-                simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
-                                                    t3=self.t3,
-                                                    rmg=self.rmg,
-                                                    paths=self.paths,
-                                                    logger=self.logger,
-                                                    atol=self.rmg['model']['atol'],
-                                                    rtol=self.rmg['model']['rtol'],
-                                                    observable_list=self.sa_observables,
-                                                    sa_atol=self.t3['sensitivity']['atol'],
-                                                    sa_rtol=self.t3['sensitivity']['rtol'],
-                                                    global_observables=None,
-                                                    )
-                simulate_adapter.simulate()
-                self.sa_dict = simulate_adapter.get_sa_coefficients()
-                if self.sa_dict is not None:
-                    self.dump_sa_coefficients()
+                if self.t3['sensitivity']['adapter'] is not None and self.sa_observables:
+                    simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
+                                                        t3=self.t3,
+                                                        rmg=self.rmg,
+                                                        paths=self.paths,
+                                                        logger=self.logger,
+                                                        atol=self.rmg['model']['atol'],
+                                                        rtol=self.rmg['model']['rtol'],
+                                                        observable_list=self.sa_observables,
+                                                        sa_atol=self.t3['sensitivity']['atol'],
+                                                        sa_rtol=self.t3['sensitivity']['rtol'],
+                                                        global_observables=None,
+                                                        )
+                    simulate_adapter.simulate()
+                    self.sa_dict = simulate_adapter.get_sa_coefficients()
+                    if self.sa_dict is not None:
+                        self.dump_sa_coefficients()
+                if self.t3['sensitivity']['global_observables'] is not None \
+                        and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
+                    idt_simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                                                            t3=self.t3,
+                                                            rmg=self.rmg,
+                                                            paths=self.paths,
+                                                            logger=self.logger,
+                                                            atol=self.rmg['model']['atol'],
+                                                            rtol=self.rmg['model']['rtol'],
+                                                            observable_list=None,
+                                                            sa_atol=self.t3['sensitivity']['atol'],
+                                                            sa_rtol=self.t3['sensitivity']['rtol'],
+                                                            global_observables=['IDT'],
+                                                            )
+                    idt_simulate_adapter.simulate()
+                    self.sa_dict_idt = idt_simulate_adapter.get_sa_coefficients()
+                    exp_path = self.t3['sensitivity'].get('experimental_idt_path')
+                    if exp_path is not None:
+                        comparison = idt_simulate_adapter.compare_with_experiment(exp_path)
+                        self.logger.info(f"IDT experimental comparison: "
+                                         f"{comparison['n_matched']}/{comparison['n_points']} matched, "
+                                         f"RMSE(log10) = {comparison['rmse_log']}")
+                        save_yaml_file(
+                            path=os.path.join(self.paths['SA'], 'idt_comparison.yaml'),
+                            content=comparison,
+                        )
 
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
@@ -279,6 +311,8 @@ class T3(object):
                 self.logger.log_max_time_reached(max_time=self.t3['options']['max_T3_walltime'])
                 break
 
+            restart_rmg = False
+
         if additional_calcs_required:
             # The main T3 loop terminated, but the latest calculations were not included in the model.
             # Run RMG for the last time.
@@ -286,7 +320,7 @@ class T3(object):
             self.logger.info(f'\n\n\nT3 iteration {self.iteration} (just generating a model using RMG):\n'
                              f'------------------------------------------------------\n')
             self.set_paths()
-            self.run_rmg(restart_rmg=run_rmg_at_start)
+            self.run_rmg(restart_rmg=False)
 
         self.logger.log_species_summary(species_dict=self.species)
         self.logger.log_reactions_summary(reactions_dict=self.reactions)
@@ -320,8 +354,12 @@ class T3(object):
             'cantera annotated': os.path.join(iteration_path, 'RMG', 'cantera_from_ck', 'chem_annotated.yaml'),
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
+            'figs': os.path.join(iteration_path, 'Figures'),
             'SA': os.path.join(iteration_path, 'SA'),
             'SA coefficients': os.path.join(iteration_path, 'SA', 'sa_coefficients.yml'),
+            'SA dict': os.path.join(iteration_path, 'SA', 'sa.yaml'),
+            'SA IDT dict': os.path.join(iteration_path, 'SA', 'sa_idt.yaml'),
+            'SA IDT dict top X': os.path.join(iteration_path, 'SA', 'sa_idt_top_x.yaml'),
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
@@ -342,62 +380,146 @@ class T3(object):
                 if self.t3['options']['shared_library_name'] is not None and self.t3['options']['external_library_path'] is not None else None,
         }
 
-    def restart(self) -> tuple[int, bool]:
+    @staticmethod
+    def _should_run_rmg(iteration: int,
+                        iteration_start: int,
+                        run_rmg_at_start: bool,
+                        restart_rmg: bool,
+                        ) -> bool:
+        """
+        Decide whether RMG should run for the given iteration.
+
+        RMG always runs for iterations after the start iteration. For the start
+        iteration it runs only if RMG has not completed yet (``run_rmg_at_start``)
+        or an interrupted run must be resumed (``restart_rmg``).
+
+        Args:
+            iteration (int): The current iteration number.
+            iteration_start (int): The iteration T3 (re)started from.
+            run_rmg_at_start (bool): Whether RMG should run at the start iteration.
+            restart_rmg (bool): Whether an interrupted RMG run must be resumed.
+
+        Returns:
+            bool: Whether to run RMG for this iteration.
+        """
+        if iteration > iteration_start:
+            return True
+        return run_rmg_at_start or restart_rmg
+
+    def restart(self) -> tuple[int, bool, bool]:
         """
         Restart T3 by looking for existing iteration folders.
         Restarts ARC if it ran and did not terminate.
 
         Returns:
-            Tuple[int, bool]:
+            Tuple[int, bool, bool]:
                 - The current iteration number.
                 - Whether to run RMG for this iteration.
+                - Whether to restart RMG for this iteration.
         """
-        # set default values
+        i_max = self.identify_iterations()
+        if i_max == 0:
+            self.logger.info("No existing iteration folders were found. Starting T3 from scratch.")
+            return i_max, True, False
+
+        self.load_species_and_reactions()
+
+        rmg_began, rmg_terminated = self.check_rmg_status()
+        arc_began, arc_terminated = self.check_arc_status()
+
+        run_rmg = not rmg_began
+        run_arc = rmg_terminated and not arc_began
+        restart_rmg = rmg_began and not rmg_terminated
+        restart_arc = not run_rmg and not restart_rmg and arc_began and not arc_terminated
+
+        if run_rmg:
+            self.logger.info(f"RMG has not run for iteration {i_max}. Preparing to start RMG.")
+        elif restart_rmg:
+            self.logger.info(f"RMG did not terminate successfully for iteration {i_max}. Preparing to restart RMG.")
+        elif run_arc:
+            self.logger.info(f"ARC has not run for iteration {i_max}. Preparing to start ARC.")
+        elif restart_arc:
+            self.logger.info(f"ARC did not terminate successfully for iteration {i_max}. Preparing to restart ARC.")
+
+        text = 'restarting RMG' if restart_rmg else 'running RMG' if run_rmg \
+            else 'restarting ARC' if restart_arc else 'skipping RMG'
+        self.logger.info(f"\nRestarting T3 from iteration {i_max}: {text}.")
+
+        if restart_arc:
+            i_max = self.handle_arc_restart(i_max)
+            run_rmg, restart_rmg = True, False
+
+        return i_max, run_rmg, restart_rmg
+
+    def identify_iterations(self) -> int:
+        """
+        Identify the latest iteration number and set paths.
+
+        Returns:
+            int: The latest iteration number.
+        """
         i_max = 0
-        run_rmg_i, restart_arc_i = True, False
-
         folders = tuple(os.walk(self.project_directory))[0][1]  # returns a 3-tuple: (dirpath, dirnames, filenames)
-        iteration_folders = [folder for folder in folders if 'iteration_' in folder]
+        iteration_folders = [folder for folder in folders
+                             if folder.startswith('iteration_') and len(folder.split('_')) == 2
+                             and folder.split('_')[1].isdigit()]
+        if iteration_folders:
+            self.logger.info(f"Identified {len(iteration_folders)} existing iteration folders.")
+            i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])
+        self.set_paths(iteration=i_max)
+        return i_max
 
-        if len(iteration_folders):
-            self.load_species_and_reactions()
-            i_max = max([int(folder.split('_')[1]) for folder in iteration_folders])  # get the latest iteration number
-            self.set_paths(iteration=i_max)
-            if i_max != 0 and os.path.isfile(self.paths['RMG log']):
-                # iteration 0 is reserved for ARC only if needed
-                with open(self.paths['RMG log'], 'r') as f:
-                    lines = f.readlines()
-                    for line in lines[::-1]:
-                        if 'MODEL GENERATION COMPLETED' in line:
-                            # RMG terminated, no need to regenerate the model
-                            run_rmg_i = False
-                            break
-            if os.path.isfile(self.paths['ARC log']) and (not run_rmg_i or i_max == 0):
-                # The ARC log file exists, and no need to run RMG (converged) or this is iteration 0
-                with open(self.paths['ARC log'], 'r') as f:
-                    lines = f.readlines()
-                    for line in lines[::-1]:
-                        if 'ARC execution terminated on' in line:
-                            # ARC terminated as well, continue to the next iteration
-                            i_max += 1
-                            run_rmg_i = True
-                            break
-                    else:
-                        # ARC did not terminate, see if the restart file was generated
-                        if os.path.isfile(self.paths['ARC restart']):
-                            restart_arc_i = True
-            if i_max or not run_rmg_i or restart_arc_i:
-                rmg_text = ', using the completed RMG run from this iteration' if not run_rmg_i \
-                    else ', re-running RMG for this iteration'
-                arc_text = ', restarting the previous ARC run in this iteration' if restart_arc_i else ''
-                self.logger.log(f'\nRestarting T3 from iteration {i_max}{rmg_text}{arc_text}.\n')
-            if restart_arc_i:
-                self.run_arc(input_file_path=self.paths['ARC restart'])
-                self.process_arc_run()
-                i_max += 1
-                run_rmg_i = True
+    def check_rmg_status(self) -> tuple[bool, bool]:
+        """
+        Check whether RMG has begun running and whether it terminated successfully
+        for the current iteration.
 
-        return i_max, run_rmg_i
+        Returns:
+            Tuple[bool, bool]:
+                - Whether RMG already began running.
+                - Whether RMG terminated successfully.
+        """
+        if os.path.isfile(self.paths['RMG log']):
+            for line in _tail_lines(self.paths['RMG log']):
+                if 'MODEL GENERATION COMPLETED' in line:
+                    return True, True
+            return True, False
+        return False, False
+
+    def check_arc_status(self) -> tuple[bool, bool]:
+        """
+        Check whether ARC has begun running and whether it terminated successfully
+        for the current iteration.
+
+        Returns:
+            Tuple[bool, bool]:
+                - Whether ARC already began running.
+                - Whether ARC terminated successfully.
+        """
+        if os.path.isfile(self.paths['ARC log']):
+            for line in _tail_lines(self.paths['ARC log']):
+                if 'ARC execution terminated on' in line:
+                    return True, True
+        if os.path.isfile(self.paths['ARC restart']):
+            return True, False
+        return False, False
+
+    def handle_arc_restart(self, i_max: int) -> int:
+        """
+        Resume an interrupted ARC run from its restart file and advance to the next
+        iteration.
+
+        Args:
+            i_max (int): The current iteration number.
+
+        Returns:
+            int: The updated iteration number (``i_max + 1``).
+        """
+        self.run_arc(input_file_path=self.paths['ARC restart'])
+        self.process_arc_run()
+        i_max += 1
+        self.set_paths(iteration=i_max)
+        return i_max
 
     def check_arc_args(self):
         """
@@ -618,6 +740,7 @@ class T3(object):
             bool: Whether additional calculations are required.
         """
         species_keys, reaction_keys, coll_vio_spc_keys, coll_vio_rxn_keys = list(), list(), list(), list()
+        rxn_idt_keys: list[int] | None = None
 
         self.rmg_species, self.rmg_reactions = self.load_species_and_reactions_from_yaml_file()
         self.logger.info(f'This RMG model has {len(self.rmg_species)} species '
@@ -628,6 +751,9 @@ class T3(object):
             if input_species['observable'] or input_species['SA_observable']:
                 sa_observables_exist = True
                 break
+        idt_sa_enabled = self.t3['sensitivity'] is not None \
+            and self.t3['sensitivity']['global_observables'] is not None \
+            and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables'])
 
         if self.t3['options']['collision_violators_thermo'] or self.t3['options']['collision_violators_rates']:
             coll_vio_spc_keys, coll_vio_rxn_keys = self.determine_species_and_reactions_based_on_collision_violators()
@@ -653,7 +779,11 @@ class T3(object):
             # 1.2. SA
             if sa_observables_exist:
                 species_keys.extend(self.determine_species_based_on_sa())
-            # 1.3. collision violators
+            # 1.3. SA based on IDT
+            if idt_sa_enabled:
+                species_idt_keys, rxn_idt_keys = self.determine_params_based_on_sa_idt()
+                species_keys.extend(species_idt_keys)
+            # 1.4. collision violators
             if self.t3['options']['collision_violators_thermo']:
                 species_keys.extend(coll_vio_spc_keys)
 
@@ -661,7 +791,12 @@ class T3(object):
         # 2.1. SA
         if sa_observables_exist:
             reaction_keys.extend(self.determine_reactions_based_on_sa())
-        # 2.2. collision violators
+        # 2.2. SA based on IDT
+        if idt_sa_enabled:
+            if rxn_idt_keys is None:
+                _, rxn_idt_keys = self.determine_params_based_on_sa_idt()
+            reaction_keys.extend(rxn_idt_keys)
+        # 2.3. collision violators
         if self.t3['options']['collision_violators_rates']:
             reaction_keys.extend(coll_vio_rxn_keys)
 
@@ -706,6 +841,8 @@ class T3(object):
                         sa_dict_max[sa_dict_key][observable_label].append(entry)
 
             for observable_label, sa_list in sa_dict_max['kinetics'].items():
+                sa_threshold = self.t3['sensitivity']['SA_threshold']
+                sa_list = [item for item in sa_list if item['max_sa'] > sa_threshold]
                 sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
                 for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
                     reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
@@ -766,7 +903,9 @@ class T3(object):
                                           abs(condition_kinetics[observable_label][parameter].min()))
                     sa_dict_max[observable_label].append(entry)
 
+        sa_threshold = self.t3['sensitivity']['SA_threshold']
         for observable_label, sa_list in sa_dict_max.items():
+            sa_list = [item for item in sa_list if item['max_sa'] > sa_threshold]
             sa_list_sorted = sorted(sa_list, key=lambda item: item['max_sa'], reverse=True)
             for i in range(min(self.t3['sensitivity']['top_SA_reactions'], len(sa_list_sorted))):
                 reaction = get_reaction_by_index(sa_list_sorted[i]['parameter'] - 1, self.rmg_reactions)
@@ -778,6 +917,85 @@ class T3(object):
                         reaction_keys.append(key)
 
         return reaction_keys
+
+    def determine_params_based_on_sa_idt(self) -> tuple[list[int], list[int]]:
+        """
+        Determine species or reactions to calculate based on the IDT sensitivity analysis
+        produced by the CanteraIDT adapter.
+
+        ``self.sa_dict_idt`` is shaped like
+        ``{token: {'IDT': {reactor: {phi: {P: {T: {ct_index: coeff}}}}}}}`` where
+        ``token`` is ``'thermo'`` or ``'kinetics'`` and ``ct_index`` is the 0-based
+        Cantera species (thermo) or reaction (kinetics) index. Species are loaded
+        1:1 with the Cantera ordering, so ``self.rmg_species`` is indexed by position.
+        Reactions, however, are duplicate-pruned by ``load_cantera_yaml_file`` while
+        Cantera keeps every duplicate, so the Cantera reaction index is resolved via
+        the reaction's ``.index`` attribute (``get_reaction_by_index``), not by position.
+
+        Returns:
+            Tuple[List[int], List[int]]: T3 species and T3 reaction indices that
+                should be refined based on IDT sensitivities.
+        """
+        visited_ct_species, species_keys = list(), list()
+        visited_spc_keys = list()
+        visited_rxns, rxn_keys = list(), list()
+        if self.sa_dict_idt is None:
+            self.logger.error("T3's sa_dict_idt was None. Please check that the input file contains a proper "
+                              "'sensitivity' block, that 'IDT' was defined in the global_observables list, "
+                              "and/or that SA was run successfully.\n"
+                              "Not performing refinement based on IDT sensitivity analysis!")
+            return species_keys, rxn_keys
+        sa_threshold = self.t3['sensitivity']['SA_threshold']
+        for token in ('thermo', 'kinetics'):
+            token_data = self.sa_dict_idt.get(token, dict()).get('IDT', dict())
+            for reactor_idt_data in token_data.values():
+                for phi_data in reactor_idt_data.values():
+                    for p_data in phi_data.values():
+                        for idt_data in p_data.values():
+                            for index, coeff in idt_data.items():
+                                if abs(coeff) < sa_threshold:
+                                    continue
+                                if token == 'thermo':
+                                    if index in visited_ct_species:
+                                        continue
+                                    visited_ct_species.append(index)
+                                    if index < 0 or index >= len(self.rmg_species):
+                                        continue
+                                    species = self.rmg_species[index]
+                                    if self.species_requires_refinement(species=species):
+                                        reason = f'(i {self.iteration}) IDT is sensitive to this species.'
+                                        key = self.add_species(species=species, reasons=reason)
+                                        if key is not None:
+                                            species_keys.append(key)
+                                else:
+                                    if index in visited_rxns:
+                                        continue
+                                    visited_rxns.append(index)
+                                    # ``index`` is the Cantera reaction index (position in the
+                                    # full annotated YAML, duplicates included). rmg_reactions is
+                                    # duplicate-pruned, so resolve by the reaction's .index attribute
+                                    # rather than by list position (which would mismap once any
+                                    # duplicate reaction was dropped).
+                                    reaction = get_reaction_by_index(index, self.rmg_reactions)
+                                    if reaction is None:
+                                        continue
+                                    if self.reaction_requires_refinement(reaction=reaction):
+                                        reason = f'(i {self.iteration}) IDT is sensitive to this reaction.'
+                                        key = self.add_reaction(reaction=reaction, reasons=reason)
+                                        if key is not None:
+                                            rxn_keys.append(key)
+                                    for spc in list(reaction.r_species) + list(reaction.p_species):
+                                        spc_key = self.get_species_key(species=spc)
+                                        if spc_key is None or spc_key in visited_spc_keys:
+                                            continue
+                                        visited_spc_keys.append(spc_key)
+                                        if self.species_requires_refinement(species=spc):
+                                            reason = (f'(i {self.iteration}) IDT is sensitive to a reaction '
+                                                      f'({reaction}) in which this species participates.')
+                                            key = self.add_species(species=spc, reasons=reason)
+                                            if key is not None:
+                                                species_keys.append(key)
+        return species_keys, rxn_keys
 
     def determine_species_from_pdep_network(self,
                                             pdep_rxns_to_explore: list[tuple[T3Reaction, int, str]],
@@ -941,7 +1159,7 @@ class T3(object):
             self.logger.info('No collision rate violating reactions identified in this model.')
             return species_keys, reaction_keys
 
-        with open(self.paths['RMG coll vio'], 'r') as f:
+        with open(self.paths['RMG coll vio']) as f:
             lines = f.readlines()
 
         for line in lines:
@@ -1443,6 +1661,23 @@ class T3(object):
             for folder in dirs:
                 if folder != 'log_archive':
                     shutil.rmtree(os.path.join(root, folder), ignore_errors=True)
+
+
+def _tail_lines(path: str, n: int = 500) -> list[str]:
+    """
+    Return the last ``n`` lines of ``path`` in reverse order (newest first),
+    streaming the file so it never has to be fully loaded.
+
+    Args:
+        path (str): Path to the file (assumed to exist).
+        n (int): Max number of trailing lines to keep.
+
+    Returns:
+        List[str]: Up to ``n`` lines, reversed (most recent first).
+    """
+    with open(path) as f:
+        last = deque(f, maxlen=n)
+    return list(reversed(last))
 
 
 def get_reaction_by_index(index: int,

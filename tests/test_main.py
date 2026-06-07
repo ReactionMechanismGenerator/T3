@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# encoding: utf-8
 
 """
 t3 tests test_main module
@@ -54,10 +53,18 @@ t3_minimal = {'options': {'all_core_reactions': False,
               'sensitivity': {'ME_methods': ['CSE', 'MSC'],
                               'SA_threshold': 0.01,
                               'adapter': 'CanteraConstantTP',
+                              'adaptive_perturbation': False,
                               'atol': 1e-06,
+                              'delta_h': 0.1,
+                              'delta_k': 0.05,
+                              'experimental_idt_path': None,
                               'global_observables': None,
+                              'idt_criterion': 'max_dOHdt',
+                              'idt_sa_method': 'brute_force',
+                              'max_sa_workers': 24,
                               'pdep_SA_threshold': 0.001,
                               'rtol': 0.0001,
+                              'save_sa_yaml': True,
                               'P_list': None,
                               'T_list': None,
                               'top_SA_reactions': 10,
@@ -109,6 +116,7 @@ rmg_minimal = {'memory': None,
                              'T': 1000.0,
                              'V': None,
                              'conditions_per_iteration': 12,
+                             'idt_mode': 'matrix',
                              'termination_conversion': {'H2': 0.9},
                              'termination_rate_ratio': None,
                              'termination_time': (5.0, 's'),
@@ -127,6 +135,10 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
                             },
                            {'SA_observable': False,
                             'UA_observable': False,
@@ -142,6 +154,10 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
                             },
                            {'SA_observable': True,
                             'UA_observable': False,
@@ -157,6 +173,10 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
                             },
                            {'SA_observable': True,
                             'UA_observable': False,
@@ -172,7 +192,11 @@ rmg_minimal = {'memory': None,
                             'xyz': None,
                             'seed_all_rads': None,
                             'solvent': False,
-                            },],
+                            'role': None,
+                            'equivalence_ratios': None,
+                            'oxidizer_fraction': None,
+                            'diluent_to_oxidizer_ratio': None,
+                            }],
                'species_constraints': None,
                }
 rmg_minimal_defaults = rmg_minimal.copy()
@@ -270,7 +294,7 @@ def test_write_t3_input_file():
         t3 = run_minimal()
         t3.write_t3_input_file()
         assert os.path.isfile(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'))
-        with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'), 'r') as f:
+        with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml')) as f:
             assert f.readline() == 'project: T3_minimal_example\n'
     finally:
         shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
@@ -296,9 +320,13 @@ def test_set_paths():
              'RMG log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
              'RMG job log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/job.log',
              'RMS': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
+             'figs': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/Figures',
              'SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA',
              'SA input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
              'SA coefficients': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_coefficients.yml',
+             'SA dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
+             'SA IDT dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
+             'SA IDT dict top X': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
              'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
              'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera_from_ck/chem_annotated.yaml',
              'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
@@ -327,68 +355,69 @@ def test_restart():
             os.makedirs(empty_dir)
 
     # empty project directory
-    # results in iteration=0, run_rmg=True
+    # results in iteration=0, run_rmg=True, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r0'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (0, True)
+    assert t3.restart() == (0, True, False)
 
     # empty 'iteration_1' folder in project directory
-    # results in iteration=1, run_rmg=True
+    # results in iteration=1, run_rmg=True, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r1'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (1, True)
+    assert t3.restart() == (1, True, False)
 
     # 'iteration_2' folder with an 'RMG.log' indicating a non-converged job
-    # results in iteration=2, run_rmg=True
+    # results in iteration=2, run_rmg=False, restart_rmg=True (RMG started but didn't terminate)
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r2'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (2, True)
+    assert t3.restart() == (2, False, True)
 
     # 'iteration_3' folder with an 'RMG.log' indicating a converged job
-    # results in iteration=3, run_rmg=False
+    # results in iteration=3, run_rmg=False, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r3'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (3, False)
+    assert t3.restart() == (3, False, False)
 
     # 'iteration_4' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a non-converged job
-    # results in iteration=4, run_rmg=False
+    # results in iteration=4, run_rmg=False, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r4'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (4, False)
+    assert t3.restart() == (4, False, False)
 
     # 'iteration_5' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a non-converged job
-    # results in iteration=5, run_rmg=False
+    # results in iteration=5, run_rmg=False, restart_rmg=False
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r5'),
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (5, False)
+    assert t3.restart() == (5, False, False)
 
-    # 'iteration_6' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a non-converged job
-    # and an ARC 'restart.yml' file
-    # results in a complete ARC run, iteration=6+1=7, run_rmg=True
+    # 'iteration_6' folder with an 'RMG.log' indicating a converged job, an 'arc.log' indicating
+    # a converged ARC run, and an ARC 'restart.yml' file (left over from a previous interrupted run).
+    # Because arc.log already contains the termination line, the state machine sees ARC as
+    # terminated and returns (6, False, False); restart_arc is NOT triggered.
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r6'),
             t3=t3_minimal,
@@ -399,22 +428,14 @@ def test_restart():
                                qm_label='Imipramine_1_peroxy_0',
                                smiles='C',
                                reasons=['reason'],
-                               t3_status=T3Status.CONVERGED if False else T3Status.PENDING,  # logic check?
-                               t3_index=0,
-                               created_at_iteration=2)}
-    # Correction: 'converged' was None in original test, so status PENDING.
-    t3.species = {0: T3Species(label='Imipramine_1_peroxy',
-                               qm_label='Imipramine_1_peroxy_0',
-                               smiles='C',
-                               reasons=['reason'],
                                t3_status=T3Status.PENDING,
                                t3_index=0,
                                created_at_iteration=2)}
     t3.dump_species_and_reactions()
-    assert t3.restart() == (7, True)
+    assert t3.restart() == (6, False, False)
     t3.process_arc_run()
     assert t3.species[0].is_converged is True
-    with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log'), 'r') as f:
+    with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log')) as f:
         lines = f.readlines()
         assert 'Starting project T3_ARC_restart_test\n' in lines
         assert 'All jobs terminated. Summary for project T3_ARC_restart_test:\n' in lines
@@ -427,7 +448,7 @@ def test_restart():
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
-    assert t3.restart() == (8, True)
+    assert t3.restart() == (7, False, False)
 
     # restore r6 log file
     with open(os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'arc.log'), 'w') as f:
@@ -436,6 +457,63 @@ Starting project T3_ARC_restart_test\n
 All jobs terminated. Summary for project T3_ARC_restart_test:\n
 Total execution time: 00:00:00\n
 ARC execution terminated on Sun Dec  4 11:50:29 2022""")
+
+
+def test_should_run_rmg():
+    """
+    Test that T3._should_run_rmg decides correctly whether RMG runs for an iteration.
+    In particular, an interrupted RMG run at the start iteration (restart_rmg=True)
+    must be resumed even when run_rmg_at_start is False.
+    """
+    # Iterations after the start iteration always run RMG.
+    assert T3._should_run_rmg(iteration=3, iteration_start=2, run_rmg_at_start=False, restart_rmg=False) is True
+    # Start iteration, RMG has not run yet -> run it.
+    assert T3._should_run_rmg(iteration=2, iteration_start=2, run_rmg_at_start=True, restart_rmg=False) is True
+    # Start iteration, RMG already completed -> skip it.
+    assert T3._should_run_rmg(iteration=2, iteration_start=2, run_rmg_at_start=False, restart_rmg=False) is False
+    # Start iteration, RMG began but did not terminate -> restart it (regression guard).
+    assert T3._should_run_rmg(iteration=2, iteration_start=2, run_rmg_at_start=False, restart_rmg=True) is True
+
+
+def test_determine_params_based_on_sa_idt_resolves_index_attr(monkeypatch):
+    """
+    determine_params_based_on_sa_idt must resolve the Cantera reaction index via the
+    reaction's .index attribute (which stays aligned with the full annotated YAML,
+    including duplicates) rather than by positional indexing into the duplicate-pruned
+    rmg_reactions list. A Cantera index that exceeds len(rmg_reactions) (as happens once
+    earlier duplicate reactions are dropped) must still resolve to the right reaction.
+    """
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    try:
+        t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_yaml_file()
+        assert len(t3.rmg_reactions) > 0
+        target = t3.rmg_reactions[0]
+        # Simulate a duplicate-pruned mechanism: this reaction's Cantera index lies
+        # beyond the length of the pruned rmg_reactions list.
+        ct_index = len(t3.rmg_reactions) + 5
+        target.index = ct_index
+        t3.iteration = 1
+        # Shape: {token: {'IDT': {reactor: {phi: {P: {T: {ct_index: coeff}}}}}}}
+        t3.sa_dict_idt = {'thermo': {'IDT': dict()},
+                          'kinetics': {'IDT': {0: {0: {1.0: {1000.0: {ct_index: 9.9}}}}}}}
+        seen_reactions = list()
+        monkeypatch.setattr(t3, 'reaction_requires_refinement',
+                            lambda reaction: seen_reactions.append(reaction) or True)
+        monkeypatch.setattr(t3, 'add_reaction', lambda reaction, reasons: 42)
+        monkeypatch.setattr(t3, 'species_requires_refinement', lambda species: False)
+        _, rxn_keys = t3.determine_params_based_on_sa_idt()
+        # With positional indexing the ct index is out of bounds and silently skipped;
+        # resolving by .index finds the reaction.
+        assert seen_reactions and seen_reactions[0] is target
+        assert 42 in rxn_keys
+    finally:
+        shutil.rmtree(t3.paths['SA'], ignore_errors=True)
+        t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
+        if os.path.isfile(t3_log):
+            os.remove(t3_log)
 
 
 def test_check_arc_args():
@@ -459,7 +537,7 @@ def test_run_arc():
     try:
         t3 = run_minimal(iteration=1, set_paths=True)
         t3.run_arc(arc_kwargs=t3.qm)
-        with open(t3.paths['ARC log'], 'r') as f:
+        with open(t3.paths['ARC log']) as f:
             lines = f.readlines()
         for line in ['Starting project T3_minimal_example\n',
                      'Geometry optimization: b3lyp/6-31g(d,p), software: gaussian\n',
@@ -499,7 +577,7 @@ def test_process_arc_run():
         assert t3.species[0].is_converged is True
         assert t3.species[1].is_converged is False
         assert os.path.isfile(t3.paths['T3 thermo lib'])
-        with open(t3.paths['T3 thermo lib'], 'r') as f:
+        with open(t3.paths['T3 thermo lib']) as f:
             lines = f.readlines()
         for line in ['name = "T3"\n',
                      "Species imipramine_ol_2_ket_4 (run time: 1 day, 8:24:38)\n",
@@ -544,13 +622,13 @@ def test_run_rmg():
             walltime=t3.t3['options']['max_RMG_walltime'],
         )
         t3.run_rmg()
-        with open(t3.paths['RMG input'], 'r') as f:
+        with open(t3.paths['RMG input']) as f:
             lines = f.readlines()
         for line in ["    thermoLibraries=['primaryThermoLibrary'],\n",
                      "simulator(atol=1e-16, rtol=1e-08)\n",
                      ]:
             assert line in lines
-        with open(t3.paths['RMG log'], 'r') as f:
+        with open(t3.paths['RMG log']) as f:
             lines = f.readlines()
         for line in ["    thermoLibraries=['primaryThermoLibrary'],\n",
                      "simulator(atol=1e-16, rtol=1e-08)\n",
@@ -1102,7 +1180,7 @@ def test_dump_species():
     t3.dump_species_and_reactions()
     assert os.path.isfile(os.path.join(dump_species_path, 't3.log'))
     assert os.path.isfile(os.path.join(dump_species_path, 'species.yml'))
-    assert t3.restart() == (5, True)
+    assert t3.restart() == (5, True, False)
 
 
 def test_load_species():

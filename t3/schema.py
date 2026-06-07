@@ -7,7 +7,7 @@ import os
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_validator, model_validator
 
 from arc.common import read_yaml_file
 
@@ -58,7 +58,7 @@ class T3Options(BaseModel):
         extra = "forbid"
 
     @model_validator(mode='after')
-    def enforce_collision_thermo(self) -> 'T3Options':
+    def enforce_collision_thermo(self) -> T3Options:
         """
         If collision_violators_rates is True, ensure collision_violators_thermo is also True.
         """
@@ -99,30 +99,57 @@ class T3Options(BaseModel):
         return value
 
 
+class IDTCriterionEnum(str, Enum):
+    """IDT criterion for determining ignition delay time."""
+    max_dOHdt = 'max_dOHdt'
+    max_dTdt = 'max_dTdt'
+    max_radical_dt = 'max_radical_dt'
+
+
+class IDTSAMethodEnum(str, Enum):
+    """SA method for IDT sensitivity analysis."""
+    brute_force = 'brute_force'
+    adjoint = 'adjoint'
+
+
 class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
     """
-    adapter: Annotated[str, Field(max_length=255)] = 'RMGConstantTP'
+    adapter: Annotated[str, Field(max_length=255)] | None = 'CanteraConstantTP'
     atol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-6
     rtol: Annotated[float, Field(gt=0, lt=1e-1)] = 1e-4
     global_observables: list[Annotated[str, Field(min_length=2, max_length=3)]] | None = None
     SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] = 0.01
+    max_sa_workers: Annotated[int, Field(ge=1)] = 24
     pdep_SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] | None = 0.001
     ME_methods: list[Annotated[str, Field(min_length=2, max_length=3)]] = ['CSE', 'MSC']
     top_SA_species: Annotated[int, Field(ge=0)] = 10
     top_SA_reactions: Annotated[int, Field(ge=0)] = 10
     T_list: list[Annotated[float, Field(gt=0)]] | None = None
     P_list: list[Annotated[float, Field(gt=0)]] | None = None
+    idt_criterion: IDTCriterionEnum = IDTCriterionEnum.max_dOHdt
+    idt_sa_method: IDTSAMethodEnum = IDTSAMethodEnum.brute_force
+    delta_h: Annotated[float, Field(gt=0)] = 0.1
+    delta_k: Annotated[float, Field(gt=0, lt=1)] = 0.05
+    adaptive_perturbation: bool = False
+    save_sa_yaml: bool = True
+    experimental_idt_path: str | None = None
 
     class Config:
         extra = "forbid"
+
+    @field_serializer('idt_criterion', 'idt_sa_method')
+    @classmethod
+    def serialize_enums(cls, v):
+        """Serialize enum fields to plain strings for YAML and logging compatibility."""
+        return v.value if isinstance(v, Enum) else v
 
     @field_validator('adapter')
     @classmethod
     def check_adapter(cls, value):
         """T3Sensitivity.adapter validator"""
-        if value not in _registered_simulate_adapters.keys():
+        if value is not None and value not in _registered_simulate_adapters.keys():
             raise ValueError(
                 f'The "T3 sensitivity adapter" argument of {value} was not present in the keys for the '
                 f'_registered_simulate_adapters dictionary: {list(_registered_simulate_adapters.keys())}'
@@ -216,12 +243,23 @@ class RadicalTypeEnum(str, Enum):
     peroxyl = 'peroxyl'
 
 
+class SpeciesRoleEnum(str, Enum):
+    """Allowed RMGSpecies role values for fuel/oxidizer/diluent mixtures."""
+    fuel = 'fuel'
+    oxidizer = 'oxidizer'
+    diluent = 'diluent'
+
+
 class RMGSpecies(BaseModel):
     """
     A class for validating input.RMG.species arguments
     """
     label: str
     concentration: Annotated[float, Field(ge=0)] | tuple[Annotated[float, Field(ge=0)], Annotated[float, Field(ge=0)]] = 0
+    role: SpeciesRoleEnum | None = None
+    equivalence_ratios: list[Annotated[float, Field(gt=0)]] | None = None
+    oxidizer_fraction: Annotated[float, Field(gt=0, le=1)] | None = None
+    diluent_to_oxidizer_ratio: Annotated[float, Field(gt=0)] | None = None
     smiles: str | None = None
     inchi: str | None = None
     adjlist: str | None = None
@@ -247,6 +285,42 @@ class RMGSpecies(BaseModel):
             raise ValueError(f"A constant species cannot have a concentration range.\n"
                              f"Got{label}: {info.data.get('concentration')}.")
         return value
+
+    @model_validator(mode='after')
+    def check_role_consistency(self) -> RMGSpecies:
+        """
+        Cross-field role validation:
+        - equivalence_ratios may only be set on a fuel species.
+        - oxidizer_fraction may only be set on an oxidizer species.
+        - diluent_to_oxidizer_ratio may only be set on a diluent species.
+        - A fuel species must declare equivalence_ratios (the φ-driven sweep).
+        """
+        if self.equivalence_ratios is not None and self.role != SpeciesRoleEnum.fuel:
+            raise ValueError(f"equivalence_ratios may only be set on a species with role='fuel'. "
+                             f"Got role={self.role!r} for {self.label!r}.")
+        if self.oxidizer_fraction is not None and self.role != SpeciesRoleEnum.oxidizer:
+            raise ValueError(f"oxidizer_fraction may only be set on a species with role='oxidizer'. "
+                             f"Got role={self.role!r} for {self.label!r}.")
+        if self.diluent_to_oxidizer_ratio is not None and self.role != SpeciesRoleEnum.diluent:
+            raise ValueError(f"diluent_to_oxidizer_ratio may only be set on a species with role='diluent'. "
+                             f"Got role={self.role!r} for {self.label!r}.")
+        if self.role == SpeciesRoleEnum.fuel and not self.equivalence_ratios:
+            raise ValueError(f"A fuel species must declare a non-empty equivalence_ratios list. "
+                             f"Got equivalence_ratios={self.equivalence_ratios!r} for {self.label!r}.")
+        return self
+
+    @field_serializer('role')
+    @classmethod
+    def serialize_role(cls, v):
+        """Serialize the role enum to a plain string for YAML and logging compatibility."""
+        return v.value if isinstance(v, Enum) else v
+
+    @field_serializer('seed_all_rads')
+    @classmethod
+    def serialize_seed_all_rads(cls, v):
+        """Serialize the RadicalTypeEnum list to plain strings so the schema dump stays
+        yaml.safe_dump-able for write_t3_input_file."""
+        return [x.value if isinstance(x, Enum) else x for x in v] if v else v
 
     @field_validator('concentration')
     @classmethod
@@ -279,6 +353,14 @@ class RMGSpecies(BaseModel):
         return self
 
 
+class IDTModeEnum(str, Enum):
+    """
+    Sweep mode used by the IDT adapter when several T / P / φ values are given.
+    """
+    matrix = 'matrix'  # full T_list × P_list × φ_list cartesian product
+    row = 'row'        # zip(T_list, P_list, φ_list) — all must have the same length
+
+
 class RMGReactor(BaseModel):
     """
     A class for validating input.RMG.reactors arguments
@@ -291,9 +373,16 @@ class RMGReactor(BaseModel):
     termination_time: tuple[Annotated[float, Field(gt=0)], TerminationTimeEnum] | None = None
     termination_rate_ratio: Annotated[float, Field(gt=0, lt=1)] | None = None
     conditions_per_iteration: Annotated[int, Field(gt=0)] = 12
+    idt_mode: IDTModeEnum = IDTModeEnum.matrix
 
     class Config:
         extra = "forbid"
+
+    @field_serializer('idt_mode')
+    @classmethod
+    def serialize_idt_mode(cls, v):
+        """Serialize the idt_mode enum to a plain string for YAML and logging compatibility."""
+        return v.value if isinstance(v, Enum) else v
 
     @field_validator('type')
     @classmethod
@@ -308,9 +397,9 @@ class RMGReactor(BaseModel):
     @field_validator('T')
     @classmethod
     def check_t(cls, value):
-        """RMGReactor.T validator"""
-        if isinstance(value, list) and len(value) != 2:
-            raise ValueError(f'When specifying the temperature as a list, only two values are allowed (T min, T max),\n'
+        """RMGReactor.T validator. Lists must have at least 2 entries (min/max range, or explicit row points)."""
+        if isinstance(value, list) and len(value) < 2:
+            raise ValueError(f'When specifying the temperature as a list, at least two values are required,\n'
                              f'got {len(value)} values: {value}.')
         return value
 
@@ -318,8 +407,8 @@ class RMGReactor(BaseModel):
     @classmethod
     def check_p(cls, value, info: ValidationInfo):
         """RMGReactor.P validator"""
-        if isinstance(value, list) and len(value) != 2:
-            raise ValueError(f'When specifying the pressure as a list, only two values are allowed (P min, P max),\n'
+        if isinstance(value, list) and len(value) < 2:
+            raise ValueError(f'When specifying the pressure as a list, at least two values are required,\n'
                              f'got {len(value)} values: {value}.')
         reactor_type = info.data.get('type')
         if reactor_type and 'gas' in reactor_type and value is None:
@@ -332,8 +421,8 @@ class RMGReactor(BaseModel):
     @classmethod
     def check_v(cls, value, info: ValidationInfo):
         """RMGReactor.V validator"""
-        if isinstance(value, list) and len(value) != 2:
-            raise ValueError(f'When specifying the volume as a list, only two values are allowed (V min, V max),\n'
+        if isinstance(value, list) and len(value) < 2:
+            raise ValueError(f'When specifying the volume as a list, at least two values are required,\n'
                              f'got {len(value)} values: {value}.')
         reactor_type = info.data.get('type')
         if reactor_type and 'liquid' in reactor_type and value is None:
@@ -418,7 +507,7 @@ class RMGModel(BaseModel):
         return int(value) if isinstance(value, float) else value
 
     @model_validator(mode='after')
-    def check_tolerance_interrupt_simulation(self) -> 'RMGModel':
+    def check_tolerance_interrupt_simulation(self) -> RMGModel:
         """
         RMGModel.tolerance_interrupt_simulation validator
         Sets tolerance_interrupt_simulation to match core_tolerance if not provided,
@@ -667,7 +756,7 @@ class RMG(BaseModel):
         return value
 
     @model_validator(mode='after')
-    def check_species_and_reactors(self) -> 'RMG':
+    def check_species_and_reactors(self) -> RMG:
         if self.reactors and self.species:
             reactor_types = {reactor.type for reactor in self.reactors}
             balance_species = [s.label for s in self.species if s.balance]
@@ -729,7 +818,7 @@ class InputBase(BaseModel):
         extra = "forbid"
 
     @model_validator(mode='after')
-    def validate_rmg_t3(self) -> 'InputBase':
+    def validate_rmg_t3(self) -> InputBase:
         """
         InputBase.validate_rmg_t3
         Validates cross-dependencies between RMG and T3 configurations.

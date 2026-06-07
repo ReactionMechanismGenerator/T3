@@ -31,6 +31,10 @@ class SimulateAdapter(ABC):
         """
         Obtain the sensitivity analysis coefficients.
 
+        Adapters that need tuning knobs (e.g. ``top_SA_species``, ``top_SA_reactions``,
+        ``max_workers``, whether to dump YAML) read them from ``self.t3['sensitivity']``
+        directly, so the signature stays minimal and uniform.
+
         Returns:
              sa_dict (dict): a SA dictionary, whose structure is given in the docstring for T3/t3/main.py
         """
