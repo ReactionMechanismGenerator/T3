@@ -445,6 +445,10 @@ class CanteraIDT(SimulateAdapter):
 
         total_tasks = len(tasks)
         succeeded, failed, retried = 0, 0, 0
+        # Actual perturbation magnitude applied per (kind, index) task, so the SA
+        # normalization matches the perturbation even when it varies (adaptive
+        # per-species sizing, or a halved delta on retry).
+        task_deltas: dict[tuple, float] = dict()
 
         with cf.ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Compute per-species adaptive delta_h if enabled
@@ -486,6 +490,7 @@ class CanteraIDT(SimulateAdapter):
                 try:
                     sa_dict[task[0]]['IDT'][task[1]] = future.result()
                     succeeded += 1
+                    task_deltas[task] = task_delta_h if task[0] == 'thermo' else task_delta_k
                 except Exception as e:
                     py_logger.warning(f"Task {task} failed: {e}. Scheduling retry with halved perturbation.")
                     to_retry.append((task, task_delta_h, task_delta_k))
@@ -496,14 +501,15 @@ class CanteraIDT(SimulateAdapter):
                 kind, _ = task
                 retry_delta_h = task_delta_h / 2 if kind == 'thermo' else task_delta_h
                 retry_delta_k = task_delta_k / 2 if kind == 'kinetics' else task_delta_k
-                retry_future_to_task[_submit(task, retry_delta_h, retry_delta_k)] = task
+                retry_future_to_task[_submit(task, retry_delta_h, retry_delta_k)] = (task, retry_delta_h, retry_delta_k)
                 retried += 1
 
             for future in cf.as_completed(retry_future_to_task):
-                task = retry_future_to_task[future]
+                task, retry_delta_h, retry_delta_k = retry_future_to_task[future]
                 try:
                     sa_dict[task[0]]['IDT'][task[1]] = future.result()
                     succeeded += 1
+                    task_deltas[task] = retry_delta_h if task[0] == 'thermo' else retry_delta_k
                 except Exception as e2:
                     failed += 1
                     if self.logger is not None:
@@ -520,6 +526,7 @@ class CanteraIDT(SimulateAdapter):
                                          perturbed_idt_dict=sa_dict,
                                          delta_h=delta_h,
                                          delta_k=delta_k,
+                                         task_deltas=task_deltas,
                                          )
         self.idt_sa_dict = get_top_sa_coefficients(idt_sa_dict=idt_sa_dict_all,
                                                    top_species=top_SA_species,
@@ -1111,12 +1118,19 @@ def compute_idt_sa(reactor_idt_dict: dict,
                    perturbed_idt_dict: dict,
                    delta_h: float = DELTA_H,
                    delta_k: float = DELTA_K,
+                   task_deltas: dict[tuple, float] | None = None,
                    ) -> dict:
     """
     Convert raw perturbed-IDT samples into normalized SA coefficients:
 
     - kinetics: ``dln(IDT)/dln(k_i) = (IDT_pert - IDT) / (IDT * delta_k)`` (dimensionless)
     - thermo:   ``dln(IDT)/dH = (IDT_pert - IDT) / (IDT * delta_h)`` (mol/kJ)
+
+    Each coefficient is normalized by the **actual** perturbation magnitude used for
+    that parameter. When ``task_deltas`` is provided it maps ``(token, index)`` to the
+    delta that was actually applied (which can differ from ``delta_h``/``delta_k`` when
+    adaptive per-species sizing is on or when a failed task was retried with a halved
+    perturbation); the scalar ``delta_h``/``delta_k`` are used as the fallback.
 
     Returns a dict shaped ``{kind: {'IDT': {r: {phi: {P: {T: {param_index: coeff}}}}}}}``.
     """
@@ -1141,10 +1155,9 @@ def compute_idt_sa(reactor_idt_dict: dict,
                             if perturbed_idt_value is None:
                                 continue
                             delta_idt = perturbed_idt_value - idt
-                            if token == 'kinetics':
-                                sa_coeff = delta_idt / (idt * delta_k)
-                            else:
-                                sa_coeff = delta_idt / (idt * delta_h)
+                            base_delta = delta_k if token == 'kinetics' else delta_h
+                            delta = task_deltas.get((token, index), base_delta) if task_deltas else base_delta
+                            sa_coeff = delta_idt / (idt * delta)
                             idt_sa_dict[token]['IDT'][r][phi][p][t][index] = sa_coeff
     return idt_sa_dict
 

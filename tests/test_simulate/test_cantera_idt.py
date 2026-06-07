@@ -17,8 +17,8 @@ from t3.common import SIMULATE_TEST_DATA_BASE_PATH, TEST_DATA_BASE_PATH
 from tests.common import almost_equal, run_minimal
 from t3.simulate.cantera_idt import (CanteraIDT, DELTA_H, DELTA_K, calculate_arrhenius_rate_coefficient,
                                      calculate_troe_rate_coefficient, calculate_chebyshev_rate_coefficient,
-                                     calculate_plog_rate_coefficient, compute_idt, get_Ea_units, get_h298,
-                                     get_pressure_from_cantera, get_t_and_p_lists, get_top_sa_coefficients,
+                                     calculate_plog_rate_coefficient, compute_idt, compute_idt_sa, get_Ea_units,
+                                     get_h298, get_pressure_from_cantera, get_t_and_p_lists, get_top_sa_coefficients,
                                      perturb_enthalpy, perturb_reaction_rate_coefficient,
                                      plot_idt_vs_temperature)
 from t3.utils.fix_cantera import fix_cantera
@@ -528,6 +528,35 @@ def test_get_top_sa_coefficients():
                                                                   24: 0.011809516976394461,
                                                                   34: 0.005113408917627866,
                                                                   35: 0.005070908258511206}
+
+
+def test_compute_idt_sa_normalizes_by_actual_delta():
+    """``compute_idt_sa`` must normalize each coefficient by the delta actually applied.
+
+    The base run gives IDT=1.0 s. A +10% kinetics perturbation (index 0) and a +5%
+    kinetics perturbation (index 1) both raise IDT to 1.1 and 1.05 respectively, i.e.
+    the same true normalized sensitivity (dlnIDT/dlnk = 1.0). Without per-task deltas
+    both would be normalized by the scalar base delta and disagree; with ``task_deltas``
+    each is divided by its own delta and they agree.
+    """
+    reactor_idt_dict = {0: {1.0: {10.0: {1000.0: 1.0}}}}
+    perturbed = {
+        'thermo': {'IDT': {}},
+        'kinetics': {'IDT': {
+            0: {0: {1.0: {10.0: {1000.0: 1.10}}}},  # perturbed with delta_k = 0.10
+            1: {0: {1.0: {10.0: {1000.0: 1.05}}}},  # perturbed with delta_k = 0.05 (e.g. a retry)
+        }},
+    }
+    # Scalar-only normalization (no task_deltas): both divided by base delta_k=0.05.
+    scalar = compute_idt_sa(reactor_idt_dict, perturbed, delta_h=0.1, delta_k=0.05)
+    assert almost_equal(scalar['kinetics']['IDT'][0][1.0][10.0][1000.0][0], 2.0)  # 0.10/(1*0.05)
+    assert almost_equal(scalar['kinetics']['IDT'][0][1.0][10.0][1000.0][1], 1.0)  # 0.05/(1*0.05)
+
+    # Per-task deltas: index 0 actually used 0.10, index 1 used 0.05 -> both recover 1.0.
+    task_deltas = {('kinetics', 0): 0.10, ('kinetics', 1): 0.05}
+    fixed = compute_idt_sa(reactor_idt_dict, perturbed, delta_h=0.1, delta_k=0.05, task_deltas=task_deltas)
+    assert almost_equal(fixed['kinetics']['IDT'][0][1.0][10.0][1000.0][0], 1.0)  # 0.10/(1*0.10)
+    assert almost_equal(fixed['kinetics']['IDT'][0][1.0][10.0][1000.0][1], 1.0)  # 0.05/(1*0.05)
 
 
 def test_get_t_and_p_lists_row():

@@ -309,6 +309,12 @@ class RMGSpecies(BaseModel):
                              f"Got equivalence_ratios={self.equivalence_ratios!r} for {self.label!r}.")
         return self
 
+    @field_serializer('role')
+    @classmethod
+    def serialize_role(cls, v):
+        """Serialize the role enum to a plain string for YAML and logging compatibility."""
+        return v.value if isinstance(v, Enum) else v
+
     @field_validator('concentration')
     @classmethod
     def check_concentration_range_order(cls, value, info: ValidationInfo):
@@ -364,6 +370,12 @@ class RMGReactor(BaseModel):
 
     class Config:
         extra = "forbid"
+
+    @field_serializer('idt_mode')
+    @classmethod
+    def serialize_idt_mode(cls, v):
+        """Serialize the idt_mode enum to a plain string for YAML and logging compatibility."""
+        return v.value if isinstance(v, Enum) else v
 
     @field_validator('type')
     @classmethod
