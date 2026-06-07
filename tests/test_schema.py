@@ -431,6 +431,21 @@ def test_rmg_species_schema():
                    )
 
 
+def test_seed_all_rads_serializes_to_plain_strings():
+    """
+    seed_all_rads (list[RadicalTypeEnum]) must serialize to plain strings so the
+    schema dump stays yaml.safe_dump-able (write_t3_input_file dumps the schema).
+    Without a serializer the list keeps RadicalTypeEnum members and safe_dump raises.
+    """
+    import yaml
+    d = RMGSpecies(label='X', smiles='C', seed_all_rads=['radical', 'peroxyl']).model_dump()
+    assert d['seed_all_rads'] == ['radical', 'peroxyl']
+    assert all(type(x) is str for x in d['seed_all_rads'])
+    yaml.safe_dump(d)  # must not raise yaml.representer.RepresenterError
+    # None passes through unchanged.
+    assert RMGSpecies(label='X', smiles='C').model_dump()['seed_all_rads'] is None
+
+
 def test_rmg_species_role_fields():
     """Test the new fuel/oxidizer/diluent role fields and their cross-field validation."""
     # A valid fuel species with equivalence ratios.

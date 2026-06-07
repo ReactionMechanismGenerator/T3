@@ -315,6 +315,13 @@ class RMGSpecies(BaseModel):
         """Serialize the role enum to a plain string for YAML and logging compatibility."""
         return v.value if isinstance(v, Enum) else v
 
+    @field_serializer('seed_all_rads')
+    @classmethod
+    def serialize_seed_all_rads(cls, v):
+        """Serialize the RadicalTypeEnum list to plain strings so the schema dump stays
+        yaml.safe_dump-able for write_t3_input_file."""
+        return [x.value if isinstance(x, Enum) else x for x in v] if v else v
+
     @field_validator('concentration')
     @classmethod
     def check_concentration_range_order(cls, value, info: ValidationInfo):
