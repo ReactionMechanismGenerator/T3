@@ -719,7 +719,7 @@ together for reference purposes.</p>
 <span class="w">    </span><span class="nt">adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CanteraConstantTP</span><span class="w">  </span><span class="c1"># *required* (this is how SA is requested)</span>
 <span class="w">                                </span><span class="c1"># Available adapters: &#39;CanteraConstantTP&#39;, &#39;CanteraConstantHP&#39;,</span>
 <span class="w">                                </span><span class="c1"># &#39;CanteraConstantUV&#39;, &#39;CanteraPFR&#39;, &#39;CanteraPFRTProfile&#39;,</span>
-<span class="w">                                </span><span class="c1"># &#39;CanteraJSR&#39;, &#39;RMGConstantTP&#39;</span>
+<span class="w">                                </span><span class="c1"># &#39;CanteraJSR&#39;, &#39;CanteraIDT&#39;, &#39;CanteraRCM&#39;, &#39;RMGConstantTP&#39;</span>
 <span class="w">    </span><span class="nt">atol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-6</span><span class="w">  </span><span class="c1"># optional, default: 1e-6</span>
 <span class="w">    </span><span class="nt">rtol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-4</span><span class="w">  </span><span class="c1"># optional, default: 1e-4</span>
 <span class="w">    </span><span class="nt">global_observables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;IDT&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;ESR&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;SL&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, only implemented in Cantera adapters,</span>
@@ -736,10 +736,30 @@ together for reference purposes.</p>
 <span class="w">    </span><span class="nt">top_SA_species</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, used per observable to determine thermo to calculate, default: 10</span>
 <span class="w">    </span><span class="nt">top_SA_reactions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, used per observable to determine rates to calculate as well as</span>
 <span class="w">                          </span><span class="c1"># thermo of species participating in these reactions, default: 10</span>
+<span class="w">    </span><span class="nt">max_sa_workers</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">24</span><span class="w">  </span><span class="c1"># optional, max worker processes for brute-force SA in the Cantera IDT</span>
+<span class="w">                        </span><span class="c1"># adapter (one perturbation per worker), default: 24</span>
 <span class="w">    </span><span class="nt">T_list</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">800</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1000</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1200</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, explicit temperature list for SA runs (overrides</span>
 <span class="w">                               </span><span class="c1"># range-based generation), Units: K, default: None</span>
 <span class="w">    </span><span class="nt">P_list</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, explicit pressure list for SA runs (overrides range-based</span>
 <span class="w">                     </span><span class="c1"># generation), Units: bar, default: None</span>
+
+<span class="w">    </span><span class="c1"># IDT-specific SA options (only apply when adapter is CanteraIDT or CanteraRCM):</span>
+<span class="w">    </span><span class="nt">idt_criterion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">max_dOHdt</span><span class="w">  </span><span class="c1"># optional, how to define the ignition delay time.</span>
+<span class="w">                              </span><span class="c1"># &#39;max_dOHdt&#39; (default): time of max d[OH]/dt (falls back to d[H]/dt</span>
+<span class="w">                              </span><span class="c1">#   if OH is absent from the mechanism)</span>
+<span class="w">                              </span><span class="c1"># &#39;max_dTdt&#39;: time of max dT/dt</span>
+<span class="w">                              </span><span class="c1"># &#39;max_radical_dt&#39;: auto-detect highest-conc radical, use max d[radical]/dt</span>
+<span class="w">    </span><span class="nt">idt_sa_method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">brute_force</span><span class="w">  </span><span class="c1"># optional, SA method for IDT.</span>
+<span class="w">                                </span><span class="c1"># &#39;brute_force&#39; (default): perturb each parameter, re-simulate</span>
+<span class="w">                                </span><span class="c1"># &#39;adjoint&#39;: Cantera built-in adjoint SA (faster, single sim per condition)</span>
+<span class="w">    </span><span class="nt">delta_h</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w">  </span><span class="c1"># optional, enthalpy perturbation for brute-force thermo SA, Units: kJ/mol, default: 0.1</span>
+<span class="w">    </span><span class="nt">delta_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.05</span><span class="w">  </span><span class="c1"># optional, fractional rate perturbation for brute-force kinetics SA, default: 0.05</span>
+<span class="w">    </span><span class="nt">adaptive_perturbation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, enable adaptive perturbation sizing. When true,</span>
+<span class="w">                                  </span><span class="c1"># delta_h scales relative to |H298| and failed workers retry with</span>
+<span class="w">                                  </span><span class="c1"># halved perturbation. default: false</span>
+<span class="w">    </span><span class="nt">experimental_idt_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># optional, path to a YAML file with experimental IDT data for</span>
+<span class="w">                                 </span><span class="c1"># comparison (not optimization). See examples/idt_with_experiment/.</span>
+<span class="w">                                 </span><span class="c1"># default: null</span>
 
 <span class="w">  </span><span class="c1"># uncertainty analysis (optional block, T3 can run w/o UA)</span>
 <span class="w">  </span><span class="c1"># either local or global UA type must be specified to execute an UA</span>
@@ -814,6 +834,39 @@ together for reference purposes.</p>
 <span class="w">      </span><span class="c1"># note: &#39;constant&#39; is only allowed in liquid phase simulations</span>
 <span class="w">      </span><span class="c1"># note: &#39;solvent&#39; is only allowed in liquid phase simulations</span>
 
+<span class="w">  </span><span class="c1"># fuel / oxidizer / diluent roles (used by the IDT adapter and the equivalence-ratio sweep)</span>
+<span class="w">  </span><span class="c1"># When &#39;role&#39; is set, the species concentrations are recomputed per phi from the fuel</span>
+<span class="w">  </span><span class="c1"># concentration, the oxidizer&#39;s stoichiometric demand, and the diluent_to_oxidizer_ratio.</span>
+<span class="w">  </span><span class="c1"># Exactly one species must carry role=&#39;fuel&#39;. Multiple oxidizers / diluents are allowed;</span>
+<span class="w">  </span><span class="c1"># oxidizer_fraction must sum to 1 across oxidizers when more than one oxidizer is given.</span>
+<span class="w">  </span><span class="c1">#</span>
+<span class="w">  </span><span class="c1"># Role-specific field restrictions (setting a field on the wrong role raises a validation error):</span>
+<span class="w">  </span><span class="c1">#   equivalence_ratios       — only on role=&#39;fuel&#39;    (required for fuel)</span>
+<span class="w">  </span><span class="c1">#   oxidizer_fraction        — only on role=&#39;oxidizer&#39;</span>
+<span class="w">  </span><span class="c1">#   diluent_to_oxidizer_ratio — only on role=&#39;diluent&#39;</span>
+<span class="w">  </span><span class="c1"># Example below: an NH3 fuel in an O2/N2O oxidizer diluted with N2:</span>
+<span class="w">  </span><span class="c1">#</span>
+<span class="w">  </span><span class="c1"># species:</span>
+<span class="w">  </span><span class="c1">#   - label: NH3</span>
+<span class="w">  </span><span class="c1">#     smiles: &#39;N&#39;</span>
+<span class="w">  </span><span class="c1">#     concentration: 1.0</span>
+<span class="w">  </span><span class="c1">#     role: fuel</span>
+<span class="w">  </span><span class="c1">#     equivalence_ratios: [0.5, 1.0, 1.5]  # required on the fuel, drives the phi sweep</span>
+<span class="w">  </span><span class="c1">#   - label: O2</span>
+<span class="w">  </span><span class="c1">#     smiles: &#39;[O][O]&#39;</span>
+<span class="w">  </span><span class="c1">#     role: oxidizer</span>
+<span class="w">  </span><span class="c1">#     oxidizer_fraction: 0.8  # fraction of total oxidizer demand carried by this oxidizer</span>
+<span class="w">  </span><span class="c1">#   - label: N2O</span>
+<span class="w">  </span><span class="c1">#     smiles: &#39;N#[N+][O-]&#39;</span>
+<span class="w">  </span><span class="c1">#     role: oxidizer</span>
+<span class="w">  </span><span class="c1">#     oxidizer_fraction: 0.2</span>
+<span class="w">  </span><span class="c1">#   - label: N2</span>
+<span class="w">  </span><span class="c1">#     adjlist: |</span>
+<span class="w">  </span><span class="c1">#       1 N u0 p1 c0 {2,T}</span>
+<span class="w">  </span><span class="c1">#       2 N u0 p1 c0 {1,T}</span>
+<span class="w">  </span><span class="c1">#     role: diluent</span>
+<span class="w">  </span><span class="c1">#     diluent_to_oxidizer_ratio: 3.76  # default 3.76 (air-like); set to 0 for an undiluted mixture</span>
+
 <span class="w">  </span><span class="c1"># reactors (List[dict]) (a required block)</span>
 <span class="w">  </span><span class="c1"># reactor type: &#39;gas batch constant T P&#39; or &#39;liquid batch constant T V&#39;</span>
 <span class="w">  </span><span class="c1"># at least one termination criterion must be given per reactor</span>
@@ -828,6 +881,9 @@ together for reference purposes.</p>
 <span class="w">      </span><span class="nt">termination_time</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">5</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;s&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># allowed units: &#39;micro-s&#39;, &#39;ms&#39;, &#39;s&#39;, &#39;hours&#39;, &#39;days&#39;</span>
 <span class="w">      </span><span class="nt">termination_rate_ratio</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
 <span class="w">      </span><span class="nt">conditions_per_iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span><span class="w">  </span><span class="c1"># optional, default: 12 (nSims in RMG)</span>
+<span class="w">      </span><span class="nt">idt_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">matrix</span><span class="w">  </span><span class="c1"># optional, only used by the Cantera IDT adapter, default: &#39;matrix&#39;</span>
+<span class="w">                        </span><span class="c1"># &#39;matrix&#39; = full T_list x P_list x phi_list cartesian product</span>
+<span class="w">                        </span><span class="c1"># &#39;row&#39;    = zip(T_list, P_list, phi_list) (lists must be same length)</span>
 
 <span class="w">  </span><span class="c1"># model (a required block)</span>
 <span class="w">  </span><span class="nt">model</span><span class="p">:</span>

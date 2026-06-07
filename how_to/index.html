@@ -1165,13 +1165,13 @@ adapter that reproduces its idealized chemistry:</p>
 <tbody>
 <tr>
 <td>Shock tube (reflected shock)</td>
-<td><code>CanteraConstantUV</code></td>
-<td>Standard treatment: closed, adiabatic, constant-volume batch reactor. Use <code>IDT</code> as a global observable for ignition delay measurements.</td>
+<td><code>CanteraConstantUV</code> or <code>CanteraIDT</code></td>
+<td>Standard treatment: closed, adiabatic, constant-volume batch reactor (<code>IdealGasReactor</code>). Use <code>CanteraConstantUV</code> for general simulations, or <code>CanteraIDT</code> when you need IDT-specific sensitivity analysis (brute-force or adjoint). Use <code>IDT</code> as a global observable for ignition delay measurements.</td>
 </tr>
 <tr>
 <td>Rapid compression machine (RCM)</td>
-<td><code>CanteraConstantUV</code></td>
-<td>Same idealization as a reflected shock once the piston is at top-dead-center. Heat loss is not modeled.</td>
+<td><code>CanteraConstantUV</code> or <code>CanteraRCM</code></td>
+<td>Same physics but at constant pressure (<code>IdealGasConstPressureReactor</code>). Use <code>CanteraRCM</code> when you need IDT-specific sensitivity analysis. Heat loss is not modeled.</td>
 </tr>
 <tr>
 <td>Constant-volume bomb</td>

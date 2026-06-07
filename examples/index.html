@@ -637,6 +637,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#idt-with-experimental-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IDT with experimental comparison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#input-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -938,6 +949,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#idt-with-experimental-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IDT with experimental comparison
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#input-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1008,7 +1030,7 @@ A shock tube post-shock state is treated as a closed, adiabatic,
 constant-volume batch reactor.</p>
 <p><strong>Features demonstrated:</strong></p>
 <ul>
-<li><code>CanteraConstantUV</code> adapter — closed adiabatic constant-V batch</li>
+<li><code>CanteraConstantUV</code> adapter — closed adiabatic constant-V batch (same <code>IdealGasReactor</code> as a shock tube post-reflected-shock state). For IDT-specific sensitivity analysis use <code>CanteraIDT</code> instead.</li>
 <li>Dilute mixture in argon (<code>balance: true</code> on Ar, <code>reactive: false</code>)</li>
 <li><code>global_observables: ['IDT']</code> — IDT is the primary measurement of a shock tube</li>
 <li>Short <code>termination_time</code> in milliseconds, matching typical IDT magnitudes</li>
@@ -1130,6 +1152,19 @@ pressures, and concentrations.</p>
 <li><code>reactive: false</code> on N<sub>2</sub> (non-reactive dissolved gas)</li>
 <li><code>all_core_species: true</code> to calculate thermo for every core species</li>
 <li>Liquid-phase specific species constraints</li>
+</ul>
+<h2 id="idt-with-experimental-comparison">IDT with experimental comparison<a class="headerlink" href="#idt-with-experimental-comparison" title="Permanent link">&para;</a></h2>
+<p><strong>Directory:</strong> <code>examples/idt_with_experiment/</code></p>
+<p>Demonstrates running IDT-focused sensitivity analysis with experimental data
+comparison. T3 computes predicted IDTs and compares them against experimental
+measurements, reporting per-point log-errors and RMSE.</p>
+<p><strong>Features demonstrated:</strong></p>
+<ul>
+<li><code>global_observables: ['IDT']</code> for IDT-based SA</li>
+<li><code>idt_criterion: max_dOHdt</code> (configurable: <code>max_dTdt</code>, <code>max_radical_dt</code>)</li>
+<li><code>idt_sa_method: adjoint</code> (<code>brute_force</code> or <code>adjoint</code> for Cantera built-in SA)</li>
+<li><code>experimental_idt_path</code> pointing to a YAML file with experimental data</li>
+<li>Experimental YAML format with citation, T/P/phi/idt fields</li>
 </ul>
 <h2 id="input-reference">Input reference<a class="headerlink" href="#input-reference" title="Permanent link">&para;</a></h2>
 <p>For a comprehensive reference showing <strong>every</strong> available input argument with
