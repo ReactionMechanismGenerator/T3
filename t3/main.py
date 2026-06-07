@@ -235,7 +235,10 @@ class T3:
             self.set_paths()
 
             # RMG
-            if self.iteration > iteration_start or self.iteration == iteration_start and run_rmg_at_start:
+            if self._should_run_rmg(iteration=self.iteration,
+                                    iteration_start=iteration_start,
+                                    run_rmg_at_start=run_rmg_at_start,
+                                    restart_rmg=restart_rmg):
                 self.run_rmg(restart_rmg=restart_rmg)
 
             # SA
@@ -376,6 +379,32 @@ class T3:
             'shared T3 kinetics lib': os.path.join(self.t3['options']['external_library_path'], f"{self.t3['options']['shared_library_name']}")
                 if self.t3['options']['shared_library_name'] is not None and self.t3['options']['external_library_path'] is not None else None,
         }
+
+    @staticmethod
+    def _should_run_rmg(iteration: int,
+                        iteration_start: int,
+                        run_rmg_at_start: bool,
+                        restart_rmg: bool,
+                        ) -> bool:
+        """
+        Decide whether RMG should run for the given iteration.
+
+        RMG always runs for iterations after the start iteration. For the start
+        iteration it runs only if RMG has not completed yet (``run_rmg_at_start``)
+        or an interrupted run must be resumed (``restart_rmg``).
+
+        Args:
+            iteration (int): The current iteration number.
+            iteration_start (int): The iteration T3 (re)started from.
+            run_rmg_at_start (bool): Whether RMG should run at the start iteration.
+            restart_rmg (bool): Whether an interrupted RMG run must be resumed.
+
+        Returns:
+            bool: Whether to run RMG for this iteration.
+        """
+        if iteration > iteration_start:
+            return True
+        return run_rmg_at_start or restart_rmg
 
     def restart(self) -> tuple[int, bool, bool]:
         """
@@ -897,9 +926,11 @@ class T3:
         ``self.sa_dict_idt`` is shaped like
         ``{token: {'IDT': {reactor: {phi: {P: {T: {ct_index: coeff}}}}}}}`` where
         ``token`` is ``'thermo'`` or ``'kinetics'`` and ``ct_index`` is the 0-based
-        Cantera species (thermo) or reaction (kinetics) index. The Cantera ordering
-        matches ``self.rmg_species`` / ``self.rmg_reactions`` since both are loaded
-        from the same annotated YAML file.
+        Cantera species (thermo) or reaction (kinetics) index. Species are loaded
+        1:1 with the Cantera ordering, so ``self.rmg_species`` is indexed by position.
+        Reactions, however, are duplicate-pruned by ``load_cantera_yaml_file`` while
+        Cantera keeps every duplicate, so the Cantera reaction index is resolved via
+        the reaction's ``.index`` attribute (``get_reaction_by_index``), not by position.
 
         Returns:
             Tuple[List[int], List[int]]: T3 species and T3 reaction indices that
@@ -940,9 +971,14 @@ class T3:
                                     if index in visited_rxns:
                                         continue
                                     visited_rxns.append(index)
-                                    if index < 0 or index >= len(self.rmg_reactions):
+                                    # ``index`` is the Cantera reaction index (position in the
+                                    # full annotated YAML, duplicates included). rmg_reactions is
+                                    # duplicate-pruned, so resolve by the reaction's .index attribute
+                                    # rather than by list position (which would mismap once any
+                                    # duplicate reaction was dropped).
+                                    reaction = get_reaction_by_index(index, self.rmg_reactions)
+                                    if reaction is None:
                                         continue
-                                    reaction = self.rmg_reactions[index]
                                     if self.reaction_requires_refinement(reaction=reaction):
                                         reason = f'(i {self.iteration}) IDT is sensitive to this reaction.'
                                         key = self.add_reaction(reaction=reaction, reasons=reason)

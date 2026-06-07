@@ -459,6 +459,63 @@ Total execution time: 00:00:00\n
 ARC execution terminated on Sun Dec  4 11:50:29 2022""")
 
 
+def test_should_run_rmg():
+    """
+    Test that T3._should_run_rmg decides correctly whether RMG runs for an iteration.
+    In particular, an interrupted RMG run at the start iteration (restart_rmg=True)
+    must be resumed even when run_rmg_at_start is False.
+    """
+    # Iterations after the start iteration always run RMG.
+    assert T3._should_run_rmg(iteration=3, iteration_start=2, run_rmg_at_start=False, restart_rmg=False) is True
+    # Start iteration, RMG has not run yet -> run it.
+    assert T3._should_run_rmg(iteration=2, iteration_start=2, run_rmg_at_start=True, restart_rmg=False) is True
+    # Start iteration, RMG already completed -> skip it.
+    assert T3._should_run_rmg(iteration=2, iteration_start=2, run_rmg_at_start=False, restart_rmg=False) is False
+    # Start iteration, RMG began but did not terminate -> restart it (regression guard).
+    assert T3._should_run_rmg(iteration=2, iteration_start=2, run_rmg_at_start=False, restart_rmg=True) is True
+
+
+def test_determine_params_based_on_sa_idt_resolves_index_attr(monkeypatch):
+    """
+    determine_params_based_on_sa_idt must resolve the Cantera reaction index via the
+    reaction's .index attribute (which stays aligned with the full annotated YAML,
+    including duplicates) rather than by positional indexing into the duplicate-pruned
+    rmg_reactions list. A Cantera index that exceeds len(rmg_reactions) (as happens once
+    earlier duplicate reactions are dropped) must still resolve to the right reaction.
+    """
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    try:
+        t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_yaml_file()
+        assert len(t3.rmg_reactions) > 0
+        target = t3.rmg_reactions[0]
+        # Simulate a duplicate-pruned mechanism: this reaction's Cantera index lies
+        # beyond the length of the pruned rmg_reactions list.
+        ct_index = len(t3.rmg_reactions) + 5
+        target.index = ct_index
+        t3.iteration = 1
+        # Shape: {token: {'IDT': {reactor: {phi: {P: {T: {ct_index: coeff}}}}}}}
+        t3.sa_dict_idt = {'thermo': {'IDT': dict()},
+                          'kinetics': {'IDT': {0: {0: {1.0: {1000.0: {ct_index: 9.9}}}}}}}
+        seen_reactions = list()
+        monkeypatch.setattr(t3, 'reaction_requires_refinement',
+                            lambda reaction: seen_reactions.append(reaction) or True)
+        monkeypatch.setattr(t3, 'add_reaction', lambda reaction, reasons: 42)
+        monkeypatch.setattr(t3, 'species_requires_refinement', lambda species: False)
+        _, rxn_keys = t3.determine_params_based_on_sa_idt()
+        # With positional indexing the ct index is out of bounds and silently skipped;
+        # resolving by .index finds the reaction.
+        assert seen_reactions and seen_reactions[0] is target
+        assert 42 in rxn_keys
+    finally:
+        shutil.rmtree(t3.paths['SA'], ignore_errors=True)
+        t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
+        if os.path.isfile(t3_log):
+            os.remove(t3_log)
+
+
 def test_check_arc_args():
     """Test the check_arc_args() method"""
     minimal_input = os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'input.yml')

@@ -245,7 +245,7 @@ class CanteraIDT(SimulateAdapter):
             time_history.append(reactor.thermo.state, t=t_)
             if use_radical_early_exit and counter % 100 == 0:
                 concentrations = np.asarray(time_history.X[:, time_history.species_index(self.radical_label)],
-                                            dtype=np.float32)
+                                            dtype=np.float64)
                 max_c_idx = int(np.argmax(concentrations))
                 if (concentrations[max_c_idx] > concentrations[-1] * 1.2
                         and len(concentrations) > max_c_idx * 1.1
@@ -466,6 +466,10 @@ class CanteraIDT(SimulateAdapter):
                                        1.0,
                                        dh_,
                                        dk_,
+                                       atol=self.atol,
+                                       rtol=self.rtol,
+                                       sa_atol=self.sa_atol,
+                                       sa_rtol=self.sa_rtol,
                                        )
 
             future_to_task = dict()
@@ -817,11 +821,19 @@ def worker(task: tuple,
            max_idt: float = 1.0,
            delta_h: float = DELTA_H,
            delta_k: float = DELTA_K,
+           atol: float = 1e-16,
+           rtol: float = 1e-8,
+           sa_atol: float = 1e-6,
+           sa_rtol: float = 1e-4,
            ) -> dict:
     """
     Worker function (must be picklable for ProcessPoolExecutor) that perturbs a single
     parameter, builds a temporary CanteraIDT adapter against the perturbed model, and
     returns the IDT dictionary for that perturbation.
+
+    The integration tolerances are passed through so the perturbed run uses the same
+    ``atol``/``rtol`` as the baseline run; otherwise the finite-difference SA
+    ``(IDT_pert - IDT) / (IDT * delta)`` would be biased by differing integrator accuracy.
     """
     if not isinstance(task, tuple) or len(task) != 2:
         raise ValueError(f'Task must be a tuple of length 2, got: {task}')
@@ -846,7 +858,8 @@ def worker(task: tuple,
             raise ValueError(f'Unknown task type {kind}')
         if success:
             new_paths = {**paths, 'cantera annotated': perturbed_model_path}
-            ct_idt_adapter = CanteraIDT(t3=t3, paths=new_paths, rmg=rmg, logger=logger)
+            ct_idt_adapter = CanteraIDT(t3=t3, paths=new_paths, rmg=rmg, logger=logger,
+                                        atol=atol, rtol=rtol, sa_atol=sa_atol, sa_rtol=sa_rtol)
             return ct_idt_adapter.simulate_idt_for_all_reactors(save_yaml=False,
                                                                 save_fig=False,
                                                                 energy='on',
