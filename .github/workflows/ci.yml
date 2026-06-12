@@ -144,7 +144,7 @@ jobs:
 
       # 9. Upload Coverage
       - name: Upload coverage data
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: T3/coverage.xml
