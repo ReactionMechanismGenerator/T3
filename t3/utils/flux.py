@@ -648,8 +648,9 @@ def create_digraph(flux_graph: dict,
             species_to_consider.update(rop_list[0])
     xs = [v for k, v in profile['X'].items() if k in species_to_consider]
     if not len(xs):
-        print(f'Could not create a flux diagram for observables {observables} at {time} s. '
-              f'Could not simulate the system.')
+        msg = (f'Could not create a flux diagram for observables {observables} at {time} s. '
+               f'Could not simulate the system.')
+        logger.warning(msg) if logger is not None else print(msg)
         return
     x_max, x_min = max(xs), min(xs)
     abs_rops = [abs(values[1]) for inner_dict in flux_graph.values() for values in inner_dict.values()]
@@ -723,7 +724,8 @@ def create_digraph(flux_graph: dict,
     try:
         graph.write(graph_png_path, format='png')
     except AssertionError:
-        print(f'Could not create a flux diagram for observables {observables} at {time} s.')
+        msg = f'Could not create a flux diagram for observables {observables} at {time} s.'
+        logger.warning(msg) if logger is not None else print(msg)
 
 
 def add_edges(graph: pydot.Dot,
