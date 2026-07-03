@@ -21,6 +21,8 @@ import re
 import shutil
 from collections import deque
 
+import cantera as ct
+
 from arc.common import (get_number_with_ordinal_indicator,
                         get_ordinal_indicator,
                         key_by_val,
@@ -37,6 +39,7 @@ from t3.chem import T3Species, T3Reaction, T3Status, KineticsMethod, ThermoMetho
 from t3.common import (DATA_BASE_PATH,
                        PROJECTS_BASE_PATH,
                        VALID_CHARS,
+                       convert_termination_time_to_seconds,
                        delete_root_rmg_log,
                        get_species_by_label,
                        sa_dict_from_yaml,
@@ -49,6 +52,8 @@ from t3.logger import Logger
 from t3.runners.rmg_runner import rmg_runner, run_arkane_job
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
+from t3.utils.fix_cantera import fix_cantera
+from t3.utils.flux import generate_flux
 from t3.utils.libraries import append_to_rmg_libraries
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 from t3.utils.cantera_parser import load_cantera_yaml_file
@@ -293,6 +298,8 @@ class T3:
                             content=comparison,
                         )
 
+            self._generate_flux_diagrams()
+
             additional_calcs_required = self.determine_species_and_reactions_to_calculate()
 
             # ARC
@@ -321,6 +328,7 @@ class T3:
                              f'------------------------------------------------------\n')
             self.set_paths()
             self.run_rmg(restart_rmg=False)
+            self._generate_flux_diagrams()
 
         self.logger.log_species_summary(species_dict=self.species)
         self.logger.log_reactions_summary(reactions_dict=self.reactions)
@@ -355,6 +363,7 @@ class T3:
             'chem annotated': os.path.join(iteration_path, 'RMG', 'chemkin', 'chem_annotated.inp'),
             'species dict': os.path.join(iteration_path, 'RMG', 'chemkin', 'species_dictionary.txt'),
             'figs': os.path.join(iteration_path, 'Figures'),
+            'flux diagrams': os.path.join(iteration_path, 'flux'),
             'SA': os.path.join(iteration_path, 'SA'),
             'SA coefficients': os.path.join(iteration_path, 'SA', 'sa_coefficients.yml'),
             'SA dict': os.path.join(iteration_path, 'SA', 'sa.yaml'),
@@ -1550,6 +1559,182 @@ class T3:
             if reason not in self.reactions[rxn_key].reasons:
                 self.reactions[rxn_key].reasons.append(reason)
         return None
+
+    def _select_flux_reactors(self) -> list[int]:
+        """Resolve flux_diagram_reactors to 0-based reactor indices (None -> first reactor)."""
+        n = len(self.rmg['reactors'])
+        selection = self.t3['options']['flux_diagram_reactors']
+        if selection is None:
+            return [0] if n else []
+        if selection == 'all':
+            return list(range(n))
+        numbers = selection if isinstance(selection, list) else [selection]
+        indices = []
+        for num in numbers:
+            idx = num - 1  # option is 1-based
+            if 0 <= idx < n and idx not in indices:
+                indices.append(idx)
+            elif not (0 <= idx < n):
+                self.logger.warning(f'flux_diagram_reactors: reactor {num} out of range '
+                                    f'(have {n}); skipping.')
+        return indices
+
+    def _flux_observables(self) -> list[str]:
+        """Base-label observables for flux, independent of whether SA ran (order-preserving dedupe)."""
+        labels = [s['label'] for s in self.rmg['species']
+                  if s.get('observable') or s.get('SA_observable')] or list(self.sa_observables)
+        seen, deduped = set(), []
+        for label in labels:
+            if label not in seen:
+                seen.add(label)
+                deduped.append(label)
+        return deduped
+
+    def _cantera_name_map(self, model) -> tuple[dict, set, set]:
+        """Return (base_map, ambiguous_bases, full_names).
+
+        base_map: base label ('H') -> full cantera name ('H(3)').
+        ambiguous_bases: base labels that map to >1 species (unusable as a base match).
+        full_names: the set of exact cantera species names (an exact full-name match always wins).
+        """
+        base_map, ambiguous, full_names = dict(), set(), set()
+        for i in range(model.n_species):
+            name = model.species()[i].name
+            full_names.add(name)
+            base = name.split('(')[0]
+            if base in base_map and base_map[base] != name:
+                ambiguous.add(base)
+            base_map[base] = name
+        return base_map, ambiguous, full_names
+
+    def _resolve_species_name(self, label: str, base_map: dict, ambiguous: set,
+                              full_names: set) -> str | None:
+        """Resolve an rmg label to a full cantera name; exact full-name wins over base match."""
+        if label in full_names:
+            return label
+        if label in base_map and label not in ambiguous:
+            return base_map[label]
+        return None
+
+    def _flux_reactor_type(self) -> tuple[str, bool] | None:
+        """Map the configured simulate adapter to (flux reactor_type, energy) or None if unsupported.
+
+        generate_flux supports only 'BatchP' and 'JSR'. PFR / constant-UV adapters have no flux
+        equivalent, so they are unsupported (skip+warn).
+        """
+        adapter = ((self.t3.get('sensitivity') or {}).get('adapter') or '')
+        supported = {'CanteraJSR': ('JSR', False),
+                     'CanteraConstantTP': ('BatchP', False),
+                     'CanteraConstantHP': ('BatchP', True),   # adiabatic const-P -> energy on
+                     'RMGConstantTP': ('BatchP', False),
+                     '': ('BatchP', False)}                    # no adapter: gas batch const T P default
+        unsupported = {'CanteraConstantUV', 'CanteraPFR', 'CanteraPFRTProfile'}
+        if adapter in supported:
+            if adapter == '':
+                self.logger.info('No sensitivity adapter set; assuming a BatchP flux reactor.')
+            return supported[adapter]
+        if adapter in unsupported:
+            self.logger.warning(f"Flux diagrams are not supported for simulate adapter "
+                                f"'{adapter}'; skipping flux diagrams.")
+            return None
+        self.logger.warning(f"Unknown simulate adapter '{adapter}'; assuming a BatchP flux reactor.")
+        return ('BatchP', False)
+
+    def _flux_conditions_from_reactor(self, reactor: dict, base_map: dict, ambiguous: set,
+                                      full_names: set, reactor_type: str, energy: bool) -> dict | None:
+        """Build generate_flux conditions from one RMG reactor, or None if the reactor is unusable.
+
+        A reactor is skipped entirely (returns None) if it is liquid/ranged, lacks a termination
+        time, or if ANY species with positive concentration cannot be unambiguously mapped to a
+        cantera species — dropping a real reactant would silently distort the flux graph.
+        """
+        if reactor.get('P') is None or reactor['type'] != 'gas batch constant T P':
+            self.logger.warning(f"Flux-diagram conditions are derived only from 'gas batch constant "
+                                f"T P' reactor entries; skipping reactor entry of type "
+                                f"'{reactor.get('type')}'.")
+            return None
+        if isinstance(reactor['T'], list) or isinstance(reactor['P'], list):
+            self.logger.warning('Flux diagrams do not support ranged T/P reactors; skipping.')
+            return None
+        if reactor.get('termination_time') is None:
+            self.logger.warning('Flux diagrams require a reactor termination_time; skipping.')
+            return None
+        composition = dict()
+        for spc in self.rmg['species']:
+            conc = spc['concentration']
+            if isinstance(conc, (list, tuple)):
+                self.logger.warning('Flux diagrams do not support ranged concentrations; skipping reactor.')
+                return None
+            if conc <= 0:
+                continue
+            name = self._resolve_species_name(spc['label'], base_map, ambiguous, full_names)
+            if name is None:
+                self.logger.warning(f"Flux diagrams: reactant '{spc['label']}' (concentration "
+                                    f"{conc}) could not be mapped to a cantera species; "
+                                    f"skipping this reactor to avoid a distorted flux graph.")
+                return None
+            composition[name] = conc
+        if not composition:
+            self.logger.warning('Flux diagrams: no positive-concentration species for this reactor; skipping.')
+            return None
+        t_final = convert_termination_time_to_seconds(reactor['termination_time'])
+        return {'reactor_type': reactor_type, 'energy': energy,
+                'T': reactor['T'], 'P': reactor['P'],
+                'times': [f * t_final for f in (0.1, 0.5, 1.0)],  # sample sub-terminal + terminal
+                'composition': composition}
+
+    def _generate_flux_diagrams(self) -> None:
+        """Generate flux diagrams for the selected reactor(s). Never raises."""
+        try:
+            if not self.t3['options']['generate_flux_diagrams']:
+                return
+            model_path = self.paths['cantera annotated']
+            if not os.path.isfile(model_path):
+                self.logger.warning(f'Skipping flux diagrams: cantera model not found at {model_path}.')
+                return
+            indices = self._select_flux_reactors()
+            if not indices:
+                return
+            reactor_kind = self._flux_reactor_type()
+            if reactor_kind is None:
+                return                                    # unsupported adapter, already warned
+            reactor_type, energy = reactor_kind
+            observable_labels = self._flux_observables()
+            if not observable_labels:
+                self.logger.info('Skipping flux diagrams: no observables identified.')
+                return
+            fix_cantera(model_path=model_path)          # fix before loading (generate_flux expects fixed)
+            model = ct.Solution(model_path)
+            base_map, ambiguous, full_names = self._cantera_name_map(model)
+            observables = [name for name in
+                           (self._resolve_species_name(o, base_map, ambiguous, full_names)
+                            for o in observable_labels) if name is not None]
+            if not observables:
+                self.logger.warning(f'Skipping flux diagrams: none of the observables '
+                                    f'{observable_labels} map to cantera species.')
+                return
+            draw_images = self.t3['options']['flux_diagrams_with_images']
+            species_dict_path = self.paths['species dict'] if draw_images else None
+            for idx in indices:
+                try:
+                    conditions = self._flux_conditions_from_reactor(
+                        self.rmg['reactors'][idx], base_map, ambiguous, full_names,
+                        reactor_type, energy)
+                    if conditions is None:
+                        continue
+                    folder = self.paths['flux diagrams'] if len(indices) == 1 else \
+                        os.path.join(self.paths['flux diagrams'], f'reactor_{idx + 1}')
+                    generate_flux(model_path=model_path, folder_path=folder,
+                                  observables=observables,
+                                  draw_molecule_images=draw_images,
+                                  species_dictionary_path=species_dict_path,
+                                  logger=self.logger, fix_cantera_model=False,
+                                  **conditions)
+                except Exception as e:
+                    self.logger.warning(f'Could not generate flux diagram for reactor {idx + 1}: '
+                                        f'{e.__class__.__name__}: {e}')
+        except Exception as e:
+            self.logger.warning(f'Flux-diagram generation failed: {e.__class__.__name__}: {e}')
 
     def dump_sa_coefficients(self):
         """

@@ -805,6 +805,29 @@ def test_determine_reactions_based_on_sa_cantera():
             os.remove(t3_log)
 
 
+def test_generate_flux_diagrams():
+    """_generate_flux_diagrams resolves base-label observables to cantera names and writes a diagram."""
+    import shutil
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1, set_paths=True)
+    # minimal_data species labels are base labels ('H2','O2','H','OH'); model uses 'H2(1)' etc.
+    t3.sa_observables = ['H', 'OH']            # base labels on purpose -> must be mapped
+    t3.rmg['reactors'][0]['termination_time'] = (0.001, 's')  # keep the batch integration fast
+    t3.t3['options']['generate_flux_diagrams'] = True
+    t3.t3['options']['flux_diagrams_with_images'] = True
+    t3.t3['options']['flux_diagram_reactors'] = None
+    try:
+        t3._generate_flux_diagrams()
+        pngs = []
+        for root, _d, files in os.walk(t3.paths['flux diagrams']):
+            pngs += [f for f in files if f.startswith('flux_diagram_') and f.endswith('.png')]
+        assert pngs, 'expected at least one flux diagram PNG'
+        # image mode drew molecule PNGs
+        assert os.path.isdir(os.path.join(t3.paths['flux diagrams'], 'species_images'))
+    finally:
+        shutil.rmtree(t3.paths['flux diagrams'], ignore_errors=True)
+
+
 def test_determine_reactions_based_on_sa_rmg():
     """Test determining reactions to calculate based on SA using the RMGConstantTP adapter"""
     t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
