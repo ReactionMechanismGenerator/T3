@@ -5,7 +5,7 @@ used for input validation
 
 import os
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_validator, model_validator
 
@@ -32,6 +32,9 @@ class T3Options(BaseModel):
     A class for validating input.T3.options arguments
     """
     flux_adapter: Annotated[str, Field(max_length=255)] = 'RMG'
+    generate_flux_diagrams: bool = True
+    flux_diagrams_with_images: bool = True
+    flux_diagram_reactors: int | list[int] | Literal['all'] | None = None
     profiles_adapter: Annotated[str, Field(max_length=255)] = 'RMG'
     collision_violators_thermo: bool = False
     collision_violators_rates: bool = False
@@ -65,6 +68,19 @@ class T3Options(BaseModel):
         if self.collision_violators_rates:
             self.collision_violators_thermo = True
         return self
+
+    @field_validator('flux_diagram_reactors')
+    @classmethod
+    def check_flux_diagram_reactors(cls, value):
+        """flux_diagram_reactors: 1-based reactor number(s) or 'all'."""
+        if value is None or value == 'all':
+            return value
+        nums = value if isinstance(value, list) else [value]
+        for n in nums:
+            if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+                raise ValueError(f'flux_diagram_reactors must be positive 1-based int(s) or '
+                                 f'"all"; got {value!r}')
+        return value
 
     @field_validator('library_name')
     @classmethod
