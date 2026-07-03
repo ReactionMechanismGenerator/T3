@@ -39,6 +39,9 @@ def generate_flux(model_path: str,
                   fix_cantera_model: bool = True,
                   allowed_nodes: list[str] | None = None,
                   max_chemical_generations: int | None = None,
+                  draw_molecule_images: bool = True,
+                  species_dictionary_path: str | None = None,
+                  logger=None,
                   ):
     """
     Generate a flux diagram for a given model and composition.
@@ -75,6 +78,9 @@ def generate_flux(model_path: str,
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
                                                        any node outside this list will not appear in the flux diagram.
         max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
+        draw_molecule_images (bool, optional): Whether to render species as molecule images instead of text labels.
+        species_dictionary_path (Optional[str], optional): Path to an RMG species_dictionary.txt used to render images.
+        logger: Optional logger with ``.warning``; falls back to ``print``.
 
     Structures:
         profiles: {<time in s>: {'P': <pressure in bar>,
@@ -102,6 +108,11 @@ def generate_flux(model_path: str,
 
     generate_top_rop_bar_figs(profiles=profiles, observables=observables, folder_path=folder_path)
 
+    image_map = None
+    if draw_molecule_images and species_dictionary_path:
+        image_map = render_species_images(species_dictionary_path=species_dictionary_path,
+                                          folder_path=folder_path, logger=logger)
+
     folder_path = os.path.join(folder_path, 'flux_diagrams')
     if generate_separate_diagrams_per_observable:
         for observable in observables:
@@ -120,6 +131,7 @@ def generate_flux(model_path: str,
                                    scaling=scaling,
                                    allowed_nodes=allowed_nodes,
                                    max_chemical_generations=max_chemical_generations,
+                                   image_map=image_map,
                                    )
     else:
         generate_flux_diagrams(profiles=profiles,
@@ -134,6 +146,7 @@ def generate_flux(model_path: str,
                                scaling=scaling,
                                allowed_nodes=allowed_nodes,
                                max_chemical_generations=max_chemical_generations,
+                               image_map=image_map,
                                )
 
 
@@ -420,20 +433,21 @@ def run_batch_p(gas: ct.Solution,
     Returns:
         Dict[float, dict]: The T, P, X, and ROP profiles (values) at a specific time.
     """
+    if any((not np.isfinite(t)) or t < 0 for t in times):
+        raise ValueError(f'run_batch_p requires finite non-negative times; got {times}')
     network, reactor = set_batch_p(gas=gas, composition=composition, T=T, P=P, energy=energy, a_tol=a_tol, r_tol=r_tol)
+    try:
+        network.max_steps = int(max_steps)
+    except (AttributeError, ct.CanteraError):
+        # max_steps is an optional tuning knob; some Cantera builds don't expose it
+        # as a settable attribute — fall back to the solver default and continue.
+        pass
     stoichiometry = get_rxn_stoichiometry(gas)
     profiles = dict()
-    tau_i = 0
-    step_counter = 0
-    while tau_i < len(times):
-        t = network.step()
-        if t > times[tau_i]:
-            network.advance(times[tau_i])
-            t = times[tau_i]
-            tau_i += 1
-        step_counter += 1
-        if step_counter > max_steps:
-            break
+    for target_time in sorted(set(times)):
+        # advance directly to each requested time; network.step() could overshoot the target and
+        # then network.advance() to an earlier time raises "Cannot integrate backwards in time".
+        network.advance(target_time)
         cantera_reaction_rops = gas.net_rates_of_progress
         rops_snapshot = {spc.name: dict() for spc in gas.species()}
         for spc in gas.species():
@@ -444,7 +458,7 @@ def run_batch_p(gas: ct.Solution,
                         rops_snapshot[spc.name].get(rxn.equation, 0.0) + rop_contribution
                     )
         profile = {'P': gas.P, 'T': gas.T, 'X': {s.name: x for s, x in zip(gas.species(), gas.X)}, 'ROPs': rops_snapshot}
-        profiles[t] = profile
+        profiles[target_time] = profile
     return profiles
 
 
@@ -527,6 +541,7 @@ def generate_flux_diagrams(profiles: dict,
                            scaling: float | None = None,
                            allowed_nodes: list[str] | None = None,
                            max_chemical_generations: int | None = None,
+                           image_map: dict[str, str] | None = None,
                            ):
     """
     Generate flux diagrams.
@@ -577,6 +592,7 @@ def generate_flux_diagrams(profiles: dict,
                        display_r_n_p=display_r_n_p,
                        scaling=scaling,
                        allowed_nodes=allowed_nodes,
+                       image_map=image_map,
                        )
 
 
@@ -594,6 +610,7 @@ def create_digraph(flux_graph: dict,
                    display_r_n_p: bool = True,
                    scaling: float | None = None,
                    allowed_nodes: list[str] | None = None,
+                   image_map: dict[str, str] | None = None,
                    ) -> None:
     """
     Create a directed graph from the flux graph and save it as a .dot file.
@@ -642,6 +659,7 @@ def create_digraph(flux_graph: dict,
                                width=get_width(x=profile['X'][origin_label], x_min=x_min, x_max=x_max),
                                concentration=profile['X'][origin_label],
                                display_concentrations=display_concentrations,
+                               image_path=image_map.get(origin_label) if image_map else None,
                                )
         rxns_rop = flux_graph[origin_label] if origin_label in flux_graph.keys() else dict()
         for rxn, rop_list in rxns_rop.items():
@@ -660,6 +678,7 @@ def create_digraph(flux_graph: dict,
                                          width=get_width(x=profile['X'][downstream_node_label], x_min=x_min, x_max=x_max),
                                          concentration=profile['X'][downstream_node_label],
                                          display_concentrations=display_concentrations,
+                                         image_path=image_map.get(downstream_node_label) if image_map else None,
                                          )
                                 for downstream_node_label in downstream_node_labels]
 
@@ -686,6 +705,12 @@ def create_digraph(flux_graph: dict,
         for node in graph.get_nodes():
             if node.get_name() not in allowed_nodes:
                 graph.del_node(node)
+    if image_map:
+        missing = sorted({n.get_name().strip('"') for n in graph.get_nodes()}
+                         - set(image_map.keys()))
+        if missing:
+            print(f'Flux diagram at {time} s: no molecule image for {missing}; '
+                  f'used text labels for these.')
     graph_dot_path = os.path.join(folder_path, f'flux_diagram_{time}_s.dot')
     graph_png_path = os.path.join(folder_path, f'flux_diagram_{time}_s.png')
     graph.write(graph_dot_path)

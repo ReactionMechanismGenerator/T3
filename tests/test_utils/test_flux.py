@@ -336,6 +336,42 @@ def test_get_node():
     assert 'fontsize=8' in node_f_str
 
 
+def test_generate_flux_with_images():
+    """generate_flux(images) populates species_images/ and writes image-mode flux PNGs."""
+    model_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                              'RMG', 'cantera_from_ck', 'chem_annotated.yaml')
+    species_dict_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                                     'RMG', 'chemkin', 'species_dictionary.txt')
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_generate_flux_images')
+    flux.generate_flux(model_path=model_path, folder_path=folder_path,
+                       observables=['H(3)'], times=[0.001],
+                       composition={'H2(1)': 0.5, 'O2(2)': 0.5},
+                       T=1000, P=1, reactor_type='BatchP',
+                       draw_molecule_images=True,
+                       species_dictionary_path=species_dict_path,
+                       fix_cantera_model=False)
+    assert os.path.isdir(os.path.join(folder_path, 'species_images'))
+    assert os.path.isfile(os.path.join(folder_path, 'flux_diagrams', 'flux_diagram_0.001_s.png'))
+    with open(os.path.join(folder_path, 'flux_diagrams', 'flux_diagram_0.001_s.dot')) as f:
+        dot_text = f.read()
+    assert 'image=' in dot_text
+
+
+def test_generate_flux_images_bad_dict_falls_back():
+    """draw_molecule_images=True with a missing dict falls back to text, no crash."""
+    model_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                              'RMG', 'cantera_from_ck', 'chem_annotated.yaml')
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_generate_flux_images_fallback')
+    flux.generate_flux(model_path=model_path, folder_path=folder_path,
+                       observables=['H(3)'], times=[0.001],
+                       composition={'H2(1)': 0.5, 'O2(2)': 0.5},
+                       T=1000, P=1, reactor_type='BatchP',
+                       draw_molecule_images=True,
+                       species_dictionary_path=os.path.join(TEST_DATA_BASE_PATH, 'nope.txt'),
+                       fix_cantera_model=False)
+    assert os.path.isfile(os.path.join(folder_path, 'flux_diagrams', 'flux_diagram_0.001_s.png'))
+
+
 def test_render_species_images():
     """render_species_images draws every species and returns a label->png map."""
     species_dict_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
