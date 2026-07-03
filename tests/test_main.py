@@ -832,6 +832,41 @@ def test_generate_flux_diagrams():
         shutil.rmtree(t3.paths['flux diagrams'], ignore_errors=True)
 
 
+def test_flux_reactor_type():
+    """_flux_reactor_type maps the simulate adapter to (reactor_type, energy) or None."""
+    t3 = run_minimal()
+    cases = {
+        'CanteraJSR': ('JSR', False),
+        'CanteraConstantTP': ('BatchP', False),
+        'CanteraConstantHP': ('BatchP', True),
+        'CanteraConstantUV': None,
+        'CanteraPFR': None,
+        'FooAdapter': None,          # unknown adapter -> skip, do not default to BatchP
+    }
+    for adapter, expected in cases.items():
+        t3.t3['sensitivity'] = {'adapter': adapter}
+        assert t3._flux_reactor_type() == expected, f'adapter {adapter}'
+    # no sensitivity adapter configured -> default gas batch const T P
+    t3.t3['sensitivity'] = None
+    assert t3._flux_reactor_type() == ('BatchP', False)
+
+
+def test_select_flux_reactors():
+    """_select_flux_reactors resolves 1-based selection to 0-based indices, dropping out-of-range."""
+    t3 = run_minimal()
+    t3.rmg['reactors'] = [{}, {}, {}]  # three reactors; only the count matters here
+    t3.t3['options']['flux_diagram_reactors'] = None
+    assert t3._select_flux_reactors() == [0]
+    t3.t3['options']['flux_diagram_reactors'] = 'all'
+    assert t3._select_flux_reactors() == [0, 1, 2]
+    t3.t3['options']['flux_diagram_reactors'] = 2
+    assert t3._select_flux_reactors() == [1]
+    t3.t3['options']['flux_diagram_reactors'] = [1, 3]
+    assert t3._select_flux_reactors() == [0, 2]
+    t3.t3['options']['flux_diagram_reactors'] = [2, 9]  # 9 is out of range -> dropped
+    assert t3._select_flux_reactors() == [1]
+
+
 def test_determine_reactions_based_on_sa_rmg():
     """Test determining reactions to calculate based on SA using the RMGConstantTP adapter"""
     t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),

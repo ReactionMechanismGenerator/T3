@@ -19,6 +19,7 @@ import inspect
 import os
 import re
 import shutil
+import traceback
 from collections import deque
 
 import cantera as ct
@@ -1637,8 +1638,9 @@ class T3:
             self.logger.warning(f"Flux diagrams are not supported for simulate adapter "
                                 f"'{adapter}'; skipping flux diagrams.")
             return None
-        self.logger.warning(f"Unknown simulate adapter '{adapter}'; assuming a BatchP flux reactor.")
-        return ('BatchP', False)
+        self.logger.warning(f"Unknown simulate adapter '{adapter}' — cannot determine the flux "
+                            f"reactor type; skipping flux diagrams.")
+        return None
 
     def _flux_conditions_from_reactor(self, reactor: dict, base_map: dict, ambiguous: set,
                                       full_names: set, reactor_type: str, energy: bool) -> dict | None:
@@ -1715,15 +1717,19 @@ class T3:
                 return
             draw_images = self.t3['options']['flux_diagrams_with_images']
             species_dict_path = self.paths['species dict'] if draw_images else None
+            # Use a per-reactor subfolder whenever the user explicitly selected reactor(s) or when
+            # more than one reactor is drawn; the generic folder is reserved for the default case
+            # (no explicit selection -> the single first reactor), preserving reactor identity.
+            explicit = self.t3['options']['flux_diagram_reactors'] is not None
             for idx in indices:
+                folder = self.paths['flux diagrams'] if (not explicit and len(indices) == 1) else \
+                    os.path.join(self.paths['flux diagrams'], f'reactor_{idx + 1}')
                 try:
                     conditions = self._flux_conditions_from_reactor(
                         self.rmg['reactors'][idx], base_map, ambiguous, full_names,
                         reactor_type, energy)
                     if conditions is None:
                         continue
-                    folder = self.paths['flux diagrams'] if len(indices) == 1 else \
-                        os.path.join(self.paths['flux diagrams'], f'reactor_{idx + 1}')
                     generate_flux(model_path=model_path, folder_path=folder,
                                   observables=observables,
                                   draw_molecule_images=draw_images,
@@ -1731,10 +1737,12 @@ class T3:
                                   logger=self.logger, fix_cantera_model=False,
                                   **conditions)
                 except Exception as e:
-                    self.logger.warning(f'Could not generate flux diagram for reactor {idx + 1}: '
-                                        f'{e.__class__.__name__}: {e}')
+                    self.logger.warning(f'Could not generate flux diagram for reactor {idx + 1} '
+                                        f'(target folder {folder}): {e.__class__.__name__}: {e}')
+                    self.logger.debug(traceback.format_exc())
         except Exception as e:
             self.logger.warning(f'Flux-diagram generation failed: {e.__class__.__name__}: {e}')
+            self.logger.debug(traceback.format_exc())
 
     def dump_sa_coefficients(self):
         """

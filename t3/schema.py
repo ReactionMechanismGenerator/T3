@@ -69,7 +69,7 @@ class T3Options(BaseModel):
             self.collision_violators_thermo = True
         return self
 
-    @field_validator('flux_diagram_reactors')
+    @field_validator('flux_diagram_reactors', mode='before')
     @classmethod
     def check_flux_diagram_reactors(cls, value):
         """flux_diagram_reactors: 1-based reactor number(s) or 'all'."""

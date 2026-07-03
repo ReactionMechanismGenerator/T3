@@ -120,6 +120,16 @@ def test_t3options_flux_diagram_reactors_rejects_bad():
             T3Options(flux_diagram_reactors=bad)
 
 
+def test_t3options_flux_diagram_reactors_rejects_bool():
+    """bool must be rejected (not silently coerced to int) whether scalar or in a list."""
+    import pytest
+    from pydantic import ValidationError
+    from t3.schema import T3Options
+    for bad in [True, False, [True]]:
+        with pytest.raises(ValidationError):
+            T3Options(flux_diagram_reactors=bad)
+
+
 def test_t3_sensitivity_schema():
     """Test creating an instance of T3Sensitivity"""
     t3_sensitivity = T3Sensitivity(adapter='CanteraConstantTP',

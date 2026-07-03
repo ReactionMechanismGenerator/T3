@@ -132,6 +132,7 @@ def generate_flux(model_path: str,
                                    allowed_nodes=allowed_nodes,
                                    max_chemical_generations=max_chemical_generations,
                                    image_map=image_map,
+                                   logger=logger,
                                    )
     else:
         generate_flux_diagrams(profiles=profiles,
@@ -147,6 +148,7 @@ def generate_flux(model_path: str,
                                allowed_nodes=allowed_nodes,
                                max_chemical_generations=max_chemical_generations,
                                image_map=image_map,
+                               logger=logger,
                                )
 
 
@@ -542,6 +544,7 @@ def generate_flux_diagrams(profiles: dict,
                            allowed_nodes: list[str] | None = None,
                            max_chemical_generations: int | None = None,
                            image_map: dict[str, str] | None = None,
+                           logger=None,
                            ):
     """
     Generate flux diagrams.
@@ -593,6 +596,7 @@ def generate_flux_diagrams(profiles: dict,
                        scaling=scaling,
                        allowed_nodes=allowed_nodes,
                        image_map=image_map,
+                       logger=logger,
                        )
 
 
@@ -611,6 +615,7 @@ def create_digraph(flux_graph: dict,
                    scaling: float | None = None,
                    allowed_nodes: list[str] | None = None,
                    image_map: dict[str, str] | None = None,
+                   logger=None,
                    ) -> None:
     """
     Create a directed graph from the flux graph and save it as a .dot file.
@@ -709,8 +714,9 @@ def create_digraph(flux_graph: dict,
         missing = sorted({n.get_name().strip('"') for n in graph.get_nodes()}
                          - set(image_map.keys()))
         if missing:
-            print(f'Flux diagram at {time} s: no molecule image for {missing}; '
-                  f'used text labels for these.')
+            msg = (f'Flux diagram at {time} s: no molecule image for {missing}; '
+                   f'used text labels for these.')
+            logger.warning(msg) if logger is not None else print(msg)
     graph_dot_path = os.path.join(folder_path, f'flux_diagram_{time}_s.dot')
     graph_png_path = os.path.join(folder_path, f'flux_diagram_{time}_s.png')
     graph.write(graph_dot_path)
