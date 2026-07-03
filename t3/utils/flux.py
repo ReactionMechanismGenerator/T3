@@ -800,6 +800,61 @@ def get_rxn_in_relevant_direction(rxn: str,
     return arrow.join([wells[i], wells[not i]])
 
 
+def render_species_images(species_dictionary_path: str,
+                          folder_path: str,
+                          logger=None,
+                          ) -> dict[str, str]:
+    """
+    Render each species in an RMG species dictionary to a PNG molecule image.
+
+    Args:
+        species_dictionary_path (str): Path to an RMG ``species_dictionary.txt``.
+        folder_path (str): Directory under which a ``species_images`` subfolder is created.
+        logger: Optional logger with ``.warning``; falls back to ``print``.
+
+    Returns:
+        dict[str, str]: label -> absolute PNG path, for species drawn successfully.
+    """
+    def _warn(msg):
+        (logger.warning if logger is not None else print)(msg)
+
+    if not species_dictionary_path or not os.path.isfile(species_dictionary_path):
+        _warn(f'Cannot render species images: species dictionary not found at '
+              f'{species_dictionary_path}.')
+        return dict()
+
+    species_dict = load_rmg_species_dictionary_file(species_dictionary_path)
+    if not species_dict:
+        return dict()
+
+    images_dir = os.path.join(folder_path, 'species_images')
+    if not os.path.isdir(images_dir):
+        os.makedirs(images_dir)
+
+    image_map, failed, used_names = dict(), list(), set()
+    for label, molecule in species_dict.items():
+        base = ''.join(c if c.isalnum() else '_' for c in label).strip('_') or 'species'
+        safe_label, n = base, 1
+        while safe_label in used_names:            # e.g. 'A-B' and 'A_B' both sanitize to 'A_B' -> suffix _1, _2, ...
+            safe_label = f'{base}_{n}'
+            n += 1
+        used_names.add(safe_label)
+        target = os.path.join(images_dir, f'{safe_label}.png')
+        try:
+            MoleculeDrawer().draw(molecule, file_format='png', target=target)
+        except Exception as e:
+            failed.append(f'{label} ({type(e).__name__})')
+            continue
+        if os.path.isfile(target) and os.path.getsize(target) > 0:
+            image_map[label] = os.path.abspath(target)
+        else:
+            failed.append(label)
+    if failed:
+        _warn(f'Could not render molecule images for {len(failed)} species: {failed}. '
+              f'These nodes will fall back to text labels.')
+    return image_map
+
+
 def get_node(graph: pydot.Dot,
              label: str,
              nodes: dict,

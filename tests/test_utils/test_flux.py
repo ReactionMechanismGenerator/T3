@@ -336,6 +336,32 @@ def test_get_node():
     assert 'fontsize=8' in node_f_str
 
 
+def test_render_species_images():
+    """render_species_images draws every species and returns a label->png map."""
+    species_dict_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                                     'RMG', 'chemkin', 'species_dictionary.txt')
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_render_species_images')
+    image_map = flux.render_species_images(species_dictionary_path=species_dict_path,
+                                           folder_path=folder_path)
+    assert len(image_map) == 12
+    assert 'Ar' in image_map and 'H2(1)' in image_map
+    for label, png in image_map.items():
+        assert os.path.isfile(png) and os.path.getsize(png) > 0
+        assert png.startswith(os.path.join(folder_path, 'species_images'))
+    # collision-safety: distinct labels -> distinct files
+    assert len(set(image_map.values())) == len(image_map)
+
+
+def test_render_species_images_missing_file():
+    """A missing dictionary path yields an empty map and no species_images dir."""
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_render_species_images_missing')
+    image_map = flux.render_species_images(
+        species_dictionary_path=os.path.join(TEST_DATA_BASE_PATH, 'does_not_exist.txt'),
+        folder_path=folder_path)
+    assert image_map == {}
+    assert not os.path.isdir(os.path.join(folder_path, 'species_images'))
+
+
 def test_get_node_image_mode():
     """A node built with image_path renders as an image box with no text label."""
     graph = pydot.Dot(graph_type='digraph')
