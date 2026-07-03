@@ -10,7 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pydot
 
+from arc.molecule.draw import MoleculeDrawer
+
 from t3.utils.fix_cantera import fix_cantera
+from t3.utils.libraries import load_rmg_species_dictionary_file
 
 
 def generate_flux(model_path: str,
@@ -804,6 +807,7 @@ def get_node(graph: pydot.Dot,
              width: float | None = None,
              concentration: float | None = None,
              display_concentrations: bool = True,
+             image_path: str | None = None,
              ) -> pydot.Node:
     """
     Get an existing node from the graph or create a new one.
@@ -816,23 +820,23 @@ def get_node(graph: pydot.Dot,
         width (Optional[float], optional): The node width.
         concentration (Optional[float], optional): The node concentration.
         display_concentrations (bool, optional): Whether to display the species concentrations next to its circle.
+        image_path (Optional[str], optional): The path to a molecule image to display in the node instead of text.
 
     Returns:
         pydot.Node: The node.
     """
-    colors = {'blue': '#DCE5F4'}
+    colors = {'blue': '#DCE5F4', 'border': '#1F4E9C'}
     fontsize = 8
     if label not in nodes.keys():
-        if observables is not None and label in observables:
-            node = pydot.Node(label,
-                              style='filled',
-                              fillcolor=colors['blue'],
-                              fontsize=fontsize,
-                              )
+        is_observable = observables is not None and label in observables
+        if image_path is not None:
+            node = pydot.Node(label, shape='box', label='', image=image_path, fontsize=fontsize)
+            if is_observable:
+                node.set('color', colors['border'])
+        elif is_observable:
+            node = pydot.Node(label, style='filled', fillcolor=colors['blue'], fontsize=fontsize)
         else:
-            node = pydot.Node(label,
-                              fontsize=fontsize,
-                              )
+            node = pydot.Node(label, fontsize=fontsize)
         if display_concentrations:
             node.set('xlabel', f'{concentration:.2e}' if concentration is not None else '')
         graph.add_node(node)

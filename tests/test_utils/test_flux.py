@@ -336,6 +336,43 @@ def test_get_node():
     assert 'fontsize=8' in node_f_str
 
 
+def test_get_node_image_mode():
+    """A node built with image_path renders as an image box with no text label."""
+    graph = pydot.Dot(graph_type='digraph')
+    node = flux.get_node(graph=graph, label='HOCHO(1)', nodes=dict(),
+                         observables=['HOCHO(1)'], width=2.0, concentration=0.2,
+                         display_concentrations=True, image_path='/tmp/HOCHO_1.png')
+    assert node.get('shape') == 'box'
+    assert node.get('label') == ''            # empty text label (pydot 4.x returns raw value)
+    assert node.get('image') == '/tmp/HOCHO_1.png'
+    assert node.get('color') == '#1F4E9C'     # observable -> border color
+    assert node.get('fillcolor') is None
+    assert node.get('xlabel') is not None     # concentration still shown
+
+
+def test_get_node_image_mode_non_observable():
+    """A non-observable image node has an image/box but no border color."""
+    graph = pydot.Dot(graph_type='digraph')
+    node = flux.get_node(graph=graph, label='N2', nodes=dict(),
+                         observables=['HOCHO(1)'], width=1.0, concentration=0.98,
+                         display_concentrations=True, image_path='/tmp/N2.png')
+    assert node.get('shape') == 'box'
+    assert node.get('image') == '/tmp/N2.png'
+    assert node.get('color') is None
+
+
+def test_get_node_text_mode_unchanged():
+    """Without image_path, get_node keeps the original text-label behavior."""
+    graph = pydot.Dot(graph_type='digraph')
+    node = flux.get_node(graph=graph, label='HOCHO(1)', nodes=dict(),
+                         observables=['HOCHO(1)'], width=2.0, concentration=0.2,
+                         display_concentrations=True)
+    assert node.get('style') == 'filled'
+    assert node.get('fillcolor') == '#DCE5F4'
+    assert node.get('image') is None
+    assert node.get('shape') is None          # default ellipse
+
+
 def test_get_flux_graph(hocho_simulation_data):
     """Test getting a normalized flux profile and generating a flux graph."""
     profiles = hocho_simulation_data.copy()
