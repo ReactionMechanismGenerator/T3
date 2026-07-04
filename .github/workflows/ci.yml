@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ReactionMechanismGenerator/ARC
-          ref: linear_ts
+          ref: main
           path: ARC
 
       # 3. Checkout RMG Database
