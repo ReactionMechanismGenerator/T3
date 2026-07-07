@@ -8,6 +8,7 @@ import datetime
 import os
 import shutil
 import re
+from unittest import mock
 
 
 from arc.common import read_yaml_file
@@ -34,6 +35,9 @@ t3_minimal = {'options': {'all_core_reactions': False,
                           'external_library_path': None,
                           'fit_missing_GAV': False,
                           'flux_adapter': 'RMG',
+                          'flux_diagram_reactors': None,
+                          'flux_diagrams_with_images': True,
+                          'generate_flux_diagrams': True,
                           'library_name': 'T3lib',
                           'max_RMG_exceptions_allowed': 10,
                           'max_RMG_walltime': '00:00:05:00',
@@ -330,6 +334,7 @@ def test_set_paths():
              'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
              'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera_from_ck/chem_annotated.yaml',
              'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
+             'flux diagrams': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/flux',
              'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
              'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
                              'species_dictionary.txt',
@@ -803,6 +808,128 @@ def test_determine_reactions_based_on_sa_cantera():
         t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
         if os.path.isfile(t3_log):
             os.remove(t3_log)
+
+
+def test_generate_flux_diagrams():
+    """_generate_flux_diagrams resolves base-label observables to cantera names and writes a diagram."""
+    import shutil
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+                     iteration=1, set_paths=True)
+    # minimal_data species labels are base labels ('H2','O2','H','OH'); model uses 'H2(1)' etc.
+    t3.sa_observables = ['H', 'OH']            # base labels on purpose -> must be mapped
+    t3.rmg['reactors'][0]['termination_time'] = (0.001, 's')  # keep the batch integration fast
+    t3.t3['options']['generate_flux_diagrams'] = True
+    t3.t3['options']['flux_diagrams_with_images'] = True
+    t3.t3['options']['flux_diagram_reactors'] = None
+    try:
+        t3._generate_flux_diagrams()
+        pngs = []
+        for root, _d, files in os.walk(t3.paths['flux diagrams']):
+            pngs += [f for f in files if f.startswith('flux_diagram_') and f.endswith('.png')]
+        assert pngs, 'expected at least one flux diagram PNG'
+        # image mode drew molecule PNGs
+        assert os.path.isdir(os.path.join(t3.paths['flux diagrams'], 'species_images'))
+    finally:
+        shutil.rmtree(t3.paths['flux diagrams'], ignore_errors=True)
+
+
+def test_flux_reactor_type():
+    """_flux_reactor_type maps the simulate adapter to (reactor_type, energy) or None."""
+    t3 = run_minimal()
+    cases = {
+        'CanteraJSR': ('JSR', False),
+        'CanteraConstantTP': ('BatchP', False),
+        'CanteraConstantHP': ('BatchP', True),
+        'CanteraConstantUV': None,
+        'CanteraPFR': None,
+        'FooAdapter': None,          # unknown adapter -> skip, do not default to BatchP
+    }
+    for adapter, expected in cases.items():
+        t3.t3['sensitivity'] = {'adapter': adapter}
+        assert t3._flux_reactor_type() == expected, f'adapter {adapter}'
+    # no sensitivity adapter configured -> default gas batch const T P
+    t3.t3['sensitivity'] = None
+    assert t3._flux_reactor_type() == ('BatchP', False)
+
+
+def test_select_flux_reactors():
+    """_select_flux_reactors resolves 1-based selection to 0-based indices, dropping out-of-range."""
+    t3 = run_minimal()
+    t3.rmg['reactors'] = [{}, {}, {}]  # three reactors; only the count matters here
+    t3.t3['options']['flux_diagram_reactors'] = None
+    assert t3._select_flux_reactors() == [0]
+    t3.t3['options']['flux_diagram_reactors'] = 'all'
+    assert t3._select_flux_reactors() == [0, 1, 2]
+    t3.t3['options']['flux_diagram_reactors'] = 2
+    assert t3._select_flux_reactors() == [1]
+    t3.t3['options']['flux_diagram_reactors'] = [1, 3]
+    assert t3._select_flux_reactors() == [0, 2]
+    t3.t3['options']['flux_diagram_reactors'] = [2, 9]  # 9 is out of range -> dropped
+    assert t3._select_flux_reactors() == [1]
+
+
+def test_execute_generates_flux_for_converged_model():
+    """execute() calls _generate_flux_diagrams once more AFTER the T3 loop, on the converged model.
+
+    A regression that dropped the post-loop call would leave the final converged mechanism without a
+    flux diagram. Every heavy step (and _generate_flux_diagrams itself) is stubbed; each flux call
+    records self.iteration. In-loop calls occur for iterations 1..max_T3_iterations, while the
+    post-loop converged-model call fires only after self.iteration is incremented past that bound.
+    """
+    t3 = run_minimal()
+    t3.t3['sensitivity'] = None                      # skip the (real) SA / simulate block entirely
+    t3.t3['options']['max_T3_iterations'] = 1        # one in-loop iteration, then the post-loop RMG
+    t3.qm['species'], t3.qm['reactions'] = [], []    # no pre-loop ARC-only iteration
+    flux_call_iterations = []
+    t3.restart = lambda: (0, False, False)  # (iteration_start, run_rmg_at_start, restart_rmg)
+    t3.run_rmg = lambda *a, **k: None
+    t3.run_arc = lambda *a, **k: None
+    t3.process_arc_run = lambda *a, **k: None
+    t3.check_overtime = lambda *a, **k: False
+    t3.determine_species_and_reactions_to_calculate = lambda *a, **k: True  # never converge -> reach post-loop RMG
+    t3._generate_flux_diagrams = lambda: flux_call_iterations.append(t3.iteration)
+    try:
+        t3.execute()
+    finally:
+        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
+    assert flux_call_iterations, 'expected _generate_flux_diagrams to be called during execute()'
+    assert max(flux_call_iterations) > t3.t3['options']['max_T3_iterations'], \
+        'expected a post-loop _generate_flux_diagrams call on the converged model'
+
+
+def test_generate_flux_diagrams_explicit_single_reactor_subfolder():
+    """An explicit single-reactor selection writes to a reactor_<n> subfolder, not the generic flux folder.
+
+    With flux_diagram_reactors=2 and two reactors, _select_flux_reactors resolves to the 0-based
+    index 1, so the output folder must be '<flux diagrams>/reactor_2' (1-based) rather than the
+    generic '<flux diagrams>' folder reserved for the default single-reactor case.
+    """
+    t3 = run_minimal(iteration=1, set_paths=True)
+    t3.t3['options']['generate_flux_diagrams'] = True
+    t3.t3['options']['flux_diagrams_with_images'] = False
+    t3.t3['options']['flux_diagram_reactors'] = 2                 # explicit -> per-reactor subfolder
+    t3.rmg['reactors'] = [dict(t3.rmg['reactors'][0]), dict(t3.rmg['reactors'][0])]  # two reactors
+    # Bypass the real cantera name resolution: identity mapping keeps observables/species usable.
+    t3._flux_observables = lambda: ['H']
+    t3._cantera_name_map = lambda model: (dict(), set(), set())
+    t3._resolve_species_name = lambda label, *a, **k: label
+    model_path = t3.paths['cantera annotated']
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    open(model_path, 'w').close()                                # satisfy the os.path.isfile guard
+    captured = {}
+    with mock.patch('t3.main.fix_cantera'), \
+            mock.patch('t3.main.ct.Solution', return_value=object()), \
+            mock.patch('t3.main.generate_flux',
+                       side_effect=lambda **kw: captured.update(kw)) as mock_generate_flux:
+        try:
+            t3._generate_flux_diagrams()
+        finally:
+            shutil.rmtree(t3.paths['iteration'], ignore_errors=True)
+    assert mock_generate_flux.call_count == 1
+    expected = os.path.join(t3.paths['flux diagrams'], 'reactor_2')
+    assert captured['folder_path'] == expected, \
+        f"expected explicit-single reactor folder {expected}, got {captured.get('folder_path')}"
+    assert captured['folder_path'] != t3.paths['flux diagrams']
 
 
 def test_determine_reactions_based_on_sa_rmg():

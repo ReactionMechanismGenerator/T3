@@ -336,6 +336,105 @@ def test_get_node():
     assert 'fontsize=8' in node_f_str
 
 
+def test_generate_flux_with_images():
+    """generate_flux(images) populates species_images/ and writes image-mode flux PNGs."""
+    model_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                              'RMG', 'cantera_from_ck', 'chem_annotated.yaml')
+    species_dict_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                                     'RMG', 'chemkin', 'species_dictionary.txt')
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_generate_flux_images')
+    flux.generate_flux(model_path=model_path, folder_path=folder_path,
+                       observables=['H(3)'], times=[0.001],
+                       composition={'H2(1)': 0.5, 'O2(2)': 0.5},
+                       T=1000, P=1, reactor_type='BatchP',
+                       draw_molecule_images=True,
+                       species_dictionary_path=species_dict_path,
+                       fix_cantera_model=False)
+    assert os.path.isdir(os.path.join(folder_path, 'species_images'))
+    assert os.path.isfile(os.path.join(folder_path, 'flux_diagrams', 'flux_diagram_0.001_s.png'))
+    with open(os.path.join(folder_path, 'flux_diagrams', 'flux_diagram_0.001_s.dot')) as f:
+        dot_text = f.read()
+    assert 'image=' in dot_text
+
+
+def test_generate_flux_images_bad_dict_falls_back():
+    """draw_molecule_images=True with a missing dict falls back to text, no crash."""
+    model_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                              'RMG', 'cantera_from_ck', 'chem_annotated.yaml')
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_generate_flux_images_fallback')
+    flux.generate_flux(model_path=model_path, folder_path=folder_path,
+                       observables=['H(3)'], times=[0.001],
+                       composition={'H2(1)': 0.5, 'O2(2)': 0.5},
+                       T=1000, P=1, reactor_type='BatchP',
+                       draw_molecule_images=True,
+                       species_dictionary_path=os.path.join(TEST_DATA_BASE_PATH, 'nope.txt'),
+                       fix_cantera_model=False)
+    assert os.path.isfile(os.path.join(folder_path, 'flux_diagrams', 'flux_diagram_0.001_s.png'))
+
+
+def test_render_species_images():
+    """render_species_images draws every species and returns a label->png map."""
+    species_dict_path = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'iteration_1',
+                                     'RMG', 'chemkin', 'species_dictionary.txt')
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_render_species_images')
+    image_map = flux.render_species_images(species_dictionary_path=species_dict_path,
+                                           folder_path=folder_path)
+    assert len(image_map) == 12
+    assert 'Ar' in image_map and 'H2(1)' in image_map
+    for label, png in image_map.items():
+        assert os.path.isfile(png) and os.path.getsize(png) > 0
+        assert png.startswith(os.path.join(folder_path, 'species_images'))
+    # collision-safety: distinct labels -> distinct files
+    assert len(set(image_map.values())) == len(image_map)
+
+
+def test_render_species_images_missing_file():
+    """A missing dictionary path yields an empty map and no species_images dir."""
+    folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_render_species_images_missing')
+    image_map = flux.render_species_images(
+        species_dictionary_path=os.path.join(TEST_DATA_BASE_PATH, 'does_not_exist.txt'),
+        folder_path=folder_path)
+    assert image_map == {}
+    assert not os.path.isdir(os.path.join(folder_path, 'species_images'))
+
+
+def test_get_node_image_mode():
+    """A node built with image_path renders as an image box with no text label."""
+    graph = pydot.Dot(graph_type='digraph')
+    node = flux.get_node(graph=graph, label='HOCHO(1)', nodes=dict(),
+                         observables=['HOCHO(1)'], width=2.0, concentration=0.2,
+                         display_concentrations=True, image_path='/tmp/HOCHO_1.png')
+    assert node.get('shape') == 'box'
+    assert node.get('label') == ''            # empty text label (pydot 4.x returns raw value)
+    assert node.get('image') == '/tmp/HOCHO_1.png'
+    assert node.get('color') == '#1F4E9C'     # observable -> border color
+    assert node.get('fillcolor') is None
+    assert node.get('xlabel') is not None     # concentration still shown
+
+
+def test_get_node_image_mode_non_observable():
+    """A non-observable image node has an image/box but no border color."""
+    graph = pydot.Dot(graph_type='digraph')
+    node = flux.get_node(graph=graph, label='N2', nodes=dict(),
+                         observables=['HOCHO(1)'], width=1.0, concentration=0.98,
+                         display_concentrations=True, image_path='/tmp/N2.png')
+    assert node.get('shape') == 'box'
+    assert node.get('image') == '/tmp/N2.png'
+    assert node.get('color') is None
+
+
+def test_get_node_text_mode_unchanged():
+    """Without image_path, get_node keeps the original text-label behavior."""
+    graph = pydot.Dot(graph_type='digraph')
+    node = flux.get_node(graph=graph, label='HOCHO(1)', nodes=dict(),
+                         observables=['HOCHO(1)'], width=2.0, concentration=0.2,
+                         display_concentrations=True)
+    assert node.get('style') == 'filled'
+    assert node.get('fillcolor') == '#DCE5F4'
+    assert node.get('image') is None
+    assert node.get('shape') is None          # default ellipse
+
+
 def test_get_flux_graph(hocho_simulation_data):
     """Test getting a normalized flux profile and generating a flux graph."""
     profiles = hocho_simulation_data.copy()

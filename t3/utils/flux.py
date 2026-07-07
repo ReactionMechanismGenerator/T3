@@ -10,7 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pydot
 
+from arc.molecule.draw import MoleculeDrawer
+
 from t3.utils.fix_cantera import fix_cantera
+from t3.utils.libraries import load_rmg_species_dictionary_file
 
 
 def generate_flux(model_path: str,
@@ -36,6 +39,9 @@ def generate_flux(model_path: str,
                   fix_cantera_model: bool = True,
                   allowed_nodes: list[str] | None = None,
                   max_chemical_generations: int | None = None,
+                  draw_molecule_images: bool = True,
+                  species_dictionary_path: str | None = None,
+                  logger=None,
                   ):
     """
     Generate a flux diagram for a given model and composition.
@@ -72,6 +78,9 @@ def generate_flux(model_path: str,
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
                                                        any node outside this list will not appear in the flux diagram.
         max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
+        draw_molecule_images (bool, optional): Whether to render species as molecule images instead of text labels.
+        species_dictionary_path (Optional[str], optional): Path to an RMG species_dictionary.txt used to render images.
+        logger: Optional logger with ``.warning``; falls back to ``print``.
 
     Structures:
         profiles: {<time in s>: {'P': <pressure in bar>,
@@ -99,6 +108,11 @@ def generate_flux(model_path: str,
 
     generate_top_rop_bar_figs(profiles=profiles, observables=observables, folder_path=folder_path)
 
+    image_map = None
+    if draw_molecule_images and species_dictionary_path:
+        image_map = render_species_images(species_dictionary_path=species_dictionary_path,
+                                          folder_path=folder_path, logger=logger)
+
     folder_path = os.path.join(folder_path, 'flux_diagrams')
     if generate_separate_diagrams_per_observable:
         for observable in observables:
@@ -117,6 +131,8 @@ def generate_flux(model_path: str,
                                    scaling=scaling,
                                    allowed_nodes=allowed_nodes,
                                    max_chemical_generations=max_chemical_generations,
+                                   image_map=image_map,
+                                   logger=logger,
                                    )
     else:
         generate_flux_diagrams(profiles=profiles,
@@ -131,6 +147,8 @@ def generate_flux(model_path: str,
                                scaling=scaling,
                                allowed_nodes=allowed_nodes,
                                max_chemical_generations=max_chemical_generations,
+                               image_map=image_map,
+                               logger=logger,
                                )
 
 
@@ -417,20 +435,21 @@ def run_batch_p(gas: ct.Solution,
     Returns:
         Dict[float, dict]: The T, P, X, and ROP profiles (values) at a specific time.
     """
+    if any((not np.isfinite(t)) or t < 0 for t in times):
+        raise ValueError(f'run_batch_p requires finite non-negative times; got {times}')
     network, reactor = set_batch_p(gas=gas, composition=composition, T=T, P=P, energy=energy, a_tol=a_tol, r_tol=r_tol)
+    try:
+        network.max_steps = int(max_steps)
+    except (AttributeError, ct.CanteraError):
+        # max_steps is an optional tuning knob; some Cantera builds don't expose it
+        # as a settable attribute — fall back to the solver default and continue.
+        pass
     stoichiometry = get_rxn_stoichiometry(gas)
     profiles = dict()
-    tau_i = 0
-    step_counter = 0
-    while tau_i < len(times):
-        t = network.step()
-        if t > times[tau_i]:
-            network.advance(times[tau_i])
-            t = times[tau_i]
-            tau_i += 1
-        step_counter += 1
-        if step_counter > max_steps:
-            break
+    for target_time in sorted(set(times)):
+        # advance directly to each requested time; network.step() could overshoot the target and
+        # then network.advance() to an earlier time raises "Cannot integrate backwards in time".
+        network.advance(target_time)
         cantera_reaction_rops = gas.net_rates_of_progress
         rops_snapshot = {spc.name: dict() for spc in gas.species()}
         for spc in gas.species():
@@ -441,7 +460,7 @@ def run_batch_p(gas: ct.Solution,
                         rops_snapshot[spc.name].get(rxn.equation, 0.0) + rop_contribution
                     )
         profile = {'P': gas.P, 'T': gas.T, 'X': {s.name: x for s, x in zip(gas.species(), gas.X)}, 'ROPs': rops_snapshot}
-        profiles[t] = profile
+        profiles[target_time] = profile
     return profiles
 
 
@@ -524,6 +543,8 @@ def generate_flux_diagrams(profiles: dict,
                            scaling: float | None = None,
                            allowed_nodes: list[str] | None = None,
                            max_chemical_generations: int | None = None,
+                           image_map: dict[str, str] | None = None,
+                           logger=None,
                            ):
     """
     Generate flux diagrams.
@@ -574,6 +595,8 @@ def generate_flux_diagrams(profiles: dict,
                        display_r_n_p=display_r_n_p,
                        scaling=scaling,
                        allowed_nodes=allowed_nodes,
+                       image_map=image_map,
+                       logger=logger,
                        )
 
 
@@ -591,6 +614,8 @@ def create_digraph(flux_graph: dict,
                    display_r_n_p: bool = True,
                    scaling: float | None = None,
                    allowed_nodes: list[str] | None = None,
+                   image_map: dict[str, str] | None = None,
+                   logger=None,
                    ) -> None:
     """
     Create a directed graph from the flux graph and save it as a .dot file.
@@ -623,8 +648,9 @@ def create_digraph(flux_graph: dict,
             species_to_consider.update(rop_list[0])
     xs = [v for k, v in profile['X'].items() if k in species_to_consider]
     if not len(xs):
-        print(f'Could not create a flux diagram for observables {observables} at {time} s. '
-              f'Could not simulate the system.')
+        msg = (f'Could not create a flux diagram for observables {observables} at {time} s. '
+               f'Could not simulate the system.')
+        logger.warning(msg) if logger is not None else print(msg)
         return
     x_max, x_min = max(xs), min(xs)
     abs_rops = [abs(values[1]) for inner_dict in flux_graph.values() for values in inner_dict.values()]
@@ -639,6 +665,7 @@ def create_digraph(flux_graph: dict,
                                width=get_width(x=profile['X'][origin_label], x_min=x_min, x_max=x_max),
                                concentration=profile['X'][origin_label],
                                display_concentrations=display_concentrations,
+                               image_path=image_map.get(origin_label) if image_map else None,
                                )
         rxns_rop = flux_graph[origin_label] if origin_label in flux_graph.keys() else dict()
         for rxn, rop_list in rxns_rop.items():
@@ -657,6 +684,7 @@ def create_digraph(flux_graph: dict,
                                          width=get_width(x=profile['X'][downstream_node_label], x_min=x_min, x_max=x_max),
                                          concentration=profile['X'][downstream_node_label],
                                          display_concentrations=display_concentrations,
+                                         image_path=image_map.get(downstream_node_label) if image_map else None,
                                          )
                                 for downstream_node_label in downstream_node_labels]
 
@@ -683,13 +711,21 @@ def create_digraph(flux_graph: dict,
         for node in graph.get_nodes():
             if node.get_name() not in allowed_nodes:
                 graph.del_node(node)
+    if image_map:
+        missing = sorted({n.get_name().strip('"') for n in graph.get_nodes()}
+                         - set(image_map.keys()))
+        if missing:
+            msg = (f'Flux diagram at {time} s: no molecule image for {missing}; '
+                   f'used text labels for these.')
+            logger.warning(msg) if logger is not None else print(msg)
     graph_dot_path = os.path.join(folder_path, f'flux_diagram_{time}_s.dot')
     graph_png_path = os.path.join(folder_path, f'flux_diagram_{time}_s.png')
     graph.write(graph_dot_path)
     try:
         graph.write(graph_png_path, format='png')
     except AssertionError:
-        print(f'Could not create a flux diagram for observables {observables} at {time} s.')
+        msg = f'Could not create a flux diagram for observables {observables} at {time} s.'
+        logger.warning(msg) if logger is not None else print(msg)
 
 
 def add_edges(graph: pydot.Dot,
@@ -797,6 +833,61 @@ def get_rxn_in_relevant_direction(rxn: str,
     return arrow.join([wells[i], wells[not i]])
 
 
+def render_species_images(species_dictionary_path: str,
+                          folder_path: str,
+                          logger=None,
+                          ) -> dict[str, str]:
+    """
+    Render each species in an RMG species dictionary to a PNG molecule image.
+
+    Args:
+        species_dictionary_path (str): Path to an RMG ``species_dictionary.txt``.
+        folder_path (str): Directory under which a ``species_images`` subfolder is created.
+        logger: Optional logger with ``.warning``; falls back to ``print``.
+
+    Returns:
+        dict[str, str]: label -> absolute PNG path, for species drawn successfully.
+    """
+    def _warn(msg):
+        (logger.warning if logger is not None else print)(msg)
+
+    if not species_dictionary_path or not os.path.isfile(species_dictionary_path):
+        _warn(f'Cannot render species images: species dictionary not found at '
+              f'{species_dictionary_path}.')
+        return dict()
+
+    species_dict = load_rmg_species_dictionary_file(species_dictionary_path)
+    if not species_dict:
+        return dict()
+
+    images_dir = os.path.join(folder_path, 'species_images')
+    if not os.path.isdir(images_dir):
+        os.makedirs(images_dir)
+
+    image_map, failed, used_names = dict(), list(), set()
+    for label, molecule in species_dict.items():
+        base = ''.join(c if c.isalnum() else '_' for c in label).strip('_') or 'species'
+        safe_label, n = base, 1
+        while safe_label in used_names:            # e.g. 'A-B' and 'A_B' both sanitize to 'A_B' -> suffix _1, _2, ...
+            safe_label = f'{base}_{n}'
+            n += 1
+        used_names.add(safe_label)
+        target = os.path.join(images_dir, f'{safe_label}.png')
+        try:
+            MoleculeDrawer().draw(molecule, file_format='png', target=target)
+        except Exception as e:
+            failed.append(f'{label} ({type(e).__name__})')
+            continue
+        if os.path.isfile(target) and os.path.getsize(target) > 0:
+            image_map[label] = os.path.abspath(target)
+        else:
+            failed.append(label)
+    if failed:
+        _warn(f'Could not render molecule images for {len(failed)} species: {failed}. '
+              f'These nodes will fall back to text labels.')
+    return image_map
+
+
 def get_node(graph: pydot.Dot,
              label: str,
              nodes: dict,
@@ -804,6 +895,7 @@ def get_node(graph: pydot.Dot,
              width: float | None = None,
              concentration: float | None = None,
              display_concentrations: bool = True,
+             image_path: str | None = None,
              ) -> pydot.Node:
     """
     Get an existing node from the graph or create a new one.
@@ -816,23 +908,23 @@ def get_node(graph: pydot.Dot,
         width (Optional[float], optional): The node width.
         concentration (Optional[float], optional): The node concentration.
         display_concentrations (bool, optional): Whether to display the species concentrations next to its circle.
+        image_path (Optional[str], optional): The path to a molecule image to display in the node instead of text.
 
     Returns:
         pydot.Node: The node.
     """
-    colors = {'blue': '#DCE5F4'}
+    colors = {'blue': '#DCE5F4', 'border': '#1F4E9C'}
     fontsize = 8
     if label not in nodes.keys():
-        if observables is not None and label in observables:
-            node = pydot.Node(label,
-                              style='filled',
-                              fillcolor=colors['blue'],
-                              fontsize=fontsize,
-                              )
+        is_observable = observables is not None and label in observables
+        if image_path is not None:
+            node = pydot.Node(label, shape='box', label='', image=image_path, fontsize=fontsize)
+            if is_observable:
+                node.set('color', colors['border'])
+        elif is_observable:
+            node = pydot.Node(label, style='filled', fillcolor=colors['blue'], fontsize=fontsize)
         else:
-            node = pydot.Node(label,
-                              fontsize=fontsize,
-                              )
+            node = pydot.Node(label, fontsize=fontsize)
         if display_concentrations:
             node.set('xlabel', f'{concentration:.2e}' if concentration is not None else '')
         graph.add_node(node)

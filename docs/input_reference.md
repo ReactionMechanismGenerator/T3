@@ -19,6 +19,16 @@ t3:
   options:
     flux_adapter: RMG  # optional, can use any implemented simulation adapter, default: 'RMG'
     profiles_adapter: RMG  # optional, can use any implemented simulation adapter, default: 'RMG'
+    generate_flux_diagrams: true  # optional, whether the main T3 workflow generates flux diagrams
+                                  # after the sensitivity-analysis step of each iteration,
+                                  # default: True
+    flux_diagrams_with_images: true  # optional, whether to render each flux-diagram node as a
+                                     # molecule structure image (True) instead of a plain text
+                                     # label (False), default: True
+    flux_diagram_reactors: null  # optional, which reactor(s) to draw a flux diagram for:
+                                 # None -> the first reactor only; a 1-based reactor number or a
+                                 # list of numbers -> those reactors; 'all' -> every reactor,
+                                 # default: None
     collision_violators_thermo: false  # optional, whether to calculate thermo of species participating
                                       # in collision violating reactions, default: False
     collision_violators_rates: false  # optional, whether to calculate rates of core collision violating
