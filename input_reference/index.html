@@ -676,6 +676,16 @@ together for reference purposes.</p>
 <span class="w">  </span><span class="nt">options</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">flux_adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RMG</span><span class="w">  </span><span class="c1"># optional, can use any implemented simulation adapter, default: &#39;RMG&#39;</span>
 <span class="w">    </span><span class="nt">profiles_adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RMG</span><span class="w">  </span><span class="c1"># optional, can use any implemented simulation adapter, default: &#39;RMG&#39;</span>
+<span class="w">    </span><span class="nt">generate_flux_diagrams</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, whether the main T3 workflow generates flux diagrams</span>
+<span class="w">                                  </span><span class="c1"># after the sensitivity-analysis step of each iteration,</span>
+<span class="w">                                  </span><span class="c1"># default: True</span>
+<span class="w">    </span><span class="nt">flux_diagrams_with_images</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, whether to render each flux-diagram node as a</span>
+<span class="w">                                     </span><span class="c1"># molecule structure image (True) instead of a plain text</span>
+<span class="w">                                     </span><span class="c1"># label (False), default: True</span>
+<span class="w">    </span><span class="nt">flux_diagram_reactors</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># optional, which reactor(s) to draw a flux diagram for:</span>
+<span class="w">                                 </span><span class="c1"># None -&gt; the first reactor only; a 1-based reactor number or a</span>
+<span class="w">                                 </span><span class="c1"># list of numbers -&gt; those reactors; &#39;all&#39; -&gt; every reactor,</span>
+<span class="w">                                 </span><span class="c1"># default: None</span>
 <span class="w">    </span><span class="nt">collision_violators_thermo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, whether to calculate thermo of species participating</span>
 <span class="w">                                      </span><span class="c1"># in collision violating reactions, default: False</span>
 <span class="w">    </span><span class="nt">collision_violators_rates</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, whether to calculate rates of core collision violating</span>
