@@ -2,7 +2,7 @@
 # Contract inherited from the base image:
 #   - non-root user `mambauser`, home `/home/mambauser`, code under `/home/mambauser/Code`
 #   - micromamba at MAMBA_ROOT_PREFIX=/opt/conda, MAMBA_DOCKERFILE_ACTIVATE=1
-#   - entrypoint `/usr/local/bin/entrywrapper.sh`, which starts as root and `runuser`s to mambauser
+#   - entrypoint `/usr/local/bin/entrywrapper.sh`, which starts as root and drops to mambauser via `runuser`
 FROM --platform=linux/amd64 laxzal/arc:latest
 
 # Build the T3 layers as the unprivileged base user
@@ -10,7 +10,7 @@ USER mambauser
 
 # Clone the T3 repository into the base image's Code directory
 WORKDIR /home/mambauser/Code
-RUN git clone -b main https://github.com/ReactionMechanismGenerator/T3.git
+RUN git clone --depth 1 --single-branch -b main https://github.com/ReactionMechanismGenerator/T3.git
 WORKDIR /home/mambauser/Code/T3
 
 # Create the T3 environment (python 3.14, see environment.yml) and slim the image.
@@ -35,5 +35,5 @@ WORKDIR /home/mambauser/
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 ENV ENV_NAME=t3_env
 
-# Restore root for the inherited entrypoint (/usr/local/bin/entrywrapper.sh runuser's to mambauser)
+# Restore root for the inherited entrypoint (/usr/local/bin/entrywrapper.sh drops to mambauser via runuser)
 USER root
