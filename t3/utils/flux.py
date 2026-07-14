@@ -117,7 +117,7 @@ def generate_flux(model_path: str,
     if generate_separate_diagrams_per_observable:
         for observable in observables:
             folder_path_observable = os.path.join(folder_path, observable)
-            if not os.path.isdir(folder_path):
+            if not os.path.isdir(folder_path_observable):
                 os.makedirs(folder_path_observable)
             generate_flux_diagrams(profiles=profiles,
                                    observables=[observable],
@@ -522,7 +522,13 @@ def generate_top_rop_bar_figs(profiles: dict,
             ax.set_ylabel('ROP, mol/cm^3/s')
             ax.bar(rxn_dict.keys(), rxn_dict.values())
             ax.bar('Total ROP', sum(rxn_dict.values()))
-            ax.barlogy = True
+            # Symmetric-log y-axis: ROPs span many orders of magnitude and can
+            # be negative (net rates), so a plain log scale is invalid. Anchor
+            # the linear-region threshold to the smallest nonzero magnitude so
+            # the log region actually spans the data (the previous ``ax.barlogy``
+            # was not a Matplotlib attribute and silently did nothing).
+            magnitudes = [abs(v) for v in (*rxn_dict.values(), sum(rxn_dict.values())) if v]
+            ax.set_yscale('symlog', linthresh=min(magnitudes) if magnitudes else 1.0)
             plt.xticks(rotation=60)
             plt.tight_layout()
             fig_path = os.path.join(base_path, f'{observable}_{time}_s.png')
@@ -807,6 +813,12 @@ def get_width(x: float,
         if x == x_min == x_max:
             return 1
         return min_width + (x - x_min) * (max_width - min_width) / (x_max - x_min)
+    # Guard the log transform against zero/underflow: a species with exactly
+    # zero mole fraction (or a zero ROP) gives log10(0) = -inf and would
+    # propagate inf/nan into the width. Floor the magnitudes to a tiny positive
+    # value so the smallest inputs map to the minimum width instead.
+    eps = 1e-300
+    x, x_min, x_max = max(x, eps), max(x_min, eps), max(x_max, eps)
     return get_width(x=-np.log10(x_min) - np.log10(x_max) + np.log10(x),
                      x_min=-np.log10(x_max),
                      x_max=-np.log10(x_min),
