@@ -286,6 +286,13 @@ def test_get_width():
     assert almost_equal(flux.get_width(x=-1, x_min=2e-18, x_max=1, log_scale=True), 4)
     assert almost_equal(flux.get_width(x=-0.089, x_min=2e-18, x_max=1, log_scale=True), 3.77, places=2)
 
+    # Zero/underflow guard: a zero magnitude (e.g. a species with exactly zero
+    # mole fraction, or a zero ROP) must not yield inf/nan widths — it maps to
+    # the minimum width, and every result stays finite.
+    assert almost_equal(flux.get_width(x=0, x_min=0, x_max=1e-2, log_scale=True), 0.2)
+    assert np.isfinite(flux.get_width(x=1e-6, x_min=0, x_max=1e-2, log_scale=True))
+    assert np.isfinite(flux.get_width(x=0, x_min=0, x_max=0, log_scale=True))
+
 
 def test_get_rxn_in_relevant_direction():
     """Test getting a reaction string in the direction where the species in one of the reactants."""
