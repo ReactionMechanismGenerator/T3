@@ -36,7 +36,7 @@ from arc.species.species import check_label
 from arc.species.converter import check_xyz_dict
 from arc.settings.settings import RMG_DB_PATH
 
-from t3.chem import T3Species, T3Reaction, T3Status, KineticsMethod, ThermoMethod
+from t3.chem import T3Species, T3Reaction, T3Status, ThermoMethod
 from t3.common import (DATA_BASE_PATH,
                        PROJECTS_BASE_PATH,
                        VALID_CHARS,
@@ -58,6 +58,7 @@ from t3.utils.flux import generate_flux
 from t3.utils.libraries import append_to_rmg_libraries
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 from t3.utils.cantera_parser import load_cantera_yaml_file
+from t3.utils.uncertainty import is_this_reaction_uncertain
 
 
 class T3:
@@ -1277,9 +1278,6 @@ class T3:
             bool: Whether the reaction rate coefficient should be calculated. ``True`` if it should be.
 
         Todo:
-            Add tests.
-
-        Todo:
             Consider cases such as:
             #
             ! BM rule fitted to 2 training reactions at node Root_1R->H_N-2R->S_N-2CHNO->H_N-2CNO-inRing_Ext-2CNO-R_N-Sp-3R!H=2CCNNOO_N-2CNO->O_Ext-2CN-R
@@ -1298,18 +1296,10 @@ class T3:
         """
         if reaction is None:
             return None
-        if reaction.kinetics_method == KineticsMethod.LIBRARY:
+        if self.get_reaction_key(reaction=reaction) is not None:
+            # This reaction was already considered, do not queue it again.
             return False
-        kinetics_comment = reaction.kinetics_comment
-        if self.get_reaction_key(reaction=reaction) is None \
-                and 'Exact match found for rate rule' not in kinetics_comment \
-                and ('Estimated using an average for rate rule' in kinetics_comment
-                     or ('Estimated using template' in kinetics_comment and 'for rate rule' in kinetics_comment)
-                     or ('Estimated using average of templates' in kinetics_comment
-                         and 'for rate rule' in kinetics_comment)
-                     or '' in kinetics_comment):
-            return True
-        return False
+        return is_this_reaction_uncertain(reaction=reaction)
 
     def get_species_key(self,
                         species: T3Species | None = None,

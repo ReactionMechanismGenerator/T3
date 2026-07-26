@@ -741,6 +741,61 @@ Library reaction: JetSurF2.0
 Flux pairs: C5H11(428), C5H10(431); H(2), H2(4);"""
 
 
+def test_reaction_requires_refinement_characterization():
+    """
+    Characterize the behavior of ``T3.reaction_requires_refinement``, which delegates to the shared
+    ``is_this_reaction_uncertain`` / ``is_this_kinetics_comment_uncertain`` predicate (on top of its
+    own dedup gate via ``get_reaction_key``). A reaction is not uncertain if its kinetics method is
+    one of Library/Training Set (``CERTAIN_KINETICS_METHODS``; QM/User are deliberately NOT
+    method-level short circuits and fall through to comment analysis, like every other method --
+    see ``t3.utils.uncertainty``'s module docstring), or if its comment carries a certain
+    provenance marker (an exact rate-rule match, a matched training reaction, or a library
+    statement) that is not itself wrapped in an "Estimated using ..." qualifier; otherwise it is
+    uncertain.
+    """
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    reactions = t3.load_species_and_reactions_from_yaml_file()[1]
+
+    # A None reaction returns None.
+    assert t3.reaction_requires_refinement(None) is None
+
+    # A library reaction is never uncertain.
+    assert reactions[24].kinetics_method.value == 'Library'
+    assert t3.reaction_requires_refinement(reactions[24]) is False
+
+    # An exact-match rate-rule reaction is not uncertain.
+    assert 'Exact match found for rate rule' in reactions[8].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[8]) is False
+
+    # A "Estimated using template ... for rate rule" comment is uncertain.
+    assert 'Estimated using template' in reactions[5].kinetics_comment \
+        and 'for rate rule' in reactions[5].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[5]) is True
+
+    # A "Estimated using an average for rate rule" comment is uncertain.
+    assert 'Estimated using an average for rate rule' in reactions[82].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[82]) is True
+
+    # A "Matched reaction ... /training" reaction (this reaction IS the matched training reaction)
+    # is not uncertain, even though its kinetics method is Rate Rules (not Library/Training Set).
+    assert 'Matched reaction' in reactions[44].kinetics_comment \
+        and '/training' in reactions[44].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[44]) is False
+
+    # An unseen reaction with an empty kinetics comment is uncertain (permissive default).
+    reactions[5].kinetics_comment = ''
+    assert t3.reaction_requires_refinement(reactions[5]) is True
+
+    # An already-queued reaction (a non-None reaction key) is not flagged for refinement,
+    # regardless of its comment content, since the dedup gate short-circuits it.
+    t3.reactions = {0: reactions[82]}
+    assert t3.get_reaction_key(reaction=reactions[82]) == 0
+    assert t3.reaction_requires_refinement(reactions[82]) is False
+
+
 def test_determine_species_based_on_sa():
     """Test determining species to calculate based on sensitivity analysis"""
     t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
