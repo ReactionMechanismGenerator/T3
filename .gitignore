@@ -152,3 +152,6 @@ htmlcov/*
 
 # Local-only agent working files (never commit)
 docs/superpowers/
+docs/t3-pdep-qm-scope.md
+docs/t3-pdep-qm-impl-plan.md
+docs/t3-pdep-qm-next-session-prompt.md
