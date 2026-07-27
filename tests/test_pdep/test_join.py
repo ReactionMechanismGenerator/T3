@@ -112,13 +112,34 @@ def test_record_as_dict_contains_no_tuples():
     assert not any(isinstance(value, tuple) for value in rendered.values())
 
 
-@pytest.mark.parametrize('missing', ['network_id', 'network_ts_label', 'arc_ts_label', 'status'])
+@pytest.mark.parametrize('missing', ['network_id', 'network_ts_label', 'status'])
 def test_record_from_dict_refuses_a_missing_required_field(missing):
-    """Test that a truncated sidecar entry is refused rather than silently read as a partial join."""
+    """Test that a truncated sidecar entry is refused rather than silently read as a partial join.
+
+    ``arc_ts_label`` is deliberately not parametrized here: it is now legitimately ``None`` for a
+    transition state ``arc_ts_label()`` refused to label, so a missing/``None`` value is not itself
+    an error (see ``test_record_round_trips_with_no_arc_ts_label``).
+    """
     rendered = _record().as_dict()
     rendered[missing] = None
     with pytest.raises(ValueError, match=missing):
         TSJoinRecord.from_dict(rendered)
+
+
+def test_record_round_trips_with_no_arc_ts_label():
+    """Test that a record whose ``arc_ts_label`` is `None` survives the YAML rendering it is stored as.
+
+    This is the ``arc_ts_label()`` refusal case: the transition state still gets a record, just with
+    no ARC label, and that record must serialize and deserialize without being mistaken for a
+    truncated one.
+    """
+    record = TSJoinRecord(network_id='network4_1',
+                          network_ts_label='TS3',
+                          status=JOIN_STATUS_NOT_QUEUED,
+                          arc_ts_label=None,
+                          reason='network_id contains unsafe characters')
+    assert TSJoinRecord.from_dict(record.as_dict()) == record
+    assert TSJoinRecord.from_dict(record.as_dict()).arc_ts_label is None
 
 
 def test_validate_refuses_one_network_ts_mapped_twice():
@@ -137,6 +158,25 @@ def test_validate_refuses_one_arc_label_claimed_twice():
     shared = arc_ts_label('network4_1', 'TS3')
     records = [_record(network_ts_label='TS3'),
                _record(network_ts_label='TS4', arc_ts_label=shared)]
+    with pytest.raises(ValueError, match='Ambiguous'):
+        validate_ts_join_records(records)
+
+
+def test_validate_accepts_two_records_with_no_arc_ts_label():
+    """Test that two `arc_ts_label=None` records do not collide with each other.
+
+    Both `arc_ts_label()` refusals get `arc_ts_label=None`, and `None` is not a real ARC label two
+    transition states could actually share, so it must be exempt from the ARC-label uniqueness check.
+    """
+    records = [_record(network_ts_label='TS3', arc_ts_label=None, status=JOIN_STATUS_NOT_QUEUED),
+              _record(network_ts_label='TS4', arc_ts_label=None, status=JOIN_STATUS_NOT_QUEUED)]
+    validate_ts_join_records(records)
+
+
+def test_validate_still_refuses_a_duplicated_network_ts_with_no_arc_ts_label():
+    """Test that network-key uniqueness is still enforced even when `arc_ts_label` is `None`."""
+    records = [_record(network_ts_label='TS3', arc_ts_label=None, status=JOIN_STATUS_NOT_QUEUED),
+              _record(network_ts_label='TS3', arc_ts_label=None, status=JOIN_STATUS_NOT_QUEUED)]
     with pytest.raises(ValueError, match='Ambiguous'):
         validate_ts_join_records(records)
 

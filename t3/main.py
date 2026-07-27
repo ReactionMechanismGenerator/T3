@@ -51,6 +51,16 @@ from t3.common import (DATA_BASE_PATH,
                        )
 from t3.logger import Logger
 from t3.pdep.cache import validate_sa_cache, write_sa_cache_metadata
+from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
+                          JOIN_STATUS_NOT_QUEUED,
+                          JOIN_STATUS_QUEUED,
+                          TSJoinRecord,
+                          arc_ts_label,
+                          expected_ts_artifact_path,
+                          merge_ts_join_records,
+                          ts_join_sidecar_path,
+                          write_ts_join_sidecar,
+                          )
 from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_GENERATED,
@@ -172,6 +182,10 @@ class T3:
         self.species, self.reactions, self.paths = dict(), dict(), dict()
         self.rmg_species, self.rmg_reactions, self.executed_networks = list(), list(), list()
         self.pdep_network_selections = list()
+        # The network-TS <-> ARC-TS join records accumulated in the current iteration. Reset per
+        # iteration alongside the QM queue they describe, since the ARC project directory they are
+        # written to is per-iteration.
+        self.pdep_ts_join_records = list()
 
         if self.qm:
             self.check_arc_args()
@@ -1034,6 +1048,11 @@ class T3:
             List[int]: Entries are T3 species indices of species determined to be calculated based on SA.
         """
         species_keys = list()
+        # The join records describe THIS iteration's QM queue and are written to this iteration's ARC
+        # project directory, so they start empty here rather than accumulating across iterations: a
+        # carried-over record would point at a previous iteration's artifact path, and re-selecting
+        # the same transition state would collide with its own stale entry.
+        self.pdep_ts_join_records = list()
         if self.t3['sensitivity']['pdep_SA_threshold'] is None:
             return species_keys
         if not os.path.isdir(self.paths['PDep SA']):
@@ -1179,6 +1198,12 @@ class T3:
                         self.logger.warning(warning)
                     self.logger.info(selection.reason())
                     self.pdep_network_selections.append(selection)
+                    if selection.qualified:
+                        self.queue_pdep_transition_states(network=network,
+                                                          selection=selection,
+                                                          structures=structures,
+                                                          network_name=network_name,
+                                                          )
 
                 # The selector resolves the SA key more robustly than an exact string match (it also
                 # handles label legalization and a network reaction stored in the opposite direction),
@@ -1225,7 +1250,194 @@ class T3:
                                         species_keys.append(key)
 
         self.logger.log_pdep_network_summary(selections=self.pdep_network_selections)
+        if self.pdep_ts_join_records:
+            sidecar_path = write_ts_join_sidecar(arc_project_directory=self.paths['ARC'],
+                                                 records=self.pdep_ts_join_records)
+            self.logger.info(f'Wrote the PDep transition state join for '
+                             f'{len(self.pdep_ts_join_records)} transition state(s) to {sidecar_path}.')
+        else:
+            # A restarted run of this same iteration can leave a sidecar on disk from a crashed or
+            # interrupted earlier attempt. If this pass selected nothing, that stale sidecar would
+            # otherwise survive and lie to the post-ARC discovery step about transition states this
+            # pass never even considered.
+            stale_sidecar_path = ts_join_sidecar_path(self.paths['ARC'])
+            if os.path.isfile(stale_sidecar_path):
+                self.logger.warning(f'No PDep transition states were selected this iteration, but a '
+                                    f'stale transition state join sidecar was found at '
+                                    f'{stale_sidecar_path}; removing it.')
+                os.remove(stale_sidecar_path)
         return species_keys
+
+    def queue_pdep_transition_states(self,
+                                     network,
+                                     selection,
+                                     structures: dict,
+                                     network_name: str,
+                                     ) -> list:
+        """
+        Queue a qualified PDep network's uncertain transition states to ARC, and record the join.
+
+        Each selected transition state is queued as its own reaction so ARC computes a transition
+        state for it, and is tied to a deterministic ARC label chosen up front (see ``t3.pdep.join``)
+        rather than to ARC's own index. That makes the network-TS <-> ARC-TS correspondence known
+        here, at queue time, instead of having to be reconstructed after ARC has run.
+
+        Every selected transition state produces a record, including the ones that could NOT be
+        queued. A transition state that is silently dropped here would later be indistinguishable
+        from one whose quantum chemistry simply failed, and the two call for opposite responses.
+
+        Args:
+            network (PDepNetwork): The parsed network.
+            selection (PDepNetworkSelection): The decision for this network, already qualified.
+            structures (dict): Network species label -> RMG adjacency list, from the Arkane
+                sensitivity output. This is the only structure source that covers EDGE species as
+                well as core ones, and the parsed network is label-only, so it is required to build
+                the species ARC needs.
+            network_name (str): The network file stem, e.g. ``'network4_2'``.
+
+        Returns:
+            list: The ``TSJoinRecord`` entries created for this network.
+        """
+        path_reactions_by_ts = network.path_reactions_by_ts()
+        records = list()
+        # Several sensitive PDep reactions can belong to the same network, so
+        # `determine_species_from_pdep_network` calls this method more than once with the same
+        # `network_name` within one iteration (`self.pdep_ts_join_records` is only reset at entry to
+        # that method, not between these calls). A `ts_label` already recorded by an earlier call was
+        # already decided this iteration, possibly already added to the QM queue, so re-deciding it
+        # here would both re-invoke `add_reaction`/`build_pdep_path_reaction` for something already
+        # settled and collide with its own record in `merge_ts_join_records`.
+        already_recorded_keys = {record.key for record in self.pdep_ts_join_records}
+        for ts_label in selection.uncertain_ts_labels():
+            if (network_name, ts_label) in already_recorded_keys:
+                continue
+            path_reactions = path_reactions_by_ts.get(ts_label, tuple())
+            record_kwargs = {
+                'network_id': network_name,
+                'network_ts_label': ts_label,
+                'path_reaction_labels': tuple(reaction.label for reaction in path_reactions),
+                'path_reaction_strs': tuple(f"{' + '.join(reaction.reactants)} <=> {' + '.join(reaction.products)}"
+                                            for reaction in path_reactions),
+            }
+            try:
+                label = arc_ts_label(network_id=network_name, network_ts_label=ts_label)
+            except ValueError as e:
+                self.logger.warning(f'Not queueing transition state {ts_label} of network {network_name}: {e}')
+                records.append(TSJoinRecord(status=JOIN_STATUS_NOT_QUEUED,
+                                            reason=str(e),
+                                            arc_ts_label=None,
+                                            **record_kwargs))
+                continue
+            record_kwargs['arc_ts_label'] = label
+
+            if not path_reactions:
+                records.append(TSJoinRecord(status=JOIN_STATUS_NOT_QUEUED,
+                                            reason=f'No path reaction in {network_name} declares '
+                                                   f'transitionState={ts_label!r}.',
+                                            **record_kwargs))
+                continue
+            if len(path_reactions) > 1:
+                # One transition state label owning several path reactions is an RMG artifact, and
+                # there is no basis for picking one: computing a transition state for A <=> B and
+                # then using it for C <=> D would be silently wrong chemistry. Refuse instead.
+                records.append(TSJoinRecord(status=JOIN_STATUS_NOT_QUEUED,
+                                            reason=f'Transition state {ts_label} is shared by '
+                                                   f'{len(path_reactions)} path reactions '
+                                                   f'({", ".join(record_kwargs["path_reaction_strs"])}), so the '
+                                                   f'transition state it refers to is ambiguous.',
+                                            **record_kwargs))
+                continue
+
+            path_reaction = path_reactions[0]
+            reaction = self.build_pdep_path_reaction(path_reaction=path_reaction,
+                                                     structures=structures,
+                                                     arc_ts_label_=label)
+            if reaction is None:
+                records.append(TSJoinRecord(status=JOIN_STATUS_NOT_QUEUED,
+                                            reason=f'Could not build structures for every species of '
+                                                   f'{record_kwargs["path_reaction_strs"][0]}; the sensitivity '
+                                                   f'output does not carry an adjacency list for all of them.',
+                                            **record_kwargs))
+                continue
+
+            reason = (f'(i {self.iteration}) The rate coefficient of PDep network {network_name} is sensitive to '
+                      f'transition state {ts_label}, whose kinetics is an estimate rather than a library or '
+                      f'training value.')
+            key = self.add_reaction(reaction=reaction, reasons=reason)
+            if key is not None:
+                records.append(TSJoinRecord(status=JOIN_STATUS_QUEUED,
+                                            t3_reaction_key=key,
+                                            expected_artifact_path=expected_ts_artifact_path(
+                                                arc_project_directory=self.paths['ARC'], label=label),
+                                            reason=reason,
+                                            **record_kwargs))
+            else:
+                # The reaction is already known to T3, so it was not queued again. If it was added in
+                # an earlier iteration its QM entry has since been cleared, so ARC will not recompute
+                # it and no artifact will appear under THIS iteration's project directory. Record that
+                # plainly and leave no expected path behind: whether a usable result exists is for the
+                # post-ARC discovery step to establish, not for this one to assume.
+                records.append(TSJoinRecord(status=JOIN_STATUS_ALREADY_PRESENT,
+                                            t3_reaction_key=self.get_reaction_key(reaction=reaction),
+                                            reason=f'{reason} This reaction was already known to T3, so it was '
+                                                   f'not queued again and may not be recomputed in this iteration.',
+                                            **record_kwargs))
+        self.pdep_ts_join_records = merge_ts_join_records(existing=self.pdep_ts_join_records, new=records)
+        return records
+
+    def build_pdep_path_reaction(self,
+                                 path_reaction,
+                                 structures: dict,
+                                 arc_ts_label_: str,
+                                 ) -> T3Reaction | None:
+        """
+        Build a ``T3Reaction`` for one path reaction of a PDep network.
+
+        The parsed network carries species LABELS only, while ARC needs fully-structured species
+        (it builds the transition state from the reactant and product molecules), so the adjacency
+        lists come from the sensitivity output's ``structures`` mapping -- the one source that
+        covers edge species as well as core ones.
+
+        Args:
+            path_reaction (PDepPathReaction): The path reaction to build.
+            structures (dict): Network species label -> RMG adjacency list.
+            arc_ts_label_ (str): The ARC transition state label to assign, which is what ties this
+                reaction's eventual quantum chemistry back to the network transition state. ARC
+                honors an already-set ``ts_label`` and only invents one when it is ``None``.
+
+        Returns:
+            T3Reaction | None: The reaction, or ``None`` if any species has no adjacency list.
+        """
+        species = dict()
+        for label in tuple(path_reaction.reactants) + tuple(path_reaction.products):
+            if label in species:
+                continue
+            adjlist = structures.get(label)
+            if not adjlist:
+                self.logger.warning(f"The sensitivity output carries no adjacency list for the network species "
+                                    f"'{label}', so the reaction it participates in cannot be sent to ARC.")
+                return None
+            try:
+                species[label] = T3Species(label=label, adjlist=adjlist)
+            except Exception as e:
+                # `structures` comes from Arkane's sensitivity output, not from T3 itself, so a
+                # malformed adjacency list is an external-data problem rather than a T3 bug -- and
+                # ARC/RMG can raise a variety of exception types for one (``ValueError``, ``KeyError``,
+                # and several ``arc.exceptions`` subclasses have all been observed for different kinds
+                # of malformed input, with no common ancestor narrower than ``Exception``). Refusing
+                # to build this species must not propagate: it needs to be treated the same as the
+                # missing-structure case above, so the transition state it belongs to still gets a
+                # ``NOT_QUEUED`` record instead of losing every join record collected so far.
+                self.logger.warning(f"Could not build a species from the adjacency list of network "
+                                    f"species '{label}', so the reaction it participates in cannot be "
+                                    f"sent to ARC: {e}")
+                return None
+        return T3Reaction(
+            r_species=[species[label] for label in path_reaction.reactants],
+            p_species=[species[label] for label in path_reaction.products],
+            ts_label=arc_ts_label_,
+            is_pressure_dependent=True,
+        )
 
     def determine_species_and_reactions_based_on_collision_violators(self) -> tuple[list[int], list[int]]:
         """

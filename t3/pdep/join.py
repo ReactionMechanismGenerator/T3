@@ -112,8 +112,11 @@ class TSJoinRecord:
     Args:
         network_id (str): The network file stem, e.g. ``'network4_1'``.
         network_ts_label (str): The transition state label in the network file's namespace.
-        arc_ts_label (str): The ARC transition state label assigned by ``arc_ts_label()``.
         status (str): One of ``TS_JOIN_STATUSES``.
+        arc_ts_label (str, optional): The ARC transition state label assigned by ``arc_ts_label()``,
+            or ``None`` when no such label could be built (e.g. ``arc_ts_label()`` refused an unsafe
+            component). A transition state still gets a record in that case -- silently dropping it
+            would be indistinguishable from one whose quantum chemistry simply failed.
         path_reaction_labels (tuple): The labels of the path reactions this transition state owns.
             A transition state may own several, so this is a tuple rather than a single label, and
             a path reaction label is not unique within a network file.
@@ -127,8 +130,8 @@ class TSJoinRecord:
     def __init__(self,
                  network_id: str,
                  network_ts_label: str,
-                 arc_ts_label: str,
                  status: str,
+                 arc_ts_label: str | None = None,
                  path_reaction_labels: tuple = tuple(),
                  path_reaction_strs: tuple = tuple(),
                  t3_reaction_key: int | None = None,
@@ -191,14 +194,14 @@ class TSJoinRecord:
         Returns:
             TSJoinRecord: The reconstructed record.
         """
-        for required in ('network_id', 'network_ts_label', 'arc_ts_label', 'status'):
+        for required in ('network_id', 'network_ts_label', 'status'):
             if not record_dict.get(required):
                 raise ValueError(f"A transition state join record is missing the required field "
                                  f"'{required}': {record_dict}")
         return cls(
             network_id=record_dict['network_id'],
             network_ts_label=record_dict['network_ts_label'],
-            arc_ts_label=record_dict['arc_ts_label'],
+            arc_ts_label=record_dict.get('arc_ts_label'),
             status=record_dict['status'],
             path_reaction_labels=tuple(record_dict.get('path_reaction_labels') or ()),
             path_reaction_strs=tuple(record_dict.get('path_reaction_strs') or ()),
@@ -240,12 +243,13 @@ def validate_ts_join_records(records: list) -> None:
                              f'{record.network_ts_label} is mapped to both '
                              f'{seen_keys[record.key]} and {record.arc_ts_label}.')
         seen_keys[record.key] = record.arc_ts_label
-        if record.arc_ts_label in seen_arc_labels:
-            previous = seen_arc_labels[record.arc_ts_label]
-            raise ValueError(f"Ambiguous transition state join: the ARC label '{record.arc_ts_label}' is "
-                             f"claimed by both {previous[0]}/{previous[1]} and "
-                             f"{record.network_id}/{record.network_ts_label}.")
-        seen_arc_labels[record.arc_ts_label] = record.key
+        if record.arc_ts_label:
+            if record.arc_ts_label in seen_arc_labels:
+                previous = seen_arc_labels[record.arc_ts_label]
+                raise ValueError(f"Ambiguous transition state join: the ARC label '{record.arc_ts_label}' is "
+                                 f"claimed by both {previous[0]}/{previous[1]} and "
+                                 f"{record.network_id}/{record.network_ts_label}.")
+            seen_arc_labels[record.arc_ts_label] = record.key
 
 
 def merge_ts_join_records(existing: list, new: list) -> list:
