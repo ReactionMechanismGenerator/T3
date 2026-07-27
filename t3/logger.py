@@ -213,6 +213,34 @@ class Logger(object):
             self.log(f'{key}: {species.qm_label}{smiles} '
                      f'(status: {clean_t3_status(species)})')
 
+    def log_pdep_network_summary(self,
+                                 selections: list,
+                                 ):
+        """
+        Log a summary of the PDep network QM-selection decisions.
+
+        Args:
+            selections (list): The ``PDepNetworkSelection`` decisions to summarize.
+        """
+        self.log('\n\n\nPDep Network Summary:\n'
+                 '---------------------')
+        qualifying = [selection for selection in selections if selection.qualified]
+        if not qualifying:
+            self.log('No PDep networks qualified for QM refinement.')
+            return
+        for selection in qualifying:
+            strongest = max(selection.uncertain_path_reactions,
+                            key=lambda ts: ts.delta_ln_k,
+                            default=None)
+            evidence = ''
+            if strongest is not None:
+                comment = strongest.kinetics_comment.splitlines()[0] if strongest.kinetics_comment else ''
+                via = f' via {strongest.path_reaction_str}' if strongest.path_reaction_str else ''
+                kinetics = f', kinetics: {comment}' if comment else ''
+                evidence = (f' (strongest evidence: TS {strongest.ts_label}{via}, '
+                           f'delta_ln_k={strongest.delta_ln_k:.3g} at {strongest.condition}{kinetics})')
+            self.log(f'{selection.network_id}: {selection.reason()}{evidence}')
+
     def log_reactions_summary(self,
                               reactions_dict: dict[int, T3Reaction],
                               ):

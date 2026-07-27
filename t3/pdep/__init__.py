@@ -5,6 +5,11 @@ Deciding which pressure-dependent reaction networks deserve expensive QM refinem
 parsing the RMG network files that decision is based on.
 """
 
+from t3.pdep.api import (
+    rank_pdep_networks,
+    save_pdep_network_selections,
+    select_pdep_network,
+)
 from t3.pdep.cache import (
     sa_cache_metadata_path,
     validate_sa_cache,
@@ -20,8 +25,11 @@ from t3.pdep.selector import (
     CACHE_STATUS_CACHED_REJECTED,
     CACHE_STATUS_CACHED_VALID,
     CACHE_STATUS_GENERATED,
+    CACHE_STATUS_UNVALIDATED,
     DEFAULT_MIN_DELTA_LN_K,
     E0_PERTURBATION_J_PER_MOL,
+    EVALUATION_STATUS_EVALUATED,
+    EVALUATION_STATUS_NOT_EVALUATED,
     PDepNetworkSelection,
     SELECTOR_VERSION,
     SensitiveTransitionState,

@@ -5,6 +5,7 @@
 t3 tests test_pdep test_selector
 """
 
+import dataclasses
 import json
 import math
 import os
@@ -14,7 +15,10 @@ from arc.common import read_yaml_file
 
 from t3.common import TEST_DATA_BASE_PATH
 from t3.pdep.parser import parse_pdep_network_file, parse_pdep_network_text
-from t3.pdep.selector import (SensitiveTransitionState,
+from t3.pdep.selector import (EVALUATION_STATUS_EVALUATED,
+                              EVALUATION_STATUS_NOT_EVALUATED,
+                              PDepNetworkSelection,
+                              SensitiveTransitionState,
                               coefficient_floor,
                               resolve_direction_key,
                               select_from_sa_dict,
@@ -127,6 +131,87 @@ def test_coefficient_floor_raises_for_non_positive_perturbation():
         coefficient_floor(min_delta_ln_k=1e-3, perturbation=0)
     with pytest.raises(ValueError):
         coefficient_floor(min_delta_ln_k=1e-3, perturbation=-1.0)
+
+
+def test_coefficient_floor_raises_for_non_positive_min_delta_ln_k():
+    """Test that ``coefficient_floor`` raises ``ValueError`` for a non-positive ``min_delta_ln_k``,
+    naming that parameter (not ``perturbation``) in the message -- a zero or negative
+    ``min_delta_ln_k`` would silently produce a floor of 0.0 (or a negative floor), which is a
+    fail-open, not a deliberate 'accept anything' choice."""
+    with pytest.raises(ValueError, match='min_delta_ln_k'):
+        coefficient_floor(min_delta_ln_k=0, perturbation=8368.0)
+    with pytest.raises(ValueError, match='min_delta_ln_k'):
+        coefficient_floor(min_delta_ln_k=-1e-3, perturbation=8368.0)
+
+
+def test_coefficient_floor_raises_for_non_finite_values():
+    """Test that ``coefficient_floor`` raises ``ValueError`` for a NaN or infinite
+    ``min_delta_ln_k`` or ``perturbation`` -- a non-finite input would silently produce a NaN or
+    inf floor (nothing, or everything, qualifies) rather than a real gate."""
+    with pytest.raises(ValueError, match='min_delta_ln_k'):
+        coefficient_floor(min_delta_ln_k=math.nan, perturbation=8368.0)
+    with pytest.raises(ValueError, match='min_delta_ln_k'):
+        coefficient_floor(min_delta_ln_k=math.inf, perturbation=8368.0)
+    with pytest.raises(ValueError, match='perturbation'):
+        coefficient_floor(min_delta_ln_k=1e-3, perturbation=math.nan)
+    with pytest.raises(ValueError, match='perturbation'):
+        coefficient_floor(min_delta_ln_k=1e-3, perturbation=math.inf)
+
+
+def test_coefficient_floor_raises_when_derived_floor_overflows():
+    """Test that ``coefficient_floor`` raises ``ValueError`` when ``min_delta_ln_k`` and
+    ``perturbation`` are each individually finite and positive, but the DERIVED floor
+    ``min_delta_ln_k / perturbation`` overflows to infinity -- validating only the two inputs is
+    not enough, since finite inputs can still divide to a non-finite result that would silently
+    make the absolute gate reject nothing (an inf floor) or accept everything (a 0.0 floor from
+    the symmetric underflow case)."""
+    with pytest.raises(ValueError):
+        coefficient_floor(min_delta_ln_k=1e300, perturbation=1e-300)
+
+
+def test_coefficient_floor_raises_when_derived_floor_underflows_to_zero():
+    """Test that ``coefficient_floor`` raises ``ValueError`` when the derived floor underflows to
+    exactly 0.0 despite finite, positive inputs -- a 0.0 floor silently disables the absolute gate
+    (every finite coefficient, including a denormal structural zero, would clear it)."""
+    with pytest.raises(ValueError):
+        coefficient_floor(min_delta_ln_k=1e-300, perturbation=1e300)
+
+
+def test_select_from_sa_dict_raises_when_relative_cutoff_overflows():
+    """Test that ``select_from_sa_dict`` raises ``ValueError`` rather than silently computing a
+    non-finite cutoff when ``relative_threshold * max_abs_ts`` overflows -- an inf cutoff would
+    fail every row closed (a wrong, unreported negative) instead of surfacing the degenerate
+    threshold that produced it."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_cutoff_overflow')
+    sa_dict = {'A + B <=> C': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS1': 1.0e250}}}
+    with pytest.raises(ValueError):
+        select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='A + B <=> C',
+                            relative_threshold=1.0e250, min_delta_ln_k=1e-3, perturbation=8368.0)
+
+
+def test_select_from_sa_dict_raises_for_bad_relative_threshold():
+    """Test that ``select_from_sa_dict`` raises ``ValueError`` for a NaN or negative
+    ``relative_threshold`` before doing any work -- a NaN threshold makes every relative-gate
+    comparison silently False, which would fall through to whatever the absolute floor decides
+    rather than raising on the bad input."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_bad_rel')
+    sa_dict = {'S1 + S2 <=> S3': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS1': 1.0}}}
+    with pytest.raises(ValueError, match='relative_threshold'):
+        select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='S1 + S2 <=> S3',
+                            relative_threshold=math.nan)
+    with pytest.raises(ValueError, match='relative_threshold'):
+        select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='S1 + S2 <=> S3',
+                            relative_threshold=-0.001)
+
+
+def test_select_sensitive_wells_raises_for_bad_relative_threshold():
+    """Test that ``select_sensitive_wells`` raises ``ValueError`` for a NaN or negative
+    ``relative_threshold``, for the same reason as ``select_from_sa_dict`` above."""
+    entries_by_condition = {(300.0, 'K', 1.0, 'bar'): {'well1': 1.0}}
+    with pytest.raises(ValueError, match='relative_threshold'):
+        select_sensitive_wells(entries_by_condition=entries_by_condition, relative_threshold=math.nan)
+    with pytest.raises(ValueError, match='relative_threshold'):
+        select_sensitive_wells(entries_by_condition=entries_by_condition, relative_threshold=-0.001)
 
 
 # --- 7. The absolute floor bites -------------------------------------------------------------------
@@ -484,6 +569,26 @@ def test_select_sensitive_wells_ranks_by_absolute_value():
     assert sensitive_wells['well_negative'] == [(300.0, 'K', 1.0, 'bar')]
 
 
+def test_select_sensitive_wells_tolerates_non_string_entry_keys():
+    """Test that ``select_sensitive_wells`` tolerates a non-string entry key (e.g. a corrupted SA
+    dict with a numeric or tuple key) by treating it as a non-TS row that is simply excluded, the
+    same tolerance :func:`select_from_sa_dict` already applies on its TS-selection path -- without
+    this guard, ``entry.startswith(TS_ENTRY_PREFIX)`` raises ``AttributeError`` on a non-string key
+    instead of producing a decision."""
+    entries_by_condition = {
+        (300.0, 'K', 1.0, 'bar'): {
+            'well_negative': -1.0,
+            42: -5.0,
+        },
+    }
+    sensitive_wells = select_sensitive_wells(entries_by_condition=entries_by_condition,
+                                            relative_threshold=0.5,
+                                            min_delta_ln_k=1e-3,
+                                            perturbation=8368.0)
+    assert 'well_negative' in sensitive_wells
+    assert 42 not in sensitive_wells
+
+
 # --- FIX4: malformed/corrupted SA data is rejected, not crashed on ------------------------------------
 
 def test_select_from_sa_dict_tolerates_non_dict_sa_dict():
@@ -653,6 +758,380 @@ def test_forward_reverse_coefficients_agree_on_real_fixture(sa_dict):
                     f'{key} vs {reverse_key}, entry {entry}, condition {condition}: '
                     f'{forward_value} vs {reverse_value} (relative difference {relative_difference})')
     assert checked_pairs > 0, 'No forward/reverse pair was found in the fixture to check the premise against.'
+
+
+# --- FIX L: SensitiveTransitionState.as_dict() falls back for a non-4-tuple condition -----------
+
+def test_sensitive_transition_state_as_dict_falls_back_for_non_4_tuple_condition():
+    """Test that as_dict() renders a malformed (non-4-element) condition as a plain list rather
+    than crashing on the T/T_unit/P/P_unit unpack."""
+    entry = SensitiveTransitionState(ts_label='TS1', coefficient=0.1, condition=(300.0, 'K'),
+                                     path_reaction_label='reactionA', path_reaction_str='S1 + S2 <=> S3',
+                                     kinetics_comment='comment', uncertain=True, delta_ln_k=0.1 * 8368.0)
+    rendered = entry.as_dict()
+    assert rendered['condition'] == [300.0, 'K']
+    json.dumps(rendered)
+
+
+# --- FIX C: evaluation_status --------------------------------------------------------------------
+
+def test_evaluation_status_evaluated_for_a_normal_decision():
+    """Test that a normal, fully-computed decision carries evaluation_status == 'evaluated'."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_eval_status_ok')
+    sa_dict = {'A + B <=> C': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS1': 1.0}}}
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='A + B <=> C',
+                                    relative_threshold=0.001)
+    assert selection.evaluation_status == EVALUATION_STATUS_EVALUATED
+
+
+def test_evaluation_status_not_evaluated_for_malformed_sa_dict():
+    """Test that a non-dict sa_dict sets evaluation_status to 'not_evaluated'."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_eval_status_top')
+    selection = select_from_sa_dict(sa_dict='not a dict', network=network, network_reaction='A + B <=> C',
+                                    relative_threshold=0.001)
+    assert selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+
+
+def test_evaluation_status_not_evaluated_when_direction_key_unresolved():
+    """Test that a network reaction absent from the SA dict sets evaluation_status to 'not_evaluated',
+    since no decision could actually be computed."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_eval_status_absent')
+    sa_dict = {'X + Y <=> Z': dict(), 'structures': dict()}
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='A + B <=> C',
+                                    relative_threshold=0.001)
+    assert selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+
+
+def test_evaluation_status_not_evaluated_for_malformed_resolved_entry():
+    """Test that a resolved SA entry that is not a dict-of-conditions sets evaluation_status to
+    'not_evaluated'."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_eval_status_entry')
+    sa_dict = {'A + B <=> C': 'not a dict', 'structures': dict()}
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='A + B <=> C',
+                                    relative_threshold=0.001)
+    assert selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+
+
+# --- FIX I: network_reactions_examined for single-reaction decisions -----------------------------
+
+def test_network_reactions_examined_is_1_when_direction_key_resolves():
+    """Test that network_reactions_examined is 1 once a direction key was resolved."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_examined_ok')
+    sa_dict = {'A + B <=> C': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS1': 1.0}}}
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='A + B <=> C',
+                                    relative_threshold=0.001)
+    assert selection.network_reactions_examined == 1
+
+
+def test_network_reactions_examined_is_0_when_direction_key_unresolved():
+    """Test that network_reactions_examined is 0 when the requested reaction could not be located
+    in the SA output at all."""
+    network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_examined_absent')
+    sa_dict = {'X + Y <=> Z': dict(), 'structures': dict()}
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction='A + B <=> C',
+                                    relative_threshold=0.001)
+    assert selection.network_reactions_examined == 0
+
+
+# --- FIX H: combine() -----------------------------------------------------------------------------
+
+def _make_decision(network_id='net1', qualified=False, method='MSC', cache_status='generated',
+                   direction_key='A + B <=> C', selected_ts=None, uncertain_path_reactions=None,
+                   warnings=None):
+    """Build a minimal PDepNetworkSelection for combine() tests."""
+    return PDepNetworkSelection(
+        network_id=network_id,
+        qualified=qualified,
+        network_reaction='A + B <=> C',
+        direction_key=direction_key,
+        method=method,
+        sa_path='sa.yml',
+        cache_status=cache_status,
+        thresholds={'relative_threshold': 0.001},
+        selected_ts=list(selected_ts) if selected_ts is not None else list(),
+        uncertain_path_reactions=list(uncertain_path_reactions) if uncertain_path_reactions is not None else list(),
+        warnings=list(warnings) if warnings is not None else list(),
+    )
+
+
+def test_combine_raises_value_error_for_empty_list():
+    """Test that combine() raises ValueError on an empty list of decisions."""
+    with pytest.raises(ValueError):
+        PDepNetworkSelection.combine([])
+
+
+def test_combine_raises_value_error_for_network_id_mismatch():
+    """Test that combine() raises ValueError when decisions disagree on network_id, since silently
+    combining decisions for different networks would fabricate confidence."""
+    decisions = [_make_decision(network_id='net1'), _make_decision(network_id='net2')]
+    with pytest.raises(ValueError):
+        PDepNetworkSelection.combine(decisions)
+
+
+def test_combine_single_component_is_equivalent():
+    """Test that combining a single decision is equivalent to that decision, modulo network_reaction
+    becoming None and direction_keys being populated."""
+    decision = _make_decision(qualified=True, direction_key='A + B <=> C')
+    combined = PDepNetworkSelection.combine([decision])
+    assert combined.network_id == decision.network_id
+    assert combined.qualified == decision.qualified
+    assert combined.method == decision.method
+    assert combined.cache_status == decision.cache_status
+    assert combined.network_reaction is None
+    assert combined.direction_keys == ['A + B <=> C']
+    assert combined.network_reactions_examined == 1
+
+
+def test_combine_method_and_cache_status_disagreement_sets_none_and_warns():
+    """Test that combine() sets method/cache_status to None and records a warning, rather than
+    silently adopting the first value, when components disagree."""
+    decisions = [_make_decision(method='MSC', cache_status='generated'),
+                 _make_decision(method='RS', cache_status='cached_valid')]
+    combined = PDepNetworkSelection.combine(decisions)
+    assert combined.method is None
+    assert combined.cache_status is None
+    assert any('disagree on method' in warning for warning in combined.warnings)
+    assert any('disagree on cache_status' in warning for warning in combined.warnings)
+
+
+def test_combine_records_direction_keys_and_unions_qualified():
+    """Test that combine() records per-component direction_keys in input order, and that qualified
+    is True iff any input qualified."""
+    decisions = [_make_decision(qualified=False, direction_key='A + B <=> C'),
+                 _make_decision(qualified=True, direction_key='D + E <=> F')]
+    combined = PDepNetworkSelection.combine(decisions)
+    assert combined.direction_key is None
+    assert combined.direction_keys == ['A + B <=> C', 'D + E <=> F']
+    assert combined.qualified is True
+
+
+# --- ROUND-34 P2: as_dict() and combine() enumerate the fields BY HAND ------------------------------
+#
+# Both ``PDepNetworkSelection.as_dict()`` and ``PDepNetworkSelection.combine()`` list the dataclass's
+# fields literally, so a field added to the dataclass is silently absent from saved YAML (as_dict)
+# and silently reset to its default on an aggregate decision (combine). Neither failure is visible
+# from any test that asserts on the fields it already knows about -- the whole point is the field
+# nobody thought to assert on. These two tests close that by deriving the expected field set from
+# ``dataclasses.fields()``, so adding a field to the dataclass FAILS them until it is handled.
+
+def _make_full_decision(direction_key='A + B <=> C', direction_ambiguous=False, evaluation_status=None,
+                        selected_ts=None, uncertain_path_reactions=None, warnings=None):
+    """Build a PDepNetworkSelection with every field set to a non-default value, for the field-coverage
+    tests below."""
+    decision = _make_decision(
+        network_id='net1',
+        qualified=False,
+        method='MSC',
+        cache_status='generated',
+        direction_key=direction_key,
+        selected_ts=selected_ts,
+        uncertain_path_reactions=uncertain_path_reactions,
+        warnings=warnings,
+    )
+    decision.direction_ambiguous = direction_ambiguous
+    decision.network_reactions_examined = 1
+    if evaluation_status is not None:
+        decision.evaluation_status = evaluation_status
+    return decision
+
+
+def _make_ts_entry(ts_label):
+    """Build a SensitiveTransitionState for the field-coverage tests below."""
+    return SensitiveTransitionState(
+        ts_label=ts_label,
+        coefficient=1e-5,
+        condition=(1000.0, 'K', 1.0, 'bar'),
+        path_reaction_label='reaction1',
+        path_reaction_str=f'A + B <=> C via {ts_label}',
+        kinetics_comment='Estimated using template',
+        uncertain=True,
+        delta_ln_k=0.5,
+    )
+
+
+def test_as_dict_renders_every_dataclass_field():
+    """Test that as_dict() renders EVERY PDepNetworkSelection field, so a newly added field cannot
+    silently vanish from the saved YAML. as_dict() enumerates its keys by hand, so nothing but this
+    equality stops a field from being dropped."""
+    declared = {dataclass_field.name for dataclass_field in dataclasses.fields(PDepNetworkSelection)}
+    rendered = set(PDepNetworkSelection(network_id='net1').as_dict().keys())
+    assert rendered == declared, (
+        f'as_dict() does not render every field. Missing: {sorted(declared - rendered)}; '
+        f'unexpected: {sorted(rendered - declared)}.')
+
+
+def test_as_dict_containers_are_isolated_from_the_live_selection():
+    """Test that mutating any container in as_dict()'s returned dict cannot rewrite the
+    PDepNetworkSelection's own state. as_dict() is the on-disk/reported shape, so a caller
+    mutating what it returns (directly, or by mutating something nested inside it) must never be
+    able to corrupt the live decision object."""
+    ts_entry = SensitiveTransitionState(
+        ts_label='TS1', coefficient=0.1, condition=(300.0, 'K', 1.0, 'bar'),
+        path_reaction_label='R1', path_reaction_str='A + B <=> C',
+        kinetics_comment='estimate', uncertain=True, delta_ln_k=0.1 * 8368.0)
+    decision = PDepNetworkSelection(
+        network_id='net1',
+        qualified=True,
+        thresholds={'relative_threshold': 0.001, 'nested': [1, 2, 3]},
+        direction_keys=['A + B <=> C'],
+        selected_ts=[ts_entry],
+        uncertain_path_reactions=[ts_entry],
+        warnings=['a warning'],
+    )
+    rendered = decision.as_dict()
+
+    # Mutate every container in the rendered dict, including nested containers.
+    rendered['thresholds']['nested'].append(999)
+    rendered['thresholds']['relative_threshold'] = -1.0
+    rendered['thresholds']['injected'] = True
+    rendered['direction_keys'].append('injected')
+    rendered['warnings'].append('injected')
+    rendered['selected_ts'].append({'injected': True})
+    rendered['selected_ts'][0]['ts_label'] = 'tampered'
+    rendered['uncertain_path_reactions'].append({'injected': True})
+    rendered['uncertain_path_reactions'][0]['ts_label'] = 'tampered'
+
+    assert decision.thresholds == {'relative_threshold': 0.001, 'nested': [1, 2, 3]}, (
+        f'thresholds mutated via as_dict() output: {decision.thresholds}')
+    assert decision.direction_keys == ['A + B <=> C'], (
+        f'direction_keys mutated via as_dict() output: {decision.direction_keys}')
+    assert decision.warnings == ['a warning'], (
+        f'warnings mutated via as_dict() output: {decision.warnings}')
+    assert len(decision.selected_ts) == 1 and decision.selected_ts[0].ts_label == 'TS1', (
+        f'selected_ts mutated via as_dict() output: {decision.selected_ts}')
+    assert len(decision.uncertain_path_reactions) == 1 and decision.uncertain_path_reactions[0].ts_label == 'TS1', (
+        f'uncertain_path_reactions mutated via as_dict() output: {decision.uncertain_path_reactions}')
+
+
+# How ``combine()`` must treat each field, as a predicate on the COMBINED decision produced from the
+# two components built in ``test_combine_handles_every_dataclass_field`` below. A field added to
+# ``PDepNetworkSelection`` without an entry here fails ``test_combine_states_a_policy_for_every_field``,
+# which is deliberate: the author has to state what an aggregate decision means for it, because the
+# default -- silently taking the dataclass default -- is exactly the failure this guards.
+_COMBINE_EXPECTED = {
+    # Identity: taken from the first decision; all components must agree or combine() raises.
+    'network_id': lambda value: value == 'net1',
+    # Unioned across components: True iff any component qualified.
+    'qualified': lambda value: value is False,
+    # Deliberately RESET: the aggregate no longer refers to one network reaction.
+    'network_reaction': lambda value: value is None,
+    'direction_key': lambda value: value is None,
+    # Recorded per component, in input order.
+    'direction_keys': lambda value: value == ['A + B <=> C', 'D + E <=> F'],
+    # Unioned: True iff any component had it True.
+    'direction_ambiguous': lambda value: value is True,
+    # Taken from the first decision (None + warning if components disagree).
+    'method': lambda value: value == 'MSC',
+    'sa_path': lambda value: value == 'sa.yml',
+    'cache_status': lambda value: value == 'generated',
+    'thresholds': lambda value: value == {'relative_threshold': 0.001},
+    # Unioned, de-duplicated, first-seen order.
+    'selected_ts': lambda value: [entry.ts_label for entry in value] == ['TS1', 'TS2'],
+    'uncertain_path_reactions': lambda value: [entry.ts_label for entry in value] == ['TS1'],
+    'warnings': lambda value: 'component warning' in value,
+    # Set to the number of decisions combined.
+    'network_reactions_examined': lambda value: value == 2,
+    # Fail-closed: an aggregate 'does not qualify' is only backed if EVERY component was actually
+    # evaluated. One never-evaluated component makes the aggregate not_evaluated.
+    'evaluation_status': lambda value: value == EVALUATION_STATUS_NOT_EVALUATED,
+}
+
+
+def test_combine_states_a_policy_for_every_field():
+    """Test that _COMBINE_EXPECTED covers every PDepNetworkSelection field. This is a conscience
+    test: it does not check combine()'s behaviour, it forces whoever adds a field to state what an
+    aggregate decision means for it, instead of inheriting the dataclass default by omission."""
+    declared = {dataclass_field.name for dataclass_field in dataclasses.fields(PDepNetworkSelection)}
+    assert set(_COMBINE_EXPECTED) == declared, (
+        f'_COMBINE_EXPECTED does not cover every field. Missing: {sorted(declared - set(_COMBINE_EXPECTED))}; '
+        f'stale: {sorted(set(_COMBINE_EXPECTED) - declared)}.')
+
+
+def test_combine_handles_every_dataclass_field():
+    """Test that combine() produces the documented value for EVERY field, from two components that
+    set every field to a non-default value. A field combine() forgets falls back to the dataclass
+    default and fails its predicate here."""
+    first = _make_full_decision(
+        direction_key='A + B <=> C',
+        direction_ambiguous=False,
+        selected_ts=[_make_ts_entry('TS1')],
+        uncertain_path_reactions=[_make_ts_entry('TS1')],
+        warnings=['component warning'],
+    )
+    second = _make_full_decision(
+        direction_key='D + E <=> F',
+        direction_ambiguous=True,
+        evaluation_status=EVALUATION_STATUS_NOT_EVALUATED,
+        selected_ts=[_make_ts_entry('TS2')],
+    )
+    combined = PDepNetworkSelection.combine([first, second])
+    failures = [name for name, predicate in _COMBINE_EXPECTED.items()
+                if not predicate(getattr(combined, name))]
+    assert not failures, (
+        f'combine() produced an unexpected value for: '
+        f'{ {name: getattr(combined, name) for name in failures} }.')
+
+
+def test_combine_keeps_evaluated_when_a_component_qualified():
+    """Test that an aggregate which DID qualify stays 'evaluated' even though another component was
+    not evaluated: the qualification is backed by the component that qualified, so refusing it would
+    be an over-refusal. The gap is still recorded as a warning."""
+    qualifying = _make_full_decision(uncertain_path_reactions=[_make_ts_entry('TS1')])
+    qualifying.qualified = True
+    unevaluated = _make_full_decision(direction_key=None, evaluation_status=EVALUATION_STATUS_NOT_EVALUATED)
+    combined = PDepNetworkSelection.combine([qualifying, unevaluated])
+    assert combined.qualified is True
+    assert combined.evaluation_status == EVALUATION_STATUS_EVALUATED
+    assert any('were not evaluated' in warning for warning in combined.warnings)
+
+
+def test_combine_warns_about_unevaluated_components_and_counts_them():
+    """Test that combine() records HOW MANY components were not evaluated, so a partial evaluation is
+    never invisible, whichever way evaluation_status lands."""
+    decisions = [_make_full_decision(),
+                 _make_full_decision(direction_key=None, evaluation_status=EVALUATION_STATUS_NOT_EVALUATED),
+                 _make_full_decision(direction_key=None, evaluation_status=EVALUATION_STATUS_NOT_EVALUATED)]
+    combined = PDepNetworkSelection.combine(decisions)
+    assert any('2 of 3 combined decisions were not evaluated' in warning for warning in combined.warnings)
+
+
+def test_combine_of_all_evaluated_components_records_no_unevaluated_warning():
+    """Test that the not-evaluated warning is NOT emitted when every component was evaluated, so the
+    warning stays a signal rather than noise on every aggregate."""
+    combined = PDepNetworkSelection.combine([_make_full_decision(), _make_full_decision()])
+    assert combined.evaluation_status == EVALUATION_STATUS_EVALUATED
+    assert not any('were not evaluated' in warning for warning in combined.warnings)
+def test_as_dict_does_not_hand_out_the_conditions_nested_objects():
+    """Test that mutating a nested object inside the ``condition`` rendered by
+    ``SensitiveTransitionState.as_dict()`` cannot reach the live record.
+
+    Same defect class as the manifest/selection/thresholds leaks already closed elsewhere on this
+    branch: a frozen dataclass that hands out its own nested containers is frozen in name only.
+    A condition reaching this record from a loaded selection is not guaranteed to be a flat tuple
+    of scalars (``_sensitive_transition_state_from_dict`` coerces whatever it finds), so both the
+    4-element branch and the fallback branch must copy rather than alias.
+    """
+    entry = SensitiveTransitionState(ts_label='TS1', coefficient=1.0, condition=([300.0], 'K', 1.0, 'bar'),
+                                     path_reaction_label='r1', path_reaction_str='A <=> B',
+                                     kinetics_comment='', uncertain=True, delta_ln_k=1.0)
+    rendered = entry.as_dict()
+    rendered['condition']['T'].append('tampered')
+    assert entry.condition[0] == [300.0], f'The live condition was rewritten: {entry.condition!r}.'
+
+
+def test_as_dict_does_not_hand_out_a_malformed_condition_itself():
+    """Test that the malformed-condition fallback in ``as_dict()`` copies too.
+
+    A condition that is neither a tuple nor a list was previously returned by reference, so the
+    caller received the record's own object rather than a rendering of it.
+    """
+    entry = SensitiveTransitionState(ts_label='TS1', coefficient=1.0, condition={'T': [300.0]},
+                                     path_reaction_label='r1', path_reaction_str='A <=> B',
+                                     kinetics_comment='', uncertain=True, delta_ln_k=1.0)
+    rendered = entry.as_dict()
+    assert rendered['condition'] is not entry.condition, 'as_dict() handed out the live condition object.'
+    rendered['condition']['T'].append('tampered')
+    assert entry.condition == {'T': [300.0]}, f'The live condition was rewritten: {entry.condition!r}.'
 
 
 def test_reason_does_not_report_a_verdict_on_a_decision_that_was_never_made():

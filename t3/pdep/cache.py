@@ -19,7 +19,9 @@ import math
 import os
 import subprocess
 
-from arc.common import read_yaml_file, save_yaml_file
+from arc.common import save_yaml_file
+
+from t3.pdep.yaml_safe import read_sa_yaml_file
 
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
@@ -149,7 +151,7 @@ def write_sa_cache_metadata(sa_path: str,
         str: The path of the sidecar that was written.
     """
     try:
-        sa_dict = read_yaml_file(sa_path)
+        sa_dict = read_sa_yaml_file(sa_path)
     except Exception:
         sa_dict = None
     metadata = {'selector_version': SELECTOR_VERSION,
@@ -222,7 +224,10 @@ def validate_sa_cache(sa_path: str,
             f'(its transition state rows may predate the Arkane fix that makes them meaningful). Regenerating.']
 
     try:
-        metadata = read_yaml_file(metadata_path) or dict()
+        # The restricted loader, not arc's read_yaml_file (yaml.FullLoader): the sidecar sits
+        # adjacent to a caller-supplied sa_path, and FullLoader constructs Python objects from tags
+        # DURING the load -- before the except below could ever turn the read into a rejection.
+        metadata = read_sa_yaml_file(metadata_path) or dict()
     except Exception as e:
         return CACHE_STATUS_CACHED_REJECTED, [f'Could not read the cache metadata at {metadata_path}: {e}. '
                                               f'Regenerating.']

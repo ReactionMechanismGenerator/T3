@@ -54,6 +54,7 @@ from t3.pdep.cache import validate_sa_cache, write_sa_cache_metadata
 from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_GENERATED,
+                              E0_PERTURBATION_J_PER_MOL,
                               select_from_sa_dict,
                               select_sensitive_wells,
                               )
@@ -1172,6 +1173,7 @@ class T3:
                         method=method_used,
                         sa_path=sa_coefficients_path,
                         cache_status=cache_status,
+                        perturbation=E0_PERTURBATION_J_PER_MOL,
                     )
                     for warning in selection.warnings:
                         self.logger.warning(warning)
@@ -1222,6 +1224,7 @@ class T3:
                                     if key is not None:
                                         species_keys.append(key)
 
+        self.logger.log_pdep_network_summary(selections=self.pdep_network_selections)
         return species_keys
 
     def determine_species_and_reactions_based_on_collision_violators(self) -> tuple[list[int], list[int]]:

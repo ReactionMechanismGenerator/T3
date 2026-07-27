@@ -33,6 +33,7 @@ Two notes on the numerics, both load-bearing:
   unrelated thermo row changed.
 """
 
+import copy
 import math
 from dataclasses import dataclass, field
 
@@ -56,6 +57,15 @@ SELECTOR_VERSION = 1
 CACHE_STATUS_GENERATED = 'generated'
 CACHE_STATUS_CACHED_VALID = 'cached_valid'
 CACHE_STATUS_CACHED_REJECTED = 'cached_rejected'
+# A caller passed validate_cache=False: the file is merely trusted, not actually validated against
+# its T3 sidecar, and is not freshly generated either -- distinct provenance from both of the above.
+CACHE_STATUS_UNVALIDATED = 'unvalidated'
+
+# Evaluation status values for PDepNetworkSelection.evaluation_status (FIX C): 'evaluated' means the
+# decision was actually computed from real SA data; 'not_evaluated' means it could not be (unreadable
+# / unparseable network, missing SA data, or a rejected cache), so qualified/selected_ts carry no signal.
+EVALUATION_STATUS_EVALUATED = 'evaluated'
+EVALUATION_STATUS_NOT_EVALUATED = 'not_evaluated'
 
 
 @dataclass(frozen=True)
@@ -98,14 +108,27 @@ class SensitiveTransitionState:
         remember positional ordering.
 
         Returns:
-            dict: A plain dict, containing no dataclass instances or tuples.
+            dict: A plain dict, containing no dataclass instances or tuples. ``condition`` is
+                rendered as ``{'T': ..., 'T_unit': ..., 'P': ..., 'P_unit': ...}`` when it has the
+                expected 4-element ``(T, T_unit, P, P_unit)`` shape; otherwise (a malformed but
+                selected condition) it falls back to a plain list so serialization cannot crash.
         """
-        temperature, temperature_unit, pressure, pressure_unit = self.condition
+        # Deep-copied, not aliased: a condition is not guaranteed to be a flat tuple of scalars.
+        # `_sensitive_transition_state_from_dict` coerces whatever a persisted record carries, so a
+        # nested container can reach this record -- and handing one out would let a caller rewrite
+        # the evidence behind a decision that has already been reported. Same defect class as the
+        # manifest/selection/thresholds leaks already closed elsewhere in this package.
+        condition = copy.deepcopy(self.condition)
+        if isinstance(condition, (tuple, list)) and len(condition) == 4:
+            temperature, temperature_unit, pressure, pressure_unit = condition
+            condition = {'T': temperature, 'T_unit': temperature_unit,
+                        'P': pressure, 'P_unit': pressure_unit}
+        elif isinstance(condition, tuple):
+            condition = list(condition)
         return {
             'ts_label': self.ts_label,
             'coefficient': self.coefficient,
-            'condition': {'T': temperature, 'T_unit': temperature_unit,
-                         'P': pressure, 'P_unit': pressure_unit},
+            'condition': condition,
             'path_reaction_label': self.path_reaction_label,
             'path_reaction_str': self.path_reaction_str,
             'kinetics_comment': self.kinetics_comment,
@@ -129,6 +152,8 @@ class PDepNetworkSelection:
             as requested by the caller.
         direction_key (str, optional): The Arkane SA key actually used, which may differ from
             ``network_reaction`` by label legalization or by direction.
+        direction_keys (list): The per-component ``direction_key``s, in input order, recorded by
+            ``combine()``; empty on a single-reaction decision.
         direction_ambiguous (bool): Whether the requested direction could not be resolved exactly
             and a different one was used instead. The decision is still reported, but it answers a
             slightly different question than the one asked.
@@ -141,11 +166,21 @@ class PDepNetworkSelection:
             i.e. the evidence for ``qualified``.
         warnings (list): Human-readable warnings (stale cache, failed TS join, non-finite rows,
             ambiguous direction, shared TS label, structurally dead TS rows).
+        network_reactions_examined (int): The number of network reaction keys examined to produce
+            this decision. For a single-reaction decision (``select_from_sa_dict``), this is ``1``
+            once a direction key was resolved and ``0`` if it was not (the requested reaction could
+            not be located in the SA output at all); set to the count of combined decisions by
+            ``combine()``.
+        evaluation_status (str): One of ``'evaluated'`` (the decision was actually computed from
+            real SA data) or ``'not_evaluated'`` (it could not be: unreadable/unparseable network,
+            missing SA data, or a rejected cache) -- in the latter case, ``qualified`` and
+            ``selected_ts`` carry no signal and must not be read as "does not qualify".
     """
     network_id: str
     qualified: bool = False
     network_reaction: str | None = None
     direction_key: str | None = None
+    direction_keys: list = field(default_factory=list)
     direction_ambiguous: bool = False
     method: str | None = None
     sa_path: str | None = None
@@ -154,6 +189,8 @@ class PDepNetworkSelection:
     selected_ts: list = field(default_factory=list)
     uncertain_path_reactions: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
+    network_reactions_examined: int = 0
+    evaluation_status: str = EVALUATION_STATUS_EVALUATED
 
     def uncertain_ts_labels(self) -> list:
         """
@@ -221,21 +258,146 @@ class PDepNetworkSelection:
         Returns:
             dict: A plain dict, containing no dataclass instances or tuples. ``selected_ts`` and
                 ``uncertain_path_reactions`` are rendered via ``SensitiveTransitionState.as_dict()``.
+                Every container field is deep-copied so that a caller mutating the returned dict
+                (including anything nested inside it) can never reach back into this object's own
+                live containers -- ``as_dict()`` is a reported, read-only snapshot.
         """
         return {
             'network_id': self.network_id,
             'qualified': self.qualified,
             'network_reaction': self.network_reaction,
             'direction_key': self.direction_key,
+            'direction_keys': copy.deepcopy(self.direction_keys),
             'direction_ambiguous': self.direction_ambiguous,
             'method': self.method,
             'sa_path': self.sa_path,
             'cache_status': self.cache_status,
-            'thresholds': dict(self.thresholds),
+            'thresholds': copy.deepcopy(self.thresholds),
             'selected_ts': [entry.as_dict() for entry in self.selected_ts],
             'uncertain_path_reactions': [entry.as_dict() for entry in self.uncertain_path_reactions],
-            'warnings': list(self.warnings),
+            'warnings': copy.deepcopy(self.warnings),
+            'network_reactions_examined': self.network_reactions_examined,
+            'evaluation_status': self.evaluation_status,
         }
+
+    @classmethod
+    def combine(cls, decisions: list) -> 'PDepNetworkSelection':
+        """
+        Combine several per-reaction decisions for the same network into one aggregate decision.
+
+        Answers "does this network deserve QM refinement AT ALL" from the per-reaction decisions
+        answering it one network reaction at a time. ``selected_ts``, ``uncertain_path_reactions``,
+        and ``warnings`` are unioned across all inputs, de-duplicated while preserving first-seen
+        order (not sorted arbitrarily). ``qualified`` is ``True`` iff any input decision qualified.
+        ``direction_ambiguous`` is ``True`` iff any input decision had it ``True``. The per-component
+        ``direction_key``s are recorded, in input order, as ``direction_keys`` on the combined
+        decision (the combined decision's own ``direction_key`` is left ``None``, since it no longer
+        refers to a single reaction).
+
+        ``network_id`` is taken from the first decision, and all decisions must agree on it: since
+        ``network_id`` is the join key downstream consumers use to identify the network, silently
+        combining decisions for different networks would fabricate confidence in a result that does
+        not actually describe one network. ``method`` and ``cache_status`` are also expected to agree
+        across inputs (they come from the same SA source), but a disagreement there is a weaker
+        signal (e.g. a partially re-generated cache) -- so instead of raising, the combined field is
+        set to ``None`` and a warning is recorded, rather than silently adopting the first value.
+        ``sa_path`` and ``thresholds`` are taken from the first decision unconditionally.
+
+        ``evaluation_status`` is ``'not_evaluated'`` if any component was not evaluated AND the
+        aggregate did not qualify -- an aggregate "does not qualify" drawn from a partially evaluated
+        set is not a decision anyone made, since an unevaluated component might have been the one
+        that qualified. An aggregate that DID qualify keeps ``'evaluated'``, because the component
+        that qualified backs it. Either way a warning records how many components were not evaluated.
+
+        ``network_reaction`` is set to ``None`` on the result, since it now represents the whole
+        network rather than one reaction, and ``network_reactions_examined`` is set to the number
+        of decisions combined. A single-component call is equivalent to that component, modulo the
+        fields documented above (``network_reaction`` becomes ``None`` and ``direction_keys`` is
+        populated).
+
+        Args:
+            decisions (list): The per-reaction ``PDepNetworkSelection`` decisions to combine.
+
+        Raises:
+            ValueError: If ``decisions`` is empty, or if the decisions disagree on ``network_id``.
+
+        Returns:
+            PDepNetworkSelection: The combined decision.
+        """
+        if not decisions:
+            raise ValueError('Cannot combine an empty list of decisions.')
+        first = decisions[0]
+        network_ids = {decision.network_id for decision in decisions}
+        if len(network_ids) > 1:
+            raise ValueError(f'Cannot combine decisions for different networks: {sorted(network_ids)}.')
+
+        methods = {decision.method for decision in decisions}
+        cache_statuses = {decision.cache_status for decision in decisions}
+        warnings = list()
+        method = first.method
+        if len(methods) > 1:
+            method = None
+            warnings.append(f'Combined decisions disagree on method ({sorted(str(m) for m in methods)}); '
+                            f'recording None rather than silently adopting one.')
+        cache_status = first.cache_status
+        if len(cache_statuses) > 1:
+            cache_status = None
+            warnings.append(f'Combined decisions disagree on cache_status '
+                            f'({sorted(str(s) for s in cache_statuses)}); recording None rather than '
+                            f'silently adopting one.')
+
+        combined = cls(
+            network_id=first.network_id,
+            qualified=any(decision.qualified for decision in decisions),
+            network_reaction=None,
+            direction_ambiguous=any(decision.direction_ambiguous for decision in decisions),
+            method=method,
+            sa_path=first.sa_path,
+            cache_status=cache_status,
+            thresholds=dict(first.thresholds),
+            network_reactions_examined=len(decisions),
+        )
+        # ``evaluation_status`` is NOT allowed to fall back to the dataclass default here: a fresh
+        # PDepNetworkSelection is 'evaluated', so combining components that were never evaluated used
+        # to produce a confidently 'evaluated', qualified=False aggregate -- precisely the "reports a
+        # decision nobody made" failure ``evaluation_status`` exists to prevent, reintroduced one
+        # level up. An aggregate 'does not qualify' is only backed if EVERY component was actually
+        # evaluated, since an unevaluated component might have been the one that qualified. An
+        # aggregate that DID qualify is backed regardless, by whichever component qualified -- but
+        # the gap is recorded as a warning either way, so a partial evaluation is never invisible.
+        not_evaluated = [decision for decision in decisions
+                         if decision.evaluation_status != EVALUATION_STATUS_EVALUATED]
+        if not_evaluated:
+            warnings.append(f'{len(not_evaluated)} of {len(decisions)} combined decisions were not '
+                            f'evaluated; the aggregate covers only the evaluated ones.')
+            if not combined.qualified:
+                combined.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+        combined.direction_keys = [decision.direction_key for decision in decisions]
+        combined.selected_ts = _union_preserving_order(decision.selected_ts for decision in decisions)
+        combined.uncertain_path_reactions = _union_preserving_order(
+            decision.uncertain_path_reactions for decision in decisions)
+        combined.warnings = _union_preserving_order([*(decision.warnings for decision in decisions), warnings])
+        return combined
+
+
+def _union_preserving_order(iterables) -> list:
+    """
+    Union several iterables of hashable items, de-duplicated, in first-seen order.
+
+    Args:
+        iterables: An iterable of iterables (e.g. a list of lists) to union.
+
+    Returns:
+        list: The de-duplicated union, in first-seen order.
+    """
+    seen = set()
+    result = list()
+    for iterable in iterables:
+        for item in iterable:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+    return result
 
 
 def coefficient_floor(min_delta_ln_k: float = DEFAULT_MIN_DELTA_LN_K,
@@ -249,14 +411,102 @@ def coefficient_floor(min_delta_ln_k: float = DEFAULT_MIN_DELTA_LN_K,
         perturbation (float, optional): The E0 perturbation Arkane applied, in J/mol.
 
     Raises:
-        ValueError: If ``perturbation`` is not positive.
+        ValueError: If ``min_delta_ln_k`` or ``perturbation`` is not a finite, positive number, or
+            if both are individually valid but the DERIVED floor ``min_delta_ln_k / perturbation``
+            is not a finite, positive number. Validating only the two inputs is not enough: finite,
+            positive inputs can still divide to an overflowed inf (the absolute gate would then
+            reject nothing) or an underflowed 0.0 (the absolute gate would then reject only exact
+            zeros, silently disabling the denormal-structural-zero protection it exists for) --
+            both fail-opens, not deliberate choices, so the derived value is checked too rather
+            than trusting that valid inputs imply a valid result.
 
     Returns:
         float: The corresponding floor on abs(dln(k)/dE0), in mol/J.
     """
-    if perturbation <= 0:
-        raise ValueError(f'The perturbation must be positive, got {perturbation}.')
-    return min_delta_ln_k / perturbation
+    if not _is_finite(min_delta_ln_k) or min_delta_ln_k <= 0:
+        raise ValueError(f'min_delta_ln_k must be a finite, positive number, got {min_delta_ln_k}.')
+    if not _is_finite(perturbation) or perturbation <= 0:
+        raise ValueError(f'The perturbation must be a finite, positive number, got {perturbation}.')
+    floor = min_delta_ln_k / perturbation
+    if not _is_finite(floor) or floor <= 0:
+        raise ValueError(f'The derived coefficient floor (min_delta_ln_k / perturbation) must be a '
+                         f'finite, positive number, got {floor} from min_delta_ln_k={min_delta_ln_k} '
+                         f'and perturbation={perturbation}.')
+    return floor
+
+
+def _validate_relative_threshold(relative_threshold: float) -> None:
+    """
+    Validate that a relative-threshold gate is a usable, non-negative fraction.
+
+    A NaN relative_threshold makes every comparison against it False, so ``cutoff = max(nan * x,
+    floor)`` would end up as whatever ``floor`` is -- silently discarding the relative gate rather
+    than raising, which is a fail-open, not a deliberate "no relative gate" choice.
+
+    Args:
+        relative_threshold (float): The relative gate, as a fraction of the largest abs
+            coefficient at the same condition.
+
+    Raises:
+        ValueError: If ``relative_threshold`` is not finite or is negative.
+    """
+    if not _is_finite(relative_threshold) or relative_threshold < 0:
+        raise ValueError(f'relative_threshold must be a finite, non-negative number, '
+                         f'got {relative_threshold}.')
+
+
+def _bounded_cutoff(relative_threshold: float, max_abs: float, floor: float, direction_key: str) -> float:
+    """
+    Compute ``max(relative_threshold * max_abs, floor)``, guarding the DERIVED cutoff itself.
+
+    ``relative_threshold`` and ``max_abs`` are each finite (validated at the call site / read from
+    finite sensitivity data), but their product can still overflow to infinity. An infinite cutoff
+    would silently fail every row closed -- a wrong, unreported negative verdict -- rather than
+    surfacing the degenerate threshold that produced it, so it is refused instead.
+
+    Args:
+        relative_threshold (float): The relative gate, already validated finite and non-negative.
+        max_abs (float): The largest absolute coefficient at this condition.
+        floor (float): The absolute floor, already validated finite and positive.
+        direction_key (str): The direction key this cutoff is being computed for, for the message.
+
+    Raises:
+        ValueError: If the derived cutoff is not finite.
+
+    Returns:
+        float: The cutoff, guaranteed finite.
+    """
+    cutoff = max(relative_threshold * max_abs, floor)
+    if not _is_finite(cutoff):
+        raise ValueError(f'The derived cutoff (relative_threshold * max_abs) for {direction_key} is not '
+                         f'finite (got {cutoff} from relative_threshold={relative_threshold} and '
+                         f'max_abs={max_abs}); refusing to silently reject every row against it.')
+    return cutoff
+
+
+def validate_selection_thresholds(relative_threshold: float,
+                                  min_delta_ln_k: float = DEFAULT_MIN_DELTA_LN_K,
+                                  perturbation: float = E0_PERTURBATION_J_PER_MOL,
+                                  ) -> None:
+    """
+    Validate all three selection thresholds together, at a single entry point.
+
+    Every caller-facing function that turns these three numbers into a decision
+    (:func:`select_from_sa_dict`, :func:`select_sensitive_wells`,
+    :func:`t3.pdep.api.select_pdep_network`, :func:`t3.pdep.api.rank_pdep_networks`) calls this
+    before doing any work, so a bad threshold raises immediately at the caller rather than
+    surfacing later as a silently wrong (over-permissive or over-refusing) selection.
+
+    Args:
+        relative_threshold (float): The relative gate; must be finite and >= 0.
+        min_delta_ln_k (float, optional): The absolute gate's numerator; must be finite and > 0.
+        perturbation (float, optional): The E0 perturbation, in J/mol; must be finite and > 0.
+
+    Raises:
+        ValueError: If any of the three is non-finite or out of its allowed range.
+    """
+    _validate_relative_threshold(relative_threshold)
+    coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
 
 
 def select_from_sa_dict(sa_dict: dict,
@@ -288,9 +538,15 @@ def select_from_sa_dict(sa_dict: dict,
         sa_path (str, optional): The path the SA dictionary was read from, recorded on the decision.
         cache_status (str, optional): How the SA data was obtained, recorded on the decision.
 
+    Raises:
+        ValueError: If ``relative_threshold``, ``min_delta_ln_k``, or ``perturbation`` is
+            non-finite or out of its allowed range (see :func:`validate_selection_thresholds`).
+
     Returns:
         PDepNetworkSelection: The decision, including the evidence behind it.
     """
+    validate_selection_thresholds(relative_threshold=relative_threshold,
+                                  min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
     if not isinstance(sa_dict, dict):
         selection = PDepNetworkSelection(
             network_id=network.network_id,
@@ -309,6 +565,7 @@ def select_from_sa_dict(sa_dict: dict,
         selection.warnings.append(
             f'The sensitivity data for network {network.network_id} is malformed (expected a dict, got '
             f'{type(sa_dict).__name__}); cannot evaluate criterion (b).')
+        selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
         return selection
 
     floor = coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
@@ -332,13 +589,18 @@ def select_from_sa_dict(sa_dict: dict,
     selection.direction_ambiguous = direction_ambiguous
     selection.warnings.extend(direction_warnings)
     if direction_key is None:
+        selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
         return selection
+
+    # A direction key was resolved, so exactly one network reaction key was actually examined.
+    selection.network_reactions_examined = 1
 
     resolved_entry = sa_dict.get(direction_key)
     if not isinstance(resolved_entry, dict):
         selection.warnings.append(
             f'The sensitivity data for SA key {direction_key} of network {selection.network_id} is malformed '
             f'(expected a dict of conditions, got {type(resolved_entry).__name__}); cannot evaluate criterion (b).')
+        selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
         return selection
 
     by_ts = network.path_reactions_by_ts()
@@ -369,7 +631,8 @@ def select_from_sa_dict(sa_dict: dict,
             continue
         max_abs_ts = max(abs(coefficient) for coefficient in ts_entries.values())
         max_abs_ts_overall = max(max_abs_ts_overall, max_abs_ts)
-        cutoff = max(relative_threshold * max_abs_ts, floor)
+        cutoff = _bounded_cutoff(relative_threshold=relative_threshold, max_abs=max_abs_ts, floor=floor,
+                                 direction_key=direction_key)
         for ts_label, coefficient in sorted(ts_entries.items()):
             if abs(coefficient) < cutoff:
                 continue
@@ -568,18 +831,26 @@ def select_sensitive_wells(entries_by_condition: dict,
         min_delta_ln_k (float, optional): The absolute gate, as a minimum ln(k) response.
         perturbation (float, optional): The E0 perturbation Arkane applied, in J/mol.
 
+    Raises:
+        ValueError: If ``relative_threshold``, ``min_delta_ln_k``, or ``perturbation`` is
+            non-finite or out of its allowed range (see :func:`validate_selection_thresholds`).
+
     Returns:
         dict: Keys are well labels, values are lists of the conditions at which they were sensitive.
     """
+    validate_selection_thresholds(relative_threshold=relative_threshold,
+                                  min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
     floor = coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
     sensitive_wells = dict()
     for condition, entries in entries_by_condition.items():
         wells = {entry: float(coefficient) for entry, coefficient in entries.items()
-                 if not entry.startswith(TS_ENTRY_PREFIX) and _is_finite(coefficient)}
+                 if isinstance(entry, str) and not entry.startswith(TS_ENTRY_PREFIX)
+                 and _is_finite(coefficient)}
         if not wells:
             continue
         max_abs_well = max(abs(coefficient) for coefficient in wells.values())
-        cutoff = max(relative_threshold * max_abs_well, floor)
+        cutoff = _bounded_cutoff(relative_threshold=relative_threshold, max_abs=max_abs_well, floor=floor,
+                                 direction_key=str(condition))
         for well, coefficient in wells.items():
             if abs(coefficient) >= cutoff:
                 sensitive_wells.setdefault(well, list()).append(condition)
