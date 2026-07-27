@@ -217,6 +217,91 @@ class TestRunArkaneJob(object):
         assert not os.path.isfile(stale_path), \
             'The stale sa_coefficients.yml should have been deleted before Arkane was invoked.'
 
+    def test_traversal_required_artifact_raises_value_error(self, tmp_path, monkeypatch):
+        """A required_artifact that escapes output_directory via '..' raises ValueError.
+
+        Regression this guards: run_arkane_job() deletes the joined artifact path before running
+        Arkane, so a traversal value like '../important.yml' used to DELETE a file outside the
+        job directory. The path must be confined to output_directory, and the file outside must
+        survive untouched.
+        """
+        input_file = self._write_input_file(tmp_path)
+        output_directory = str(tmp_path / 'output')
+        outside_file = tmp_path / 'important.yml'
+        outside_file.write_text('precious: data\n')
+
+        def fake_run_arkane(statmech_dir):
+            pass  # must never be reached
+
+        monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane)
+        traversal_artifact = os.path.join('..', 'important.yml')
+        with pytest.raises(ValueError) as excinfo:
+            run_arkane_job(input_file=input_file,
+                           output_directory=output_directory,
+                           required_artifact=traversal_artifact)
+        assert 'important.yml' in str(excinfo.value)
+        assert outside_file.is_file(), \
+            'The file outside output_directory must not be deleted by a traversal required_artifact.'
+
+    def test_absolute_required_artifact_raises_value_error(self, tmp_path, monkeypatch):
+        """An absolute required_artifact is rejected outright with a ValueError naming it.
+
+        Regression this guards: os.path.join(output_directory, <absolute path>) silently discards
+        output_directory entirely, so an absolute value pointed the delete-then-require gate at an
+        arbitrary filesystem location.
+        """
+        input_file = self._write_input_file(tmp_path)
+        output_directory = str(tmp_path / 'output')
+        absolute_target = tmp_path / 'elsewhere.yml'
+        absolute_target.write_text('precious: data\n')
+
+        def fake_run_arkane(statmech_dir):
+            pass  # must never be reached
+
+        monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane)
+        with pytest.raises(ValueError) as excinfo:
+            run_arkane_job(input_file=input_file,
+                           output_directory=output_directory,
+                           required_artifact=str(absolute_target))
+        assert 'elsewhere.yml' in str(excinfo.value)
+        assert absolute_target.is_file(), \
+            'The absolute-path target must not be deleted by run_arkane_job().'
+
+    def test_relative_required_artifact_delete_then_require_preserved(self, tmp_path, monkeypatch):
+        """A normal relative required_artifact keeps the delete-then-require semantics.
+
+        A stale copy of the artifact is deleted before the run; when Arkane rewrites it the job
+        succeeds, and when Arkane does not, the job fails and the stale copy is gone.
+        """
+        input_file = self._write_input_file(tmp_path)
+        output_directory = str(tmp_path / 'output')
+        os.makedirs(output_directory, exist_ok=True)
+        artifact_path = os.path.join(output_directory, 'output.py')
+        with open(artifact_path, 'w') as f:
+            f.write('# stale artifact from a previous run\n')
+
+        def fake_run_arkane_rewriting(statmech_dir):
+            with open(os.path.join(statmech_dir, 'output.py'), 'w') as f:
+                f.write('# fresh artifact\n')
+
+        monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane_rewriting)
+        assert run_arkane_job(input_file=input_file,
+                              output_directory=output_directory,
+                              required_artifact='output.py') is True
+
+        with open(artifact_path, 'w') as f:
+            f.write('# stale artifact from a previous run\n')
+
+        def fake_run_arkane_writing_nothing(statmech_dir):
+            pass
+
+        monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane_writing_nothing)
+        assert run_arkane_job(input_file=input_file,
+                              output_directory=output_directory,
+                              required_artifact='output.py') is False
+        assert not os.path.isfile(artifact_path), \
+            'The stale artifact should have been deleted before Arkane was invoked.'
+
     def test_differently_named_yml_present_returns_false(self, tmp_path, monkeypatch):
         """Some other .yml file in sensitivity/, but no sa_coefficients.yml -> False."""
         input_file = self._write_input_file(tmp_path)

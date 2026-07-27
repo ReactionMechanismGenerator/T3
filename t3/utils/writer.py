@@ -330,20 +330,26 @@ generatedSpeciesConstraints(
         f.writelines(rmg_input)
 
 
-def write_pdep_network_file(network_name: str,
-                            method: str,
-                            pdep_sa_path: str,
-                            rmg_pdep_path: str,
-                            ) -> tuple:
+def write_arkane_network_input_file(source_path: str,
+                                    dest_path: str,
+                                    method: str,
+                                    sensitivity: bool = True,
+                                    ) -> tuple:
     """
-    Adding a P-dep SA directive to an Arkane network input file.
+    Rewrite an RMG P-dep network file into an Arkane network input file.
+
+    Copies ``source_path`` to ``dest_path``, rewrites the ``method = '...'`` line via
+    ``METHOD_MAP``, and (optionally) injects a ``sensitivity_conditions`` directive spanning the
+    network's T/P extrema. This is the shared core behind both ``write_pdep_network_file`` (SA,
+    ``sensitivity=True``) and the ``ArkaneMESolverAdapter`` (plain ME, ``sensitivity=False``).
 
     Args:
-
-        network_name (str): The name of the original network file, e.g. 'network32_1'.
+        source_path (str): The path to the original RMG network file to copy from.
+        dest_path (str): The path to write the resulting Arkane input file to. The parent
+                         directory is created if it does not already exist.
         method (str): 'CSE', 'MSC' or 'RS'.
-        pdep_sa_path (str): The path to the PDep_SA iteration folder.
-        rmg_pdep_path (str): The path to the RMG/pdep iteration folder.
+        sensitivity (bool, optional): Whether to inject a ``sensitivity_conditions`` directive
+                                      spanning the network's T/P extrema. Default: ``True``.
 
     Raises:
         ValueError: If T/P ranges could not be parsed from the file.
@@ -351,15 +357,12 @@ def write_pdep_network_file(network_name: str,
     Returns:
         tuple: Isomer labels of the current network.
     """
-    # copy the network file into a new folder (and rename it to input.py)
-    sa_pdep_path = os.path.join(pdep_sa_path, network_name, method)
-    if not os.path.isdir(sa_pdep_path):
-        os.makedirs(sa_pdep_path)
-    input_file_path = os.path.join(sa_pdep_path, 'input.py')
-    shutil.copyfile(src=os.path.join(rmg_pdep_path, network_name + '.py'),
-                    dst=input_file_path)
+    dest_dir = os.path.dirname(dest_path)
+    if dest_dir and not os.path.isdir(dest_dir):
+        os.makedirs(dest_dir)
+    shutil.copyfile(src=source_path, dst=dest_path)
 
-    with open(input_file_path, 'r') as f:
+    with open(dest_path, 'r') as f:
         lines = f.readlines()
         new_lines, isomer_labels = list(), list()
         t_min, t_max, p_min, p_max = None, None, None, None
@@ -403,18 +406,49 @@ def write_pdep_network_file(network_name: str,
                 if any(param is None for param in [t_min, t_max, p_min, p_max]):
                     raise ValueError(f'Could not parse all T/P parameters, got:\n'
                                      f'T min = {t_min}, T max = {t_max}, P min = {p_min}, P max = {p_max}.')
-                sa_conditions = f"""    sensitivity_conditions = [[({t_min}, 'K'), ({p_min}, 'bar')],
+                if sensitivity:
+                    sa_conditions = f"""    sensitivity_conditions = [[({t_min}, 'K'), ({p_min}, 'bar')],
                               [({t_max}, 'K'), ({p_min}, 'bar')],
                               [({t_min}, 'K'), ({p_max}, 'bar')],
                               [({t_max}, 'K'), ({p_max}, 'bar')]],"""
-                new_lines.append(sa_conditions)
+                    new_lines.append(sa_conditions)
             else:
                 new_lines.append(line)
 
-    with open(input_file_path, 'w') as f:
+    with open(dest_path, 'w') as f:
         f.writelines(new_lines)
 
     return tuple(isomer_labels)
+
+
+def write_pdep_network_file(network_name: str,
+                            method: str,
+                            pdep_sa_path: str,
+                            rmg_pdep_path: str,
+                            ) -> tuple:
+    """
+    Adding a P-dep SA directive to an Arkane network input file.
+
+    Args:
+
+        network_name (str): The name of the original network file, e.g. 'network32_1'.
+        method (str): 'CSE', 'MSC' or 'RS'.
+        pdep_sa_path (str): The path to the PDep_SA iteration folder.
+        rmg_pdep_path (str): The path to the RMG/pdep iteration folder.
+
+    Raises:
+        ValueError: If T/P ranges could not be parsed from the file.
+
+    Returns:
+        tuple: Isomer labels of the current network.
+    """
+    sa_pdep_path = os.path.join(pdep_sa_path, network_name, method)
+    input_file_path = os.path.join(sa_pdep_path, 'input.py')
+    source_path = os.path.join(rmg_pdep_path, network_name + '.py')
+    return write_arkane_network_input_file(source_path=source_path,
+                                           dest_path=input_file_path,
+                                           method=method,
+                                           sensitivity=True)
 
 
 def to_camel_case(uv: str) -> str:

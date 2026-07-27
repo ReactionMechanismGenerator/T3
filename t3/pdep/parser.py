@@ -17,6 +17,30 @@ from typing import Optional
 
 RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
 
+# ``pdepreaction(...)`` is deliberately NOT part of ``RECOGNIZED_TOP_LEVEL_CALLS`` above: it is
+# not part of the Arkane *input* DSL that RMG pdep network files use. It is a write-only call
+# that Arkane itself emits into a pdep job's ``output.py`` to report a solved kinetics result.
+ARKANE_PDEP_OUTPUT_TOP_LEVEL_CALL = 'pdepreaction'
+
+# Keywords of a kinetics call that describe the validity bounds or metadata of a rate expression
+# rather than the rate itself. These are always finite in Arkane's output (they echo the job's
+# T/P ranges), so they must never be allowed to satisfy a "the kinetics parameters are finite"
+# check on their own: a ``Chebyshev(coeffs=[], Tmin=..., Tmax=..., Pmin=..., Pmax=...)`` carries
+# NO rate information despite having four finite numeric leaves. ``T0`` (the modified-Arrhenius
+# reference temperature, a fixed 1 K in RMG/Arkane output) is a reference quantity like ``Tref``
+# and ``Pref``, not a fitted rate coefficient. The keys observed in real Arkane pdep output
+# fixtures (``tests/data/pdep_me/``) are Tmin/Tmax/Pmin/Pmax/kunits.
+KINETICS_BOUNDS_AND_METADATA_KEYS = ('Tmin', 'Tmax', 'Pmin', 'Pmax', 'Tref', 'Pref', 'T0',
+                                     'kunits', 'comment', 'efficiencies')
+
+# Kinetics call names that may legitimately appear nested inside a ``kinetics=`` keyword of an
+# Arkane pdep output entry (e.g., ``PDepArrhenius(arrhenius=[Arrhenius(...), ...])``). Payload
+# extraction recurses into these; any OTHER call in payload position (``float('nan')``,
+# ``array(...)``) is unverifiable and is surfaced as a ``None`` leaf so the ME-success gate
+# rejects it rather than silently skipping it.
+NESTED_KINETICS_CALL_NAMES = ('Arrhenius', 'MultiArrhenius', 'PDepArrhenius', 'MultiPDepArrhenius',
+                              'Chebyshev', 'ThirdBody', 'Lindemann', 'Troe')
+
 
 @dataclass(frozen=True)
 class PDepPathReaction:
@@ -82,6 +106,250 @@ class PDepNetwork:
                 continue
             by_ts.setdefault(path_reaction.transition_state, list()).append(path_reaction)
         return {ts_label: tuple(reactions) for ts_label, reactions in by_ts.items()}
+
+
+@dataclass(frozen=True)
+class PDepArkaneReaction:
+    """
+    A single ``pdepreaction(...)`` entry parsed from an Arkane pdep job's ``output.py``.
+
+    Args:
+        reactants (tuple): The reactant species labels.
+        products (tuple): The product species labels.
+        kinetics_type (str, optional): The kinetics callee name, e.g. ``'Chebyshev'``, if any.
+        kinetics_params (dict): The kinetics call's keyword arguments, keyword name -> parsed
+            literal value (e.g., ``'coeffs'`` -> a nested list of numbers/``None``, ``'Tmin'`` ->
+            a ``(300, 'K')`` tuple). Keywords whose value could not be evaluated as a literal are
+            omitted.
+        numeric_values (tuple): Every numeric leaf found anywhere inside ``kinetics_params``
+            (recursing into nested lists/tuples), flattened into one tuple, in traversal order.
+            ``None`` entries are preserved (not skipped or coerced) since detecting them is the
+            whole point: a rejected chemically-significant-eigenvalues solve still writes a
+            syntactically valid ``Chebyshev(coeffs=[[None, None, ...], ...])`` block. NOTE: this
+            deliberately mixes the rate payload with the (always finite) T/P bounds/metadata
+            numbers; success gating must use ``rate_payload_numeric_values`` instead.
+        rate_payload_numeric_values (tuple): The numeric (or ``None``) leaves of the RATE PAYLOAD
+            only: every kinetics keyword that is not in ``KINETICS_BOUNDS_AND_METADATA_KEYS``
+            (e.g. ``coeffs`` for Chebyshev, ``A``/``n``/``Ea`` for Arrhenius, the nested
+            ``arrhenius=[...]`` list for PDepArrhenius/MultiArrhenius). Extraction recurses into
+            nested kinetics calls; anything unverifiable in payload position (a bare name such as
+            ``nan``, an unrecognized call such as ``float('nan')`` or ``array(...)``) surfaces as
+            a ``None`` leaf rather than being skipped.
+        missing_kinetics_keys (tuple): The kinetics keywords that were omitted from
+            ``kinetics_params`` because their values could not be evaluated as literals, so an
+            omitted ``coeffs`` is distinguishable from a legitimately absent one.
+    """
+    reactants: tuple
+    products: tuple
+    kinetics_type: str | None
+    kinetics_params: dict
+    numeric_values: tuple
+    rate_payload_numeric_values: tuple = tuple()
+    missing_kinetics_keys: tuple = tuple()
+
+
+def parse_arkane_pdep_output_file(path: str) -> tuple:
+    """
+    Parse an Arkane pdep job's ``output.py`` file from disk.
+
+    Args:
+        path (str): The path to the Arkane pdep ``output.py`` file.
+
+    Raises:
+        ValueError: If the file cannot be parsed as Python.
+
+    Returns:
+        tuple: The parsed ``PDepArkaneReaction`` entries, in file order. Empty if the file
+        contains no ``pdepreaction(...)`` calls (including an empty or comment-only file);
+        unlike ``parse_pdep_network_file``, this deliberately does NOT raise in that case, since
+        emptiness is itself an informative outcome for an ME-success gate built on top of this.
+    """
+    with open(path, 'r') as f:
+        text = f.read()
+    return parse_arkane_pdep_output_text(text=text, path=path)
+
+
+def parse_arkane_pdep_output_text(text: str, path: str = '') -> tuple:
+    """
+    Parse Arkane pdep ``output.py`` text into a tuple of ``PDepArkaneReaction``.
+
+    Args:
+        text (str): The Arkane pdep ``output.py`` file content.
+        path (str, optional): The path the text was read from, if any (used only in error
+            messages).
+
+    Raises:
+        ValueError: If the text cannot be parsed as Python.
+
+    Returns:
+        tuple: The parsed ``PDepArkaneReaction`` entries, in file order. Empty if no
+        ``pdepreaction(...)`` calls are present; this is not an error (see
+        ``parse_arkane_pdep_output_file``).
+    """
+    try:
+        # Arkane output files can contain the same RMG-generated comments (with invalid escape
+        # sequences) that trigger a spurious SyntaxWarning under ``ast.parse``; see the matching
+        # note in ``parse_pdep_network_text`` above.
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SyntaxWarning)
+            tree = ast.parse(text)
+    except SyntaxError as e:
+        raise ValueError(f"Could not parse the Arkane pdep output file at '{path}' as Python: {e}")
+
+    reactions = []
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if _get_call_name(call) != ARKANE_PDEP_OUTPUT_TOP_LEVEL_CALL:
+            continue
+        reactions.append(_parse_arkane_pdep_reaction(_call_keywords(call)))
+    return tuple(reactions)
+
+
+def _parse_arkane_pdep_reaction(kwargs: dict) -> PDepArkaneReaction:
+    """
+    Build a ``PDepArkaneReaction`` from a ``pdepreaction(...)`` call's keyword arguments.
+
+    Args:
+        kwargs (dict): A mapping of keyword name to its (still-AST) value node.
+
+    Returns:
+        PDepArkaneReaction: The parsed Arkane pdep reaction.
+    """
+    reactants = tuple(_literal_or_none(kwargs.get('reactants')) or ())
+    products = tuple(_literal_or_none(kwargs.get('products')) or ())
+
+    kinetics_type = None
+    kinetics_params = dict()
+    numeric_values = []
+    rate_payload_numeric_values = []
+    missing_kinetics_keys = []
+    kinetics_node = kwargs.get('kinetics')
+    if isinstance(kinetics_node, ast.Call):
+        kinetics_type = _get_call_name(kinetics_node)
+        for key, value_node in _call_keywords(kinetics_node).items():
+            value = _literal_or_none(value_node)
+            if value is None and not _is_literal_none(value_node):
+                # The value could not be evaluated as a literal at all (e.g., itself a nested
+                # Call or a bare name such as ``nan``); omit it from ``kinetics_params`` rather
+                # than silently recording a fabricated ``None``, but RECORD the omission so an
+                # unparseable ``coeffs`` is distinguishable from a legitimately absent one.
+                missing_kinetics_keys.append(key)
+            else:
+                kinetics_params[key] = value
+                numeric_values.extend(_extract_numeric_leaves(value))
+            if key not in KINETICS_BOUNDS_AND_METADATA_KEYS:
+                # Rate payload (coeffs / A / n / Ea / arrhenius=[...] / ...): extract its numeric
+                # leaves from the AST node itself, so nested kinetics calls contribute their
+                # payload and unverifiable nodes surface as None leaves.
+                rate_payload_numeric_values.extend(_extract_payload_numeric_leaves(value_node))
+
+    return PDepArkaneReaction(
+        reactants=reactants,
+        products=products,
+        kinetics_type=kinetics_type,
+        kinetics_params=kinetics_params,
+        numeric_values=tuple(numeric_values),
+        rate_payload_numeric_values=tuple(rate_payload_numeric_values),
+        missing_kinetics_keys=tuple(missing_kinetics_keys),
+    )
+
+
+def _is_literal_none(node) -> bool:
+    """
+    Check whether an AST node is literally the ``None`` constant (as opposed to a node that
+    simply failed to evaluate as a literal, for which ``_literal_or_none`` also returns ``None``).
+
+    Args:
+        node: An AST node (or ``None``).
+
+    Returns:
+        bool: True if ``node`` is an ``ast.Constant`` whose value is ``None``.
+    """
+    return isinstance(node, ast.Constant) and node.value is None
+
+
+def _extract_payload_numeric_leaves(node) -> list:
+    """
+    Recursively collect the numeric (or ``None``) leaves of a rate-payload AST node.
+
+    Unlike ``_extract_numeric_leaves`` (which walks an already literal-evaluated value), this
+    walks the AST node directly, so it can recurse into nested kinetics calls such as
+    ``PDepArrhenius(arrhenius=[Arrhenius(...), ...])`` whose values ``ast.literal_eval`` cannot
+    handle. Within a recognized nested kinetics call, keywords listed in
+    ``KINETICS_BOUNDS_AND_METADATA_KEYS`` are skipped (they are bounds/metadata, not payload).
+    Any node in payload position that cannot be verified as a finite literal -- a bare name such
+    as ``nan``, an unrecognized call such as ``float('nan')`` or ``array(...)`` -- yields a
+    ``None`` leaf, so the ME-success gate rejects it instead of silently skipping it. String
+    constants (unit labels inside quantity tuples like ``(1e13, 's^-1')``) are skipped.
+
+    Args:
+        node: An AST node from a rate-payload keyword's value.
+
+    Returns:
+        list: The numeric/``None`` leaves found, in traversal order.
+    """
+    leaves = []
+    if isinstance(node, ast.Constant):
+        if node.value is None:
+            leaves.append(None)
+        elif isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+            leaves.append(node.value)
+        # Strings and other constants (unit labels, comments) carry no rate information: skip.
+    elif isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        for element in node.elts:
+            leaves.extend(_extract_payload_numeric_leaves(element))
+    elif isinstance(node, ast.Dict):
+        for value_node in node.values:
+            leaves.extend(_extract_payload_numeric_leaves(value_node))
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        inner = _extract_payload_numeric_leaves(node.operand)
+        if isinstance(node.op, ast.USub):
+            inner = [-leaf if leaf is not None else None for leaf in inner]
+        leaves.extend(inner)
+    elif isinstance(node, ast.Call) and _get_call_name(node) in NESTED_KINETICS_CALL_NAMES:
+        for key, value_node in _call_keywords(node).items():
+            if key in KINETICS_BOUNDS_AND_METADATA_KEYS:
+                continue
+            leaves.extend(_extract_payload_numeric_leaves(value_node))
+    else:
+        # Unverifiable payload content (bare Name like ``nan``, unrecognized call like
+        # ``float('nan')`` or ``array(...)``, arbitrary expression): surface as None so the
+        # gate treats it as non-finite rather than pretending it is absent.
+        leaves.append(None)
+    return leaves
+
+
+def _extract_numeric_leaves(value) -> list:
+    """
+    Recursively collect every numeric (or ``None``) leaf out of a parsed literal value.
+
+    Handles nested lists/tuples such as ``Chebyshev(coeffs=[[...], [...]])`` and quantity
+    tuples such as ``Tmin=(300, 'K')``: numbers are collected, non-numeric leaves (e.g., unit
+    strings like ``'K'`` or ``'s^-1'``) are silently skipped, and ``None`` leaves are preserved
+    as ``None`` rather than skipped or coerced, since detecting them is the whole point of this
+    module's caller (the ME-success gate).
+
+    Args:
+        value: A parsed literal value (number, ``None``, str, list, tuple, dict, or a nesting
+            of these).
+
+    Returns:
+        list: The numeric/``None`` leaves found, in traversal order.
+    """
+    leaves = []
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            leaves.extend(_extract_numeric_leaves(item))
+    elif isinstance(value, dict):
+        for item in value.values():
+            leaves.extend(_extract_numeric_leaves(item))
+    elif value is None:
+        leaves.append(None)
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        leaves.append(value)
+    return leaves
 
 
 def parse_pdep_network_file(path: str) -> PDepNetwork:

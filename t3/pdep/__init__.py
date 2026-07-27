@@ -15,6 +15,12 @@ from t3.pdep.cache import (
     validate_sa_cache,
     write_sa_cache_metadata,
 )
+from t3.pdep.mesolver import (
+    ArkaneMESolverAdapter,
+    MESolverAdapter,
+    mesolver_factory,
+    register_mesolver_adapter,
+)
 from t3.pdep.parser import (
     PDepNetwork,
     PDepPathReaction,

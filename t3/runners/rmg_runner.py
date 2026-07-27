@@ -476,6 +476,7 @@ def run_arkane_job(input_file: str,
                    output_directory: str,
                    plot: bool = False,
                    logger: Logger | None = None,
+                   required_artifact: str = os.path.join('sensitivity', 'sa_coefficients.yml'),
                    ) -> bool:
     """
     Run an Arkane job.
@@ -485,11 +486,39 @@ def run_arkane_job(input_file: str,
         output_directory (str): The path to the output directory.
         plot (bool, optional): Whether to plot the results.
         logger (Logger, optional): The logger object.
+        required_artifact (str, optional): A path, relative to ``output_directory``, naming the
+                                           artifact that Arkane must (re)write for the job to be
+                                           considered successful. Deleted before the run (if
+                                           present) and required to exist afterward. Defaults to
+                                           the SA job's ``sensitivity/sa_coefficients.yml``, so
+                                           this is a no-op for all existing callers.
+
+    Raises:
+        ValueError: If ``required_artifact`` is an absolute path, or resolves (after ``..`` and
+                    symlink resolution) to a location outside ``output_directory``. The joined
+                    path is deleted before the run, so an unconfined value would delete an
+                    arbitrary file elsewhere on the filesystem.
 
     Returns:
         bool: Whether the job was successful.
     """
     from arc.statmech.arkane import run_arkane
+
+    # Confine the artifact path to output_directory BEFORE any side effect: the joined path is
+    # deleted below, so a traversal value ('../important.yml') or an absolute value (which makes
+    # os.path.join discard output_directory entirely) would otherwise delete a file outside the
+    # job directory.
+    if os.path.isabs(required_artifact):
+        raise ValueError(f"The 'required_artifact' argument must be a path relative to the output "
+                         f"directory, got the absolute path '{required_artifact}'.")
+    resolved_output_directory = os.path.realpath(output_directory)
+    artifact_path = os.path.join(output_directory, required_artifact)
+    resolved_artifact_path = os.path.realpath(artifact_path)
+    if resolved_artifact_path == resolved_output_directory \
+            or os.path.commonpath([resolved_output_directory, resolved_artifact_path]) != resolved_output_directory:
+        raise ValueError(f"The 'required_artifact' argument must resolve to a path strictly inside "
+                         f"the output directory '{output_directory}', got '{required_artifact}' "
+                         f"which resolves to '{resolved_artifact_path}'.")
 
     # Ensure output directory exists
     if not os.path.exists(output_directory):
@@ -501,15 +530,14 @@ def run_arkane_job(input_file: str,
     if os.path.abspath(input_file) != os.path.abspath(target_input):
         shutil.copyfile(input_file, target_input)
 
-    # Check for success by looking for the sensitivity coefficients file, which is the actual
-    # product of a successful Arkane SA job. Neither output.py nor a stale sa_coefficients.yml is
-    # evidence of anything: both can survive from a previous run. Rather than relying on a
-    # timestamp comparison (racy under coarse filesystem mtime granularity, and meaningless if the
-    # clock or filesystem lies), delete any pre-existing file before invoking Arkane and simply
-    # require that Arkane itself (re)wrote it.
-    sa_coefficients_path = os.path.join(output_directory, 'sensitivity', 'sa_coefficients.yml')
-    if os.path.isfile(sa_coefficients_path):
-        os.remove(sa_coefficients_path)
+    # Check for success by looking for the required artifact, which is the actual product of a
+    # successful Arkane job. Neither output.py nor a stale artifact is evidence of anything: both
+    # can survive from a previous run. Rather than relying on a timestamp comparison (racy under
+    # coarse filesystem mtime granularity, and meaningless if the clock or filesystem lies),
+    # delete any pre-existing file before invoking Arkane and simply require that Arkane itself
+    # (re)wrote it. ``artifact_path`` was computed (and confined to ``output_directory``) above.
+    if os.path.isfile(artifact_path):
+        os.remove(artifact_path)
 
     try:
         run_arkane(statmech_dir=output_directory)
@@ -518,9 +546,9 @@ def run_arkane_job(input_file: str,
             logger.error(f'Arkane run failed with error: {e}')
         return False
 
-    if not os.path.isfile(sa_coefficients_path):
+    if not os.path.isfile(artifact_path):
         if logger:
-            logger.error(f'The Arkane job in {output_directory} did not produce {sa_coefficients_path}.')
+            logger.error(f'The Arkane job in {output_directory} did not produce {artifact_path}.')
         return False
     return True
 

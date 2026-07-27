@@ -13,13 +13,22 @@ import pytest
 from t3.common import TEST_DATA_BASE_PATH
 from t3.pdep.parser import (
     _call_keywords,
+    PDepArkaneReaction,
     PDepNetwork,
     PDepPathReaction,
+    parse_arkane_pdep_output_file,
+    parse_arkane_pdep_output_text,
     parse_pdep_network_file,
     parse_pdep_network_text,
 )
 
 PDEP_NETWORK_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1', 'RMG', 'pdep')
+
+# Fixtures for the Arkane pdep *output* parser live under ``tests/data/pdep_me/`` rather than
+# ``tests/data/pdep_network/`` because the latter is a ``t3.paths['PDep SA']`` target that other
+# tests ``shutil.rmtree`` during teardown; see the module docstring in ``test_me_success.py`` for
+# the full explanation.
+PDEP_ME_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_me')
 
 # (file stem, number of species, number of transition states, number of path reactions)
 NETWORK_COUNTS = [
@@ -224,6 +233,157 @@ def test_multi_arrhenius_nested_comments_are_collected():
     assert '\n' in reaction.kinetics_comment
 
 
+def test_parse_arkane_pdep_output_file_success_fixture():
+    """Test that the real clean-ME-solve output.py parses to one PDepArkaneReaction with finite
+    Chebyshev coefficients (including legitimately negative ones).
+    """
+    path = os.path.join(PDEP_ME_DIR, 'success', 'output.py')
+    reactions = parse_arkane_pdep_output_file(path=path)
+    assert isinstance(reactions, tuple)
+    assert len(reactions) == 1
+    reaction = reactions[0]
+    assert isinstance(reaction, PDepArkaneReaction)
+    assert reaction.reactants == ('C1rad(2)',)
+    assert reaction.products == ('H(34)', 'CH2(T)(48)')
+    assert reaction.kinetics_type == 'Chebyshev'
+    assert reaction.kinetics_params['kunits'] == 's^-1'
+    assert reaction.kinetics_params['Tmin'] == (300, 'K')
+    coeffs = reaction.kinetics_params['coeffs']
+    assert coeffs[0][0] == -31.1515
+    # Legitimately negative coefficients must survive unmodified (log-space fit coefficients,
+    # not k(T,P) itself).
+    assert any(row[0] < 0 for row in coeffs)
+    assert all(v is not None for v in reaction.numeric_values)
+
+
+def test_parse_arkane_pdep_output_file_soft_failure_cse_none_survives():
+    """Test that the real CSE soft-failure output.py's all-None Chebyshev coeffs survive
+    parsing as literal None values, not skipped and not coerced to 0 or NaN.
+    """
+    path = os.path.join(PDEP_ME_DIR, 'soft_failure_cse', 'output.py')
+    reactions = parse_arkane_pdep_output_file(path=path)
+    assert len(reactions) == 1
+    reaction = reactions[0]
+    assert reaction.kinetics_type == 'Chebyshev'
+    coeffs = reaction.kinetics_params['coeffs']
+    assert len(coeffs) == 6
+    assert all(v is None for row in coeffs for v in row)
+    assert len(reaction.numeric_values) > 0
+    # The coeffs entries are None (24 of them: 6x4), but numeric_values also carries the
+    # perfectly finite Tmin/Tmax/Pmin/Pmax quantity numbers, so not *every* entry is None.
+    assert any(v is None for v in reaction.numeric_values)
+    assert sum(1 for v in reaction.numeric_values if v is None) == 24
+
+
+def test_parse_arkane_pdep_output_file_hard_failure_empty_tuple():
+    """Test that the real 0-byte hard-failure output.py parses to an empty tuple, not an error.
+
+    This is the specific behavior that lets the ME-success gate distinguish "crashed before
+    writing anything" from "wrote something bad": an empty file must not raise ValueError the
+    way an empty RMG pdep network file does in parse_pdep_network_file.
+    """
+    path = os.path.join(PDEP_ME_DIR, 'hard_failure', 'output.py')
+    reactions = parse_arkane_pdep_output_file(path=path)
+    assert reactions == tuple()
+
+
+def test_parse_arkane_pdep_output_text_empty_or_comment_only_yields_empty_tuple():
+    """Test that an empty string and a comment-only string both parse to an empty tuple rather
+    than raising, mirroring the hard-failure fixture case but for synthetic inputs.
+
+    Regression this guards: a naive port of parse_pdep_network_text's "raise ValueError if no
+    reactions" behavior into the Arkane-output parser would make this raise instead of returning
+    an empty tuple, breaking the ME-success gate's ability to treat emptiness as informative
+    rather than exceptional.
+    """
+    assert parse_arkane_pdep_output_text(text='') == tuple()
+    assert parse_arkane_pdep_output_text(text='# just a comment\n# nothing else\n') == tuple()
+
+
+ARKANE_OUTPUT_ANTI_EXEC_TEXT = """
+raise RuntimeError('executed!')
+
+pdepreaction(
+    reactants = ['A'],
+    products = ['B', 'C'],
+    kinetics = Chebyshev(
+        coeffs = [[1.0, 2.0], [None, 4.0]],
+        kunits = 's^-1',
+        Tmin = (300, 'K'),
+        Tmax = (2100, 'K'),
+    ),
+)
+"""
+
+
+def test_parse_arkane_pdep_output_text_anti_exec_and_nested_none():
+    """Test that a top-level side-effect statement is never executed (only ast.parse is used),
+    and that a None nested two levels deep inside coeffs survives parsing.
+    """
+    reactions = parse_arkane_pdep_output_text(text=ARKANE_OUTPUT_ANTI_EXEC_TEXT)
+    assert len(reactions) == 1
+    reaction = reactions[0]
+    assert reaction.reactants == ('A',)
+    assert reaction.products == ('B', 'C')
+    assert reaction.kinetics_type == 'Chebyshev'
+    assert reaction.kinetics_params['coeffs'] == [[1.0, 2.0], [None, 4.0]]
+    assert None in reaction.numeric_values
+    assert 1.0 in reaction.numeric_values
+    assert 300 in reaction.numeric_values
+
+
+def test_parse_arkane_pdep_output_text_invalid_syntax_raises_value_error():
+    """Test that syntactically invalid Arkane output text raises a ValueError, matching the
+    RMG pdep network parser's behavior for malformed input (as opposed to merely-empty input,
+    which must not raise).
+    """
+    with pytest.raises(ValueError):
+        parse_arkane_pdep_output_text(text='pdepreaction(\n    reactants = \n')
+
+
+def test_rate_payload_numeric_values_exclude_bounds_and_metadata():
+    """Test that ``rate_payload_numeric_values`` carries only the rate payload's numeric leaves
+    (``coeffs`` here), never the Tmin/Tmax/Pmin/Pmax bounds or metadata numbers.
+
+    Regression this guards: the combined ``numeric_values`` field mixes the (always finite)
+    T/P bounds with the actual rate coefficients, which let a payload-free kinetics call pass
+    the ME-success gate on its bounds alone.
+    """
+    text = ("pdepreaction(\n"
+            "    reactants=['A'], products=['B'],\n"
+            "    kinetics=Chebyshev(coeffs=[[1.0, -2.5]], kunits='s^-1',\n"
+            "                       Tmin=(300,'K'), Tmax=(2100,'K'),\n"
+            "                       Pmin=(0.1,'bar'), Pmax=(100,'bar')),\n"
+            ")\n")
+    reactions = parse_arkane_pdep_output_text(text=text)
+    assert len(reactions) == 1
+    reaction = reactions[0]
+    assert reaction.rate_payload_numeric_values == (1.0, -2.5)
+    # The combined field keeps its original meaning (payload AND bounds).
+    assert 300 in reaction.numeric_values
+    assert 300 not in reaction.rate_payload_numeric_values
+    assert reaction.missing_kinetics_keys == tuple()
+
+
+def test_missing_kinetics_keys_records_unparseable_coeffs():
+    """Test that a kinetics keyword omitted because it could not be literal-evaluated (a bare
+    ``nan`` name inside ``coeffs``) is recorded in ``missing_kinetics_keys``, so an omitted
+    ``coeffs`` is distinguishable from a legitimately absent one.
+    """
+    text = ("pdepreaction(\n"
+            "    reactants=['A'], products=['B'],\n"
+            "    kinetics=Chebyshev(coeffs=[[nan]], kunits='s^-1',\n"
+            "                       Tmin=(300,'K'), Tmax=(2100,'K'),\n"
+            "                       Pmin=(0.1,'bar'), Pmax=(100,'bar')),\n"
+            ")\n")
+    reactions = parse_arkane_pdep_output_text(text=text)
+    assert len(reactions) == 1
+    reaction = reactions[0]
+    assert 'coeffs' in reaction.missing_kinetics_keys
+    assert 'coeffs' not in reaction.kinetics_params
+    # The unresolvable payload leaf surfaces as None (non-finite), never silently vanishes.
+    assert any(v is None for v in reaction.rate_payload_numeric_values) \
+        or reaction.rate_payload_numeric_values == tuple()
 class TestKwargsUnpackingOnRecognizedCallsIsRefused:
     """
     round-30 P2. ``_call_keywords`` maps an ``ast.Call``'s keyword arguments to their (still-AST)
