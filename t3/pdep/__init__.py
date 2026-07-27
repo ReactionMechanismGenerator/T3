@@ -15,6 +15,11 @@ from t3.pdep.cache import (
     validate_sa_cache,
     write_sa_cache_metadata,
 )
+from t3.pdep.hybrid import (
+    HybridNetworkResult,
+    QMEnergySettings,
+    write_hybrid_network_input_file,
+)
 from t3.pdep.mesolver import (
     ArkaneMESolverAdapter,
     MESolverAdapter,

@@ -2,7 +2,10 @@
 t3 utils writer module
 """
 
+import ast
+import logging
 import os
+import re
 import shutil
 
 from mako.template import Template
@@ -11,11 +14,34 @@ from arc.species.perceive import perceive_molecule_from_xyz
 
 from t3.chem import T3Species
 from t3.utils.generator import generate_radicals
+from t3.utils.network_thermo import format_skipped_species, network_thermo_t_max
 
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
               'RS': 'reservoir state',
               'MSC': 'modified strong collision',
               }
+
+logger = logging.getLogger(__name__)
+
+
+def format_clamped_t_max(value: float) -> str:
+    """
+    Format a clamped Tmax value for injection into an Arkane network input file's text.
+
+    Matches the plain-integer style RMG's own writer uses for a P-dep network's Tmax (e.g.
+    ``3000`` rather than ``3000.0``) whenever the clamped value is a whole number, so a clamp does
+    not introduce a stylistic difference from the numbers RMG itself would have written; a
+    fractional species thermo ceiling (e.g. ``957.493``) is preserved exactly via ``repr``.
+
+    Args:
+        value (float): The clamped Tmax value, in Kelvin.
+
+    Returns:
+        str: The formatted value.
+    """
+    if value == int(value):
+        return str(int(value))
+    return repr(value)
 
 
 def write_rmg_input_file(rmg: dict,
@@ -330,6 +356,67 @@ generatedSpeciesConstraints(
         f.writelines(rmg_input)
 
 
+# Matches a 'method = ...' (or 'method=...') assignment statement, tolerant of both quote styles
+# and of missing whitespace around '=': e.g. "    method = 'CSE',", '    method="CSE",',
+# "method='CSE',". Anchored at the start of the (whitespace-stripped) line, so a line whose first
+# non-whitespace character is '#' (a comment) never matches.
+METHOD_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)method\s*=\s*(?P<quote>['\"])(?P<value>.*?)(?P=quote)(?P<trailing>.*)$")
+
+# A cheap, cheaper-than-the-full-rewrite-regex candidate check used by callers to decide whether a
+# line is a 'method = ...' assignment at all (used to drive the per-file rewrite count). Kept
+# separate from METHOD_LINE_RE so a malformed candidate (e.g. an assignment with an unterminated
+# quote) still counts as "found" and fails loudly via rewrite_arkane_method_line's own ValueError,
+# rather than being silently skipped as "not a method line".
+METHOD_LINE_CANDIDATE_RE = re.compile(r'^[ \t]*method\s*=')
+
+
+def rewrite_arkane_method_line(line: str, method: str) -> str:
+    """
+    Rewrite a P-dep network file's ``method = '...'`` line to use the resolved Arkane method name.
+
+    Factored out of ``write_arkane_network_input_file`` so ``t3.pdep.hybrid`` can reuse the exact
+    same string-scan logic rather than duplicating it.
+
+    Tolerates both single- and double-quoted values (``method = 'CSE'`` and ``method = "CSE"``)
+    and missing whitespace around ``=`` (``method='CSE'``), preserving whichever quote character
+    the source line used. Does NOT attempt to distinguish a genuine top-level ``method = ...``
+    assignment from one that happens to appear inside a triple-quoted string; that is a known,
+    still-open limitation of this line-scan (non-AST) approach.
+
+    Args:
+        line (str): The source line, e.g. ``"    method = 'chemically-significant eigenvalues',\\n"``.
+        method (str): 'CSE', 'MSC' or 'RS'.
+
+    Raises:
+        ValueError: If ``line`` does not have the expected ``method = <quoted string>`` shape.
+            Never silently returns ``line`` unchanged: a caller that fails to rewrite a P-dep
+            network's method line would go on to solve it with the SOURCE file's method while
+            downstream cache metadata records the REQUESTED method, silently mismatching them.
+
+    Returns:
+        str: The rewritten line.
+    """
+    #     method = 'chemically-significant eigenvalues',
+    newline = ''
+    body = line
+    if body.endswith('\r\n'):
+        newline = '\r\n'
+        body = body[:-2]
+    elif body.endswith('\n'):
+        newline = '\n'
+        body = body[:-1]
+
+    match = METHOD_LINE_RE.match(body)
+    if match is None:
+        raise ValueError(f"Could not rewrite a P-dep network file's 'method = ...' line to method {method!r}: the "
+                         f"line does not have the expected quoted assignment shape (single- or double-quoted), "
+                         f"got: {line!r}.")
+
+    quote = match.group('quote')
+    return (f"{match.group('indent')}method = {quote}{METHOD_MAP[method]}{quote}"
+            f"{match.group('trailing')}{newline}")
+
+
 def write_arkane_network_input_file(source_path: str,
                                     dest_path: str,
                                     method: str,
@@ -364,10 +451,28 @@ def write_arkane_network_input_file(source_path: str,
 
     with open(dest_path, 'r') as f:
         lines = f.readlines()
+        # Computed once, from the exact text that was just copied to dest_path, BEFORE the T/P
+        # extrema are line-scanned below: this is the ceiling every species the ceiling could be
+        # computed for has valid NASA thermo up to, and it is what decides whether the pdep
+        # block's own requested Tmax must be clamped. See network_thermo_t_max's docstring for
+        # why None (no species contributed a determinable ceiling) means "clamp nothing" rather
+        # than "clamp to zero", and for why a species whose thermo could not be read is skipped
+        # rather than failing the whole file -- which is also why a non-empty `skipped` below
+        # means this ceiling may be higher than the network's true one.
+        ceiling = network_thermo_t_max(''.join(lines))
+        thermo_t_max = ceiling.t_max
+        if ceiling.skipped:
+            logger.warning(
+                f"Network '{source_path}': the NASA thermo ceiling used to clamp '{dest_path}' "
+                f"({thermo_t_max} K) could not account for {len(ceiling.skipped)} species whose "
+                f"thermo could not be read: {format_skipped_species(ceiling.skipped)}. The true "
+                f"network-wide ceiling may therefore be lower than {thermo_t_max} K.")
         new_lines, isomer_labels = list(), list()
-        t_min, t_max, p_min, p_max = None, None, None, None
+        t_min, t_max, t_count, p_min, p_max = None, None, None, None, None
         parse_tp, parse_isomers = False, (False, False)
+        method_rewrite_count = 0
         for line in lines:
+            skip_line = False
             if 'pressureDependence(' in line:
                 parse_tp = True
             if 'network(' in line:
@@ -383,6 +488,89 @@ def write_arkane_network_input_file(source_path: str,
                 elif 'Tmax' in line and '(' in line:
                     #     Tmax = (2200, 'K'),
                     t_max = line.split('(')[1].split(',')[0]
+                    if thermo_t_max is not None and float(t_max) > thermo_t_max:
+                        # The pdep grid asks for a temperature no species' NASA thermo is valid
+                        # to; standalone Arkane refuses this outright ("No valid NASA polynomial
+                        # at temperature ... K.") rather than tolerating the extrapolation the way
+                        # RMG did at generation time. Clamp to the narrowest species ceiling, and
+                        # rewrite THIS line in place (not just the sensitivity_conditions block
+                        # below) since this is the line Arkane's pressureDependence job itself
+                        # reads and fails on.
+                        if t_min is None or thermo_t_max <= float(t_min):
+                            raise ValueError(
+                                f"Cannot write '{dest_path}': the pdep network's requested Tmax "
+                                f"({t_max} K) exceeds the narrowest species thermo ceiling in the "
+                                f"network ({thermo_t_max} K), and clamping to that ceiling would "
+                                f"leave a Tmax ({thermo_t_max} K) at or below Tmin ({t_min} K), "
+                                f"i.e. no valid temperature point to solve at all.")
+                        logger.warning(
+                            f"Network '{source_path}': requested pdep Tmax of {t_max} K exceeds "
+                            f"the narrowest species thermo (NASA) ceiling in the file, "
+                            f"{thermo_t_max} K; clamping the Arkane SA/ME grid's Tmax to "
+                            f"{thermo_t_max} K in '{dest_path}' so standalone Arkane does not "
+                            f"refuse the solve with 'No valid NASA polynomial at temperature ... K.'")
+                        formatted_t_max = format_clamped_t_max(thermo_t_max)
+                        paren_index = line.index('(')
+                        comma_index = line.index(',', paren_index)
+                        line = line[:paren_index + 1] + formatted_t_max + line[comma_index:]
+                        t_max = formatted_t_max
+                elif 'Tcount' in line and '=' in line:
+                    #     Tcount = 8,
+                    t_count = line.split('=', 1)[1].split(',')[0].strip()
+                elif 'Tlist' in line and '(' in line:
+                    #     Tlist = ([3200,2290.91,...,700],'K'),
+                    # RMG's writer always precomputes an explicit Tlist alongside Tmin/Tmax/Tcount,
+                    # and Arkane's own pdep.py only calls generate_T_list() (which would build the
+                    # grid from Tmin/Tmax/Tcount) when self.Tlist is None. If Tlist is present, it
+                    # wins outright and Tmin/Tmax are ignored -- so clamping the Tmax line above is
+                    # a no-op unless this stale, out-of-range Tlist is also dropped so Arkane
+                    # regenerates the grid over the clamped range instead of solving at the
+                    # network's original (too-high) grid points.
+                    if thermo_t_max is not None:
+                        rhs = line.split('=', 1)[1].strip()
+                        if rhs.endswith(','):
+                            rhs = rhs[:-1]
+                        try:
+                            parsed = ast.literal_eval(rhs)
+                        except (ValueError, SyntaxError) as e:
+                            raise ValueError(
+                                f"Cannot write '{dest_path}': a clamp is in play (the narrowest "
+                                f"species thermo ceiling is {thermo_t_max} K), so the pdep "
+                                f"network's Tlist line must be understood to decide whether to "
+                                f"drop it, but it could not be parsed as a Python literal: {e}")
+                        if (not isinstance(parsed, tuple) or len(parsed) != 2
+                                or not isinstance(parsed[0], (list, tuple))
+                                or not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                                           for v in parsed[0])
+                                or parsed[1] != 'K'):
+                            raise ValueError(
+                                f"Cannot write '{dest_path}': a clamp is in play (the narrowest "
+                                f"species thermo ceiling is {thermo_t_max} K), so the pdep "
+                                f"network's Tlist line must be understood to decide whether to "
+                                f"drop it, but it is not a 2-element (sequence-of-numbers, unit) "
+                                f"tuple with unit 'K'; got: {parsed!r}.")
+                        entries = parsed[0]
+                        if any(entry > thermo_t_max for entry in entries):
+                            missing = [name for name, val in (('Tmin', t_min), ('Tmax', t_max),
+                                                              ('Tcount', t_count)) if val is None]
+                            if missing:
+                                raise ValueError(
+                                    f"Cannot write '{dest_path}': the pdep network's Tlist contains "
+                                    f"an entry above the narrowest species thermo ceiling "
+                                    f"({thermo_t_max} K) and must be dropped so Arkane regenerates "
+                                    f"the T grid itself, but {', '.join(missing)} could not be "
+                                    f"parsed from the pressureDependence(...) block to regenerate "
+                                    f"from.")
+                            highest = max(entries)
+                            logger.warning(
+                                f"Network '{source_path}': dropping the pressureDependence(...) "
+                                f"block's explicit Tlist line when writing '{dest_path}' -- its "
+                                f"highest entry ({highest} K) exceeds the narrowest species thermo "
+                                f"(NASA) ceiling in the file, {thermo_t_max} K; Arkane will "
+                                f"regenerate the T grid itself from the clamped Tmin ({t_min} K) / "
+                                f"Tmax ({t_max} K) / Tcount ({t_count}) instead of using this "
+                                f"network's original (too-high) grid.")
+                            skip_line = True
                 elif 'Pmin' in line and '(' in line:
                     #     Pmin = (0.01, 'bar'),
                     p_min = line.split('(')[1].split(',')[0]
@@ -394,13 +582,9 @@ def write_arkane_network_input_file(source_path: str,
                 parts = line.split("'")
                 if len(parts) >= 2:
                     isomer_labels.append(parts[1])
-            if 'method = ' in line:
-                #     method = 'chemically-significant eigenvalues',
-                splits = line.split("'")
-                if len(splits) >= 3:
-                    new_lines.append(f"{splits[0]}'{METHOD_MAP[method]}'{splits[2]}")
-                else:
-                    new_lines.append(line)
+            if METHOD_LINE_CANDIDATE_RE.match(line):
+                new_lines.append(rewrite_arkane_method_line(line=line, method=method))
+                method_rewrite_count += 1
             elif 'rmgmode' in line:
                 new_lines.append(line)
                 if any(param is None for param in [t_min, t_max, p_min, p_max]):
@@ -412,8 +596,14 @@ def write_arkane_network_input_file(source_path: str,
                               [({t_min}, 'K'), ({p_max}, 'bar')],
                               [({t_max}, 'K'), ({p_max}, 'bar')]],"""
                     new_lines.append(sa_conditions)
-            else:
+            elif not skip_line:
                 new_lines.append(line)
+
+    if method_rewrite_count != 1:
+        raise ValueError(f"Expected exactly one 'method = ...' line to rewrite in '{source_path}', found "
+                         f"{method_rewrite_count}. Refusing to write '{dest_path}' with an unresolved (zero) or "
+                         f"ambiguous (more than one) method line, rather than silently solving with the source "
+                         f"file's original method.")
 
     with open(dest_path, 'w') as f:
         f.writelines(new_lines)

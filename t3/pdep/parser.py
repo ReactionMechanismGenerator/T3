@@ -15,6 +15,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+# network_thermo_t_max is a network-file parsing concern callers reasonably look for in this
+# module, but it lives in t3.utils so that t3.utils.writer can use it without a circular import
+# (t3.pdep -> t3.utils.writer is the existing dependency direction; several t3.pdep submodules
+# import from t3.utils.writer, so t3.utils.writer cannot import from t3.pdep in turn).
+from t3.utils.network_thermo import (NetworkTextUnparseable,  # noqa: F401
+                                     NetworkThermoCeiling,  # noqa: F401
+                                     format_skipped_species,  # noqa: F401
+                                     network_thermo_t_max)  # noqa: F401
+
 RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
 
 # ``pdepreaction(...)`` is deliberately NOT part of ``RECOGNIZED_TOP_LEVEL_CALLS`` above: it is
