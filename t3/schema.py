@@ -139,6 +139,7 @@ class T3Sensitivity(BaseModel):
     SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] = 0.01
     max_sa_workers: Annotated[int, Field(ge=1)] = 24
     pdep_SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] | None = 0.001
+    pdep_min_delta_ln_k: Annotated[float, Field(gt=0, lt=1)] = 1e-3
     ME_methods: list[Annotated[str, Field(min_length=2, max_length=3)]] = ['CSE', 'MSC']
     top_SA_species: Annotated[int, Field(ge=0)] = 10
     top_SA_reactions: Annotated[int, Field(ge=0)] = 10

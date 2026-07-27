@@ -84,6 +84,10 @@ t3:
     pdep_SA_threshold: 0.001  # optional, used to determine wells and reactions to calculate thermo
                               # and rates for from a PES of a sensitive reaction, default: 0.001
                               # Pass None to skip PES SA.
+    pdep_min_delta_ln_k: 0.001  # optional, the smallest ln(k) response to a PES SA perturbation that
+                                # still counts as "sensitive", default: 0.001. Acts as an absolute
+                                # floor alongside the relative pdep_SA_threshold, so that denormal
+                                # near-zero sensitivity coefficients cannot pass on relative grounds.
     ME_methods: ['CSE', 'MSC']  # master equation methods for PES SA,
                                 # any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC']
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10

@@ -138,6 +138,7 @@ def test_t3_sensitivity_schema():
                                    global_observables=None,
                                    SA_threshold=0.01,
                                    pdep_SA_threshold=0.001,
+                                   pdep_min_delta_ln_k=1e-3,
                                    ME_methods=['CSE', 'MSC'],
                                    top_SA_species=10,
                                    top_SA_reactions=10
@@ -148,6 +149,7 @@ def test_t3_sensitivity_schema():
     assert t3_sensitivity.global_observables is None
     assert t3_sensitivity.SA_threshold == 0.01
     assert t3_sensitivity.pdep_SA_threshold == 0.001
+    assert t3_sensitivity.pdep_min_delta_ln_k == 1e-3
     assert t3_sensitivity.ME_methods == ['CSE', 'MSC']
     assert t3_sensitivity.top_SA_species == 10
     assert t3_sensitivity.top_SA_reactions == 10

@@ -501,6 +501,16 @@ def run_arkane_job(input_file: str,
     if os.path.abspath(input_file) != os.path.abspath(target_input):
         shutil.copyfile(input_file, target_input)
 
+    # Check for success by looking for the sensitivity coefficients file, which is the actual
+    # product of a successful Arkane SA job. Neither output.py nor a stale sa_coefficients.yml is
+    # evidence of anything: both can survive from a previous run. Rather than relying on a
+    # timestamp comparison (racy under coarse filesystem mtime granularity, and meaningless if the
+    # clock or filesystem lies), delete any pre-existing file before invoking Arkane and simply
+    # require that Arkane itself (re)wrote it.
+    sa_coefficients_path = os.path.join(output_directory, 'sensitivity', 'sa_coefficients.yml')
+    if os.path.isfile(sa_coefficients_path):
+        os.remove(sa_coefficients_path)
+
     try:
         run_arkane(statmech_dir=output_directory)
     except Exception as e:
@@ -508,13 +518,11 @@ def run_arkane_job(input_file: str,
             logger.error(f'Arkane run failed with error: {e}')
         return False
 
-    # Check for success by looking for the sensitivity output directory,
-    # which is the actual product of a successful Arkane SA job.
-    # Do not rely on output.py as it may pre-exist from previous runs.
-    sa_dir = os.path.join(output_directory, 'sensitivity')
-    if os.path.isdir(sa_dir) and any(f.endswith('.yml') or f.endswith('.yaml') for f in os.listdir(sa_dir)):
-        return True
-    return False
+    if not os.path.isfile(sa_coefficients_path):
+        if logger:
+            logger.error(f'The Arkane job in {output_directory} did not produce {sa_coefficients_path}.')
+        return False
+    return True
 
 
 def run_rmg_sa_incore(rmg_input_file_path: str,

@@ -50,6 +50,13 @@ from t3.common import (DATA_BASE_PATH,
                        time_lapse,
                        )
 from t3.logger import Logger
+from t3.pdep.cache import validate_sa_cache, write_sa_cache_metadata
+from t3.pdep.parser import parse_pdep_network_file
+from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
+                              CACHE_STATUS_GENERATED,
+                              select_from_sa_dict,
+                              select_sensitive_wells,
+                              )
 from t3.runners.rmg_runner import rmg_runner, run_arkane_job
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
@@ -95,6 +102,8 @@ class T3:
         reactions (Dict[int, T3Reaction]): The T3 reactions dictionary. Keys are T3 reaction indices.
         paths (dict): Various directory and file paths.
         executed_networks (list): PDep networks for which SA was already executed. Entries are tuples of isomer labels.
+        pdep_network_selections (list): Entries are ``PDepNetworkSelection`` decisions of whether each examined
+                                        PDep network qualifies for QM refinement.
         rmg_species (List[T3Species]): Entries are RMG species objects in the model core for a certain T3 iteration.
         rmg_reactions (List[T3Reaction]): Entries are RMG reaction objects in the model core for a certain T3 iteration.
         sa_observables (list): Entries are RMG species labels for the SA observables.
@@ -161,6 +170,7 @@ class T3:
         self.kinetics_lib_base_path = os.path.join(RMG_DB_PATH, 'kinetics', 'libraries')
         self.species, self.reactions, self.paths = dict(), dict(), dict()
         self.rmg_species, self.rmg_reactions, self.executed_networks = list(), list(), list()
+        self.pdep_network_selections = list()
 
         if self.qm:
             self.check_arc_args()
@@ -1054,8 +1064,8 @@ class T3:
             network_name = f'network{reaction.network.index}_{network_version}'  # w/o the '.py' extension
 
             # Try running this network using user-specified methods by order.
-            sa_coefficients_path, arkane = None, None
-            errors = list()
+            sa_coefficients_path, arkane, method_used, cache_status = None, None, None, None
+            network_path = os.path.join(self.paths['RMG PDep'], f'{network_name}.py')
             for method in self.t3['sensitivity']['ME_methods']:
                 isomer_labels = write_pdep_network_file(
                     network_name=network_name,
@@ -1065,6 +1075,25 @@ class T3:
                 )
                 arkane_input = os.path.join(self.paths['PDep SA'], network_name, method, 'input.py')
                 arkane_output_dir = os.path.join(self.paths['PDep SA'], network_name, method)
+                candidate_sa_path = os.path.join(arkane_output_dir, 'sensitivity', 'sa_coefficients.yml')
+                # Re-use a previous analysis only if T3 itself vouched for it. An SA output without a
+                # valid T3 sidecar is regenerated rather than trusted: a stale one can silently report
+                # no sensitivity at all, which would drop this network from QM refinement unnoticed.
+                cache_status, cache_warnings = validate_sa_cache(
+                    sa_path=candidate_sa_path,
+                    network_path=network_path,
+                    min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
+                    method=method,
+                )
+                if cache_status == CACHE_STATUS_CACHED_VALID:
+                    self.logger.info(f'\nReusing the cached PDep SA for network {network_name} '
+                                     f'({method} method) to examine reaction {reaction} '
+                                     f'(iteration {self.iteration}).')
+                    self.executed_networks.append(isomer_labels)
+                    sa_coefficients_path, method_used = candidate_sa_path, method
+                    break
+                for warning in cache_warnings:
+                    self.logger.debug(warning)
                 self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method\n'
                                  f'to examine reaction {reaction} (iteration {self.iteration})...')
                 success = run_arkane_job(input_file=arkane_input,
@@ -1077,14 +1106,19 @@ class T3:
                     self.logger.info(f'Successfully executed a PDep SA for network {network_name} '
                                      f'using the {method} method.\n')
                     self.executed_networks.append(isomer_labels)
-                    sa_coefficients_path = os.path.join(self.paths['PDep SA'], network_name, method,
-                                                        'sensitivity', 'sa_coefficients.yml')
+                    sa_coefficients_path, method_used = candidate_sa_path, method
+                    cache_status = CACHE_STATUS_GENERATED
+                    if os.path.isfile(sa_coefficients_path):
+                        write_sa_cache_metadata(sa_path=sa_coefficients_path,
+                                                network_path=network_path,
+                                                network_id=network_name,
+                                                method=method,
+                                                )
                     break
             else:
-                self.logger.error(f"Could not execute a PDep SA for network {network_name} using "
-                                  f"{self.t3['sensitivity']['ME_methods']}.\nGot the following errors:")
-                for method, e in zip(self.t3['sensitivity']['ME_methods'], errors):
-                    self.logger.info(f'{e.__class__} for method {method}:\n{e}\n')
+                self.logger.error(f"Could not execute a PDep SA for network {network_name} using any of "
+                                  f"{self.t3['sensitivity']['ME_methods']}. See the Arkane logs under "
+                                  f"{os.path.join(self.paths['PDep SA'], network_name)} for details.")
 
             if sa_coefficients_path is not None:
                 sa_dict = read_yaml_file(sa_coefficients_path)
@@ -1093,8 +1127,14 @@ class T3:
                 reactants_label = ' + '.join([spc.to_chemkin() for spc in r_species])
                 products_label = ' + '.join([spc.to_chemkin() for spc in p_species])
                 chemkin_reaction_str = f'{reactants_label} <=> {products_label}'
+                structures = sa_dict.get('structures') if isinstance(sa_dict, dict) else None
+                if not isinstance(structures, dict):
+                    self.logger.error(f"The SA output at {sa_coefficients_path} for network {network_name} "
+                                      f"is missing a valid 'structures' entry; cannot map network species labels. "
+                                      f"Not assessing network {network_name} for QM refinement.")
+                    continue
                 labels_map = dict()  # Keys are network species labels, values are Chemkin labels of the RMG species.
-                for network_label, adj in sa_dict['structures'].items():
+                for network_label, adj in structures.items():
                     labels_map[network_label] = get_species_label_by_structure(adj=adj, species_list=self.rmg_species)
 
                 def _find_network_label(spc_label):
@@ -1111,30 +1151,58 @@ class T3:
                 reactants_label = ' + '.join([_find_network_label(spc.label) for spc in r_species])
                 products_label = ' + '.join([_find_network_label(spc.label) for spc in p_species])
                 network_reaction_str = f'{reactants_label} <=> {products_label}'
-                if network_reaction_str not in sa_dict:
+
+                # Decide whether this whole network is worth refining with QM (criterion (b)): the
+                # observable is already known to be sensitive to this reaction (criterion (a)), so ask
+                # whether the network's own rate coefficient is in turn sensitive to a transition state
+                # whose kinetics is merely an estimate.
+                network, selection = None, None
+                try:
+                    network = parse_pdep_network_file(path=network_path)
+                except (OSError, ValueError) as e:
+                    self.logger.warning(f'Could not parse the PDep network file {network_path}: {e}\n'
+                                        f'Not assessing network {network_name} for QM refinement.')
+                if network is not None:
+                    selection = select_from_sa_dict(
+                        sa_dict=sa_dict,
+                        network=network,
+                        network_reaction=network_reaction_str,
+                        relative_threshold=self.t3['sensitivity']['pdep_SA_threshold'],
+                        min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
+                        method=method_used,
+                        sa_path=sa_coefficients_path,
+                        cache_status=cache_status,
+                    )
+                    for warning in selection.warnings:
+                        self.logger.warning(warning)
+                    self.logger.info(selection.reason())
+                    self.pdep_network_selections.append(selection)
+
+                # The selector resolves the SA key more robustly than an exact string match (it also
+                # handles label legalization and a network reaction stored in the opposite direction),
+                # so re-use its resolution for the well analysis below when it is available.
+                direction_key = selection.direction_key if selection is not None else None
+                if direction_key is None and network_reaction_str in sa_dict:
+                    direction_key = network_reaction_str
+                if direction_key is None:
                     self.logger.error(f'Could not locate reaction {network_reaction_str} '
                                       f'in SA output for network {network_name}.')
                 else:
                     # identify wells in this network this reaction is sensitive to
-                    sensitive_wells_dict = dict()  # keys are wells labels, values are lists of sensitive conditions
-                    for condition, sa_data in sa_dict[network_reaction_str].items():
-                        max_sa_coeff = max([sa_coeff for sa_coeff in sa_data.values()])
-                        for entry, sa_coeff in sa_data.items():
-                            if '(TS)' not in entry \
-                                    and sa_coeff > max_sa_coeff * self.t3['sensitivity']['pdep_SA_threshold']:
-                                if entry not in sensitive_wells_dict:
-                                    sensitive_wells_dict[entry] = [condition]
-                                else:
-                                    sensitive_wells_dict[entry].append(condition)
+                    sensitive_wells_dict = select_sensitive_wells(
+                        entries_by_condition=sa_dict[direction_key],
+                        relative_threshold=self.t3['sensitivity']['pdep_SA_threshold'],
+                        min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
+                    )
                     if sensitive_wells_dict:
                         # extract species from wells and add to species_to_calc if thermo is uncertain
                         for well, conditions in sensitive_wells_dict.items():
                             species_list = list()
                             for label in well.split(' + '):
-                                spc_label = labels_map[label]
+                                spc_label = labels_map.get(label)
                                 species = None
                                 if spc_label is not None:
-                                    species = get_species_by_label(label=labels_map[label],
+                                    species = get_species_by_label(label=spc_label,
                                                                    species_list=self.rmg_species)
                                 elif arkane is not None:
                                     # this is an Edge species which is missing from the Core rmg_species list
