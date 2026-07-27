@@ -17,6 +17,7 @@ import os
 
 from t3.common import TEST_DATA_BASE_PATH
 from t3.pdep.me_success import MESuccessResult, check_arkane_me_success
+from t3.pdep.parser import parse_pdep_network_file
 
 PDEP_ME_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_me')
 SUCCESS_OUTPUT = os.path.join(PDEP_ME_DIR, 'success', 'output.py')
@@ -278,3 +279,45 @@ def test_kinetics_with_no_numeric_parameters_is_rejected(tmp_path):
     result = check_arkane_me_success(output_path=path)
     assert result.succeeded is False
     assert any('no numeric' in reason.lower() for reason in result.reasons)
+
+
+def test_expected_reactions_derived_from_the_network_accepts_a_complete_solve():
+    """Test that the count derived from the network file accepts the solve Arkane produced from it.
+
+    ``tests/data/pdep_me/success_multi/`` holds a real Arkane MSC solve of ``network4_1.py``. The
+    expected count is not restated here; it is derived from the network file itself, so this test
+    fails if the derivation and the real Arkane enumeration ever drift apart.
+    """
+    network = parse_pdep_network_file(path=os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1',
+                                                        'RMG', 'pdep', 'network4_1.py'))
+    result = check_arkane_me_success(output_path=os.path.join(PDEP_ME_DIR, 'success_multi', 'output.py'),
+                                     exit_code=0,
+                                     stderr='',
+                                     expected_reactions=network.expected_net_reaction_count())
+    assert result.succeeded is True, result.reasons
+
+
+def test_a_truncated_output_is_rejected_by_the_expected_reaction_count(tmp_path):
+    """Test that a solve cut short partway through writing its net reactions is rejected.
+
+    Every entry a truncated ``output.py`` does contain is syntactically perfect and numerically
+    finite, so no per-entry check can catch this -- only the count can. This is the hole that
+    ``expected_reactions`` exists to close, and it stayed open while nothing passed the argument.
+    """
+    network = parse_pdep_network_file(path=os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1',
+                                                        'RMG', 'pdep', 'network4_1.py'))
+    with open(os.path.join(PDEP_ME_DIR, 'success_multi', 'output.py'), 'r') as f:
+        text = f.read()
+    # Cut the file at the start of the last complete entry, simulating a solve that died partway.
+    truncated_text = text[:text.rindex('pdepreaction(')]
+    truncated_path = str(tmp_path / 'truncated_output.py')
+    with open(truncated_path, 'w') as f:
+        f.write(truncated_text)
+    result = check_arkane_me_success(output_path=truncated_path,
+                                     exit_code=0,
+                                     stderr='',
+                                     expected_reactions=network.expected_net_reaction_count())
+    assert result.succeeded is False
+    assert any('expected' in reason.lower() for reason in result.reasons), result.reasons
+    # Without the count, the very same truncated file reads as a clean solve -- that is the hole.
+    assert check_arkane_me_success(output_path=truncated_path, exit_code=0, stderr='').succeeded is True

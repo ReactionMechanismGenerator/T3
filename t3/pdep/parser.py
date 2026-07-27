@@ -72,6 +72,63 @@ class PDepPathReaction:
     kinetics_comment: str
 
 
+def _canonical_channel(labels) -> tuple:
+    """
+    Canonically order the species labels of a single network channel.
+
+    Arkane sorts the species of every channel it reads or derives, so membership comparisons
+    between channels are order-insensitive on its side. T3 holds labels rather than species
+    objects, so it sorts the labels instead. Both sides of every comparison must be canonicalized
+    the same way or a membership test silently misses and a channel is counted twice.
+
+    Args:
+        labels (iterable): The species labels of one channel.
+
+    Returns:
+        tuple: The labels, sorted.
+    """
+    return tuple(sorted(labels))
+
+
+def _derive_product_channels(path_reactions: tuple,
+                             isomers: tuple,
+                             reactant_channels: tuple,
+                             ) -> tuple:
+    """
+    Derive a network's product channels from its path reactions.
+
+    RMG-generated pdep network files never write the ``products`` keyword of the ``network(...)``
+    call, so Arkane derives the product channels itself: any path reaction side that is neither a
+    declared unimolecular isomer nor a declared reactant channel becomes a product channel. This
+    mirrors that derivation so T3 sees the same channels Arkane will, without importing or
+    executing any RMG code. Reading the keyword literally instead yields no product channels at
+    all for every real file, which under-counts the net reactions Arkane writes.
+
+    The two arity branches deliberately test different memberships, exactly as Arkane does: a
+    unimolecular side is tested against the isomers, a multi-species side against the declared
+    reactant channels. Reactant sides are considered before product sides, per path reaction, in
+    file order, so the resulting order matches Arkane's.
+
+    Args:
+        path_reactions (tuple): The parsed ``PDepPathReaction`` entries, in file order.
+        isomers (tuple): The declared isomer labels.
+        reactant_channels (tuple): The declared reactant channels, canonically ordered.
+
+    Returns:
+        tuple: The derived product channels, each a canonically ordered tuple of species labels.
+    """
+    product_channels = list()
+    for path_reaction in path_reactions:
+        for side in (_canonical_channel(path_reaction.reactants), _canonical_channel(path_reaction.products)):
+            if len(side) == 1:
+                if side[0] not in isomers and side not in product_channels:
+                    product_channels.append(side)
+            elif len(side) > 1:
+                if side not in reactant_channels and side not in product_channels:
+                    product_channels.append(side)
+    return tuple(product_channels)
+
+
 @dataclass(frozen=True)
 class PDepNetwork:
     """
@@ -85,8 +142,15 @@ class PDepNetwork:
         transition_state_labels (tuple): All ``transitionState(...)`` labels, in file order.
         path_reactions (tuple): The parsed ``PDepPathReaction`` entries, in file order.
         isomers (tuple): The ``network(...)`` isomer labels.
-        reactant_channels (tuple): The ``network(...)`` reactant channels, each a tuple of str.
-        product_channels (tuple): The ``network(...)`` product channels, each a tuple of str.
+        reactant_channels (tuple): The ``network(...)`` reactant channels, each a canonically
+                                   ordered tuple of str.
+        product_channels (tuple): The RESOLVED product channels, each a canonically ordered tuple
+                                  of str. RMG-generated files omit the ``products`` keyword and
+                                  let Arkane derive these from the path reactions, so they are
+                                  derived here too whenever the keyword is absent.
+        product_channels_declared (bool): Whether ``product_channels`` were read from an explicit
+                                          ``products`` keyword (``True``) or derived from the path
+                                          reactions (``False``).
     """
     network_id: str
     path: str
@@ -97,6 +161,65 @@ class PDepNetwork:
     isomers: tuple
     reactant_channels: tuple
     product_channels: tuple
+    product_channels_declared: bool = False
+
+    def expected_net_reaction_count(self) -> int:
+        """
+        The number of live ``pdepreaction(...)`` entries Arkane writes for this network.
+
+        Arkane enumerates net reactions in ``PressureDependenceJob.save()`` as a double loop whose
+        source index runs over the isomers and reactant channels only, and whose destination index
+        runs over those plus the product channels, skipping the diagonal. Within the
+        isomer/reactant block each unordered pair is therefore visited twice, and the second
+        occurrence is written out commented, contributing no parsed entry; every
+        isomer-or-reactant-channel to product-channel pair is visited exactly once and is always
+        written live.
+
+        No branch of that loop omits an entry -- a rate fit that fails raises, and a rejected fit
+        still writes its entry with empty coefficients -- so this count is exact rather than an
+        upper bound. That is what makes it usable to detect a truncated ``output.py``.
+
+        The duplicate suppression is deliberately simulated rather than reduced to a closed form.
+        Arkane compares each candidate against EVERY previously printed reaction, by label and in
+        either direction, not merely against the ones inside the isomer/reactant block. A single
+        configuration may legitimately appear in both the source list and the product list -- a
+        declared unimolecular reactant channel is also derived as a product channel, since the
+        derivation's unimolecular branch tests only against the isomers -- and the entries reaching
+        it from the other sources are then commented out as duplicates of the entries leaving it.
+        The closed form ``S*(S-1)/2 + S*P`` silently over-counts exactly those, which would reject
+        a complete solve. Measured: a network with one such overlapping channel writes 15 live
+        entries where the closed form predicts 18.
+
+        Returns:
+            int: The expected number of live ``pdepreaction(...)`` entries.
+        """
+        sources = self.isomers_as_channels() + self.reactant_channels
+        destinations = sources + self.product_channels
+        printed, live_count = list(), 0
+        for destination_index, destination in enumerate(destinations):
+            for source_index, source in enumerate(sources):
+                if source_index == destination_index:
+                    continue
+                if any((source, destination) in ((other_source, other_destination),
+                                                 (other_destination, other_source))
+                       for other_source, other_destination in printed):
+                    continue
+                printed.append((source, destination))
+                live_count += 1
+        return live_count
+
+    def isomers_as_channels(self) -> tuple:
+        """
+        The isomer labels expressed as single-species channels.
+
+        Isomers are stored as bare labels while reactant and product channels are tuples of
+        labels. Net reaction enumeration compares the three against one another, so they must
+        share a shape.
+
+        Returns:
+            tuple: One single-element tuple per isomer.
+        """
+        return tuple((isomer,) for isomer in self.isomers)
 
     def path_reactions_by_ts(self) -> dict:
         """
@@ -412,6 +535,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '') -> PDepN
     isomers = tuple()
     reactant_channels = tuple()
     product_channels = tuple()
+    product_channels_declared = False
 
     for node in tree.body:
         if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
@@ -423,23 +547,49 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '') -> PDepN
         kwargs = _call_keywords(call, path=path, call_name=call_name)
 
         if call_name == 'species':
-            label = _literal_or_none(kwargs.get('label'))
+            label = _literal_or_raise(kwargs.get('label'), path=path, keyword='label',
+                                      action="omit it from the species labels")
             if label is not None:
                 species_labels.append(label)
 
         elif call_name == 'transitionState':
-            label = _literal_or_none(kwargs.get('label'))
+            label = _literal_or_raise(kwargs.get('label'), path=path, keyword='label',
+                                      action="omit it from the transition state labels")
             if label is not None:
                 transition_state_labels.append(label)
 
         elif call_name == 'reaction':
-            path_reactions.append(_parse_reaction(kwargs))
+            path_reactions.append(_parse_reaction(kwargs, path=path))
 
         elif call_name == 'network':
             network_label = _literal_or_none(kwargs.get('label'))
+            # ``isomers`` and ``reactants`` fail closed for the same reason ``products`` does below,
+            # and the cost of degrading is higher: they are the SOURCE side of the net reaction loop
+            # and the memberships every path reaction side is tested against when product channels
+            # are derived. Silently reading an unevaluable value as "no isomers" would both
+            # under-count the sources and reclassify every unimolecular side as a product channel,
+            # so the expected net reaction count would describe a topology the file never declared.
+            # An explicit ``None`` literal is refused here too, rather than treated as absent: the
+            # keyword was written, so its intent is not "omitted" and guessing is not ours to do.
+            for keyword in ('isomers', 'reactants'):
+                if keyword in kwargs and _literal_or_none(kwargs[keyword]) is None:
+                    raise ValueError(f"The pdep network file at '{path}' declares a '{keyword}' keyword "
+                                     f"that could not be evaluated literally; refusing to read it as an "
+                                     f"empty channel list in its place.")
             isomers = tuple(_literal_or_none(kwargs.get('isomers')) or ())
-            reactant_channels = tuple(tuple(channel) for channel in (_literal_or_none(kwargs.get('reactants')) or ()))
-            product_channels = tuple(tuple(channel) for channel in (_literal_or_none(kwargs.get('products')) or ()))
+            reactant_channels = tuple(_canonical_channel(channel)
+                                      for channel in (_literal_or_none(kwargs.get('reactants')) or ()))
+            # A ``products`` keyword that is present but not literal-evaluable (a name, a call, a
+            # comprehension) must not be treated as absent: deriving the channels instead would
+            # silently answer a different question than the file asks, and the resulting net
+            # reaction count would reject complete solves. Refuse the file rather than guess.
+            declared_product_channels = _literal_or_none(kwargs.get('products'))
+            if 'products' in kwargs and declared_product_channels is None:
+                raise ValueError(f"The pdep network file at '{path}' declares a 'products' keyword that "
+                                 f"could not be evaluated literally; refusing to derive product channels "
+                                 f"in its place.")
+            product_channels_declared = declared_product_channels is not None
+            product_channels = tuple(_canonical_channel(channel) for channel in (declared_product_channels or ()))
 
         # ``pressureDependence(...)`` data is not part of the public API here; it is
         # recognized (so it is not silently ignored as "unrecognized") but otherwise unused.
@@ -447,6 +597,10 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '') -> PDepN
     if not path_reactions:
         raise ValueError(f"The pdep network file at '{path}' contains no reaction(...) entries; nothing to parse.")
 
+    if not product_channels_declared:
+        product_channels = _derive_product_channels(path_reactions=tuple(path_reactions),
+                                                    isomers=isomers,
+                                                    reactant_channels=reactant_channels)
     return PDepNetwork(
         network_id=network_id,
         path=path,
@@ -457,23 +611,42 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '') -> PDepN
         isomers=isomers,
         reactant_channels=reactant_channels,
         product_channels=product_channels,
+        product_channels_declared=product_channels_declared,
     )
 
 
-def _parse_reaction(kwargs: dict) -> PDepPathReaction:
+def _parse_reaction(kwargs: dict, path: str = '') -> PDepPathReaction:
     """
     Build a ``PDepPathReaction`` from a ``reaction(...)`` call's keyword arguments.
 
     Args:
         kwargs (dict): A mapping of keyword name to its (still-AST) value node.
+        path (str, optional): The file path being parsed, for error messages only.
+
+    Raises:
+        ValueError: If ``reactants``, ``products``, or ``transitionState`` is present but not
+            literal-evaluable.
 
     Returns:
         PDepPathReaction: The parsed path reaction.
     """
     label = _literal_or_none(kwargs.get('label'))
-    reactants = tuple(_literal_or_none(kwargs.get('reactants')) or ())
-    products = tuple(_literal_or_none(kwargs.get('products')) or ())
-    transition_state = _literal_or_none(kwargs.get('transitionState'))
+    # A present-but-unevaluable ``reactants``/``products`` must not collapse to an empty tuple as
+    # if the keyword were absent: ``_derive_product_channels`` has no zero-length branch, so an
+    # empty side silently contributes NO product channel, under-counting
+    # ``expected_net_reaction_count()``; and callers outside this module (e.g. ``t3.main``) build a
+    # TS-search reaction from ``reactants + products``, so an empty tuple there queues a bogus,
+    # species-less reaction instead of failing loudly.
+    reactants = tuple(_literal_or_raise(kwargs.get('reactants'), path=path, keyword='reactants',
+                                        action="read it as an empty reactant list") or ())
+    products = tuple(_literal_or_raise(kwargs.get('products'), path=path, keyword='products',
+                                       action="read it as an empty product list") or ())
+    # An ABSENT ``transitionState`` is legitimate (``path_reactions_by_ts`` relies on it to exclude
+    # such reactions from its map), but one that is present and unevaluable must not collapse to
+    # the same ``None`` -- that would silently and wrongly exclude a path reaction the file DID
+    # associate with a transition state.
+    transition_state = _literal_or_raise(kwargs.get('transitionState'), path=path, keyword='transitionState',
+                                         action="treat it as having no transition state")
 
     kinetics_type = None
     kinetics_comment = ''
@@ -628,3 +801,44 @@ def _literal_or_none(node):
         return ast.literal_eval(node)
     except (ValueError, TypeError):
         return None
+
+
+def _literal_or_raise(node, *, path: str, keyword: str, action: str):
+    """
+    Evaluate an AST keyword value node as a literal, failing closed if it is present but unusable.
+
+    ``_literal_or_none`` alone cannot distinguish "the keyword was never written" (the legitimate,
+    absent case) from "the keyword was written but its value could not be evaluated as a literal"
+    (e.g. a bare name or a nested call) -- both collapse to ``None``. Treating the latter as if it
+    were the former is the fail-open defect this module has already had to fix multiple times: an
+    unevaluable value must RAISE rather than be silently read as absent, since a caller that reads
+    it as absent answers a different question than the file asked and can under-count channels or
+    silently drop entries.
+
+    An EXPLICITLY WRITTEN ``None`` literal (e.g. ``reactants=None``) is refused for the same
+    reason, consistent with the ``network(...)`` ``isomers``/``reactants``/``products`` guard in
+    ``parse_pdep_network_text``: the keyword was written, so its intent is not "omitted" and
+    guessing is not ours to do. A real RMG-generated ``network.py`` never emits an explicit
+    ``None`` for these keywords, so refusing it costs nothing on legitimate input and closes a
+    hole on hand-edited/unusual input.
+
+    Args:
+        node: The keyword's (still-AST) value node, or ``None`` if the keyword is absent.
+        path (str): The file path being parsed (for the error message only).
+        keyword (str): The keyword name (for the error message only).
+        action (str): What would otherwise silently happen if this were treated as absent, phrased
+            to complete "refusing to ... in its place." (e.g. ``"read it as an empty reactant list"``).
+
+    Raises:
+        ValueError: If ``node`` is present but not literal-evaluable, or is literally ``None``.
+
+    Returns:
+        The literal-evaluated value, or ``None`` if ``node`` is ``None``, i.e. genuinely absent.
+    """
+    if node is None:
+        return None
+    value = _literal_or_none(node)
+    if value is None:
+        raise ValueError(f"The pdep network file at '{path}' declares a '{keyword}' keyword that "
+                         f"could not be evaluated literally; refusing to {action} in its place.")
+    return value

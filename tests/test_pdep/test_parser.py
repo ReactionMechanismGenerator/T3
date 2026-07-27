@@ -384,6 +384,339 @@ def test_missing_kinetics_keys_records_unparseable_coeffs():
     # The unresolvable payload leaf surfaces as None (non-finite), never silently vanishes.
     assert any(v is None for v in reaction.rate_payload_numeric_values) \
         or reaction.rate_payload_numeric_values == tuple()
+
+
+# Product channel derivation
+#
+# RMG never writes a ``products=`` keyword into a generated network file; Arkane derives the
+# product channels from the path reactions instead. The expected values below are MEASURED, not
+# assumed: a real Arkane MSC run on ``network4_1.py`` named these three channels in its log, and
+# the ``output.py`` it produced is checked in at ``tests/data/pdep_me/success_multi/`` with
+# exactly 12 live ``pdepreaction(...)`` entries.
+NETWORK4_1_PRODUCT_CHANNELS = [{'CH2(S)(53)', 'C3rad(4)'}, {'CH2(T)(48)', 'C3rad(4)'}, {'butyl_2(67)'}]
+NETWORK4_1_EXPECTED_NET_REACTIONS = 12
+
+PDEP_NETWORK_VARIANTS_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_network_variants')
+
+
+def test_product_channels_are_derived_when_the_keyword_is_absent():
+    """Test that product channels absent from ``network(...)`` are derived from the path reactions.
+
+    ``network4_1.py`` declares one isomer and two reactant channels and no ``products=`` keyword.
+    Reading the keyword literally yields zero product channels, which would under-count the net
+    reactions Arkane writes by a factor of four.
+    """
+    network = parse_pdep_network_file(path=os.path.join(PDEP_NETWORK_DIR, 'network4_1.py'))
+    assert network.isomers == ('C4rad(5)',)
+    assert len(network.reactant_channels) == 2
+    assert network.product_channels_declared is False
+    assert [set(channel) for channel in network.product_channels] == NETWORK4_1_PRODUCT_CHANNELS
+
+
+def test_expected_net_reaction_count_matches_a_real_arkane_output():
+    """Test the predicted net reaction count against a real Arkane ``output.py``.
+
+    This is the load-bearing test of the derivation: it ties the count computed from the network
+    file to the number of live ``pdepreaction(...)`` entries Arkane actually wrote for that very
+    network, rather than to a number restated from the source.
+    """
+    network = parse_pdep_network_file(path=os.path.join(PDEP_NETWORK_DIR, 'network4_1.py'))
+    assert network.expected_net_reaction_count() == NETWORK4_1_EXPECTED_NET_REACTIONS
+    reactions = parse_arkane_pdep_output_file(path=os.path.join(PDEP_ME_DIR, 'success_multi', 'output.py'))
+    assert len(reactions) == network.expected_net_reaction_count()
+
+
+def test_expected_net_reaction_count_for_a_single_channel_network():
+    """Test the degenerate one-isomer network, whose Arkane output holds a single entry."""
+    network = parse_pdep_network_file(path=os.path.join(PDEP_NETWORK_DIR, 'network1_1.py'))
+    assert len(network.isomers) == 1
+    assert network.reactant_channels == tuple()
+    assert len(network.product_channels) == 1
+    assert network.expected_net_reaction_count() == 1
+    reactions = parse_arkane_pdep_output_file(path=os.path.join(PDEP_ME_DIR, 'success', 'output.py'))
+    assert len(reactions) == network.expected_net_reaction_count()
+
+
+def test_product_channels_are_derived_for_every_real_network_fixture():
+    """Test that the derivation yields at least one product channel for each real fixture.
+
+    No real RMG-generated network file declares ``products=``, so a fixture reporting zero product
+    channels means the derivation silently did nothing.
+    """
+    for stem, _, _, _ in NETWORK_COUNTS:
+        network = parse_pdep_network_file(path=os.path.join(PDEP_NETWORK_DIR, f'{stem}.py'))
+        assert network.product_channels_declared is False, stem
+        assert len(network.product_channels) > 0, stem
+
+
+def test_declared_product_channels_are_used_verbatim():
+    """Test that an explicit ``products=`` keyword wins over the derivation."""
+    network = parse_pdep_network_file(path=os.path.join(PDEP_NETWORK_VARIANTS_DIR,
+                                                        'network_explicit_products.py'))
+    assert network.product_channels_declared is True
+    assert [set(channel) for channel in network.product_channels] == [{'B', 'C'}, {'D'}]
+    # One isomer and two declared product channels, none of them overlapping.
+    assert network.expected_net_reaction_count() == 2
+
+
+def test_channel_labels_are_canonically_ordered():
+    """Test that multi-species channels are sorted, so membership comparisons cannot silently miss."""
+    network = parse_pdep_network_file(path=os.path.join(PDEP_NETWORK_DIR, 'network4_1.py'))
+    for channel in network.reactant_channels + network.product_channels:
+        assert list(channel) == sorted(channel)
+
+
+def test_the_two_arity_branches_of_the_derivation_are_not_interchangeable():
+    """Test that the derivation reproduces Arkane's asymmetric membership tests exactly.
+
+    Arkane tests a unimolecular side against the isomers only, and a multi-species side against
+    the reactant channels only -- despite its own comment claiming both are tested against both.
+    Two consequences follow, and both are pinned here because unifying the branches looks like a
+    harmless cleanup and silently under-counts the network:
+
+    * ``['D']`` is a declared reactant channel, yet becomes a product channel as well, because the
+      unimolecular branch never consults the reactant channels.
+    * ``['B', 'C']`` survives even though ``'B'`` is an isomer, because the multi-species branch
+      never consults the isomers.
+    """
+    network = parse_pdep_network_file(path=os.path.join(PDEP_NETWORK_VARIANTS_DIR,
+                                                        'network_arity_asymmetry.py'))
+    assert network.isomers == ('A', 'B')
+    assert network.reactant_channels == (('D',),)
+    assert network.product_channels_declared is False
+    assert [set(channel) for channel in network.product_channels] == [{'B', 'C'}, {'D'}]
+    # ``('D',)`` is both a source and a destination, so the three entries reaching it are
+    # commented out as duplicates of the three leaving it. The closed form would say 9.
+    assert network.expected_net_reaction_count() == 7
+
+
+def test_a_channel_that_is_both_a_source_and_a_destination_is_not_double_counted():
+    """Test the net reaction count when one configuration appears in both channel lists.
+
+    Arkane suppresses a duplicate by comparing each candidate against EVERY previously printed
+    reaction, by label and in either direction -- not only against those inside the
+    isomer/reactant block. A configuration that is both a declared unimolecular reactant channel
+    and a derived product channel therefore has the entries reaching it commented out as
+    duplicates of the entries leaving it.
+
+    The numbers are measured, not derived: ``tests/data/pdep_me/overlapping_channels/`` is a real
+    Arkane MSC run of ``network4_1`` with ``butyl_2(67)`` additionally declared as a reactant
+    channel. It holds 15 live entries and 9 commented ones. The closed form ``S*(S-1)/2 + S*P``
+    predicts 18, which would reject that complete solve.
+    """
+    network = parse_pdep_network_file(path=os.path.join(PDEP_ME_DIR, 'overlapping_channels', 'input.py'))
+    assert ('butyl_2(67)',) in network.reactant_channels
+    assert ('butyl_2(67)',) in network.product_channels
+    assert network.expected_net_reaction_count() == 15
+    reactions = parse_arkane_pdep_output_file(path=os.path.join(PDEP_ME_DIR, 'overlapping_channels', 'output.py'))
+    assert len(reactions) == network.expected_net_reaction_count()
+
+
+def test_a_non_literal_products_keyword_is_refused_rather_than_derived():
+    """Test that a present-but-unevaluable ``products`` keyword raises instead of being derived.
+
+    ``_literal_or_none`` returns ``None`` both for an absent keyword and for one whose value is a
+    name or a call. Conflating the two would let a file that DECLARES its product channels be
+    silently treated as one that omits them, producing a net reaction count for a topology the
+    file never described.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=SOME_NAME)\n")
+    with pytest.raises(ValueError, match='products'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_a_non_literal_isomers_keyword_is_refused():
+    """Test that a present-but-unevaluable ``isomers`` keyword raises instead of degrading to empty.
+
+    Degrading here is worse than for ``products``: the isomers are the source side of the net
+    reaction loop AND the thing every unimolecular path reaction side is tested against when
+    product channels are derived. An empty isomer list therefore both under-counts the sources
+    and misclassifies every unimolecular side as a product channel, so the expected net reaction
+    count describes a topology the file never declared -- and a complete solve gets rejected.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=SOME_NAME, reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='isomers'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_a_non_literal_reactants_keyword_is_refused():
+    """Test that a present-but-unevaluable ``reactants`` keyword raises instead of degrading to empty.
+
+    A comprehension is used here rather than a bare name so that the guard is shown to key off
+    "``_literal_or_none`` could not evaluate it", not off any one node type.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[[s] for s in SOURCES], products=[])\n")
+    with pytest.raises(ValueError, match='reactants'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_absent_isomers_and_reactants_keywords_still_parse():
+    """Test that ABSENT ``isomers``/``reactants`` keywords remain legitimate and parse as empty.
+
+    The refusal above must key off "present but unevaluable", not off "falsy": omitting these
+    keywords is normal, so conflating the two cases would reject ordinary files.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n')\n")
+    network = parse_pdep_network_text(text=text, network_id='n', path='<test>')
+    assert network.isomers == tuple()
+    assert network.reactant_channels == tuple()
+
+
+def test_a_non_literal_reactants_keyword_in_reaction_is_refused():
+    """Test that a present-but-unevaluable ``reactants`` keyword on ``reaction(...)`` raises.
+
+    ``_parse_reaction`` used to mirror the pre-fix ``network(...)`` defect: ``tuple(_literal_or_none(
+    kwargs.get('reactants')) or ())`` collapsed a name or call in ``reactants`` position to the
+    empty tuple, silently contributing NO product channel for that side and letting ``t3.main``
+    queue an empty ``T3Reaction`` for a TS search.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=REACTANT_LIST, products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='reactants'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_a_non_literal_products_keyword_in_reaction_is_refused():
+    """Test that a present-but-unevaluable ``products`` keyword on ``reaction(...)`` raises.
+
+    Same defect as the ``reactants`` case above, on the other side of the reaction.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=PRODUCT_LIST, transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='products'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_a_non_literal_transition_state_keyword_is_refused():
+    """Test that a present-but-unevaluable ``transitionState`` keyword on ``reaction(...)`` raises.
+
+    An ABSENT ``transitionState`` is legitimate (``PDepNetwork.path_reactions_by_ts`` relies on
+    it to exclude such reactions from its map), but one that is present and unevaluable must not
+    collapse to the same ``None`` -- that would silently and wrongly exclude a path reaction that
+    the file DID associate with a transition state.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState=TS_LABELS[2])\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='transitionState'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_absent_transition_state_keyword_still_parses():
+    """Test that an ABSENT ``transitionState`` keyword remains legitimate and parses as ``None``.
+
+    The refusal above must key off "present but unevaluable", not off "missing", so an ordinary
+    path reaction without an associated transition state must still parse.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'])\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    network = parse_pdep_network_text(text=text, network_id='n', path='<test>')
+    assert network.path_reactions[0].transition_state is None
+
+
+def test_a_non_literal_species_label_is_refused():
+    """Test that a present-but-unevaluable ``label`` keyword on ``species(...)`` raises.
+
+    The pre-fix handler did ``if label is not None: species_labels.append(label)``, so an
+    unevaluable label silently vanished from ``species_labels`` instead of failing closed.
+    """
+    text = ("species(label=SOME_NAME, E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='label'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_a_non_literal_transition_state_label_is_refused():
+    """Test that a present-but-unevaluable ``label`` keyword on ``transitionState(...)`` raises.
+
+    Same defect as the ``species(...)`` case above.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "transitionState(label=SOME_NAME, E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='label'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_an_explicit_none_reactants_keyword_on_reaction_is_refused():
+    """Test that an EXPLICITLY WRITTEN ``reactants=None`` on ``reaction(...)`` raises.
+
+    ``network(...)``'s ``isomers``/``reactants``/``products`` guard already refuses an explicit
+    ``None`` literal rather than treating it as legitimate absence, on the reasoning that the
+    keyword was written so its intent is not "omitted". ``_literal_or_raise`` must be consistent
+    with that: a real RMG-generated network file never emits an explicit ``None`` for
+    ``reactants``, so refusing it costs nothing on legitimate input and closes a hole on
+    hand-edited/unusual input.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=None, products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='reactants'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_an_explicit_none_products_keyword_on_reaction_is_refused():
+    """Test that an EXPLICITLY WRITTEN ``products=None`` on ``reaction(...)`` raises.
+
+    Same defect as the ``reactants`` case above, on the other side of the reaction.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=None, transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='products'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_an_explicit_none_transition_state_keyword_is_refused():
+    """Test that an EXPLICITLY WRITTEN ``transitionState=None`` on ``reaction(...)`` raises.
+
+    An ABSENT ``transitionState`` is legitimate (the keyword was never written), but one that IS
+    written, even as literal ``None``, must raise rather than be read as the same absent case: the
+    keyword was written, so its intent is not "omitted" and guessing is not ours to do.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState=None)\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='transitionState'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_an_explicit_none_species_label_is_refused():
+    """Test that an EXPLICITLY WRITTEN ``label=None`` on ``species(...)`` raises.
+
+    Same rationale as the other three explicit-``None`` guards above.
+    """
+    text = ("species(label=None, E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='label'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+def test_an_explicit_none_transition_state_label_is_refused():
+    """Test that an EXPLICITLY WRITTEN ``label=None`` on ``transitionState(...)`` raises.
+
+    Same rationale as the other three explicit-``None`` guards above.
+    """
+    text = ("species(label='A', E0=(0.0,'kJ/mol'))\n"
+            "transitionState(label=None, E0=(0.0,'kJ/mol'))\n"
+            "reaction(label='reaction1', reactants=['A'], products=['B'], transitionState='TS1')\n"
+            "network(label='n', isomers=['A'], reactants=[], products=[])\n")
+    with pytest.raises(ValueError, match='label'):
+        parse_pdep_network_text(text=text, network_id='n', path='<test>')
 class TestKwargsUnpackingOnRecognizedCallsIsRefused:
     """
     round-30 P2. ``_call_keywords`` maps an ``ast.Call``'s keyword arguments to their (still-AST)
