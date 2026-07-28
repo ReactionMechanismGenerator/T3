@@ -424,6 +424,9 @@ def test_restart():
     # a converged ARC run, and an ARC 'restart.yml' file (left over from a previous interrupted run).
     # Because arc.log already contains the termination line, the state machine sees ARC as
     # terminated and returns (6, False, False); restart_arc is NOT triggered.
+    # The ARC-finalization branch does not fire either: this iteration left no P-dep join sidecar,
+    # so there are no transition state artifacts for finalization to rescue and the pre-existing
+    # behavior is preserved (see T3.has_pending_ts_join).
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r6'),
             t3=t3_minimal,
@@ -445,6 +448,8 @@ def test_restart():
         lines = f.readlines()
         assert 'Starting project T3_ARC_restart_test\n' in lines
         assert 'All jobs terminated. Summary for project T3_ARC_restart_test:\n' in lines
+    r6_marker_path = os.path.join(restart_base_path, 'r6', 'iteration_6', 'arc_finalization_complete.marker')
+    assert os.path.isfile(r6_marker_path)
 
     # 'iteration_7' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a converged job
     # results in iteration=7+1=8, run_rmg=True
@@ -463,6 +468,11 @@ Starting project T3_ARC_restart_test\n
 All jobs terminated. Summary for project T3_ARC_restart_test:\n
 Total execution time: 00:00:00\n
 ARC execution terminated on Sun Dec  4 11:50:29 2022""")
+
+    # the explicit process_arc_run() call above writes the durable ARC finalization marker as its
+    # last step; remove it so the tracked fixture tree stays pristine across runs
+    if os.path.isfile(r6_marker_path):
+        os.remove(r6_marker_path)
 
 
 def test_should_run_rmg():
@@ -593,6 +603,10 @@ def test_process_arc_run():
     finally:
         if os.path.isfile(t3.paths['T3 thermo lib']):
             os.remove(t3.paths['T3 thermo lib'])
+        # process_arc_run() also writes the durable ARC finalization marker as its last step;
+        # remove it so the tracked fixture tree stays pristine across test runs.
+        if os.path.isfile(t3.paths['ARC finalization marker']):
+            os.remove(t3.paths['ARC finalization marker'])
 
 
 def test_get_current_rmg_tol():

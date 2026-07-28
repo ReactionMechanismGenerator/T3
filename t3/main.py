@@ -19,6 +19,7 @@ import inspect
 import os
 import re
 import shutil
+import tempfile
 import traceback
 from collections import deque
 
@@ -51,13 +52,17 @@ from t3.common import (DATA_BASE_PATH,
                        )
 from t3.logger import Logger
 from t3.pdep.cache import validate_sa_cache, write_sa_cache_metadata
-from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
+from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
+from t3.pdep.discovery import ARTIFACT_STATUS_MISSING
+from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
+                          JOIN_STATUS_ALREADY_PRESENT,
                           JOIN_STATUS_NOT_QUEUED,
                           JOIN_STATUS_QUEUED,
                           TSJoinRecord,
                           arc_ts_label,
                           expected_ts_artifact_path,
                           merge_ts_join_records,
+                          read_ts_join_sidecar,
                           ts_join_sidecar_path,
                           write_ts_join_sidecar,
                           )
@@ -77,6 +82,12 @@ from t3.utils.libraries import append_to_rmg_libraries
 from t3.utils.writer import write_pdep_network_file, write_rmg_input_file
 from t3.utils.cantera_parser import load_cantera_yaml_file
 from t3.utils.uncertainty import is_this_reaction_uncertain
+
+
+# Leading text of the durable ARC finalization marker. Its presence is what tells a restart that an
+# already-terminated ARC run was fully finalized; the content is checked so that an empty or
+# truncated file reads as "not finalized" rather than as done.
+ARC_FINALIZATION_MARKER_TEXT = 'ARC finalization completed'
 
 
 class T3:
@@ -399,6 +410,18 @@ class T3:
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
+            # Sibling of 'ARC' (never nested inside it): capture_ts_artifacts refuses a capture_dir
+            # that resolves inside the ARC project directory, since ARC deletes/recreates its own
+            # subtrees (including calcs/statmech/kinetics/) on every rate pass, and the whole point of
+            # capturing is durability against exactly that.
+            'PDep capture': os.path.join(iteration_path, 'PDep_capture'),
+            # A T3-owned, durable completion marker for ARC finalization (capture + ARC-info
+            # processing), written only as the LAST step of process_arc_run(). Deliberately a
+            # sibling FILE at the iteration level, not nested inside 'PDep capture': nesting it there
+            # would make a marker-only 'PDep capture' directory (the common case: no PDep transition
+            # states queued, so capture_ts_artifacts is never even called) look like unowned content
+            # to _refuse_unowned_capture_dir the next time a capture with real records is attempted.
+            'ARC finalization marker': os.path.join(iteration_path, 'arc_finalization_complete.marker'),
             'ARC': os.path.join(iteration_path, 'ARC'),
             'ARC input': os.path.join(iteration_path, 'ARC', 'input.yml'),
             'ARC restart': os.path.join(iteration_path, 'ARC', 'restart.yml'),
@@ -467,6 +490,25 @@ class T3:
         run_arc = rmg_terminated and not arc_began
         restart_rmg = rmg_began and not rmg_terminated
         restart_arc = not run_rmg and not restart_rmg and arc_began and not arc_terminated
+        # ARC terminated successfully, but ARC finalization (transition state capture + ARC-info
+        # processing, see process_arc_run()) never completed -- e.g. T3 crashed in the window between
+        # ARC terminating and process_arc_run() finishing. check_arc_status() alone cannot see this
+        # gap: it only reads ARC's own log/restart files, which say nothing about whether T3 itself
+        # finished processing that (already-successful) run. Left unhandled, arc_began=True and
+        # arc_terminated=True would make both run_arc and restart_arc False, and the iteration would
+        # silently replay through run_arc()/process_arc_run() without ever capturing the completed
+        # run -- and ARC deletes calcs/statmech/kinetics/ on its next rate pass, so the artifacts
+        # would then be gone for good.
+        # Deliberately scoped to iterations that queued P-dep transition states, i.e. that left a
+        # join sidecar behind. An absent marker cannot on its own distinguish "T3 crashed before
+        # finalizing" from "finalized by an earlier T3 that never wrote a marker", so keying off the
+        # marker alone would re-finalize every project completed before this feature existed,
+        # re-appending RMG library entries and advancing the iteration under them. The sidecar is
+        # the positive evidence that finalization has something to rescue; without one there are no
+        # artifacts to capture, and the pre-existing behavior is preserved exactly.
+        finalize_arc = not run_rmg and not restart_rmg and not restart_arc \
+            and arc_began and arc_terminated and self.has_pending_ts_join() \
+            and not self.check_arc_finalization_complete()
 
         if run_rmg:
             self.logger.info(f"RMG has not run for iteration {i_max}. Preparing to start RMG.")
@@ -476,13 +518,19 @@ class T3:
             self.logger.info(f"ARC has not run for iteration {i_max}. Preparing to start ARC.")
         elif restart_arc:
             self.logger.info(f"ARC did not terminate successfully for iteration {i_max}. Preparing to restart ARC.")
+        elif finalize_arc:
+            self.logger.info(f"ARC terminated for iteration {i_max}, but ARC finalization (transition state "
+                             f"capture) did not complete. Preparing to finalize.")
 
         text = 'restarting RMG' if restart_rmg else 'running RMG' if run_rmg \
-            else 'restarting ARC' if restart_arc else 'skipping RMG'
+            else 'restarting ARC' if restart_arc else 'finalizing ARC' if finalize_arc else 'skipping RMG'
         self.logger.info(f"\nRestarting T3 from iteration {i_max}: {text}.")
 
         if restart_arc:
             i_max = self.handle_arc_restart(i_max)
+            run_rmg, restart_rmg = True, False
+        elif finalize_arc:
+            i_max = self.handle_arc_finalization_restart(i_max)
             run_rmg, restart_rmg = True, False
 
         return i_max, run_rmg, restart_rmg
@@ -539,6 +587,73 @@ class T3:
         if os.path.isfile(self.paths['ARC restart']):
             return True, False
         return False, False
+
+    def check_arc_finalization_complete(self) -> bool:
+        """
+        Whether ARC finalization (transition state capture + ARC-info processing, see
+        ``process_arc_run()``) already completed for the current iteration.
+
+        Backed by a T3-owned, durable marker file (``self.paths['ARC finalization marker']``)
+        living OUTSIDE the ARC project directory, written only as the very LAST step of
+        ``process_arc_run()``. Its presence is therefore proof that finalization ran to completion;
+        its absence -- combined with ARC having already terminated -- is exactly the crash window
+        this method exists to detect, since ``check_arc_status()`` alone only reads ARC's own
+        log/restart files and has no way to know whether T3 itself finished processing an
+        already-successful ARC run.
+
+        A marker that exists but is empty or unrecognizable is treated as ABSENT rather than as
+        completion. The file is written atomically, so a truncated one should not occur, but reading
+        mere existence as proof would turn a crash mid-write into finalization being skipped forever
+        -- redoing finalization is recoverable, silently never doing it is not.
+
+        Returns:
+            bool: True if a valid marker is present.
+        """
+        marker_path = self.paths['ARC finalization marker']
+        if not os.path.isfile(marker_path):
+            return False
+        try:
+            with open(marker_path, 'r') as f:
+                content = f.read().strip()
+        except OSError:
+            return False
+        return content.startswith(ARC_FINALIZATION_MARKER_TEXT)
+
+    def has_pending_ts_join(self) -> bool:
+        """
+        Whether the current iteration queued P-dep transition states to ARC, evidenced by a join
+        sidecar on disk.
+
+        This is what scopes the finalization-gap branch in ``restart()``. The sidecar is written
+        before ARC starts and survives a crash, so its presence means captureable artifacts may
+        exist; its absence means there is nothing for capture to rescue and the legacy restart
+        behavior must be preserved untouched.
+
+        Returns:
+            bool: True if a join sidecar exists for this iteration.
+        """
+        return os.path.isfile(ts_join_sidecar_path(arc_project_directory=self.paths['ARC']))
+
+    def handle_arc_finalization_restart(self, i_max: int) -> int:
+        """
+        Finalize an ARC run that already terminated successfully but whose ARC finalization
+        (transition state capture + ARC-info processing) never completed, then advance to the next
+        iteration.
+
+        ARC itself does not need to be re-invoked here -- only ``process_arc_run()``, which reads
+        the durable join sidecar and the ARC project directory that already exist on disk from the
+        completed (but unfinalized) run, and writes the completion marker as its last step.
+
+        Args:
+            i_max (int): The current iteration number.
+
+        Returns:
+            int: The updated iteration number (``i_max + 1``).
+        """
+        self.process_arc_run()
+        i_max += 1
+        self.set_paths(iteration=i_max)
+        return i_max
 
     def handle_arc_restart(self, i_max: int) -> int:
         """
@@ -600,6 +715,11 @@ class T3:
 
         self.logger.info(f'\nRunning ARC (iteration {self.iteration})...')
 
+        # A new ARC run invalidates any finalization marker left by an earlier run in this same
+        # iteration: that marker describes results this run is about to replace. Leaving it would
+        # make process_arc_run() treat the new run as already finalized and skip it entirely.
+        self._clear_arc_finalization_marker()
+
         if input_file_path is not None:
             arc_kwargs = read_yaml_file(input_file_path)
 
@@ -648,6 +768,19 @@ class T3:
         Todo:
             - Check for non-physical species in unconverged species.
         """
+        if self.check_arc_finalization_complete():
+            # This ARC run was already finalized. Re-running would append the same converged results
+            # to the RMG libraries a second time and re-capture over a good capture, so a redundant
+            # call has to be a no-op rather than a duplicating one.
+            self.logger.info(f'ARC finalization already completed for iteration {self.iteration}, skipping.')
+            return
+
+        # Capture first. It is the only step here whose inputs are ephemeral: ARC deletes and
+        # recreates calcs/statmech/kinetics/ at the top of its next rate pass. Everything below
+        # reads durable state, so if the ARC-info parsing or the library append were to raise with
+        # capture sequenced after them, the artifacts would be gone before capture ever ran.
+        self._capture_pdep_ts_artifacts()
+
         unconverged_spc_keys, converged_spc_keys = list(), list()
         unconverged_rxn_keys, converged_rxn_keys = list(), list()
         if os.path.isfile(self.paths['ARC info']):
@@ -685,9 +818,331 @@ class T3:
                                     shared_library_name=self.t3['options']['shared_library_name'],
                                     paths=self.paths,
                                     logger=self.logger)
+
         # clear the calculated objects from self.qm:
         self.qm['species'], self.qm['reactions'] = list(), list()
         self.dump_species_and_reactions()
+
+        # Write the durable ARC finalization marker LAST, only once everything above (ARC-info
+        # processing, library updates, and TS artifact capture) has completed without raising. See
+        # check_arc_finalization_complete(): its presence is what tells a restart that this ARC
+        # run's finalization is fully done and must not be redone; if anything above raised, this
+        # line is never reached and the marker stays absent, so a restart correctly retries.
+        self._mark_arc_finalization_complete()
+
+    def _capture_pdep_ts_artifacts(self):
+        """
+        Capture, once and durably, every PDep transition state QM artifact ARC produced for the run
+        this call to ``process_arc_run()`` is processing.
+
+        Reads the join sidecar from disk (``t3.pdep.join.read_ts_join_sidecar``) rather than from
+        ``self.qm['reactions']`` or ``self.pdep_ts_join_records``: neither in-memory object survives
+        a restart intact (``self.qm['reactions']`` holds plain ``reaction.copy()`` objects that
+        discard everything but ``ts_label``, and ``self.pdep_ts_join_records`` is only ever populated
+        within a single ``determine_species_from_pdep_network()`` call), so the sidecar written
+        pre-ARC via ``write_ts_join_sidecar`` is the only durable record of which transition states
+        were queued -- including across a crash and restart.
+
+        An iteration that queued no PDep transition states -- the common case -- must incur zero
+        cost and zero side effects here: ``read_ts_join_sidecar`` returns ``[]`` when no sidecar file
+        exists, which means "none were queued", not "the join was lost", so returning immediately in
+        that case is a deliberate no-op, not an error being suppressed.
+
+        A verified capture already on disk is authoritative for replay: ``run_arc()`` never
+        modifies or clears the capture directory (it only ever clears the finalization marker), so
+        if a capture from an earlier attempt at this same iteration already holds a verified,
+        identity-matched, non-empty result, re-running ``capture_ts_artifacts`` here would be
+        redundant at best and dangerous at worst if ARC has since deleted the artifacts it read the
+        first time. ``_pdep_capture_is_authoritative`` makes that skip/raise/proceed decision; see
+        its docstring for the exact three-way split.
+
+        Raises:
+            ValueError: Anything ``capture_ts_artifacts`` itself raises (e.g. a missing or escaping
+                       log file, a torn or corrupted vendored copy, a duplicate transition state
+                       label), or anything ``_pdep_capture_is_authoritative`` raises (an existing
+                       capture whose identity does not match this iteration). This is intentionally
+                       NOT swallowed: an iteration that DID queue PDep transition states but whose
+                       capture failed, or produced no artifact for a transition state ARC was
+                       actually queued to compute, must stop T3 rather than silently continue, since
+                       ARC deletes and recreates ``calcs/statmech/kinetics/`` on its next rate pass
+                       -- there would be no second chance to capture what failed here.
+        """
+        join_records = read_ts_join_sidecar(self.paths['ARC'])
+        if not join_records:
+            # No sidecar means "none were queued" -- unless ARC actually produced T3-labelled
+            # transition state artifacts, in which case the join that named them has been lost and
+            # those artifacts cannot be attributed to any network. Treating that as an empty
+            # iteration would silently abandon completed QM work, so fail closed instead.
+            orphaned = self._find_orphaned_ts_artifacts()
+            if orphaned:
+                raise ValueError(f'Found {len(orphaned)} T3-labelled transition state artifact(s) in '
+                                 f'{self.paths["ARC"]} but no join sidecar naming them: {sorted(orphaned)}.\n'
+                                 f'The join record was lost, so these artifacts cannot be attributed to a '
+                                 f'P-dep network. Refusing to finalize rather than abandon them.')
+            return
+
+        capture_dir = self.paths['PDep capture']
+        if self._pdep_capture_is_authoritative(capture_dir=capture_dir, join_records=join_records):
+            self.logger.info(f'A verified, identity-matched PDep transition state capture already '
+                             f'exists at {capture_dir}; skipping re-capture for this iteration.')
+            # The missing-artifact refusal below MUST also be evaluated here, from the existing
+            # capture's own frozen per-transition-state statuses. Skipping re-capture is not the
+            # same as having nothing left to check: a PARTIAL capture (some queued transition states
+            # produced artifacts, others did not) is refused on its first attempt, yet it verifies,
+            # matches this iteration's identity, and has captured_artifact_count > 0 -- so without
+            # this call the replay would return early, jump straight over the refusal, and finalize,
+            # permanently abandoning the transition states that never produced QM. The two guards
+            # would silently cancel each other out.
+            manifest = read_yaml_file(path=os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME))
+            self._refuse_if_queued_ts_lack_artifacts(
+                statuses_by_key={(entry.get('network_id'), entry.get('network_ts_label')): entry.get('status')
+                                 for entry in manifest.get('transition_states', [])},
+                join_records=join_records,
+            )
+            return
+
+        result = capture_ts_artifacts(
+            join_records=join_records,
+            arc_project_directory=self.paths['ARC'],
+            capture_dir=capture_dir,
+        )
+        self.logger.info(f'Captured {len(result.records)} PDep transition state QM artifact '
+                         f'record(s) into {result.capture_dir}.')
+        self._refuse_if_queued_ts_lack_artifacts(
+            statuses_by_key={record.key: record.status for record in result.records},
+            join_records=join_records,
+        )
+
+    def _refuse_if_queued_ts_lack_artifacts(self, statuses_by_key: dict, join_records: list):
+        """
+        Refuse to finalize when a transition state ARC was actually queued to compute produced no
+        artifact.
+
+        A transition state that was QUEUED to ARC (as opposed to ``already_present`` or
+        ``not_queued``, neither of which ever expects an artifact from this ARC run) but whose
+        artifact is MISSING means ARC either never produced it or it was cleaned up before capture
+        ran. Finalizing anyway would silently abandon QM work T3 believed it was waiting on, leaving
+        an incomplete manifest with no trace that anything is missing at all -- and ARC deletes and
+        recreates ``calcs/statmech/kinetics/`` on its next rate pass, so there is no second chance.
+
+        Deliberately shared by BOTH paths in ``_capture_pdep_ts_artifacts`` -- the freshly-captured
+        one and the skip-re-capture one. Evaluating it only after a fresh capture would let a replay
+        over an already-written PARTIAL capture slip past it entirely, which is exactly how the
+        authoritative-capture guard and this one would otherwise cancel each other out.
+
+        Args:
+            statuses_by_key (dict): Artifact status per ``(network_id, network_ts_label)`` key,
+                                    sourced either from a fresh capture's records or from an
+                                    existing capture manifest's frozen entries.
+            join_records (list): This iteration's join records, carrying what was actually queued.
+
+        Raises:
+            ValueError: If any QUEUED transition state has no artifact.
+        """
+        join_status_by_key = {record.key: record.status for record in join_records}
+        missing_queued_labels = sorted(
+            key[1] for key, status in statuses_by_key.items()
+            if status == ARTIFACT_STATUS_MISSING and join_status_by_key.get(key) == JOIN_STATUS_QUEUED
+        )
+        if missing_queued_labels:
+            raise ValueError(f'{len(missing_queued_labels)} transition state(s) were queued to ARC for '
+                             f'PDep refinement but produced no artifact after this capture pass: '
+                             f'{missing_queued_labels}. ARC deletes and recreates '
+                             f'calcs/statmech/kinetics/ on its next rate pass, so there will be no '
+                             f'second chance to capture these -- finalizing silently would abandon '
+                             f'them with an incomplete manifest. Refusing to finalize.')
+
+    def _pdep_capture_is_authoritative(self, capture_dir: str, join_records: list) -> bool:
+        """
+        Decide whether an existing PDep capture at ``capture_dir`` is authoritative for this
+        iteration's join records, so ``_capture_pdep_ts_artifacts`` should skip re-capturing
+        entirely, or whether no usable capture exists yet and a normal capture should proceed, or
+        whether an existing capture is ambiguous enough that finalizing must be refused outright.
+
+        Locked design (not to be relitigated): a verified capture is authoritative for replay --
+        ``run_arc()`` never clears or modifies the capture directory itself, only the finalization
+        marker, so any capture found here was either written by this iteration or is stale from an
+        unrelated one. A proven new ARC run may supersede a prior capture ONLY transactionally, from
+        inside ``capture_ts_artifacts``'s own backstop refusal (which refuses to overwrite a valid
+        non-empty capture with an empty one when ``supersede=False``) -- this method must never pass
+        ``supersede=True`` to force that decision.
+
+        Returns:
+            bool: True if ``capture_dir`` holds a verified capture whose identity (ARC project
+                 directory, and the exact set of ``(network_id, network_ts_label)`` keys) matches
+                 this iteration's join records, AND whose ``captured_artifact_count`` is greater
+                 than zero -- i.e. it already holds real captured artifacts, so re-capturing would
+                 be redundant. False if no valid capture exists yet, or one exists with matching
+                 identity but zero captured artifacts (an insufficiency, not an identity mismatch --
+                 letting capture proceed normally is safe and lets the missing-artifact guard in
+                 ``_capture_pdep_ts_artifacts`` catch any transition state still genuinely missing).
+
+        Raises:
+            ValueError: If a verified capture exists at ``capture_dir`` but its identity does not
+                       match this iteration -- a different ARC project directory, or a different set
+                       of transition states. Reusing (or silently overwriting) it could attribute
+                       another iteration's or another ARC project's QM results to this one, which is
+                       exactly the kind of ambiguity this module refuses to guess through.
+        """
+        try:
+            existing = verify_capture(capture_dir)
+        except ValueError:
+            # No capture on disk, or one that is absent/malformed/torn: nothing valid to reuse,
+            # so capture_ts_artifacts must run normally (and, per its own docstring, will raise on
+            # a genuinely torn capture rather than silently overwriting it).
+            return False
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        manifest = read_yaml_file(path=manifest_path)
+        manifest_arc_dir = manifest.get('arc_project_directory')
+        current_arc_dir = self.paths['ARC']
+        if manifest_arc_dir is None or os.path.realpath(manifest_arc_dir) != os.path.realpath(current_arc_dir):
+            raise ValueError(f'A PDep transition state capture already exists at {capture_dir}, but '
+                             f'its manifest names a different ARC project directory '
+                             f'({manifest_arc_dir!r}) than this iteration\'s ({current_arc_dir!r}). '
+                             f'Refusing to reuse or overwrite it: attributing it to this iteration '
+                             f'could silently mix QM results captured from an unrelated ARC run.')
+
+        manifest_keys = {(entry.get('network_id'), entry.get('network_ts_label'))
+                         for entry in manifest.get('transition_states', [])}
+        current_keys = {record.key for record in join_records}
+        if manifest_keys != current_keys:
+            raise ValueError(f'A PDep transition state capture already exists at {capture_dir} for '
+                             f'ARC project directory {current_arc_dir}, but it names a different set '
+                             f'of transition states than this iteration\'s join sidecar (captured: '
+                             f'{sorted(manifest_keys)}, current: {sorted(current_keys)}). Refusing to '
+                             f'reuse or overwrite it: an identity mismatch here is ambiguous, not safe '
+                             f'to resolve automatically.')
+
+        if not self._pdep_capture_networks_match_current_join(capture_dir=capture_dir, manifest=manifest):
+            # The ARC project directory and the exact transition-state set both still match, but the
+            # network(s) those transition states belong to do not: either the RMG network file was
+            # regenerated (different source_sha256) or the master-equation method changed, since this
+            # capture was taken. Unlike the two checks above, this is NOT ambiguous -- there is nothing
+            # to guess through: the frozen artifacts describe a network/method that no longer matches
+            # what this iteration's join sidecar names, so they must not be replayed as authoritative.
+            # Returning False (rather than raising) lets capture proceed normally below, which vendors
+            # the CURRENT network file and method fresh and overwrites the stale capture -- exactly
+            # the same path taken when no capture exists yet.
+            return False
+
+        return existing.captured_artifact_count > 0
+
+    def _pdep_capture_networks_match_current_join(self, capture_dir: str, manifest: dict) -> bool:
+        """
+        Whether an existing capture's frozen ``networks`` block agrees with the CURRENT join
+        sidecar's ``networks`` block on every network the capture covers.
+
+        A capture is only validly reusable if it was taken against the SAME network source and the
+        SAME master-equation method: if the RMG network file was regenerated (different
+        ``source_sha256``) or the ME method changed (e.g. CSE vs MSC vs RS) since the capture was
+        written, the frozen artifacts describe a different calculation, and replaying them would
+        silently attribute a result to inputs that never produced it. This check is deliberately
+        narrower than the ARC-directory and transition-state-set checks in
+        ``_pdep_capture_is_authoritative``: those raise on mismatch because reuse would be
+        ambiguous, whereas a network/method change is unambiguous and simply means the existing
+        capture is stale -- so this returns ``False`` (not authoritative) rather than raising,
+        letting a normal fresh capture proceed and overwrite it.
+
+        Fails CLOSED on any missing or malformed evidence: a block that is absent, not a mapping, or
+        missing an entry on either side is treated as NOT matching, never as vacuously matching.
+        ``t3.pdep.cache.hash_file`` returns a prefixed ``'sha256:<hex>'`` string on both sides, so
+        the comparison is a direct string equality, not a bare-hex comparison.
+
+        Args:
+            capture_dir (str): The capture directory, for error-message context only (no error is
+                              raised here; kept for symmetry with the caller's other checks).
+            manifest (dict): The existing capture's manifest, as read from
+                            ``CAPTURE_MANIFEST_FILE_NAME``.
+
+        Returns:
+            bool: True only if, for every network named in the manifest's ``networks`` block, the
+                 current join sidecar also names that network with the identical ``source_sha256``
+                 and ``method``. False if either block is missing/malformed, a network is absent
+                 from either side, or any value disagrees.
+        """
+        manifest_networks = manifest.get('networks')
+        if not isinstance(manifest_networks, dict) or not manifest_networks:
+            # A capture verified by ``verify_capture`` always has a non-empty, well-formed
+            # ``networks`` block (see its own fail-closed check) -- reaching here with something
+            # else means the manifest was edited out from under us since verification. No evidence
+            # to compare against means no basis to call this capture authoritative.
+            return False
+        try:
+            current_networks = read_ts_join_networks(self.paths['ARC'])
+        except ValueError:
+            # A malformed current sidecar's networks block is not usable evidence either.
+            return False
+        if not isinstance(current_networks, dict) or not current_networks:
+            return False
+        for network_id, manifest_entry in manifest_networks.items():
+            if not isinstance(manifest_entry, dict):
+                return False
+            current_entry = current_networks.get(network_id)
+            if not isinstance(current_entry, dict):
+                return False
+            manifest_sha256 = manifest_entry.get('source_sha256')
+            current_sha256 = current_entry.get('source_sha256')
+            if not manifest_sha256 or manifest_sha256 != current_sha256:
+                return False
+            manifest_method = manifest_entry.get('method')
+            current_method = current_entry.get('method')
+            if not manifest_method or manifest_method != current_method:
+                return False
+        return True
+
+    def _find_orphaned_ts_artifacts(self) -> list:
+        """
+        T3-labelled transition state artifacts ARC wrote that no join sidecar accounts for.
+
+        Used to tell "this iteration queued no P-dep transition states" apart from "the join sidecar
+        that named them is gone", which look identical from the sidecar alone.
+
+        Returns:
+            list: The labels of any orphaned transition state artifacts, empty if there are none.
+        """
+        ts_dir = os.path.dirname(expected_ts_artifact_path(arc_project_directory=self.paths['ARC'],
+                                                           label='placeholder'))
+        if not os.path.isdir(ts_dir):
+            return list()
+        return [os.path.splitext(name)[0] for name in os.listdir(ts_dir)
+                if name.startswith(f'{ARC_TS_LABEL_PREFIX}_') and name.endswith('.py')]
+
+    def _clear_arc_finalization_marker(self):
+        """
+        Remove the ARC finalization marker for the current iteration, if one exists.
+
+        Called when a new ARC run starts, so that a marker describing a superseded run cannot make
+        the new run look already finalized.
+        """
+        marker_path = self.paths['ARC finalization marker']
+        if os.path.isfile(marker_path):
+            os.remove(marker_path)
+
+    def _mark_arc_finalization_complete(self):
+        """
+        Write the durable ARC finalization marker.
+
+        Must only be called as the LAST step of ``process_arc_run()`` -- see
+        ``check_arc_finalization_complete()`` for why the marker's presence must mean finalization
+        is fully done.
+        """
+        marker_path = self.paths['ARC finalization marker']
+        marker_dir = os.path.dirname(marker_path)
+        if not os.path.isdir(marker_dir):
+            os.makedirs(marker_dir)
+        # Written atomically. A partially written marker is indistinguishable from a complete one by
+        # existence alone, and would make finalization be skipped forever for this iteration.
+        fd, staged_path = tempfile.mkstemp(prefix='.arc-finalization-', dir=marker_dir)
+        try:
+            with os.fdopen(fd, 'w') as f:
+                f.write(f'{ARC_FINALIZATION_MARKER_TEXT} at {datetime.datetime.now().isoformat()}\n')
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(staged_path, marker_path)
+        finally:
+            if os.path.isfile(staged_path):
+                os.remove(staged_path)
 
     def get_current_rmg_tol(self) -> float:
         """
