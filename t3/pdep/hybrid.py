@@ -322,16 +322,26 @@ class QMEnergySettings:
                                                   the header entirely when ``None``.
         use_hindered_rotors (bool, optional): Arkane's ``useHinderedRotors``. Default: ``True``.
         use_bond_corrections (bool, optional): Arkane's ``useBondCorrections``. Default: ``False``.
+                                               Must not be ``True``: Arkane's input DSL has no
+                                               directive to pin bond additivity correction VALUES
+                                               (``useBondCorrections``/``bondCorrectionType`` only
+                                               select whether/which BAC SCHEME applies; the actual
+                                               numeric corrections come from Arkane's own database
+                                               at solve time). ``write_hybrid_network_input_file``
+                                               raises ``ValueError`` rather than honoring ``True``.
         bond_correction_type (str, optional): Arkane's ``bondCorrectionType`` ('p' for
                                               Petersson-type or 'm' for Melius-type BAC; see
-                                              ``arkane/input.py``). Required (must not be
-                                              ``None``) when ``use_bond_corrections`` is ``True``,
-                                              since Arkane would otherwise silently default it to
-                                              'p' rather than making the choice explicit. Must be
-                                              ``None`` when ``use_bond_corrections`` is ``False``.
-                                              Default: ``None``.
-        atom_energies (dict, optional): Arkane's ``atomEnergies`` mapping. Omitted from the
-                                        header entirely when ``None``.
+                                              ``arkane/input.py``). Must be ``None`` when
+                                              ``use_bond_corrections`` is ``False`` (its only
+                                              allowed value, since ``use_bond_corrections=True`` is
+                                              itself always refused). Default: ``None``.
+        atom_energies (dict, optional): Arkane's ``atomEnergies`` mapping -- the only directive in
+                                        Arkane's input DSL that pins atom energy correction VALUES
+                                        (as opposed to merely turning corrections on/off). Must not
+                                        be ``None`` when ``use_atom_corrections`` is ``True``:
+                                        ``write_hybrid_network_input_file`` raises ``ValueError``
+                                        rather than emitting ``useAtomCorrections = True`` with no
+                                        ``atomEnergies = ...`` to back it.
         use_atom_corrections (bool, optional): Arkane's ``useAtomCorrections``. Default: ``True``.
                                                Must not be ``False``: that directive silently
                                                disables the atom energy corrections that put a
@@ -420,6 +430,8 @@ def write_hybrid_network_input_file(source_path: str,
     Raises:
         ValueError: If ``energy_settings.model_chemistry`` is missing/blank or fails validation; if
                    ``energy_settings.use_atom_corrections`` is ``False``; if
+                   ``energy_settings.use_atom_corrections`` is ``True`` and ``atom_energies`` is
+                   ``None``; if ``energy_settings.use_bond_corrections`` is ``True``; if
                    ``qm_transition_states`` is empty; if a key of ``qm_transition_states`` is not
                    a transition state label in the source network; if a QM artifact file (or a
                    ``Log(...)`` file it references) does not exist; if a ``Log(...)`` path
@@ -445,19 +457,30 @@ def write_hybrid_network_input_file(source_path: str,
                          "Arkane's atom energy corrections, so a QM'd transition state's E0 would not be on the "
                          "same energy reference scale as the RMG wells around it. Leave use_atom_corrections=True "
                          "(the default).")
+    if energy_settings.atom_energies is None:
+        raise ValueError("QMEnergySettings.use_atom_corrections is True but atom_energies is None: Arkane's "
+                         "atomEnergies directive is the ONLY place in its input DSL where atom energy correction "
+                         "VALUES are pinned (useAtomCorrections merely turns the mechanism on/off). Leaving "
+                         "atom_energies unset would emit useAtomCorrections = True with no atomEnergies = ... to "
+                         "back it, silently falling through to whatever corrections Arkane's own database happens "
+                         "to have for this model chemistry -- exactly the drift that can put a QM'd transition "
+                         "state's E0 off the same enthalpy-of-formation scale as the RMG wells around it. Provide "
+                         "the ARC-computed atom_energies dict for this model chemistry.")
     if energy_settings.tunneling is not None:
         _validate_no_injection_chars('tunneling', energy_settings.tunneling)
-    if energy_settings.use_bond_corrections and energy_settings.bond_correction_type is None:
-        raise ValueError("QMEnergySettings.bond_correction_type is required when use_bond_corrections is True: "
-                         "without it, Arkane silently defaults bondCorrectionType to 'p' (Petersson-type) rather "
-                         "than making that choice explicit.")
+    if energy_settings.use_bond_corrections:
+        raise ValueError("QMEnergySettings.use_bond_corrections is True: Arkane's input DSL has no directive to "
+                         "pin bond additivity correction VALUES -- useBondCorrections only turns the mechanism "
+                         "on, and bondCorrectionType only selects WHICH scheme ('p' Petersson-type or 'm' "
+                         "Melius-type) to apply; the actual numeric corrections are looked up from Arkane's own "
+                         "database at solve time, with no way for this file to pin (or even record) what was "
+                         "actually applied. That is exactly the drift this hybrid writer exists to prevent for a "
+                         "QM'd transition state's E0. Leave use_bond_corrections=False (the default) -- the escape "
+                         "hatch this guard names.")
     if not energy_settings.use_bond_corrections and energy_settings.bond_correction_type is not None:
         raise ValueError("QMEnergySettings.bond_correction_type is set but use_bond_corrections is False, so it "
                          "would silently have no effect; either set use_bond_corrections=True or leave "
                          "bond_correction_type unset.")
-    if energy_settings.bond_correction_type is not None and energy_settings.bond_correction_type not in ('p', 'm'):
-        raise ValueError(f"QMEnergySettings.bond_correction_type must be 'p' (Petersson-type) or 'm' "
-                         f"(Melius-type), got {energy_settings.bond_correction_type!r}.")
     if not qm_transition_states:
         raise ValueError('qm_transition_states is empty; use t3.utils.writer.write_arkane_network_input_file(...) '
                          'instead to write an all-ILT (non-hybrid) Arkane network input file.')

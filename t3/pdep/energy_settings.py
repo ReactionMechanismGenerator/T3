@@ -378,7 +378,11 @@ def _cross_validate_frequency_scale_factor(input_value: float | None, output_yml
         float | None: ``input_value`` if set; else ``output.yml``'s value if set; else ``None``.
     """
     output_value = output_yml.get('freq_scale_factor')
-    if output_value is not None and not isinstance(output_value, (int, float)):
+    # Exact type() membership, not isinstance: isinstance(True, (int, float)) is True in Python's
+    # numeric tower, so an isinstance-based check would let a YAML `true`/`false` through as 1.0/0.0
+    # and silently scale every frequency, instead of naming the type defect (see
+    # _validate_literal_type's docstring for the same reasoning applied to input.py's directives).
+    if output_value is not None and type(output_value) not in (int, float):
         raise ValueError(f"'{output_yml_path}' has a non-numeric 'freq_scale_factor': {output_value!r}.")
     if input_value is not None and output_value is not None and not math.isclose(input_value, output_value):
         raise ValueError(f"Frequency scale factor mismatch: input.py sets frequencyScaleFactor = {input_value!r} "

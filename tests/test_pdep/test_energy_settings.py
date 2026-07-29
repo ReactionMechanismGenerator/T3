@@ -177,6 +177,24 @@ def test_frequency_scale_factor_mismatch_raises(tmp_path):
         read_arc_energy_settings(str(project_dir), statmech_subdir='kinetics')
 
 
+def test_output_yml_boolean_freq_scale_factor_is_rejected_not_silently_scaled(tmp_path):
+    """``output.yml``'s ``freq_scale_factor`` must be an actual ``float``, not YAML's ``true``.
+    ``isinstance(True, (int, float))`` is ``True`` in Python's numeric tower, so a naive
+    isinstance-based check would let a boolean ``freq_scale_factor`` through; with this subdir's
+    ``input.py`` also carrying a numeric ``frequencyScaleFactor``, the type defect would then be
+    masked behind a coincidental 'mismatch' error (``math.isclose(0.988, True)`` is ``False``)
+    instead of being named for what it is."""
+    project_dir = _write_minimal_arc_project(tmp_path / 'arc_project', "modelChemistry = 'CBS-QB3'")
+    output_yml_path = os.path.join(project_dir, 'output', 'output.yml')
+    with open(output_yml_path, 'r') as f:
+        content = f.read()
+    content = content.replace('freq_scale_factor: 0.988', 'freq_scale_factor: true')
+    with open(output_yml_path, 'w') as f:
+        f.write(content)
+    with pytest.raises(ValueError, match='non-numeric'):
+        read_arc_energy_settings(arc_project_directory=project_dir, statmech_subdir='kinetics')
+
+
 def test_use_bond_corrections_true_without_bond_correction_type_raises(tmp_path):
     """Same-file contradiction: useBondCorrections = True but bondCorrectionType is never assigned
     in that same input.py. This must raise even before output.yml is consulted."""

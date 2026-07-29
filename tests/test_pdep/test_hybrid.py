@@ -46,7 +46,24 @@ TS_MISSING_LOG_ARTIFACT = os.path.join(ARC_TS_DIR, 'TS_missing_log.py')
 TS_COLLIDING_ARTIFACT = os.path.join(ARC_TS_DIR, 'TS_colliding.py')
 TS_DUP_PATH_TEXT_ARTIFACT = os.path.join(ARC_TS_DIR, 'TS_dup_path_text.py')
 
-DEFAULT_ENERGY_SETTINGS = QMEnergySettings(model_chemistry='wb97xd/def2tzvp')
+# A realistic ARC atom-energies dict (see tests/test_pdep/test_energy_settings.py's xl1001
+# fixture), not an empty/absent one: QMEnergySettings(use_atom_corrections=True) with
+# atom_energies=None is exactly the fail-open state write_hybrid_network_input_file now refuses,
+# and that state is reachable from a real ARC project (atomEnergies is only ever emitted by ARC
+# for gfn2/torchani model chemistries), so this fixture must carry values, not omit them.
+DEFAULT_ENERGY_SETTINGS = QMEnergySettings(
+    model_chemistry='wb97xd/def2tzvp',
+    atom_energies={
+        'Br': -2574.174533595486,
+        'C': -37.84706210301937,
+        'Cl': -460.1467876783656,
+        'F': -99.73955550924293,
+        'H': -0.5006557872395249,
+        'N': -54.584995947182875,
+        'O': -75.07252406126821,
+        'S': -398.1105530401693,
+    },
+)
 
 
 def test_refuses_unknown_ts_label(tmp_path):
@@ -99,11 +116,19 @@ def test_refuses_missing_or_blank_model_chemistry(tmp_path, model_chemistry):
         )
 
 
-def test_refuses_bond_correction_type_unset_when_bond_corrections_enabled(tmp_path):
-    """Item 1: use_bond_corrections=True with bond_correction_type left unset (Arkane would
-    otherwise silently default to Petersson-type BAC) raises ValueError."""
-    energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', use_bond_corrections=True)
-    with pytest.raises(ValueError, match='bond_correction_type'):
+def test_refuses_use_bond_corrections_true_unconditionally(tmp_path):
+    """Item 1: use_bond_corrections=True is refused unconditionally, regardless of
+    bond_correction_type. Arkane's input DSL has no directive to pin BAC VALUES -- only
+    useBondCorrections (bool) and bondCorrectionType ('p'/'m', which SCHEME to apply); the actual
+    numeric corrections are looked up from Arkane's own database at solve time (see
+    arkane/input.py's local_context.get('atomEnergies', ...) being the only corrections-VALUES
+    directive that exists). So turning this on can silently apply a BAC that was fit against a
+    different reference than the RMG wells around a QM'd TS, with no way for this file to pin what
+    was actually applied."""
+    energy_settings = QMEnergySettings(
+        model_chemistry='wb97xd/def2tzvp', use_bond_corrections=True, bond_correction_type='p',
+        atom_energies={'C': -37.79, 'H': -0.5})
+    with pytest.raises(ValueError, match='use_bond_corrections'):
         write_hybrid_network_input_file(
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
@@ -117,7 +142,8 @@ def test_refuses_bond_correction_type_set_when_bond_corrections_disabled(tmp_pat
     """Item 1: bond_correction_type set while use_bond_corrections is False raises ValueError,
     since it would silently have no effect."""
     energy_settings = QMEnergySettings(
-        model_chemistry='wb97xd/def2tzvp', use_bond_corrections=False, bond_correction_type='p')
+        model_chemistry='wb97xd/def2tzvp', use_bond_corrections=False, bond_correction_type='p',
+        atom_energies={'C': -37.79, 'H': -0.5})
     with pytest.raises(ValueError, match='bond_correction_type'):
         write_hybrid_network_input_file(
             source_path=NETWORK_FIXTURE,
@@ -128,12 +154,14 @@ def test_refuses_bond_correction_type_set_when_bond_corrections_disabled(tmp_pat
         )
 
 
-def test_refuses_invalid_bond_correction_type_value(tmp_path):
-    """Item 1: an unrecognized bond_correction_type value raises ValueError (Arkane only
-    accepts 'p' for Petersson or 'm' for Melius)."""
-    energy_settings = QMEnergySettings(
-        model_chemistry='wb97xd/def2tzvp', use_bond_corrections=True, bond_correction_type='bogus')
-    with pytest.raises(ValueError, match='bond_correction_type'):
+def test_refuses_use_atom_corrections_true_with_atom_energies_none(tmp_path):
+    """Item 5: use_atom_corrections=True (the default) with atom_energies left None raises
+    ValueError. This is the currently-live fail-open: _build_energy_header only emits
+    atomEnergies = ... when atom_energies is not None, so a caller could otherwise turn atom
+    corrections ON in the generated file without pinning the VALUES Arkane will actually look up
+    -- exactly the gap that leaves a QM'd TS's E0 off the RMG wells' enthalpy-of-formation scale."""
+    energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', atom_energies=None)
+    with pytest.raises(ValueError, match='atom_energies'):
         write_hybrid_network_input_file(
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
@@ -141,24 +169,6 @@ def test_refuses_invalid_bond_correction_type_value(tmp_path):
             qm_transition_states={'TS1': TS1_ARTIFACT},
             energy_settings=energy_settings,
         )
-
-
-def test_emits_bond_correction_type_when_bond_corrections_enabled(tmp_path):
-    """Item 1: a valid bond_correction_type is emitted as Arkane's bondCorrectionType directive
-    when use_bond_corrections is True."""
-    dest_path = str(tmp_path / 'input.py')
-    energy_settings = QMEnergySettings(
-        model_chemistry='wb97xd/def2tzvp', use_bond_corrections=True, bond_correction_type='m')
-    write_hybrid_network_input_file(
-        source_path=NETWORK_FIXTURE,
-        dest_path=dest_path,
-        method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
-        energy_settings=energy_settings,
-    )
-    with open(dest_path, 'r') as f:
-        text = f.read()
-    assert "bondCorrectionType = 'm'" in text
 
 
 @pytest.mark.parametrize('bad_model_chemistry', [
@@ -190,7 +200,8 @@ def test_rejects_model_chemistry_with_injection_characters(tmp_path, bad_model_c
 def test_rejects_tunneling_with_injection_characters(tmp_path, bad_tunneling):
     """Item 2: tunneling containing a newline, quote or backslash is rejected up front, rather
     than being raw-interpolated into the generated (executable) Arkane input."""
-    energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', tunneling=bad_tunneling)
+    energy_settings = QMEnergySettings(
+        model_chemistry='wb97xd/def2tzvp', tunneling=bad_tunneling, atom_energies={'C': -37.79, 'H': -0.5})
     with pytest.raises(ValueError, match='tunneling'):
         write_hybrid_network_input_file(
             source_path=NETWORK_FIXTURE,
@@ -245,7 +256,7 @@ def test_accepts_and_renders_bare_level_of_theory_model_chemistry(tmp_path, mode
     is accepted (it legitimately contains quote characters that _validate_no_injection_chars alone
     would reject) and rendered bare (unquoted), not as a quoted string containing that syntax."""
     dest_path = str(tmp_path / 'input.py')
-    energy_settings = QMEnergySettings(model_chemistry=model_chemistry_expr)
+    energy_settings = QMEnergySettings(model_chemistry=model_chemistry_expr, atom_energies={'C': -37.79, 'H': -0.5})
     write_hybrid_network_input_file(
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
@@ -383,7 +394,8 @@ def test_qm_reaction_drops_kinetics_and_adds_tunneling(tmp_path):
 def test_qm_reaction_omits_tunneling_when_not_configured(tmp_path):
     """tunneling=None on QMEnergySettings means no tunneling = ... is written."""
     dest_path = str(tmp_path / 'input.py')
-    energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', tunneling=None)
+    energy_settings = QMEnergySettings(
+        model_chemistry='wb97xd/def2tzvp', tunneling=None, atom_energies={'C': -37.79, 'H': -0.5})
     write_hybrid_network_input_file(
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,

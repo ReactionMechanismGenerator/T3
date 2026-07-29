@@ -99,8 +99,11 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
     block. ``useAtomCorrections`` is ``True`` to stay faithful to ARC, which computes it as
     ``bool(model_chemistry or atom_energies)`` and so can never emit ``False`` alongside a
     ``modelChemistry`` line; a ``False`` here would be an ARC-impossible state that the hybrid
-    writer rightly refuses, making the end-to-end path untestable. ``useBondCorrections`` stays
-    ``False`` so no
+    writer rightly refuses, making the end-to-end path untestable. ``atomEnergies`` is populated
+    with a realistic ARC-shaped dict (not omitted) so ``use_atom_corrections=True`` resolves to a
+    real ``atom_energies`` mapping rather than ``None`` -- the fail-open state
+    ``write_hybrid_network_input_file`` now refuses, which would otherwise make the end-to-end
+    capture-to-hybrid-write path untestable too. ``useBondCorrections`` stays ``False`` so no
     cross-validation against ``output.yml`` (frequencyScaleFactor/atomEnergies/bondCorrectionType) is
     ever triggered by this fixture. Gated so it never overwrites an ``output.yml`` a test has already
     written of its own (``output.yml`` is project-global, shared across statmech subdirs -- see the
@@ -114,6 +117,7 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
                 "modelChemistry = 'CBS-QB3'\n\n"
                 "useHinderedRotors = True\n\n"
                 "useAtomCorrections = True\n\n"
+                "atomEnergies = {'C': -37.844411, 'H': -0.499818, 'N': -54.581501, 'O': -75.062219}\n\n"
                 "useBondCorrections = False\n"
             )
     output_dir = os.path.join(arc_dir, 'output')
@@ -1942,6 +1946,7 @@ def test_a_capture_alone_can_drive_a_hybrid_network_write(tmp_path):
             use_hindered_rotors=energy_settings['use_hindered_rotors'],
             use_bond_corrections=energy_settings['use_bond_corrections'],
             bond_correction_type=energy_settings['bond_correction_type'],
+            atom_energies=energy_settings['atom_energies'],
             use_atom_corrections=energy_settings['use_atom_corrections']),
         qm_artifacts_root=capture_dir,
     )
