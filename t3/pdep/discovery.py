@@ -122,6 +122,18 @@ TS_ARTIFACT_STATUSES = frozenset({
     ARTIFACT_STATUS_UNVERIFIED,
 })
 
+# Which statuses this module ever pairs with a non-None artifact_path, and which it never does --
+# read straight off this function's own branches below (the USABLE/UNVERIFIED tail sets
+# artifact_path=recomputed_path; MISSING/UNUSABLE/NOT_QUEUED all set it None). A capture manifest
+# is untrusted data re-read off disk by a consumer (``t3.pdep.capture.verify_capture``) that never
+# ran this function itself, so it cannot assume a status/path pairing this module would never
+# produce; these two sets let that consumer enforce the pairing is exactly what discovery would
+# have written, rather than only checking the path when one happens to be present.
+TS_ARTIFACT_STATUSES_REQUIRING_ARTIFACT_PATH = frozenset({ARTIFACT_STATUS_USABLE, ARTIFACT_STATUS_UNVERIFIED})
+TS_ARTIFACT_STATUSES_REQUIRING_NO_ARTIFACT_PATH = frozenset({
+    ARTIFACT_STATUS_MISSING, ARTIFACT_STATUS_UNUSABLE, ARTIFACT_STATUS_NOT_QUEUED,
+})
+
 # Every selected transition state came back usable: the hybrid network is fully QM-refined.
 HYBRID_STATUS_COMPLETE = 'complete'
 # At least one, but not all, selected transition states came back usable.

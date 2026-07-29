@@ -15,11 +15,18 @@ from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           arc_ts_label,
                           expected_ts_artifact_path,
                           merge_ts_join_records,
+                          read_ts_join_networks,
                           read_ts_join_sidecar,
                           ts_join_sidecar_path,
+                          validate_ts_join_networks,
                           validate_ts_join_records,
                           write_ts_join_sidecar,
                           )
+
+# A syntactically valid source_sha256 in the one representation this module stores: the full
+# 'sha256:<hex>' string exactly as t3.pdep.cache.hash_file returns it. join.py validates the
+# format only (file existence and re-hashing are the capture step's job), so a literal is enough.
+VALID_SHA = f'sha256:{"0123456789abcdef" * 4}'
 
 
 def _record(network_id='network4_1',
@@ -32,6 +39,14 @@ def _record(network_id='network4_1',
                         arc_ts_label=kwargs.pop('arc_ts_label', arc_ts_label(network_id, network_ts_label)),
                         status=status,
                         **kwargs)
+
+
+def _networks_for(records: list, method: str = 'MSC') -> dict:
+    """Build a well-formed networks block covering exactly the networks the records reference."""
+    return {network_id: {'source_path': f'/rmg/pdep/{network_id}.py',
+                         'source_sha256': VALID_SHA,
+                         'method': method}
+            for network_id in {record.network_id for record in records}}
 
 
 def test_arc_ts_label_is_deterministic_and_namespaced():
@@ -221,7 +236,8 @@ def test_sidecar_round_trips(tmp_path):
                _record(network_ts_label='TS4', status=JOIN_STATUS_ALREADY_PRESENT, reason='already known'),
                _record(network_id='network1_1', network_ts_label='TS1',
                        status=JOIN_STATUS_NOT_QUEUED, reason='no structure')]
-    path = write_ts_join_sidecar(arc_project_directory=project, records=records)
+    networks = _networks_for(records)
+    path = write_ts_join_sidecar(arc_project_directory=project, records=records, networks=networks)
     assert path == ts_join_sidecar_path(project)
     assert os.path.basename(path) == TS_JOIN_SIDECAR_FILE_NAME
     assert read_ts_join_sidecar(project) == records
@@ -257,7 +273,9 @@ def test_reading_a_sidecar_with_an_ambiguous_mapping_raises(tmp_path):
     (project / TS_JOIN_SIDECAR_FILE_NAME).write_text(
         'transition_states:\n'
         f'- {{network_id: network4_1, network_ts_label: TS3, arc_ts_label: {shared}, status: queued}}\n'
-        f'- {{network_id: network4_1, network_ts_label: TS4, arc_ts_label: {shared}, status: queued}}\n')
+        f'- {{network_id: network4_1, network_ts_label: TS4, arc_ts_label: {shared}, status: queued}}\n'
+        'networks:\n'
+        f'  network4_1: {{source_path: /rmg/pdep/network4_1.py, source_sha256: {VALID_SHA}, method: MSC}}\n')
     with pytest.raises(ValueError, match='Ambiguous'):
         read_ts_join_sidecar(str(project))
 
@@ -266,8 +284,165 @@ def test_write_refuses_ambiguous_records_without_leaving_a_partial_sidecar(tmp_p
     """Test that a refused write leaves nothing behind for a later step to misread as authoritative."""
     project = str(tmp_path / 'ARC')
     shared = arc_ts_label('network4_1', 'TS3')
+    records = [_record(network_ts_label='TS3'),
+               _record(network_ts_label='TS4', arc_ts_label=shared)]
     with pytest.raises(ValueError, match='Ambiguous'):
         write_ts_join_sidecar(arc_project_directory=project,
-                              records=[_record(network_ts_label='TS3'),
-                                       _record(network_ts_label='TS4', arc_ts_label=shared)])
+                              records=records,
+                              networks=_networks_for(records))
     assert not os.path.isfile(ts_join_sidecar_path(project))
+
+
+def test_networks_block_round_trips_losslessly(tmp_path):
+    """Test that the networks block survives a write/read cycle byte-equal in content."""
+    project = str(tmp_path / 'ARC')
+    records = [_record(network_ts_label='TS3'),
+               _record(network_id='network1_1', network_ts_label='TS1')]
+    networks = {'network4_1': {'source_path': '/rmg/pdep/network4_1.py',
+                               'source_sha256': VALID_SHA,
+                               'method': 'MSC'},
+                'network1_1': {'source_path': '/rmg/pdep/network1_1.py',
+                               'source_sha256': f'sha256:{"fedcba9876543210" * 4}',
+                               'method': 'CSE'}}
+    write_ts_join_sidecar(arc_project_directory=project, records=records, networks=networks)
+    assert read_ts_join_networks(project) == networks
+
+
+def test_read_networks_of_an_absent_sidecar_is_empty_not_an_error(tmp_path):
+    """Test that a project that queued nothing has an empty networks mapping, mirroring records."""
+    assert read_ts_join_networks(str(tmp_path)) == dict()
+
+
+def test_reading_a_sidecar_without_a_networks_key_raises(tmp_path):
+    """Test fail-closed on a sidecar predating (or stripped of) the networks block.
+
+    No backward compatibility is offered on this branch: a sidecar that names transition states but
+    cannot say which network file (at which hash, refined with which ME method) they came from is
+    not a partial answer, it is no answer -- the capture step could vendor the wrong network file.
+    """
+    project = tmp_path / 'ARC'
+    project.mkdir()
+    label = arc_ts_label('network4_1', 'TS3')
+    (project / TS_JOIN_SIDECAR_FILE_NAME).write_text(
+        'transition_states:\n'
+        f'- {{network_id: network4_1, network_ts_label: TS3, arc_ts_label: {label}, status: queued}}\n')
+    with pytest.raises(ValueError, match="'networks' key"):
+        read_ts_join_sidecar(str(project))
+    with pytest.raises(ValueError, match="'networks' key"):
+        read_ts_join_networks(str(project))
+
+
+def test_a_sidecar_with_empty_records_and_no_networks_key_still_raises(tmp_path):
+    """Test that the missing-key refusal is not shadowed by the cross-reference check.
+
+    With zero records the cross-reference between records and networks is vacuously satisfied, so
+    only the explicit key-presence check stands between this file and being silently read as a
+    valid empty sidecar -- and a sidecar stripped of its ``networks`` key is malformed regardless
+    of how many records it holds.
+    """
+    project = tmp_path / 'ARC'
+    project.mkdir()
+    (project / TS_JOIN_SIDECAR_FILE_NAME).write_text('transition_states: []\n')
+    with pytest.raises(ValueError, match="'networks' key"):
+        read_ts_join_sidecar(str(project))
+
+
+def test_a_record_referencing_an_unknown_network_raises():
+    """Test the record -> networks direction: every referenced network must have an entry."""
+    records = [_record(), _record(network_id='network1_1', network_ts_label='TS1')]
+    networks = _networks_for([records[0]])  # network1_1 deliberately absent
+    with pytest.raises(ValueError, match='network1_1'):
+        validate_ts_join_networks(records=records, networks=networks)
+
+
+def test_an_unreferenced_networks_entry_raises():
+    """Test the networks -> record direction: an entry no record references is refused.
+
+    An unreferenced entry means the sidecar asserts an identity for work it never actually
+    queued -- either the records were dropped or the entry belongs to another iteration; both
+    are corruption, not noise.
+    """
+    records = [_record()]
+    networks = _networks_for(records)
+    networks['network9_9'] = {'source_path': '/rmg/pdep/network9_9.py',
+                              'source_sha256': VALID_SHA,
+                              'method': 'MSC'}
+    with pytest.raises(ValueError, match='network9_9'):
+        validate_ts_join_networks(records=records, networks=networks)
+
+
+def test_networks_entries_required_even_when_all_records_were_not_queued():
+    """Test that not_queued records still pin their network's identity: they reference it too."""
+    records = [_record(status=JOIN_STATUS_NOT_QUEUED, arc_ts_label=None, reason='refused')]
+    with pytest.raises(ValueError, match='network4_1'):
+        validate_ts_join_networks(records=records, networks=dict())
+
+
+@pytest.mark.parametrize('method', ['msc', 'modified strong collision', 'default', '', None])
+def test_an_unrecognized_method_raises(method):
+    """Test that only a method key t3.utils.writer.METHOD_MAP accepts is allowed.
+
+    The method is what the downstream hybrid Arkane input will be written with; an unknown value
+    here would only fail later, deep inside Arkane input generation, far from its cause.
+    """
+    records = [_record()]
+    networks = _networks_for(records)
+    networks['network4_1']['method'] = method
+    with pytest.raises(ValueError, match='method'):
+        validate_ts_join_networks(records=records, networks=networks)
+
+
+@pytest.mark.parametrize('bad_sha', [
+    '0123456789abcdef' * 4,             # bare hex digest, missing the 'sha256:' prefix
+    'sha256:' + '0123456789ABCDEF' * 4,  # uppercase hex
+    'sha256:' + '0123456789abcdef' * 3,  # too short
+    'sha256:' + 'ghijklmnopqrstuv' * 4,  # not hex at all
+    'md5:' + '0123456789abcdef' * 4,     # wrong algorithm prefix
+    '',
+    None,
+])
+def test_a_malformed_source_sha256_raises(bad_sha):
+    """Test strict validation of the stored hash representation: 'sha256:' + 64 lowercase hex."""
+    records = [_record()]
+    networks = _networks_for(records)
+    networks['network4_1']['source_sha256'] = bad_sha
+    with pytest.raises(ValueError, match='source_sha256'):
+        validate_ts_join_networks(records=records, networks=networks)
+
+
+@pytest.mark.parametrize('bad_path', ['', '   ', None, 42])
+def test_a_blank_source_path_raises(bad_path):
+    """Test that source_path must be a non-blank string."""
+    records = [_record()]
+    networks = _networks_for(records)
+    networks['network4_1']['source_path'] = bad_path
+    with pytest.raises(ValueError, match='source_path'):
+        validate_ts_join_networks(records=records, networks=networks)
+
+
+def test_write_refuses_a_bad_networks_block_without_leaving_a_partial_sidecar(tmp_path):
+    """Test that networks validation happens before anything is written, like record validation."""
+    project = str(tmp_path / 'ARC')
+    records = [_record()]
+    with pytest.raises(ValueError, match='network4_1'):
+        write_ts_join_sidecar(arc_project_directory=project, records=records, networks=dict())
+    assert not os.path.isfile(ts_join_sidecar_path(project))
+
+
+def test_reading_a_sidecar_with_an_invalid_networks_entry_raises(tmp_path):
+    """Test that networks validation is enforced on the way IN as well.
+
+    The sidecar sits on disk between two ARC-length steps and can be edited in between, so the
+    reader re-validates rather than assuming the writer's guarantees still hold.
+    """
+    project = tmp_path / 'ARC'
+    project.mkdir()
+    label = arc_ts_label('network4_1', 'TS3')
+    (project / TS_JOIN_SIDECAR_FILE_NAME).write_text(
+        'transition_states:\n'
+        f'- {{network_id: network4_1, network_ts_label: TS3, arc_ts_label: {label}, status: queued}}\n'
+        'networks:\n'
+        f'  network4_1: {{source_path: /rmg/pdep/network4_1.py, source_sha256: {VALID_SHA}, '
+        f'method: not_a_method}}\n')
+    with pytest.raises(ValueError, match='method'):
+        read_ts_join_sidecar(str(project))

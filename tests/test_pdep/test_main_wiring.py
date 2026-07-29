@@ -18,13 +18,14 @@ ever written to.
 """
 
 import builtins
+import hashlib
 import os
 
 import pytest
 
 import t3.main as t3_main
 from t3.chem import T3Species
-from t3.pdep.cache import sa_cache_metadata_path, write_sa_cache_metadata
+from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
 from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
                           JOIN_STATUS_NOT_QUEUED,
@@ -32,6 +33,7 @@ from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
                           TSJoinRecord,
                           arc_ts_label,
                           expected_ts_artifact_path,
+                          read_ts_join_networks,
                           read_ts_join_sidecar,
                           ts_join_sidecar_path,
                           write_ts_join_sidecar,
@@ -454,6 +456,96 @@ class TestQueuePdepTransitionStates(object):
         assert records[0].expected_artifact_path == os.path.join(
             t3.paths['ARC'], 'calcs', 'statmech', 'kinetics', 'TSs', 'T3PDep_network4_2_TS1.py')
         assert t3.qm['reactions'][-1].ts_label == records[0].arc_ts_label
+        # The sidecar also freezes the qualified network's identity: the real network file's path,
+        # its content hash at selection time (asserted against an independent hashlib computation,
+        # never the primitive production used), and the ME method the selection's SA actually used.
+        networks = read_ts_join_networks(t3.paths['ARC'])
+        assert set(networks) == {NETWORK_NAME}
+        entry = networks[NETWORK_NAME]
+        assert entry['source_path'] == _network_path(t3)
+        with open(_network_path(t3), 'rb') as f:
+            assert entry['source_sha256'] == f'sha256:{hashlib.sha256(f.read()).hexdigest()}'
+        assert entry['method'] == 'CSE'
+        assert networks == t3.pdep_ts_join_networks
+
+    def test_network_identity_freezing_is_fail_closed(self, tmp_path):
+        """Test the guards of ``_record_pdep_network_identity``: a selection with no resolved ME
+        method must raise (never default), a vanished network file must raise, and a conflicting
+        re-record for the same network within one iteration must raise rather than last-write-win.
+        The happy path is exercised end to end by the sidecar test above."""
+        t3 = _build_t3(tmp_path)
+        record = TSJoinRecord(network_id=NETWORK_NAME,
+                              network_ts_label='TS1',
+                              arc_ts_label=arc_ts_label(NETWORK_NAME, 'TS1'),
+                              status=JOIN_STATUS_QUEUED,
+                              reason='Queued to ARC.')
+        t3.pdep_ts_join_records = [record]
+        t3.pdep_ts_join_networks = dict()
+        selection = _selection(ts_labels=['TS1'])
+        assert selection.method is None
+        with pytest.raises(ValueError, match='method'):
+            t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                             network_path=_network_path(t3),
+                                             selection=selection)
+
+        selection.method = 'MSC'
+        # A selection that recorded no content hash cannot freeze an identity either: the sidecar's
+        # source_sha256 is supposed to be the hash of the bytes the selection EXAMINED, and there is
+        # nothing honest to put there when the selection never recorded one. Checked before the
+        # filesystem guard below, because it is a question about the decision, not about the path.
+        assert selection.network_source_hash is None
+        with pytest.raises(ValueError, match='no content hash'):
+            t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                             network_path=_network_path(t3),
+                                             selection=selection)
+
+        selection.network_source_hash = hash_file(path=_network_path(t3))
+        with pytest.raises(ValueError, match='gone'):
+            t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                             network_path=os.path.join(t3.paths['RMG PDep'], 'nonexistent.py'),
+                                             selection=selection)
+
+        t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                         network_path=_network_path(t3),
+                                         selection=selection)
+        assert set(t3.pdep_ts_join_networks) == {NETWORK_NAME}
+        assert t3.pdep_ts_join_networks[NETWORK_NAME]['method'] == 'MSC'
+        # The recorded hash is the one the SELECTION carries, not a fresh hash of whatever is on disk
+        # now. Those agree in a healthy run -- which is why the end-to-end test above cannot tell the
+        # two apart -- so pin the distinction directly: a selection carrying a hash that does NOT
+        # match the current file must record its own, because the whole point of the sidecar is to
+        # name the bytes the decision examined.
+        assert t3.pdep_ts_join_networks[NETWORK_NAME]['source_sha256'] == selection.network_source_hash
+        stale = 'sha256:' + 'b' * 64
+        assert stale != hash_file(path=_network_path(t3))
+        selection.network_source_hash = stale
+        t3.pdep_ts_join_networks = dict()
+        t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                         network_path=_network_path(t3),
+                                         selection=selection)
+        assert t3.pdep_ts_join_networks[NETWORK_NAME]['source_sha256'] == stale
+
+        # An identical re-record (a second reaction of the same network) is absorbed...
+        t3.pdep_ts_join_networks = dict()
+        selection.network_source_hash = hash_file(path=_network_path(t3))
+        t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                         network_path=_network_path(t3),
+                                         selection=selection)
+        t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                         network_path=_network_path(t3),
+                                         selection=selection)
+        # ...but a conflicting one is refused. The network file changed on disk mid-iteration, and
+        # the next reaction of the same network re-parsed it (main.py parses per reaction), so that
+        # reaction's selection carries the NEW hash while the sidecar already holds the old one.
+        # Note the conflict is now detected between two hashes each of which some selection actually
+        # examined, rather than between one examined hash and one re-read at record time.
+        with open(_network_path(t3), 'a') as f:
+            f.write('# the network file changed mid-iteration\n')
+        selection.network_source_hash = hash_file(path=_network_path(t3))
+        with pytest.raises(ValueError, match='Conflicting'):
+            t3._record_pdep_network_identity(network_name=NETWORK_NAME,
+                                             network_path=_network_path(t3),
+                                             selection=selection)
 
     def test_a_stale_sidecar_is_removed_when_this_pass_selects_nothing(self, tmp_path, monkeypatch):
         """Test that an empty pass removes a stale sidecar left by an earlier, interrupted attempt.
@@ -470,7 +562,8 @@ class TestQueuePdepTransitionStates(object):
                                       arc_ts_label=arc_ts_label('network9_9', 'TS7'),
                                       status=JOIN_STATUS_QUEUED,
                                       reason='stale from a previous, interrupted attempt')]
-        write_ts_join_sidecar(arc_project_directory=t3.paths['ARC'], records=stale_records)
+        write_ts_join_sidecar(arc_project_directory=t3.paths['ARC'], records=stale_records,
+                              networks=_networks_for_records(t3, stale_records))
         assert os.path.isfile(ts_join_sidecar_path(t3.paths['ARC']))
 
         t3.determine_species_from_pdep_network(pdep_rxns_to_explore=[])
@@ -591,7 +684,7 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
             f.write(
                 "modelChemistry = 'CBS-QB3'\n\n"
                 "useHinderedRotors = True\n\n"
-                "useAtomCorrections = False\n\n"
+                "useAtomCorrections = True\n\n"
                 "useBondCorrections = False\n"
             )
     output_dir = os.path.join(arc_dir, 'output')
@@ -602,13 +695,41 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
             f.write('{}\n')
 
 
+def _networks_for_records(t3, records: list, method: str = 'MSC') -> dict:
+    """Build the sidecar networks block for the given records against ``t3``'s RMG pdep directory,
+    writing a stub network file for any referenced network that has no real fixture file there.
+    Hashes are computed with ``t3.pdep.cache.hash_file``, the same primitive production code
+    records them with."""
+    rmg_pdep_dir = t3.paths['RMG PDep']
+    os.makedirs(rmg_pdep_dir, exist_ok=True)
+    networks = dict()
+    for network_id in sorted({record.network_id for record in records}):
+        source_path = os.path.join(rmg_pdep_dir, f'{network_id}.py')
+        if not os.path.isfile(source_path):
+            with open(source_path, 'w') as f:
+                f.write(f"# stub RMG network file\nnetwork(label='{network_id}')\n")
+        networks[network_id] = {'source_path': source_path,
+                                'source_sha256': hash_file(source_path),
+                                'method': method}
+    return networks
+
+
+def _write_sidecar(t3, records: list, method: str = 'MSC') -> None:
+    """Write the join sidecar for ``records`` with a matching networks block (see
+    ``_networks_for_records``), exactly as the in-run path would have pre-ARC."""
+    write_ts_join_sidecar(arc_project_directory=t3.paths['ARC'],
+                          records=records,
+                          networks=_networks_for_records(t3, records, method=method))
+
+
 def _queue_usable_ts(t3, network_id='network4_2', network_ts_label='TS9') -> TSJoinRecord:
     """Queue one usable PDep transition state against ``t3``'s current ARC directory: write the
-    join sidecar record T3 would have written pre-ARC, plus the converged ARC artifact and status
-    entry ARC would have produced, so ``process_arc_run()``'s capture step has something real to
-    discover and vendor. Also writes the ARC energy-settings fixture (``calcs/statmech/kinetics/
-    input.py`` + ``output/output.yml``) that ``capture_ts_artifacts`` now requires -- without it,
-    ``read_arc_energy_settings`` fails closed and every caller of this helper would raise."""
+    join sidecar record T3 would have written pre-ARC (with its networks identity block), plus the
+    converged ARC artifact and status entry ARC would have produced, so ``process_arc_run()``'s
+    capture step has something real to discover and vendor. Also writes the ARC energy-settings
+    fixture (``calcs/statmech/kinetics/input.py`` + ``output/output.yml``) that
+    ``capture_ts_artifacts`` now requires -- without it, ``read_arc_energy_settings`` fails closed
+    and every caller of this helper would raise."""
     arc_dir = t3.paths['ARC']
     label = arc_ts_label(network_id, network_ts_label)
     expected_path = expected_ts_artifact_path(arc_dir, label)
@@ -621,7 +742,7 @@ def _queue_usable_ts(t3, network_id='network4_2', network_ts_label='TS9') -> TSJ
                           )
     _write_ts_artifact(expected_path)
     _write_ts_status_yml(arc_dir, label, converged=True)
-    write_ts_join_sidecar(arc_dir, [record])
+    _write_sidecar(t3, [record])
     _write_energy_settings_fixture(arc_dir)
     return record
 
@@ -884,7 +1005,7 @@ class TestProcessArcRunFinalizationWiring(object):
                                 reason='Queued to ARC.',
                                 ),
                    ]
-        write_ts_join_sidecar(arc_dir, records)
+        _write_sidecar(t3, records)
 
         with pytest.raises(ValueError, match='produced no artifact'):
             t3.process_arc_run()
@@ -957,7 +1078,7 @@ class TestProcessArcRunFinalizationWiring(object):
                               )
         # deliberately do NOT write the artifact or its status.yml entry: ARC either never produced
         # it, or it was removed before capture ran here.
-        write_ts_join_sidecar(arc_dir, [record])
+        _write_sidecar(t3, [record])
 
         with pytest.raises(ValueError, match='produced no artifact'):
             t3.process_arc_run()
@@ -982,7 +1103,7 @@ class TestProcessArcRunFinalizationWiring(object):
                                          status=JOIN_STATUS_NOT_QUEUED,
                                          reason='Not selected for QM refinement.',
                                          )
-        write_ts_join_sidecar(arc_dir, [already_present_record, not_queued_record])
+        _write_sidecar(t3, [already_present_record, not_queued_record])
 
         t3.process_arc_run()  # must not raise
 

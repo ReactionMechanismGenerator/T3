@@ -8,11 +8,15 @@ with discovery), not to any one recorded run of it. Mirrors the fixture-construc
 """
 
 import hashlib
+import multiprocessing
 import os
+import shutil
 
 import pytest
 import yaml
 
+from t3.pdep import capture as capture_module
+from t3.pdep.cache import hash_file
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, CaptureResult, VerifyResult, capture_ts_artifacts, \
     verify_capture
 from t3.pdep.discovery import (
@@ -22,7 +26,9 @@ from t3.pdep.discovery import (
     ARTIFACT_STATUS_UNVERIFIED,
     ARTIFACT_STATUS_USABLE,
 )
-from t3.pdep.hybrid import _read_qm_artifact
+from arc.common import read_yaml_file
+from t3.common import TEST_DATA_BASE_PATH
+from t3.pdep.hybrid import QMEnergySettings, _read_qm_artifact, write_hybrid_network_input_file
 from t3.pdep.join import JOIN_STATUS_ALREADY_PRESENT, JOIN_STATUS_NOT_QUEUED, JOIN_STATUS_QUEUED, TSJoinRecord, \
     arc_ts_label, expected_ts_artifact_path
 
@@ -90,7 +96,11 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
     """Write a minimal, valid ARC energy-settings fixture -- ``calcs/statmech/<statmech_subdir>/input.py``
     and ``output/output.yml`` -- under ``arc_dir``, exactly what
     ``t3.pdep.energy_settings.read_arc_energy_settings`` requires to freeze a complete energy-settings
-    block. Deliberately sets ``useAtomCorrections``/``useBondCorrections`` both ``False`` so no
+    block. ``useAtomCorrections`` is ``True`` to stay faithful to ARC, which computes it as
+    ``bool(model_chemistry or atom_energies)`` and so can never emit ``False`` alongside a
+    ``modelChemistry`` line; a ``False`` here would be an ARC-impossible state that the hybrid
+    writer rightly refuses, making the end-to-end path untestable. ``useBondCorrections`` stays
+    ``False`` so no
     cross-validation against ``output.yml`` (frequencyScaleFactor/atomEnergies/bondCorrectionType) is
     ever triggered by this fixture. Gated so it never overwrites an ``output.yml`` a test has already
     written of its own (``output.yml`` is project-global, shared across statmech subdirs -- see the
@@ -103,7 +113,7 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
             f.write(
                 "modelChemistry = 'CBS-QB3'\n\n"
                 "useHinderedRotors = True\n\n"
-                "useAtomCorrections = False\n\n"
+                "useAtomCorrections = True\n\n"
                 "useBondCorrections = False\n"
             )
     output_dir = os.path.join(arc_dir, 'output')
@@ -112,6 +122,34 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
     if not os.path.isfile(output_yml_path):
         with open(output_yml_path, 'w') as f:
             f.write('{}\n')
+
+
+def _networks_for(join_records: list, networks_dir: str, method: str = 'MSC') -> dict:
+    """Build the sidecar-shaped networks block for the given records, backed by real stub RMG
+    network files under ``networks_dir`` (created if absent) so that capture's live-hash check has
+    a real file to verify. Hashes are computed with ``t3.pdep.cache.hash_file``, the same primitive
+    production code records them with."""
+    os.makedirs(networks_dir, exist_ok=True)
+    networks = dict()
+    for network_id in sorted({record.network_id for record in join_records}):
+        source_path = os.path.join(networks_dir, f'{network_id}.py')
+        if not os.path.isfile(source_path):
+            with open(source_path, 'w') as f:
+                f.write(f"# stub RMG network file\nnetwork(label='{network_id}')\n")
+        networks[network_id] = {'source_path': source_path,
+                                'source_sha256': hash_file(source_path),
+                                'method': method}
+    return networks
+
+
+def _capture(join_records, arc_project_directory, capture_dir, networks=None, **kwargs):
+    """Call ``capture_ts_artifacts`` with a well-formed networks block derived from the records
+    (stub network files live in a sibling directory of the ARC project, standing in for RMG's
+    ``pdep/``), unless the test supplies its own."""
+    if networks is None:
+        networks = _networks_for(join_records, networks_dir=f'{arc_project_directory}_rmg_pdep')
+    return capture_ts_artifacts(join_records, arc_project_directory, capture_dir,
+                                networks=networks, **kwargs)
 
 
 def _usable_record(tmp_path, network_id='network4_1', network_ts_label='TS3'):
@@ -134,7 +172,7 @@ class TestCaptureTsArtifacts:
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
 
         assert isinstance(result, CaptureResult)
         assert len(result.records) == 1
@@ -155,7 +193,7 @@ class TestCaptureTsArtifacts:
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
         captured = result.records[0]
 
         # A captured artifact must be re-readable in place: _read_qm_artifact must resolve its
@@ -222,7 +260,7 @@ class TestCaptureTsArtifacts:
         # No status.yml/output.yml entry at all for this one -- convergence stays unknown.
 
         capture_dir = str(tmp_path / '__capture__')
-        result = capture_ts_artifacts(
+        result = _capture(
             [usable, missing, unusable, not_queued, already_present, unverified], arc_dir, capture_dir)
 
         by_label = {record.network_ts_label: record for record in result.records}
@@ -259,7 +297,7 @@ class TestCaptureTsArtifacts:
         )
         capture_dir = str(tmp_path / 'capture')
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
 
         assert len(result.records) == 1
         assert result.records[0].artifact_path is None
@@ -282,7 +320,7 @@ class TestCaptureTsArtifacts:
         # discover_ts_artifacts itself refuses this at discovery time (classifies UNUSABLE, never
         # raises) -- confirm capture_ts_artifacts surfaces that same fail-closed classification
         # rather than somehow vendoring the escaping file.
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
         assert result.records[0].status == ARTIFACT_STATUS_UNUSABLE
         assert result.records[0].artifact_path is None
         # qm/ may exist (capture_ts_artifacts now always reconciles it with the manifest, even on
@@ -299,7 +337,7 @@ class TestCaptureTsArtifacts:
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
 
         with open(result.manifest_path) as f:
             manifest = yaml.safe_load(f)
@@ -367,7 +405,7 @@ class TestCaptureTsArtifacts:
 
         monkeypatch.setattr(capture_module, '_sha256_file', toctou_probing_sha256_file)
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
 
         with open(result.manifest_path) as f:
             manifest = yaml.safe_load(f)
@@ -400,7 +438,7 @@ class TestCaptureTsArtifacts:
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
 
-        capture_ts_artifacts([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
 
         qm_dir = os.path.join(capture_dir, 'qm')
         for root, _dirs, files in os.walk(qm_dir):
@@ -431,7 +469,7 @@ class TestCaptureTsArtifacts:
         kinetics_input_mtime = os.path.getmtime(kinetics_input_py_path)
         capture_dir = str(tmp_path / 'capture')
 
-        capture_ts_artifacts([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
 
         manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
         with open(manifest_path) as f:
@@ -495,7 +533,7 @@ class TestCaptureTsArtifacts:
         )
         capture_dir = str(tmp_path / 'capture')
 
-        capture_ts_artifacts([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
 
         manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
         with open(manifest_path) as f:
@@ -518,7 +556,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         good_record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS_good')
-        first_result = capture_ts_artifacts([good_record], arc_dir, capture_dir)
+        first_result = _capture([good_record], arc_dir, capture_dir)
         previous_manifest_mtime = os.path.getmtime(first_result.manifest_path)
         previous_artifact_content = open(first_result.records[0].artifact_path).read()
 
@@ -546,7 +584,7 @@ class TestCaptureTsArtifacts:
         # discover_ts_artifacts already fails closed to UNUSABLE for this exact case (never handing
         # capture_ts_artifacts a broken artifact_path to read), assert instead that the *previous*
         # capture is untouched after this second, partially-bad call.
-        second_result = capture_ts_artifacts([good_record, bad_record], arc_dir, capture_dir)
+        second_result = _capture([good_record, bad_record], arc_dir, capture_dir)
 
         # The bad record was classified UNUSABLE by discovery (never reached _read_qm_artifact
         # with a path capture_ts_artifacts would need to roll back), and the good record's capture
@@ -572,7 +610,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         good_record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS_good')
-        first_result = capture_ts_artifacts([good_record], arc_dir, capture_dir)
+        first_result = _capture([good_record], arc_dir, capture_dir)
         previous_files = sorted(
             os.path.relpath(os.path.join(root, name), capture_dir)
             for root, _dirs, names in os.walk(capture_dir) for name in names
@@ -586,7 +624,7 @@ class TestCaptureTsArtifacts:
         broken_record.status = 'weird_status'  # bypass TSJoinRecord.__init__'s own validation
 
         with pytest.raises(ValueError):
-            capture_ts_artifacts([good_record, broken_record], arc_dir, capture_dir)
+            _capture([good_record, broken_record], arc_dir, capture_dir)
 
         after_files = sorted(
             os.path.relpath(os.path.join(root, name), capture_dir)
@@ -597,6 +635,237 @@ class TestCaptureTsArtifacts:
             if relpath.endswith('.py') and 'qm' in relpath.split(os.sep):
                 with open(os.path.join(capture_dir, relpath)) as f:
                     assert 'Log(' in f.read()
+
+    def test_a_crash_during_the_atomic_swap_leaves_the_prior_good_capture_intact(self, tmp_path, monkeypatch):
+        # The swap step (rename capture_dir aside, os.replace staging_dir into place, remove the
+        # renamed-aside tree) is the one place a fully-staged, already-self-verified new capture
+        # touches the previous good one at all. Simulate a crash exactly there -- os.replace itself
+        # raising, e.g. an OSError from a full disk or a cross-device link -- and confirm
+        # capture_ts_artifacts renames the old tree straight back rather than leaving capture_dir
+        # empty or half-populated. A naive destroy-then-copy swap (no rename-aside, no restore-on-
+        # failure) would pass every OTHER test in this file (none of them inject a failure inside
+        # the swap itself) while silently destroying the prior good capture the instant os.replace
+        # failed -- this test exists specifically to kill that mutation.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        capture_dir = str(tmp_path / 'capture')
+
+        good_record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS_good')
+        first_result = _capture([good_record], arc_dir, capture_dir)
+        previous_manifest_mtime = os.path.getmtime(first_result.manifest_path)
+        previous_files = sorted(
+            os.path.relpath(os.path.join(root, name), capture_dir)
+            for root, _dirs, names in os.walk(capture_dir) for name in names
+        )
+        previous_artifact_content = open(first_result.records[0].artifact_path).read()
+
+        real_os_replace = capture_module.os.replace
+
+        def failing_replace(src, dst):
+            # Only fail the staging_dir -> capture_dir swap itself; anything else (there is
+            # nothing else in this codepath, but fail closed rather than assume) uses the real
+            # implementation.
+            if os.path.basename(dst) == os.path.basename(capture_dir):
+                raise OSError('simulated crash during atomic swap')
+            return real_os_replace(src, dst)
+
+        monkeypatch.setattr(capture_module.os, 'replace', failing_replace)
+
+        with pytest.raises(OSError, match='simulated crash during atomic swap'):
+            _capture([good_record], arc_dir, capture_dir)
+
+        # The prior good capture must be exactly as it was: same files, same manifest mtime, same
+        # artifact content -- never observed empty (old tree destroyed before the swap) or
+        # half-populated (new tree partially applied).
+        assert os.path.isdir(capture_dir)
+        after_files = sorted(
+            os.path.relpath(os.path.join(root, name), capture_dir)
+            for root, _dirs, names in os.walk(capture_dir) for name in names
+        )
+        assert after_files == previous_files
+        assert os.path.getmtime(first_result.manifest_path) == previous_manifest_mtime
+        assert open(first_result.records[0].artifact_path).read() == previous_artifact_content
+        # No leftover staging/old-capture scratch directories beside capture_dir.
+        parent_dir = os.path.dirname(os.path.abspath(capture_dir))
+        leftover = [name for name in os.listdir(parent_dir)
+                    if name.startswith('.capture-staging-') or name.startswith('.capture-old-')]
+        assert leftover == []
+
+    def test_a_real_process_death_between_rename_aside_and_replace_is_recoverable(self, tmp_path):
+        # Defect: the swap is rename-aside (capture_dir -> '.capture-old-*') THEN a separate
+        # os.replace (staging_dir -> capture_dir) -- two syscalls, not one. The test above only
+        # covers a caught in-process exception (os.replace raising); it proves nothing about a
+        # process that dies for REAL (kill -9, OOM-kill, power loss) between the two syscalls,
+        # since that skips every except/finally handler in _capture_ts_artifacts_locked entirely.
+        # Simulate that for real: fork a child, let it perform the actual rename-aside, then call
+        # os._exit() immediately after -- before it ever reaches os.replace. Confirm the defect
+        # window is real (capture_dir observably absent, prior good capture sitting under
+        # '.capture-old-*'), then confirm _recover_capture_swap_state -- run by the next call that
+        # holds the lock -- restores the exact pre-crash capture.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        capture_dir = str(tmp_path / 'capture')
+
+        good_record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS_good')
+        first_result = _capture([good_record], arc_dir, capture_dir)
+        previous_manifest_mtime = os.path.getmtime(first_result.manifest_path)
+        previous_artifact_content = open(first_result.records[0].artifact_path).read()
+        previous_files = sorted(
+            os.path.relpath(os.path.join(root, name), capture_dir)
+            for root, _dirs, names in os.walk(capture_dir) for name in names
+        )
+
+        second_arc_dir = str(tmp_path / 'arc_project_2')
+        os.makedirs(second_arc_dir)
+        second_record = _usable_record(tmp_path=tmp_path.__class__(second_arc_dir), network_ts_label='TS_second')
+
+        def _child(arc_dir_, capture_dir_, record_):
+            # Runs in a forked child (fork start method: no pickling, the child is a full memory
+            # copy of this process). Patch os.rename so the SWAP's rename-aside call -- identified
+            # by its destination being a '.capture-old-*' sibling, exactly as production code names
+            # it -- performs the real rename and then calls os._exit immediately: a genuine process
+            # death that skips every Python-level except/finally in capture.py, landing exactly
+            # between the rename-aside and the subsequent os.replace.
+            real_rename = os.rename
+
+            def crash_after_rename_aside(src, dst):
+                if os.path.basename(dst).startswith(capture_module._CAPTURE_OLD_DIR_PREFIX):
+                    real_rename(src, dst)
+                    os._exit(1)
+                return real_rename(src, dst)
+
+            capture_module.os.rename = crash_after_rename_aside
+            try:
+                _capture([record_], arc_dir_, capture_dir_)
+            finally:
+                # Only reached if the crash point above was never hit (a bug in this test's own
+                # setup, not in capture.py) -- exit nonzero regardless so the parent never mistakes
+                # this for a clean, non-crashing run.
+                os._exit(2)
+
+        ctx = multiprocessing.get_context('fork')
+        child = ctx.Process(target=_child, args=(second_arc_dir, capture_dir, second_record))
+        child.start()
+        child.join(timeout=30)
+        assert child.exitcode == 1, (
+            f"child did not die at the intended crash point (exitcode {child.exitcode!r}); this "
+            "test's own crash injection did not fire as expected, not a capture.py failure."
+        )
+
+        # Empirically confirm the defect window is real: capture_dir must be absent (rename-aside
+        # completed and removed it; os.replace never ran to repopulate it), with exactly one valid
+        # '.capture-old-*' sibling holding the untouched prior good capture.
+        assert not os.path.isdir(capture_dir)
+        parent_dir = os.path.dirname(os.path.abspath(capture_dir))
+        old_dirs = [name for name in os.listdir(parent_dir)
+                    if name.startswith(capture_module._CAPTURE_OLD_DIR_PREFIX)]
+        assert len(old_dirs) == 1
+        recovered_manifest_path = os.path.join(parent_dir, old_dirs[0], CAPTURE_MANIFEST_FILE_NAME)
+        assert os.path.getmtime(recovered_manifest_path) == previous_manifest_mtime
+
+        # The crashed child died while holding capture_dir's lock -- clean it up first so the
+        # recovery call below isn't blocked by an unrelated stale-lock concern (that is covered by
+        # its own dedicated test).
+        stale_lock_path = capture_module._capture_lock_path(capture_dir)
+        if os.path.isfile(stale_lock_path):
+            os.remove(stale_lock_path)
+
+        # The next lock-holding call recovers it: _recover_capture_swap_state restores capture_dir
+        # to EXACTLY the pre-crash content -- not the second (never-swapped-in) attempt's content.
+        capture_module._recover_capture_swap_state(capture_dir=capture_dir)
+        assert os.path.isdir(capture_dir)
+        after_files = sorted(
+            os.path.relpath(os.path.join(root, name), capture_dir)
+            for root, _dirs, names in os.walk(capture_dir) for name in names
+        )
+        assert after_files == previous_files
+        assert os.path.getmtime(first_result.manifest_path) == previous_manifest_mtime
+        assert open(first_result.records[0].artifact_path).read() == previous_artifact_content
+        verify_result = verify_capture(capture_dir)
+        assert verify_result.record_count == 1
+        assert verify_result.captured_artifact_count == 1
+
+        leftover = [name for name in os.listdir(parent_dir)
+                    if name.startswith(capture_module._CAPTURE_OLD_DIR_PREFIX)
+                    or name.startswith(capture_module._CAPTURE_STAGING_DIR_PREFIX)]
+        assert leftover == []
+
+    def test_a_second_capture_call_against_a_locked_capture_dir_is_refused(self, tmp_path):
+        # Defect: without interprocess exclusion, two processes could both pass
+        # _refuse_unowned_capture_dir, build two competing staging directories, and race the
+        # rename-aside/os.replace swap against each other. Simulate a concurrent process already
+        # capturing into capture_dir by taking its lock directly (with OUR pid recorded, so it is
+        # never mistaken for stale), then assert a second, genuinely concurrent capture_ts_artifacts
+        # call over the SAME capture_dir raises rather than proceeding.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        capture_dir = str(tmp_path / 'capture')
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS_locked')
+
+        lock_path = capture_module._acquire_capture_lock(capture_dir=capture_dir)
+        try:
+            with pytest.raises(RuntimeError, match='already held'):
+                _capture([record], arc_dir, capture_dir)
+            # Refusing to take the lock must mean NOTHING was written: capture_dir must not even
+            # be created, let alone partially populated, by the call that failed to get the lock.
+            assert not os.path.exists(capture_dir)
+        finally:
+            capture_module._release_capture_lock(lock_path)
+
+        # Once the lock is released, an otherwise-identical call succeeds normally.
+        result = _capture([record], arc_dir, capture_dir)
+        assert os.path.isdir(capture_dir)
+
+    def test_a_lock_held_by_a_dead_process_is_reclaimed_rather_than_blocking_forever(self, tmp_path):
+        # A process that dies while holding the lock (kill -9, OOM-kill -- anything that skips the
+        # 'finally: _release_capture_lock(...)' in capture_ts_artifacts) must not permanently wedge
+        # this capture_dir: the next call must recognize the recorded PID no longer corresponds to a
+        # live process and reclaim the lock, rather than failing closed forever.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        capture_dir = str(tmp_path / 'capture')
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS_stale')
+
+        lock_path = capture_module._capture_lock_path(capture_dir)
+        os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+        # Fabricate a lock file recording a PID guaranteed to be dead: fork a short-lived child,
+        # reap it, and use its now-freed PID -- a real dead PID, not a guessed-large/unlikely one.
+        child_pid = os.fork()
+        if child_pid == 0:
+            os._exit(0)
+        os.waitpid(child_pid, 0)
+        with open(lock_path, 'w') as f:
+            f.write(f'{child_pid}\n')
+
+        result = _capture([record], arc_dir, capture_dir)
+        assert os.path.isdir(capture_dir)
+
+    def test_multiple_ambiguous_old_capture_siblings_refuses_to_guess_which_is_real(self, tmp_path):
+        # If _recover_capture_swap_state ever found MORE than one sibling '.capture-old-*'
+        # directory that each hold a valid manifest while capture_dir itself is missing/empty,
+        # silently picking one would risk resurrecting the wrong (possibly stale) prior capture.
+        # This should never arise from a single crashed swap -- but the guard must refuse outright
+        # rather than guess, if it somehow does.
+        # Fabricate two independently-valid '.capture-old-*' siblings directly -- a valid manifest
+        # is just a dict with 'transition_states' and 'arc_project_directory' keys per
+        # _has_valid_capture_manifest, so this does not need two full real captures (which, routed
+        # through the SAME capture_dir, would trigger capture_dir's own crash-recovery in between
+        # and silently consume the first one before the second existed).
+        capture_dir = str(tmp_path / 'capture')
+        manifest = {'transition_states': [], 'arc_project_directory': '/nonexistent'}
+        old_a = os.path.join(str(tmp_path), capture_module._CAPTURE_OLD_DIR_PREFIX + 'a')
+        old_b = os.path.join(str(tmp_path), capture_module._CAPTURE_OLD_DIR_PREFIX + 'b')
+        os.makedirs(old_a)
+        os.makedirs(old_b)
+        with open(os.path.join(old_a, CAPTURE_MANIFEST_FILE_NAME), 'w') as f:
+            yaml.dump(manifest, f)
+        with open(os.path.join(old_b, CAPTURE_MANIFEST_FILE_NAME), 'w') as f:
+            yaml.dump(manifest, f)
+
+        # capture_dir is absent, with two independently-valid '.capture-old-*' siblings.
+        assert not os.path.exists(capture_dir)
+        with pytest.raises(ValueError, match='Refusing to recover'):
+            capture_module._recover_capture_swap_state(capture_dir=capture_dir)
 
     def test_duplicate_arc_ts_label_across_two_networks_is_refused(self, tmp_path):
         # arc_ts_label() is `f'{prefix}_{network_id}_{network_ts_label}'`, and '_' is itself a
@@ -614,7 +883,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         with pytest.raises(ValueError) as exc_info:
-            capture_ts_artifacts([first, second], arc_dir, capture_dir)
+            _capture([first, second], arc_dir, capture_dir)
 
         message = str(exc_info.value)
         assert first.arc_ts_label in message
@@ -654,7 +923,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         with pytest.raises(ValueError) as exc_info:
-            capture_ts_artifacts([record], arc_dir, capture_dir)
+            _capture([record], arc_dir, capture_dir)
 
         message = str(exc_info.value)
         assert record.network_id in message
@@ -670,7 +939,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         good_record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
-        first_result = capture_ts_artifacts([good_record], arc_dir, capture_dir)
+        first_result = _capture([good_record], arc_dir, capture_dir)
         assert os.path.isdir(os.path.join(capture_dir, 'qm'))
         assert os.path.isfile(first_result.records[0].artifact_path)
 
@@ -684,7 +953,7 @@ class TestCaptureTsArtifacts:
         # caller must explicitly opt in via supersede=True (see
         # test_zero_artifact_capture_refuses_to_clear_valid_prior_capture_by_default for the
         # default-refuses behavior this scenario now exercises).
-        second_result = capture_ts_artifacts([zero_record], arc_dir, capture_dir, supersede=True)
+        second_result = _capture([zero_record], arc_dir, capture_dir, supersede=True)
 
         assert second_result.records[0].artifact_path is None
         with open(second_result.manifest_path) as f:
@@ -711,7 +980,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         good_record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
-        first_result = capture_ts_artifacts([good_record], arc_dir, capture_dir)
+        first_result = _capture([good_record], arc_dir, capture_dir)
         captured_artifact_path = first_result.records[0].artifact_path
         assert os.path.isfile(captured_artifact_path)
 
@@ -722,7 +991,7 @@ class TestCaptureTsArtifacts:
             reason='Could not build the species for this transition state.',
         )
         with pytest.raises(ValueError, match='supersede'):
-            capture_ts_artifacts([zero_record], arc_dir, capture_dir)
+            _capture([zero_record], arc_dir, capture_dir)
 
         # Refusing must leave the prior, good capture completely untouched -- not partially
         # cleared, not re-verified-and-then-clobbered.
@@ -746,7 +1015,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         with pytest.raises(ValueError) as exc_info:
-            capture_ts_artifacts([first, second], arc_dir, capture_dir)
+            _capture([first, second], arc_dir, capture_dir)
 
         message = str(exc_info.value)
         assert first.arc_ts_label in message
@@ -762,7 +1031,7 @@ class TestCaptureTsArtifacts:
         capture_dir = os.path.join(arc_dir, 'capture')
 
         with pytest.raises(ValueError) as exc_info:
-            capture_ts_artifacts([record], arc_dir, capture_dir)
+            _capture([record], arc_dir, capture_dir)
 
         message = str(exc_info.value)
         assert capture_dir in message
@@ -781,7 +1050,7 @@ class TestCaptureTsArtifacts:
             f.write('not a capture')
 
         with pytest.raises(ValueError) as exc_info:
-            capture_ts_artifacts([record], arc_dir, capture_dir)
+            _capture([record], arc_dir, capture_dir)
 
         message = str(exc_info.value)
         assert capture_dir in message
@@ -794,7 +1063,7 @@ class TestCaptureTsArtifacts:
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
         # Sanity: a freshly-written, untouched capture verifies clean.
         verify_capture(capture_dir)
 
@@ -819,7 +1088,7 @@ class TestCaptureTsArtifacts:
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
 
-        capture_ts_artifacts([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
         verify_capture(capture_dir)  # sanity: clean immediately after capture
 
         # Simulate a crash between vendoring qm/ and writing the manifest (or an out-of-band edit
@@ -872,7 +1141,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         with pytest.raises(ValueError, match='empty'):
-            capture_ts_artifacts(join_records=[], arc_project_directory=arc_dir, capture_dir=capture_dir)
+            _capture(join_records=[], arc_project_directory=arc_dir, capture_dir=capture_dir)
 
         assert not os.path.exists(capture_dir), 'a refused capture must not leave a capture directory behind'
 
@@ -881,7 +1150,7 @@ class TestCaptureTsArtifacts:
         os.makedirs(arc_dir)
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
-        capture_result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        capture_result = _capture([record], arc_dir, capture_dir)
         captured_artifact_path = capture_result.records[0].artifact_path
         assert os.path.isfile(captured_artifact_path)
 
@@ -892,6 +1161,124 @@ class TestCaptureTsArtifacts:
         assert result.manifest_path == os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
         assert result.record_count == 1
         assert result.captured_artifact_count == 1
+
+    def test_verify_capture_returns_the_verified_ts_records_for_the_writer_to_consume(self, tmp_path):
+        # P1 #1: the writer (t3.main._write_pdep_hybrid_network_inputs) used to re-read the
+        # manifest itself after verify_capture already read and validated it, and rebuild
+        # TSArtifactRecords from that second, unverified read. verify_capture must hand back the
+        # records it already validated (with resolved, confined artifact paths) so the writer
+        # never needs a second read of untrusted disk state.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        capture_result = _capture([record], arc_dir, capture_dir)
+        captured_artifact_path = capture_result.records[0].artifact_path
+
+        result = verify_capture(capture_dir)
+
+        assert len(result.ts_records) == 1
+        ts_record = result.ts_records[0]
+        assert ts_record.network_id == record.network_id
+        assert ts_record.network_ts_label == record.network_ts_label
+        assert ts_record.status == ARTIFACT_STATUS_USABLE
+        # The path handed back must already be resolved against capture_dir (an absolute,
+        # existing path), not the raw manifest-relative string -- a consumer that only ever sees
+        # this resolved value cannot reconstruct an unconfined path out of it.
+        assert ts_record.artifact_path == captured_artifact_path
+        assert os.path.isfile(ts_record.artifact_path)
+
+    def test_verify_capture_refuses_a_usable_status_with_no_captured_artifact_path(self, tmp_path):
+        # P1 #2: verify_capture never used to look at 'status' at all -- it counted a captured
+        # artifact purely by 'captured_artifact_path is not None'. A hand-edited (or corrupted)
+        # manifest claiming status: usable but with captured_artifact_path: null would verify
+        # clean and silently be treated as zero captured artifacts by any consumer that (rightly)
+        # trusts 'usable' to mean "there is a vendored artifact for this". That is exactly the
+        # kind of torn/tampered state verify_capture exists to catch.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        entry = manifest['transition_states'][0]
+        assert entry['status'] == ARTIFACT_STATUS_USABLE
+        entry['captured_artifact_path'] = None
+        entry['captured_artifact_sha256'] = None
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='usable'):
+            verify_capture(capture_dir)
+
+    def test_verify_capture_refuses_a_non_null_captured_artifact_path_on_a_status_forbidding_one(self, tmp_path):
+        # The converse of the above: a status that discovery would never pair with an artifact
+        # path (e.g. 'missing') showing up with a non-null captured_artifact_path is just as
+        # untrustworthy a manifest as the reverse pairing -- both mean the status/path pairing no
+        # longer matches what discovery would have produced.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        entry = manifest['transition_states'][0]
+        entry['status'] = ARTIFACT_STATUS_MISSING
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='missing'):
+            verify_capture(capture_dir)
+
+    def test_verify_capture_refuses_an_unrecognized_status(self, tmp_path):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['transition_states'][0]['status'] = 'not_a_real_status'
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        # 'Refusing to verify' pins this to verify_capture's OWN status guard rather than the
+        # downstream, differently-worded 'Unrecognized transition state artifact status' raised by
+        # TSArtifactRecord.__init__ -- a loose 'unrecognized' match would pass even if
+        # verify_capture's own check were deleted, since that constructor enforces the same
+        # invariant redundantly a few lines later.
+        with pytest.raises(ValueError, match='Refusing to verify.*unrecognized status'):
+            verify_capture(capture_dir)
+
+    def test_verify_capture_refuses_a_missing_status_field(self, tmp_path):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        del manifest['transition_states'][0]['status']
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        # Same reasoning as the sibling unrecognized-status test above: a missing status field
+        # reads as `entry.get('status')` -> None, which is also not in TS_ARTIFACT_STATUSES, so the
+        # same 'Refusing to verify ... unrecognized status' guard fires here. Pinning to that exact
+        # phrasing (rather than a bare 'status' match) is what makes this test actually exercise
+        # verify_capture's own check instead of passing on TSArtifactRecord's redundant one.
+        with pytest.raises(ValueError, match='Refusing to verify.*unrecognized status'):
+            verify_capture(capture_dir)
 
     def test_captured_log_hash_mismatch_during_copy_is_refused(self, tmp_path, monkeypatch):
         # A real mid-copy corruption: shutil.copyfile itself (used internally by
@@ -913,7 +1300,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         with pytest.raises(ValueError) as exc_info:
-            capture_ts_artifacts([record], arc_dir, capture_dir)
+            _capture([record], arc_dir, capture_dir)
 
         assert 'Torn or corrupt' in str(exc_info.value)
 
@@ -926,7 +1313,7 @@ class TestCaptureTsArtifacts:
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
 
         assert isinstance(result.energy_settings, dict)
         # A plain string label is frozen as its string VALUE, WITHOUT the surrounding quotes, so that
@@ -939,7 +1326,10 @@ class TestCaptureTsArtifacts:
         # test_frozen_model_chemistry_round_trips_into_the_hybrid_writer, which covers both.
         assert result.energy_settings['model_chemistry'] == 'CBS-QB3'
         assert result.energy_settings['use_hindered_rotors'] is True
-        assert result.energy_settings['use_atom_corrections'] is False
+        # True, matching the fixture, which matches ARC: use_aec is computed as
+        # bool(model_chemistry or atom_energies), so ARC cannot emit False alongside a modelChemistry
+        # line. A False here would be an ARC-impossible state that the hybrid writer rightly refuses.
+        assert result.energy_settings['use_atom_corrections'] is True
         assert result.energy_settings['use_bond_corrections'] is False
 
         manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
@@ -961,7 +1351,7 @@ class TestCaptureTsArtifacts:
         )
         capture_dir = str(tmp_path / 'capture')
 
-        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+        result = _capture([record], arc_dir, capture_dir)
 
         assert result.energy_settings is None
 
@@ -978,7 +1368,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         with pytest.raises(ValueError, match='ARC statmech'):
-            capture_ts_artifacts([record], arc_dir, capture_dir)
+            _capture([record], arc_dir, capture_dir)
 
         assert not os.path.exists(capture_dir), (
             'a capture refused during the energy-settings preflight must not leave a capture '
@@ -995,7 +1385,7 @@ class TestCaptureTsArtifacts:
         os.makedirs(arc_dir)
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
-        capture_ts_artifacts([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
 
         manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
         with open(manifest_path) as f:
@@ -1012,7 +1402,7 @@ class TestCaptureTsArtifacts:
         os.makedirs(arc_dir)
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
         capture_dir = str(tmp_path / 'capture')
-        capture_ts_artifacts([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
 
         manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
         with open(manifest_path) as f:
@@ -1069,8 +1459,499 @@ class TestCaptureTsArtifacts:
             reason='Could not build the species for this transition state.',
         )
         capture_dir = str(tmp_path / 'capture')
-        capture_ts_artifacts([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
 
         result = verify_capture(capture_dir)
 
         assert result.captured_artifact_count == 0
+
+
+class TestNetworkVendoring:
+    """The vendored-network-source layer: the capture must carry its own copy of each RMG
+    ``network.py`` (plus the frozen ME method), verified against the identity the join sidecar
+    recorded, so downstream hybrid-network writing never needs the RMG ``pdep/`` directory or the
+    ARC project directory to still exist."""
+
+    def _captured_setup(self, tmp_path):
+        """One usable record, its networks block (with a real stub network file), and a completed
+        capture. Returns ``(record, networks, capture_dir)``."""
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        networks = _networks_for([record], networks_dir=str(tmp_path / 'rmg_pdep'))
+        capture_dir = str(tmp_path / 'capture')
+        result = _capture([record], arc_dir, capture_dir, networks=networks)
+        return record, networks, capture_dir, result
+
+    def test_network_file_is_vendored_byte_identical(self, tmp_path):
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        source_path = networks[record.network_id]['source_path']
+        vendored_path = os.path.join(capture_dir, 'networks', f'{record.network_id}.py')
+
+        assert os.path.isfile(vendored_path)
+        with open(source_path, 'rb') as f:
+            source_bytes = f.read()
+        with open(vendored_path, 'rb') as f:
+            vendored_bytes = f.read()
+        assert len(source_bytes) > 0
+        assert vendored_bytes == source_bytes
+
+    def test_manifest_records_an_authoritative_networks_block(self, tmp_path):
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        with open(os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)) as f:
+            manifest = yaml.safe_load(f)
+
+        assert record.network_id in manifest['networks']
+        entry = manifest['networks'][record.network_id]
+        assert entry['source_path'] == networks[record.network_id]['source_path']
+        # The recorded hash is the full 'sha256:<hex>' string, verified against an independent
+        # hash implementation so the test never shares one with the code under test.
+        assert entry['source_sha256'] == f"sha256:{_sha256_of(entry['source_path'])}"
+        assert entry['method'] == 'MSC'
+        assert entry['captured_path'] == os.path.join('networks', f'{record.network_id}.py')
+
+    def test_capture_result_surfaces_the_networks_mapping(self, tmp_path):
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        assert isinstance(result.networks, dict)
+        assert set(result.networks) == {record.network_id}
+        assert result.networks[record.network_id]['method'] == 'MSC'
+        assert result.networks[record.network_id]['captured_path'] == \
+            os.path.join('networks', f'{record.network_id}.py')
+
+    def test_capture_survives_deletion_of_rmg_pdep_and_arc_project(self, tmp_path):
+        # THE acceptance property of the whole vendoring layer: after a successful capture, both
+        # source trees can vanish entirely and the capture alone still verifies and yields a usable
+        # network source (the vendored copy), the frozen ME method, and the frozen energy settings.
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+
+        shutil.rmtree(str(tmp_path / 'rmg_pdep'))
+        shutil.rmtree(str(tmp_path / 'arc_project'))
+
+        verify_result = verify_capture(capture_dir)
+        assert verify_result.captured_artifact_count == 1
+        assert isinstance(verify_result.networks, dict)
+        assert len(verify_result.networks) == 1
+        entry = verify_result.networks[record.network_id]
+        vendored_abs_path = os.path.join(capture_dir, entry['captured_path'])
+        assert os.path.isfile(vendored_abs_path)
+        with open(vendored_abs_path) as f:
+            assert record.network_id in f.read()
+        assert entry['method'] == 'MSC'
+        assert isinstance(verify_result.energy_settings, dict)
+        assert verify_result.energy_settings['model_chemistry'] == 'CBS-QB3'
+
+    def test_capture_raises_when_live_network_hash_mismatches_the_recorded_one(self, tmp_path):
+        # "The world changed under us": the RMG network file was rewritten between the SA/selection
+        # pass that recorded its hash and this capture pass. The capture must refuse -- vendoring
+        # the new bytes would freeze a network the selection never actually examined.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        networks = _networks_for([record], networks_dir=str(tmp_path / 'rmg_pdep'))
+        with open(networks[record.network_id]['source_path'], 'a') as f:
+            f.write('# the network file changed after selection ran\n')
+        capture_dir = str(tmp_path / 'capture')
+
+        with pytest.raises(ValueError, match='source_sha256|changed'):
+            _capture([record], arc_dir, capture_dir, networks=networks)
+
+        assert not os.path.exists(capture_dir), (
+            'a capture refused during the network pre-flight must not leave a capture directory '
+            'behind -- the pre-flight runs before any write.'
+        )
+
+    def test_capture_raises_specifically_when_a_network_file_is_missing(self, tmp_path):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        networks = _networks_for([record], networks_dir=str(tmp_path / 'rmg_pdep'))
+        os.remove(networks[record.network_id]['source_path'])
+        capture_dir = str(tmp_path / 'capture')
+
+        with pytest.raises(ValueError, match=record.network_id):
+            _capture([record], arc_dir, capture_dir, networks=networks)
+
+        assert not os.path.exists(capture_dir)
+
+    def test_capture_refuses_a_networks_block_missing_a_referenced_network(self, tmp_path):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+
+        with pytest.raises(ValueError, match=record.network_id):
+            _capture([record], arc_dir, capture_dir, networks=dict())
+
+        assert not os.path.exists(capture_dir)
+
+    def test_a_corrupted_network_copy_is_refused_at_capture_time(self, tmp_path, monkeypatch):
+        # Simulates mid-copy corruption of the network source vendoring itself (the same failure
+        # mode test_captured_log_hash_mismatch_during_copy_is_refused simulates for logs): the
+        # vendored copy's hash must be re-checked against the sidecar's recorded source_sha256
+        # immediately after the copy, and any disagreement refused on the spot.
+        real_copyfile = shutil.copyfile
+
+        def corrupt_network_copyfile(src, dst):
+            if os.path.basename(src).startswith('network'):
+                with open(dst, 'w') as f:
+                    f.write('corrupted network copy\n')
+                return dst
+            return real_copyfile(src, dst)
+
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        networks = _networks_for([record], networks_dir=str(tmp_path / 'rmg_pdep'))
+        capture_dir = str(tmp_path / 'capture')
+        monkeypatch.setattr(capture_module.shutil, 'copyfile', corrupt_network_copyfile)
+
+        with pytest.raises(ValueError, match='Torn or corrupt'):
+            _capture([record], arc_dir, capture_dir, networks=networks)
+
+    def test_a_corrupted_network_copy_during_recapture_does_not_destroy_the_prior_good_capture(
+            self, tmp_path, monkeypatch):
+        # Defect A (round-22 P1 #2): capture supersession is not transactional. A RE-capture over
+        # an already-good capture_dir that dies partway through _vendor_network_sources must leave
+        # the ORIGINAL good networks/ file exactly as it was -- not a destroy-then-half-rebuild
+        # torn state with no way back. This is the probe that distinguishes the finding from
+        # test_a_corrupted_network_copy_is_refused_at_capture_time above, which only ever exercises
+        # a FIRST capture into an empty capture_dir and never asserts anything about prior data.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        networks = _networks_for([record], networks_dir=str(tmp_path / 'rmg_pdep'))
+        capture_dir = str(tmp_path / 'capture')
+
+        # First capture: succeeds, leaves a good vendored network file behind.
+        _capture([record], arc_dir, capture_dir, networks=networks)
+        vendored_path = os.path.join(capture_dir, 'networks', f'{record.network_id}.py')
+        with open(vendored_path, 'rb') as f:
+            good_bytes = f.read()
+        assert len(good_bytes) > 0
+
+        # Second capture (re-capture over the same, already-good capture_dir): corrupt the
+        # network copy mid-vendoring, simulating a crash/tamper partway through supersession.
+        real_copyfile = shutil.copyfile
+
+        def corrupt_network_copyfile(src, dst):
+            if os.path.basename(src).startswith('network'):
+                with open(dst, 'w') as f:
+                    f.write('corrupted network copy\n')
+                return dst
+            return real_copyfile(src, dst)
+
+        monkeypatch.setattr(capture_module.shutil, 'copyfile', corrupt_network_copyfile)
+
+        with pytest.raises(ValueError, match='Torn or corrupt'):
+            _capture([record], arc_dir, capture_dir, networks=networks)
+
+        # The prior good capture must survive completely untouched -- transactional supersession
+        # means this failed re-capture can never leave the old good state gone or half-overwritten.
+        assert os.path.isfile(vendored_path), (
+            'a failed re-capture destroyed the previously good vendored network file -- '
+            'capture supersession is not transactional'
+        )
+        with open(vendored_path, 'rb') as f:
+            assert f.read() == good_bytes, (
+                'a failed re-capture left a corrupted/partial network file in place of the '
+                'good one -- capture supersession is not transactional'
+            )
+
+    def test_pre_swap_self_check_refuses_a_staged_capture_whose_manifest_networks_block_is_incomplete(
+            self, tmp_path, monkeypatch):
+        # capture_ts_artifacts calls verify_capture(staging_dir) as a self-check BEFORE swapping the
+        # staged tree into capture_dir's place -- this is distinct from the per-copy hash checks
+        # _vendor_network_sources already performs during vendoring (covered by
+        # test_a_corrupted_network_copy_is_refused_at_capture_time above): those catch a corrupted
+        # COPY, not an internal bug that silently drops a network from the manifest's 'networks'
+        # block after every copy already vendored and hashed correctly. Simulate exactly that: wrap
+        # _vendor_network_sources so the real vendoring/hashing succeeds (every file on disk is
+        # fine), but the dict handed back for the manifest is missing one entry -- the only way this
+        # is ever caught is verify_capture's own 'networks' completeness check, run here as a
+        # pre-swap self-check. Without that self-check call, this internally-inconsistent capture
+        # would be swapped into capture_dir's place and returned as if it were good.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        networks = _networks_for([record], networks_dir=str(tmp_path / 'rmg_pdep'))
+        capture_dir = str(tmp_path / 'capture')
+
+        real_vendor_network_sources = capture_module._vendor_network_sources
+
+        def dropping_vendor_network_sources(networks, capture_dir):
+            result = real_vendor_network_sources(networks=networks, capture_dir=capture_dir)
+            # The real vendoring/hashing already happened correctly; only the returned manifest
+            # dict is truncated, simulating a bug that loses track of an already-vendored network.
+            result.pop(record.network_id, None)
+            return result
+
+        monkeypatch.setattr(capture_module, '_vendor_network_sources', dropping_vendor_network_sources)
+
+        with pytest.raises(ValueError, match=record.network_id):
+            _capture([record], arc_dir, capture_dir, networks=networks)
+
+        # First-time capture: a staged tree that fails its own pre-swap self-check must never be
+        # swapped into capture_dir's place at all.
+        assert not os.path.exists(capture_dir), (
+            'a staged capture that fails its own pre-swap self-check (verify_capture(staging_dir)) '
+            'was swapped into capture_dir anyway -- the pre-swap self-check is not load-bearing'
+        )
+
+    def test_a_network_id_that_escapes_the_networks_subdir_is_refused(self, tmp_path):
+        # A network_id is only ever label-validated for QUEUED transition states (arc_ts_label
+        # refuses unsafe components); a not_queued record can legitimately carry any string, so the
+        # vendoring step itself must confine the vendored file name to the networks/ subdirectory
+        # rather than let 'net/../x'-style ids write outside it.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        evil_id = os.path.join('..', 'escaped')
+        record = TSJoinRecord(network_id=evil_id,
+                              network_ts_label='TS1',
+                              status=JOIN_STATUS_NOT_QUEUED,
+                              reason='network_id contains unsafe characters')
+        networks_dir = str(tmp_path / 'rmg_pdep')
+        os.makedirs(networks_dir)
+        source_path = os.path.join(networks_dir, 'evil.py')
+        with open(source_path, 'w') as f:
+            f.write('# stub\n')
+        networks = {evil_id: {'source_path': source_path,
+                              'source_sha256': hash_file(source_path),
+                              'method': 'MSC'}}
+        capture_dir = str(tmp_path / 'capture')
+
+        with pytest.raises(ValueError, match='outside the capture'):
+            _capture([record], arc_dir, capture_dir, networks=networks)
+
+        assert not os.path.exists(os.path.join(capture_dir, '..', 'escaped.py'))
+        assert not os.path.exists(str(tmp_path / 'escaped.py'))
+
+    def test_verify_catches_a_deleted_vendored_network_file(self, tmp_path):
+        # Mutation 2 of the brief, as a live test: the manifest names a vendored network that no
+        # longer exists on disk. This must be a torn-capture failure, never a silent pass.
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        os.remove(os.path.join(capture_dir, 'networks', f'{record.network_id}.py'))
+
+        with pytest.raises(ValueError, match='network'):
+            verify_capture(capture_dir)
+
+    def test_verify_catches_a_tampered_vendored_network_file(self, tmp_path):
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        with open(os.path.join(capture_dir, 'networks', f'{record.network_id}.py'), 'a') as f:
+            f.write('# tampered after capture\n')
+
+        with pytest.raises(ValueError, match='sha256'):
+            verify_capture(capture_dir)
+
+    def test_verify_refuses_an_empty_networks_block_when_transition_states_reference_networks(self, tmp_path):
+        # The anti-vacuity case called out by the brief: transition_states is non-empty and every
+        # entry names a network_id, so an empty (or absent) networks block cannot "pass because
+        # there was nothing to iterate over".
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['networks'] = dict()
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='networks'):
+            verify_capture(capture_dir)
+
+    def test_verify_refuses_a_manifest_with_no_networks_key(self, tmp_path):
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        del manifest['networks']
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='networks'):
+            verify_capture(capture_dir)
+
+    def test_verify_refuses_an_unreferenced_networks_entry(self, tmp_path):
+        # The other direction: a networks entry no transition state references asserts an identity
+        # for work this capture never contained.
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['networks']['network9_9'] = dict(manifest['networks'][record.network_id])
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='network9_9'):
+            verify_capture(capture_dir)
+
+    def test_verify_refuses_an_invalid_method_in_the_networks_block(self, tmp_path):
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['networks'][record.network_id]['method'] = 'definitely_not_an_me_method'
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='method'):
+            verify_capture(capture_dir)
+
+    def test_a_stale_vendored_network_from_a_prior_capture_is_replaced(self, tmp_path):
+        # A re-capture into an owned capture_dir must leave the vendored networks/ directory in
+        # exact agreement with the new manifest: a corrupted or stale file with the same name is
+        # overwritten (never silently kept), and a leftover file from a network the new capture
+        # does not contain is removed.
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        vendored_path = os.path.join(capture_dir, 'networks', f'{record.network_id}.py')
+        with open(vendored_path, 'w') as f:
+            f.write('# stale bytes from an interrupted prior run\n')
+        stale_extra_path = os.path.join(capture_dir, 'networks', 'network9_9.py')
+        with open(stale_extra_path, 'w') as f:
+            f.write('# leftover from a prior capture of a different network set\n')
+
+        arc_dir = str(tmp_path / 'arc_project')
+        _capture([record], arc_dir, capture_dir, networks=networks)
+
+        with open(networks[record.network_id]['source_path'], 'rb') as f:
+            source_bytes = f.read()
+        with open(vendored_path, 'rb') as f:
+            vendored_bytes = f.read()
+        assert vendored_bytes == source_bytes
+        assert not os.path.exists(stale_extra_path)
+        verify_capture(capture_dir)
+
+    def test_verify_refuses_an_absolute_captured_artifact_path_that_escapes_capture_dir(self, tmp_path):
+        # Defect B (round-22 P1 #3): verify_capture must confine every manifest-supplied path to
+        # capture_dir. os.path.join(a, '/abs/path') silently returns '/abs/path', so an absolute
+        # captured_artifact_path in the manifest would otherwise make verification read (and
+        # "pass") an arbitrary external file instead of the capture's own vendored copy.
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        outside_file = tmp_path / 'outside_capture_dir.py'
+        outside_file.write_bytes(b'an external file the tampered manifest points at\n')
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['transition_states'][0]['captured_artifact_path'] = str(outside_file)
+        manifest['transition_states'][0]['captured_artifact_sha256'] = _sha256_of(str(outside_file))
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='outside'):
+            verify_capture(capture_dir)
+
+    def test_verify_refuses_a_captured_log_sha256_key_that_escapes_capture_dir_via_dotdot(self, tmp_path):
+        # Same vector, but through a captured_log_sha256 KEY (a relpath, not the artifact path
+        # itself) using '..' to walk back out of capture_dir, rather than an absolute path.
+        #
+        # The escaping relpath must resolve to a file that genuinely EXISTS and genuinely hashes
+        # to the recorded value -- one directory level up from capture_dir, exactly where
+        # outside_file is written below -- so that without confinement this would actually
+        # "verify" (wrong file, right-looking hash), not merely raise some unrelated error. An
+        # earlier version of this test used two '..' components, overshooting past tmp_path to a
+        # location with no file at all; that made the test vacuous, since the resulting "no longer
+        # exists on disk" ValueError coincidentally matched the pytest.raises 'outside' pattern
+        # only because the filename itself (outside_log.out) appears in that unrelated message --
+        # the test would have "passed" even with the confinement check deleted entirely.
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        outside_file_path = os.path.join(os.path.dirname(capture_dir), 'outside_log.out')
+        with open(outside_file_path, 'wb') as f:
+            f.write(b'an external log the tampered manifest points at\n')
+        escaping_relpath = os.path.join('..', os.path.basename(outside_file_path))
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        entry = manifest['transition_states'][0]
+        entry['captured_log_sha256'] = {escaping_relpath: _sha256_of(outside_file_path)}
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='outside'):
+            verify_capture(capture_dir)
+
+    def test_verify_refuses_a_networks_block_captured_path_that_escapes_capture_dir(self, tmp_path):
+        # The third vector called out by the finding: the networks block's own captured_path.
+        record, networks, capture_dir, result = self._captured_setup(tmp_path)
+        outside_file = tmp_path / 'outside_network.py'
+        outside_file.write_bytes(b'an external network file the tampered manifest points at\n')
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['networks'][record.network_id]['captured_path'] = str(outside_file)
+        manifest['networks'][record.network_id]['source_sha256'] = f'sha256:{_sha256_of(str(outside_file))}'
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='outside'):
+            verify_capture(capture_dir)
+
+
+REAL_NETWORK_FIXTURE = os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1', 'RMG', 'pdep',
+                                    'network4_1.py')
+
+
+def test_a_capture_alone_can_drive_a_hybrid_network_write(tmp_path):
+    """
+    The end-to-end acceptance property this whole capture layer exists for: with BOTH the RMG pdep
+    source directory and the ARC project directory deleted, the capture alone must still supply
+    everything ``write_hybrid_network_input_file`` needs -- the network source, the ME method, the
+    energy-reference settings, and the QM artifact (with its ``Log(...)`` files resolving inside the
+    capture).
+
+    Every other capture test asserts pieces of this in isolation: that the manifest verifies, that
+    the vendored network is byte-identical, that the frozen settings round-trip. None of them proves
+    the pieces actually COMPOSE into a usable hybrid write, which is the only thing the capture is
+    for. This test deliberately uses the REAL network fixture rather than the stub written by
+    ``_networks_for``: a stub has no ``reaction(...)`` entries, so it hashes and vendors perfectly
+    while being unparseable by the writer that has to consume it -- byte-identity is not usability.
+    """
+    arc_dir = str(tmp_path / 'arc_project')
+    os.makedirs(arc_dir)
+    record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS1')
+
+    rmg_pdep_dir = str(tmp_path / 'rmg_pdep')
+    os.makedirs(rmg_pdep_dir)
+    live_source_path = os.path.join(rmg_pdep_dir, f'{record.network_id}.py')
+    shutil.copyfile(REAL_NETWORK_FIXTURE, live_source_path)
+    networks = {record.network_id: {'source_path': live_source_path,
+                                    'source_sha256': hash_file(live_source_path),
+                                    'method': 'MSC'}}
+    capture_dir = str(tmp_path / 'capture')
+    _capture([record], arc_dir, capture_dir, networks=networks)
+
+    shutil.rmtree(rmg_pdep_dir)
+    shutil.rmtree(arc_dir)
+    assert not os.path.exists(rmg_pdep_dir)
+    assert not os.path.exists(arc_dir)
+
+    manifest = read_yaml_file(path=os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME))
+    energy_settings = manifest['energy_settings']
+    network_entry = manifest['networks'][record.network_id]
+    captured_entries = [entry for entry in manifest['transition_states']
+                        if entry.get('captured_artifact_path')]
+    assert len(captured_entries) == 1, captured_entries
+    entry = captured_entries[0]
+
+    result = write_hybrid_network_input_file(
+        source_path=os.path.join(capture_dir, network_entry['captured_path']),
+        dest_path=str(tmp_path / 'hybrid' / 'input.py'),
+        method=network_entry['method'],
+        qm_transition_states={entry['network_ts_label']: os.path.join(capture_dir,
+                                                                     entry['captured_artifact_path'])},
+        energy_settings=QMEnergySettings(
+            model_chemistry=energy_settings['model_chemistry'],
+            frequency_scale_factor=energy_settings['frequency_scale_factor'],
+            use_hindered_rotors=energy_settings['use_hindered_rotors'],
+            use_bond_corrections=energy_settings['use_bond_corrections'],
+            bond_correction_type=energy_settings['bond_correction_type'],
+            use_atom_corrections=energy_settings['use_atom_corrections']),
+        qm_artifacts_root=capture_dir,
+    )
+
+    assert os.path.isfile(result.dest_path)
+    assert result.qm_ts_labels == (entry['network_ts_label'],)
+    # The point of a HYBRID network: the transition states that never got QM must survive as ILT
+    # rather than being dropped. Asserting non-emptiness first keeps this from passing vacuously.
+    assert len(result.ilt_ts_labels) > 0
+    assert entry['network_ts_label'] not in result.ilt_ts_labels
+    with open(result.dest_path, 'r') as f:
+        written = f.read()
+    assert 'useAtomCorrections = True' in written

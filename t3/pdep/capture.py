@@ -68,10 +68,15 @@ from dataclasses import dataclass
 
 from arc.common import read_yaml_file, save_yaml_file
 
-from t3.pdep.discovery import TSArtifactRecord, discover_ts_artifacts
+from t3.pdep.cache import hash_file
+from t3.pdep.discovery import (TS_ARTIFACT_STATUSES,
+                               TS_ARTIFACT_STATUSES_REQUIRING_ARTIFACT_PATH,
+                               TS_ARTIFACT_STATUSES_REQUIRING_NO_ARTIFACT_PATH,
+                               TSArtifactRecord,
+                               discover_ts_artifacts)
 from t3.pdep.energy_settings import read_arc_energy_settings, validate_frozen_energy_settings
 from t3.pdep.hybrid import _read_qm_artifact, _vendor_qm_artifacts, _vendored_log_names
-from t3.pdep.join import validate_ts_join_records
+from t3.pdep.join import validate_networks_block, validate_ts_join_records
 
 # The manifest file name, written at the top level of every capture directory.
 CAPTURE_MANIFEST_FILE_NAME = 'capture_manifest.yml'
@@ -85,6 +90,20 @@ _CAPTURE_QM_SUBDIR = 'qm'
 # the capture-consumption path may ever treat this directory's contents as authoritative -- see
 # _capture_provenance_files and the module docstring.
 _CAPTURE_PROVENANCE_SUBDIR = 'provenance'
+
+# The subdirectory the vendored RMG network source files (one ``<network_id>.py`` per network the
+# capture's transition states belong to) are written under, inside the capture directory. Unlike
+# 'provenance/', this directory IS authoritative: it holds the exact network file the SA/selection
+# pass examined, verified by hash against the join sidecar's frozen identity, and it is what
+# downstream hybrid-network writing must read -- never the (long-gone) RMG ``pdep/`` directory.
+_CAPTURE_NETWORKS_SUBDIR = 'networks'
+
+# Sibling-of-capture_dir naming convention for the atomic-swap machinery in
+# _capture_ts_artifacts_locked and its crash-recovery counterpart, _recover_capture_swap_state.
+# Both live in the same parent_dir as capture_dir itself (never inside it), so a fresh capture's
+# own qm/networks/provenance layout is never confused with this module's own scratch directories.
+_CAPTURE_STAGING_DIR_PREFIX = '.capture-staging-'
+_CAPTURE_OLD_DIR_PREFIX = '.capture-old-'
 
 
 @dataclass(frozen=True)
@@ -108,11 +127,21 @@ class CaptureResult:
                                           transition state had anything to freeze a model chemistry
                                           for). Also recorded under the manifest's ``'energy_settings'``
                                           key -- unlike ``'provenance'``, this key IS authoritative.
+        networks (dict, optional): The frozen, AUTHORITATIVE network identity block:
+                                   ``network_id -> {source_path, source_sha256, captured_path,
+                                   method}``, one entry per network the captured transition states
+                                   belong to, with ``captured_path`` relative to ``capture_dir``.
+                                   Also recorded under the manifest's ``'networks'`` key. Like
+                                   ``energy_settings`` (and unlike ``'provenance'``), this IS
+                                   authoritative: downstream consumers must read the capture's own
+                                   vendored network copy and recorded ME method, never re-derive
+                                   them from the ARC project or the RMG ``pdep/`` directory.
     """
     capture_dir: str
     manifest_path: str
     records: tuple
     energy_settings: dict | None = None
+    networks: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -141,16 +170,42 @@ class VerifyResult:
                                        legitimately be zero -- that is the "verified but empty"
                                        case this result exists to make distinguishable from
                                        "verified and non-empty" for the caller.
+        networks (dict, optional): The manifest's AUTHORITATIVE ``'networks'`` block, re-verified:
+                                   ``network_id -> {source_path, source_sha256, captured_path,
+                                   method}`` with ``captured_path`` relative to ``capture_dir``.
+                                   Surfaced here so a consumer can reach the vendored network
+                                   source and its frozen ME method from the verified capture alone,
+                                   with no dependency on the RMG ``pdep/`` or ARC project
+                                   directories still existing.
+        energy_settings (dict, optional): The manifest's AUTHORITATIVE ``'energy_settings'`` block
+                                          (``None`` only for a verified zero-artifact capture),
+                                          surfaced for the same reason as ``networks``.
+        ts_records (tuple): One ``TSArtifactRecord`` per transition-state manifest entry, built
+                            from EXACTLY the fields this function itself just validated (including
+                            the status/captured_artifact_path consistency check below) -- never a
+                            second, independent read of the manifest. ``artifact_path`` on each
+                            record is already resolved to an absolute path under ``capture_dir``
+                            (confined via the same per-file check used to verify the artifact
+                            exists), so a consumer building on ``ts_records`` cannot reconstruct an
+                            unconfined path itself. A caller (in particular the hybrid-input writer)
+                            must consume this instead of re-reading the manifest: a second,
+                            untrusted read could observe a manifest mutated out from under the first
+                            read (e.g. a concurrent re-capture), reintroducing exactly the
+                            check-then-use race this function's own re-verification exists to close.
     """
     capture_dir: str
     manifest_path: str
     record_count: int
     captured_artifact_count: int
+    networks: dict | None = None
+    energy_settings: dict | None = None
+    ts_records: tuple = ()
 
 
 def capture_ts_artifacts(join_records: list,
                          arc_project_directory: str,
                          capture_dir: str,
+                         networks: dict,
                          sensitivity_by_ts: dict | None = None,
                          supersede: bool = False,
                          ) -> CaptureResult:
@@ -175,10 +230,41 @@ def capture_ts_artifacts(join_records: list,
                            this module previously captured into (see ``_refuse_unowned_capture_dir``);
                            created if it does not already exist. Must NOT resolve inside
                            ``arc_project_directory`` (see ``_refuse_capture_dir_inside_arc_project``).
-                           Repeated calls (e.g. a re-run) atomically replace its ``qm/``
-                           subdirectory and its manifest; see ``_vendor_qm_artifacts`` for the
-                           staging + atomic-replace guarantee that protects a prior capture from a
-                           mid-vendoring failure.
+                           The ENTIRE new capture (``qm/``, ``networks/``, ``provenance/`` and the
+                           manifest) is built in a sibling staging directory and self-checked with
+                           ``verify_capture`` before ``capture_dir`` is touched at all; only then is
+                           it atomically swapped into ``capture_dir``'s place (a same-filesystem
+                           rename-aside-then-``os.replace``, mirroring ``_vendor_qm_artifacts``'s own
+                           staging + atomic-replace idiom, extended to the whole directory). A
+                           repeated call (e.g. a re-run) therefore either fully replaces a prior
+                           capture with a complete, self-verified new one, or -- on any failure
+                           anywhere in discovery, vendoring, or verification -- leaves the prior
+                           capture completely untouched; it can never observe or leave behind a torn
+                           mix of old and new files. This whole call holds an interprocess lock on
+                           ``capture_dir`` (see ``_acquire_capture_lock``), so two concurrent
+                           processes capturing the same ``capture_dir`` can never interleave their
+                           staging and swap. Honest limit: POSIX has no single syscall that replaces
+                           a non-empty directory's contents atomically, so the rename-aside and the
+                           ``os.replace`` above are still two separate steps; a process that dies
+                           between them (``kill -9``, OOM-kill, power loss -- anything that skips
+                           this function's own ``except``/``finally`` handlers) leaves ``capture_dir``
+                           transiently ABSENT with the last good capture sitting under a sibling
+                           ``.capture-old-*`` name. What IS guaranteed is that the very next call
+                           against the same ``capture_dir`` (which must take the same lock first)
+                           finds and restores it before doing anything else, via
+                           ``_recover_capture_swap_state`` -- so no capture is ever lost, but a
+                           concurrent reader that bypasses this module's lock could transiently
+                           observe ``capture_dir`` missing (never corrupt) until that recovery runs.
+        networks (dict): The join sidecar's frozen network identity block:
+                        ``network_id -> {source_path, source_sha256, method}``, covering exactly
+                        the networks ``join_records`` reference (see
+                        ``t3.pdep.join.validate_networks_block``). Every named network's LIVE file
+                        at ``source_path`` is re-hashed with ``t3.pdep.cache.hash_file`` and must
+                        still match the recorded ``source_sha256`` -- a mismatch means the RMG
+                        network file changed between the SA/selection pass and this capture, and
+                        is refused rather than vendored. Each verified file is then copied into
+                        ``capture_dir``'s ``networks/`` subdirectory and recorded under the
+                        manifest's AUTHORITATIVE ``'networks'`` key.
         sensitivity_by_ts (dict, optional): Forwarded verbatim to ``discover_ts_artifacts``.
         supersede (bool, optional): Defaults to ``False``. If this discovery pass finds ZERO usable
                                    artifacts (``records_with_artifact`` empty) AND ``capture_dir``
@@ -196,6 +282,9 @@ def capture_ts_artifacts(join_records: list,
                                    fails ``verify_capture`` (nothing valid to protect in that case).
 
     Raises:
+        RuntimeError: If ``capture_dir``'s interprocess lock is already held by another (live, or
+                     unidentifiable) process -- this function fails CLOSED rather than silently
+                     proceeding without exclusion; see ``_acquire_capture_lock``.
         ValueError: Anything ``discover_ts_artifacts``, ``_read_qm_artifact`` or
                    ``_vendor_qm_artifacts`` themselves raise (e.g. an artifact whose ``Log(...)``
                    path escapes ``arc_project_directory``, or references a log file that no longer
@@ -211,10 +300,48 @@ def capture_ts_artifacts(join_records: list,
                    corrupted copy. All of this is raised before ``capture_dir`` is touched at all
                    where possible, and the post-copy hash checks fail closed the instant a mismatch
                    is found, so a single bad transition state cannot leave a partially-populated or
-                   silently-corrupt capture directory behind, or destroy a prior, good capture.
+                   silently-corrupt capture directory behind, or destroy a prior, good capture. All
+                   of this happens against a staging directory rather than ``capture_dir`` itself
+                   (see the ``capture_dir`` Args entry above), and a staged capture that fails its
+                   own ``verify_capture`` self-check is refused the same way -- ``capture_dir`` is
+                   never replaced with (or left as) anything less than a complete, self-verified
+                   capture.
 
     Returns:
         CaptureResult: The populated capture directory, its manifest path, and the frozen records.
+    """
+    lock_path = _acquire_capture_lock(capture_dir=capture_dir)
+    try:
+        # Recover from a crash inside a PRIOR call's atomic swap (see _recover_capture_swap_state)
+        # before doing anything else. Safe to run unconditionally, now that this process holds the
+        # lock above: no other process can be mid-build against capture_dir while this runs, so
+        # there is no risk of "recovering" out from under a concurrent, still-in-flight capture.
+        _recover_capture_swap_state(capture_dir=capture_dir)
+        return _capture_ts_artifacts_locked(
+            join_records=join_records,
+            arc_project_directory=arc_project_directory,
+            capture_dir=capture_dir,
+            networks=networks,
+            sensitivity_by_ts=sensitivity_by_ts,
+            supersede=supersede,
+        )
+    finally:
+        _release_capture_lock(lock_path)
+
+
+def _capture_ts_artifacts_locked(join_records: list,
+                                 arc_project_directory: str,
+                                 capture_dir: str,
+                                 networks: dict,
+                                 sensitivity_by_ts: dict | None,
+                                 supersede: bool,
+                                 ) -> CaptureResult:
+    """
+    The body of ``capture_ts_artifacts``, run only once the caller already holds ``capture_dir``'s
+    interprocess lock and crash recovery has already run. Split out purely so those two concerns
+    (see ``_acquire_capture_lock`` and ``_recover_capture_swap_state``) can wrap this body in a
+    ``try``/``finally`` without reindenting it; see ``capture_ts_artifacts`` for the full contract,
+    Args, Returns and Raises.
     """
     # Pre-flight, before discovery even runs: refuse ANY duplicate arc_ts_label (or duplicate
     # (network_id, network_ts_label) key) across the FULL join_records population, regardless of
@@ -254,6 +381,17 @@ def capture_ts_artifacts(join_records: list,
     # anything else risks silently treating a caller's unrelated directory as "ours" and replacing
     # its qm/ subdirectory.
     _refuse_unowned_capture_dir(capture_dir=capture_dir)
+
+    # Pre-flight: validate the networks identity block against the join records (both directions,
+    # plus per-entry field validation), then verify every named network's LIVE file still hashes to
+    # the sidecar's recorded source_sha256 -- all BEFORE discovery runs and before anything is
+    # written to capture_dir. A network file that changed (or vanished) between the SA/selection
+    # pass and this capture is a real "the world changed under us" defect: vendoring the new bytes
+    # would freeze a network the selection never actually examined.
+    validate_networks_block(referenced_network_ids={record.network_id for record in join_records},
+                            networks=networks,
+                            context=f"the capture request for '{capture_dir}'")
+    _preflight_network_sources(networks=networks)
 
     records = discover_ts_artifacts(
         join_records=join_records,
@@ -345,122 +483,302 @@ def capture_ts_artifacts(join_records: list,
                 f"arc_project_directory. Pass supersede=True to confirm this replacement is intended."
             )
 
-    if not os.path.isdir(capture_dir):
-        os.makedirs(capture_dir)
+    # Build the ENTIRE new capture in a sibling staging directory, never touching capture_dir
+    # itself until the staged tree is complete and has passed verify_capture's own self-check.
+    # This is the directory-level analogue of _vendor_qm_artifacts's staging + atomic-replace
+    # idiom (see t3.pdep.hybrid), extended to cover the whole capture rather than just its qm/
+    # subdirectory: qm/, networks/, provenance/ and the manifest are all staged together, so a
+    # crash or exception at ANY point below leaves capture_dir either completely absent (first
+    # capture) or exactly as it was before this call (a re-capture) -- never a torn mix of some
+    # new files and some stale ones. Without this, a partial write (e.g. a corrupted mid-copy that
+    # _vendor_network_sources's rmtree-then-rebuild already began) could destroy a previously good,
+    # already-verified capture and leave an incomplete one in its place, with no way back.
+    parent_dir = os.path.dirname(os.path.abspath(capture_dir))
+    if not os.path.isdir(parent_dir):
+        os.makedirs(parent_dir)
+    staging_dir = tempfile.mkdtemp(prefix=_CAPTURE_STAGING_DIR_PREFIX, dir=parent_dir)
+    try:
+        qm_dir = os.path.join(staging_dir, _CAPTURE_QM_SUBDIR)
+        # Zero usable artifacts is the common case (missing/unusable/not_queued/unverified-with-no-
+        # path records carry no artifact_path at all), not an exception to special-case:
+        # _vendor_qm_artifacts is always called, even with an empty artifact_infos, so that a
+        # zero-artifact pass still produces a (trivially empty) qm/ in the staged capture. Staging
+        # is always fresh here, so _vendor_qm_artifacts's own managed-qm_dir/foreign-qm_dir branch
+        # never triggers -- qm_dir cannot pre-exist inside a directory this function just created.
+        _vendor_qm_artifacts(artifact_infos=artifact_infos, qm_dir=qm_dir, dest_dir=staging_dir)
 
-    qm_dir = os.path.join(capture_dir, _CAPTURE_QM_SUBDIR)
-    # Zero usable artifacts is the common case (missing/unusable/not_queued/unverified-with-no-path
-    # records carry no artifact_path at all), not an exception to special-case: _vendor_qm_artifacts
-    # is always called, even with an empty artifact_infos, so that a zero-artifact pass atomically
-    # clears any stale qm/ a PREVIOUS capture into this same capture_dir left behind, keeping the
-    # directory in agreement with the (now-empty) manifest. _vendor_qm_artifacts's own managed-qm_dir
-    # guard (basename exactly 'qm', parent exactly dest_dir) still applies, so a foreign qm_dir is
-    # never touched. (The guard above already refused this outright when it would destroy a valid,
-    # non-empty prior capture without supersede=True; reaching this point means either there was
-    # nothing worth protecting, or the caller explicitly opted in.)
-    _vendor_qm_artifacts(artifact_infos=artifact_infos, qm_dir=qm_dir, dest_dir=capture_dir)
+        captured_records = list()
+        manifest_entries = list()
+        # (record, captured_artifact_relpath) pairs needing their final, capture_dir-rooted
+        # artifact_path filled in AFTER the atomic swap below -- staging_dir will no longer exist
+        # by then (it becomes capture_dir), so an absolute path built against it now would dangle.
+        pending_records = list()
+        for record in records:
+            info = artifact_infos.get(record.arc_ts_label)
+            if info is None:
+                pending_records.append((record, None))
+                manifest_entries.append(_manifest_entry(record=record, source_hashes=None,
+                                                         captured_artifact_path=None, captured_log_paths=None))
+                continue
 
-    captured_records = list()
-    manifest_entries = list()
-    for record in records:
-        info = artifact_infos.get(record.arc_ts_label)
-        if info is None:
-            captured_records.append(record)
-            manifest_entries.append(_manifest_entry(record=record, source_hashes=None, captured_artifact_path=None,
-                                                     captured_log_paths=None))
-            continue
+            log_names = _vendored_log_names(resolved_paths=[resolved for _, resolved in info['logs']])
+            captured_artifact_relpath = os.path.join(_CAPTURE_QM_SUBDIR, f'{record.arc_ts_label}.py')
+            captured_log_relpaths = {
+                original_path: os.path.join(_CAPTURE_QM_SUBDIR, 'logs', record.arc_ts_label,
+                                            log_names[resolved_path])
+                for original_path, resolved_path in info['logs']
+            }
 
-        log_names = _vendored_log_names(resolved_paths=[resolved for _, resolved in info['logs']])
-        captured_artifact_relpath = os.path.join(_CAPTURE_QM_SUBDIR, f'{record.arc_ts_label}.py')
-        captured_log_relpaths = {
-            original_path: os.path.join(_CAPTURE_QM_SUBDIR, 'logs', record.arc_ts_label, log_names[resolved_path])
-            for original_path, resolved_path in info['logs']
-        }
+            # Verify captured-vs-source immediately after the copy, fail closed on any disagreement.
+            # Logs are byte-for-byte copies (_vendor_qm_artifacts never rewrites them), so their
+            # captured hash must equal the source hash computed before the copy; any mismatch means
+            # the copy itself corrupted/truncated a file and this capture must never be returned as
+            # if it were trustworthy.
+            captured_log_sha256 = dict()
+            for original_path, resolved_path in info['logs']:
+                captured_relpath = captured_log_relpaths[original_path]
+                captured_abs_path = os.path.join(staging_dir, captured_relpath)
+                captured_hash = _sha256_file(captured_abs_path)
+                source_hash = source_hashes[record.arc_ts_label]['logs'][original_path]
+                if captured_hash != source_hash:
+                    raise ValueError(
+                        f"Torn or corrupt capture detected for transition state {record.arc_ts_label!r}: "
+                        f"the vendored log at '{captured_abs_path}' has sha256 {captured_hash}, but its "
+                        f"source '{resolved_path}' hashed to {source_hash} before the copy. Refusing to "
+                        f"return a capture whose vendored bytes disagree with their own source."
+                    )
+                captured_log_sha256[captured_relpath] = captured_hash
 
-        # Verify captured-vs-source immediately after the copy, fail closed on any disagreement.
-        # Logs are byte-for-byte copies (_vendor_qm_artifacts never rewrites them), so their captured
-        # hash must equal the source hash computed before the copy; any mismatch means the copy
-        # itself corrupted/truncated a file and this capture must never be returned as if it were
-        # trustworthy.
-        captured_log_sha256 = dict()
-        for original_path, resolved_path in info['logs']:
-            captured_relpath = captured_log_relpaths[original_path]
-            captured_abs_path = os.path.join(capture_dir, captured_relpath)
-            captured_hash = _sha256_file(captured_abs_path)
-            source_hash = source_hashes[record.arc_ts_label]['logs'][original_path]
-            if captured_hash != source_hash:
+            # The vendored pointer .py is intentionally REWRITTEN by _vendor_qm_artifacts (its
+            # Log(...) arguments become relative to its own final directory), so its captured bytes
+            # can never equal the source's -- asserting byte-equality here would be asserting
+            # something false by construction. What IS verified instead is a structural property
+            # that survives the rewrite: read the captured pointer back with _read_qm_artifact
+            # (confined to staging_dir, standing in for the eventual capture_dir) and confirm it
+            # resolves to exactly as many logs as the source did, and that every one of those
+            # resolved logs' content hash is one of the logs just hashed and verified above. That
+            # is: not "same bytes," but "still correctly and exclusively points at its own
+            # already-verified vendored logs."
+            captured_artifact_abs_path = os.path.join(staging_dir, captured_artifact_relpath)
+            captured_artifact_sha256 = _sha256_file(captured_artifact_abs_path)
+            captured_pointer_info = _read_qm_artifact(
+                ts_label=record.arc_ts_label,
+                artifact_path=captured_artifact_abs_path,
+                allowed_log_root=staging_dir,
+            )
+            if len(captured_pointer_info['logs']) != len(info['logs']):
                 raise ValueError(
-                    f"Torn or corrupt capture detected for transition state {record.arc_ts_label!r}: "
-                    f"the vendored log at '{captured_abs_path}' has sha256 {captured_hash}, but its "
-                    f"source '{resolved_path}' hashed to {source_hash} before the copy. Refusing to "
-                    f"return a capture whose vendored bytes disagree with their own source."
+                    f"Torn or corrupt capture detected for transition state {record.arc_ts_label!r}: the "
+                    f"captured pointer '{captured_artifact_abs_path}' resolves to "
+                    f"{len(captured_pointer_info['logs'])} log(s), but the source pointer resolved to "
+                    f"{len(info['logs'])}. Refusing to return a capture whose pointer no longer matches "
+                    f"the artifact it was vendored from."
                 )
-            captured_log_sha256[captured_relpath] = captured_hash
+            expected_hashes = sorted(captured_log_sha256.values())
+            actual_hashes = sorted(_sha256_file(resolved) for _, resolved in captured_pointer_info['logs'])
+            if actual_hashes != expected_hashes:
+                raise ValueError(
+                    f"Torn or corrupt capture detected for transition state {record.arc_ts_label!r}: the "
+                    f"captured pointer '{captured_artifact_abs_path}' resolves to logs whose content "
+                    f"hashes do not match the vendored logs captured alongside it. Refusing to return a "
+                    f"capture whose pointer no longer correctly and exclusively references its own "
+                    f"already-verified logs."
+                )
 
-        # The vendored pointer .py is intentionally REWRITTEN by _vendor_qm_artifacts (its Log(...)
-        # arguments become relative to capture_dir), so its captured bytes can never equal the
-        # source's -- asserting byte-equality here would be asserting something false by
-        # construction. What IS verified instead is a structural property that survives the
-        # rewrite: read the captured pointer back with _read_qm_artifact (confined to capture_dir)
-        # and confirm it resolves to exactly as many logs as the source did, and that every one of
-        # those resolved logs' content hash is one of the logs just hashed and verified above. That
-        # is: not "same bytes," but "still correctly and exclusively points at its own
-        # already-verified vendored logs."
-        captured_artifact_abs_path = os.path.join(capture_dir, captured_artifact_relpath)
-        captured_artifact_sha256 = _sha256_file(captured_artifact_abs_path)
-        captured_pointer_info = _read_qm_artifact(
-            ts_label=record.arc_ts_label,
-            artifact_path=captured_artifact_abs_path,
-            allowed_log_root=capture_dir,
-        )
-        if len(captured_pointer_info['logs']) != len(info['logs']):
-            raise ValueError(
-                f"Torn or corrupt capture detected for transition state {record.arc_ts_label!r}: the "
-                f"captured pointer '{captured_artifact_abs_path}' resolves to "
-                f"{len(captured_pointer_info['logs'])} log(s), but the source pointer resolved to "
-                f"{len(info['logs'])}. Refusing to return a capture whose pointer no longer matches "
-                f"the artifact it was vendored from."
-            )
-        expected_hashes = sorted(captured_log_sha256.values())
-        actual_hashes = sorted(_sha256_file(resolved) for _, resolved in captured_pointer_info['logs'])
-        if actual_hashes != expected_hashes:
-            raise ValueError(
-                f"Torn or corrupt capture detected for transition state {record.arc_ts_label!r}: the "
-                f"captured pointer '{captured_artifact_abs_path}' resolves to logs whose content "
-                f"hashes do not match the vendored logs captured alongside it. Refusing to return a "
-                f"capture whose pointer no longer correctly and exclusively references its own "
-                f"already-verified logs."
-            )
+            pending_records.append((record, captured_artifact_relpath))
+            manifest_entries.append(_manifest_entry(
+                record=record,
+                source_hashes=source_hashes[record.arc_ts_label],
+                captured_artifact_path=captured_artifact_relpath,
+                captured_log_paths=captured_log_relpaths,
+                captured_artifact_sha256=captured_artifact_sha256,
+                captured_log_sha256=captured_log_sha256,
+            ))
 
+        # Vendor the (already pre-flight-verified) network source files into networks/, after the
+        # TS artifact vendoring/verification above, for the same all-verified-content-before-
+        # provenance sequencing: each copy is re-hashed against the sidecar's recorded
+        # source_sha256 immediately, failing closed on any disagreement, and the manifest below is
+        # only ever written once every vendored network already sits verified on disk. This runs
+        # against staging_dir, which _vendor_network_sources always finds networks/-less (a fresh
+        # staging directory), so its rebuild-from-scratch rmtree never has anything stale to clear.
+        manifest_networks = _vendor_network_sources(networks=networks, capture_dir=staging_dir)
+
+        # Archive status.yml/output.yml as inert provenance (see _capture_provenance_files) AFTER
+        # vendoring/verification above has succeeded, so a provenance-archiving failure never
+        # leaves a capture_dir in a state inconsistent with what was just verified, and BEFORE the
+        # manifest is written, so the manifest's 'provenance' entries always describe files that
+        # are already on disk under the (eventual) capture_dir by the time a reader could see the
+        # manifest.
+        provenance_entries = _capture_provenance_files(arc_project_directory=arc_project_directory,
+                                                       capture_dir=staging_dir)
+
+        manifest_path = _write_manifest(capture_dir=staging_dir, arc_project_directory=arc_project_directory,
+                                        manifest_entries=manifest_entries, provenance_entries=provenance_entries,
+                                        energy_settings=energy_settings, networks=manifest_networks)
+
+        # Self-check the fully staged capture with the same verifier a downstream consumer would
+        # use, BEFORE it is ever swapped into capture_dir's place. This is the natural post-write
+        # check verify_capture already exists to perform; running it here means a staged capture
+        # that would fail its own verification is refused (and staging_dir discarded, capture_dir
+        # untouched) rather than ever becoming the thing callers see as "the capture".
+        verify_capture(staging_dir)
+
+        # Every file has been staged and self-verified; nothing below can fail on CONTENT grounds
+        # any more. Swap staging_dir into capture_dir's place atomically: rename any existing
+        # capture_dir aside first (a same-filesystem, near-instant rename, not a copy -- os.replace
+        # cannot atomically replace a non-empty directory directly), then os.replace the staged
+        # directory into the now-vacant capture_dir path (atomic, since the target is absent), and
+        # only remove the renamed-aside old tree once the new one is confirmed in place. This
+        # closes the gap a naive rmtree-then-replace would leave open: a crash between the two
+        # steps would destroy the prior good capture and leave nothing in its place, even though
+        # os.replace itself is atomic. If os.replace itself fails, the old tree is renamed straight
+        # back so capture_dir is left exactly as it was, never observed empty or half-populated.
+        old_capture_dir = None
+        if os.path.isdir(capture_dir):
+            old_capture_dir = tempfile.mkdtemp(prefix=_CAPTURE_OLD_DIR_PREFIX, dir=parent_dir)
+            os.rmdir(old_capture_dir)
+            os.rename(capture_dir, old_capture_dir)
+        try:
+            os.replace(staging_dir, capture_dir)
+        except BaseException:
+            if old_capture_dir is not None:
+                os.rename(old_capture_dir, capture_dir)
+            raise
+        if old_capture_dir is not None:
+            shutil.rmtree(old_capture_dir)
+    finally:
+        if os.path.isdir(staging_dir):
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+    # Fill in each captured record's final, capture_dir-rooted artifact_path now that capture_dir
+    # holds the (formerly staged) files -- deferred from the loop above because staging_dir no
+    # longer exists by this point (os.replace renamed it into capture_dir), so an absolute path
+    # built against it earlier would have dangled.
+    for record, captured_artifact_relpath in pending_records:
+        if captured_artifact_relpath is None:
+            captured_records.append(record)
+            continue
         record_dict = record.as_dict()
         # CRITICAL: the raw ARC pointer path must not cross this boundary -- only the vendored,
         # capture_dir-relative path is handed back to callers downstream of capture.
-        record_dict['artifact_path'] = captured_artifact_abs_path
+        record_dict['artifact_path'] = os.path.join(capture_dir, captured_artifact_relpath)
         captured_records.append(TSArtifactRecord.from_dict(record_dict))
 
-        manifest_entries.append(_manifest_entry(
-            record=record,
-            source_hashes=source_hashes[record.arc_ts_label],
-            captured_artifact_path=captured_artifact_relpath,
-            captured_log_paths=captured_log_relpaths,
-            captured_artifact_sha256=captured_artifact_sha256,
-            captured_log_sha256=captured_log_sha256,
-        ))
+    return CaptureResult(capture_dir=capture_dir, manifest_path=os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME),
+                         records=tuple(captured_records), energy_settings=energy_settings, networks=manifest_networks)
 
-    # Archive status.yml/output.yml as inert provenance (see _capture_provenance_files) AFTER
-    # vendoring/verification above has succeeded, so a provenance-archiving failure never leaves a
-    # capture_dir in a state inconsistent with what was just verified, and BEFORE the manifest is
-    # written, so the manifest's 'provenance' entries always describe files that are already on
-    # disk under capture_dir by the time a reader could see the manifest.
-    provenance_entries = _capture_provenance_files(arc_project_directory=arc_project_directory,
-                                                   capture_dir=capture_dir)
 
-    manifest_path = _write_manifest(capture_dir=capture_dir, arc_project_directory=arc_project_directory,
-                                    manifest_entries=manifest_entries, provenance_entries=provenance_entries,
-                                    energy_settings=energy_settings)
+def _preflight_network_sources(networks: dict) -> None:
+    """
+    Verify every network's LIVE source file exists and still hashes to its recorded identity.
 
-    return CaptureResult(capture_dir=capture_dir, manifest_path=manifest_path, records=tuple(captured_records),
-                         energy_settings=energy_settings)
+    Runs before anything is written to the capture directory. A missing file and a hash mismatch
+    are refused separately, each with a message naming the network and what to do about it: both
+    mean the RMG ``pdep/`` tree this capture was told about is not the one the SA/selection pass
+    examined, and vendoring whatever is (or is not) there now would silently freeze the wrong
+    network.
+
+    Args:
+        networks (dict): The sidecar's ``network_id -> {source_path, source_sha256, method}``
+                        block, already validated by ``validate_networks_block``.
+
+    Raises:
+        ValueError: If a network's ``source_path`` does not exist on disk, or the file's current
+                   ``t3.pdep.cache.hash_file`` result differs from the recorded ``source_sha256``.
+    """
+    for network_id, entry in networks.items():
+        source_path = entry['source_path']
+        if not os.path.isfile(source_path):
+            raise ValueError(
+                f"Cannot capture the network source for '{network_id}': the RMG network file "
+                f"'{source_path}' recorded in the join sidecar no longer exists on disk. The file the "
+                f"SA/selection pass examined is gone before it could be vendored -- capture must run "
+                f"before the RMG pdep/ directory of this iteration is cleaned up or overwritten."
+            )
+        live_sha256 = hash_file(source_path)
+        if live_sha256 != entry['source_sha256']:
+            raise ValueError(
+                f"Refusing to capture the network source for '{network_id}': the RMG network file "
+                f"'{source_path}' now hashes to {live_sha256}, but the join sidecar recorded "
+                f"{entry['source_sha256']} when the SA/selection pass examined it. The file changed "
+                f"between selection and capture, so vendoring it would freeze a network the selection "
+                f"never actually saw. This is a real defect in the run's sequencing, not a warning."
+            )
+
+
+def _vendor_network_sources(networks: dict, capture_dir: str) -> dict:
+    """
+    Copy every (already pre-flight-verified) network source file into ``capture_dir``'s
+    ``networks/`` subdirectory, verifying each copy by hash, and build the manifest's
+    AUTHORITATIVE ``'networks'`` block.
+
+    The subdirectory is rebuilt from scratch on every capture: a stale vendored copy left by a
+    prior capture into this same (owned) ``capture_dir`` -- including one for a network this
+    capture no longer contains -- would otherwise survive in silent disagreement with the new
+    manifest. Each file is staged via ``tempfile.mkstemp`` + ``os.replace`` (the same atomic-copy
+    idiom as ``_capture_provenance_files``), never copied directly onto its final name, and then
+    re-hashed with ``t3.pdep.cache.hash_file``: since network files are vendored byte-for-byte
+    (unlike the rewritten QM pointer files), the vendored hash must equal the sidecar's recorded
+    ``source_sha256`` exactly, and any disagreement is a torn/corrupt copy refused on the spot.
+
+    Args:
+        networks (dict): The sidecar's ``network_id -> {source_path, source_sha256, method}``
+                        block, already validated and pre-flight-verified against the live files.
+        capture_dir (str): The capture directory being populated.
+
+    Raises:
+        ValueError: If a ``network_id`` would escape the ``networks/`` subdirectory as a file name,
+                   or a vendored copy's hash does not match the recorded ``source_sha256``.
+
+    Returns:
+        dict: ``network_id -> {source_path, source_sha256, captured_path, method}``, with
+             ``captured_path`` relative to ``capture_dir``.
+    """
+    networks_dir = os.path.join(capture_dir, _CAPTURE_NETWORKS_SUBDIR)
+    if os.path.isdir(networks_dir):
+        shutil.rmtree(networks_dir)
+    os.makedirs(networks_dir)
+    manifest_networks = dict()
+    for network_id, entry in networks.items():
+        captured_relpath = os.path.join(_CAPTURE_NETWORKS_SUBDIR, f'{network_id}.py')
+        captured_abs_path = os.path.join(capture_dir, captured_relpath)
+        # Confinement, mirroring the realpath idiom used across this module family: a network_id
+        # containing a path separator or '..' (possible for a never-queued network, whose id was
+        # never label-validated) must not be able to place its vendored copy outside networks/.
+        resolved_networks_dir = os.path.realpath(networks_dir)
+        resolved_captured = os.path.realpath(captured_abs_path)
+        if os.path.dirname(resolved_captured) != resolved_networks_dir:
+            raise ValueError(
+                f"Refusing to vendor the network source for network_id={network_id!r}: its vendored "
+                f"file name would resolve to '{resolved_captured}', outside the capture's networks/ "
+                f"subdirectory '{resolved_networks_dir}'. A network id must be a plain file name "
+                f"component; refusing rather than writing outside the capture directory."
+            )
+        fd, staged_path = tempfile.mkstemp(prefix=f'.network-', dir=networks_dir)
+        os.close(fd)
+        try:
+            shutil.copyfile(entry['source_path'], staged_path)
+            os.replace(staged_path, captured_abs_path)
+        finally:
+            if os.path.isfile(staged_path):
+                os.remove(staged_path)
+        captured_sha256 = hash_file(captured_abs_path)
+        if captured_sha256 != entry['source_sha256']:
+            raise ValueError(
+                f"Torn or corrupt capture detected for network '{network_id}': the vendored network "
+                f"file '{captured_abs_path}' hashes to {captured_sha256}, but its source "
+                f"'{entry['source_path']}' was recorded (and pre-flight-verified) as "
+                f"{entry['source_sha256']}. Refusing to return a capture whose vendored bytes disagree "
+                f"with their own source."
+            )
+        manifest_networks[network_id] = {
+            'source_path': entry['source_path'],
+            'source_sha256': entry['source_sha256'],
+            'captured_path': captured_relpath,
+            'method': entry['method'],
+        }
+    return manifest_networks
 
 
 def _manifest_entry(record: TSArtifactRecord, source_hashes: dict | None, captured_artifact_path: str | None,
@@ -530,7 +848,8 @@ def _manifest_entry(record: TSArtifactRecord, source_hashes: dict | None, captur
 
 
 def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entries: list,
-                    provenance_entries: list | None = None, energy_settings: dict | None = None) -> str:
+                    provenance_entries: list | None = None, energy_settings: dict | None = None,
+                    networks: dict | None = None) -> str:
     """
     Write the capture manifest atomically: stage it under a temp name inside ``capture_dir``, then
     ``os.replace`` it onto ``CAPTURE_MANIFEST_FILE_NAME``, so a write failure partway through (e.g.
@@ -560,6 +879,15 @@ def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entri
                                           the sole source downstream hybrid-network writing may rely
                                           on for a captured transition state's model chemistry and
                                           atom/bond corrections.
+        networks (dict, optional): The vendored-network identity block (see
+                                  ``_vendor_network_sources``): ``network_id -> {source_path,
+                                  source_sha256, captured_path, method}``. Recorded under the
+                                  manifest's ``'networks'`` key. Like ``'energy_settings'`` (and
+                                  unlike ``'provenance'``), this key IS authoritative: downstream
+                                  consumers must read the capture's own vendored network copy at
+                                  ``captured_path`` and its recorded ``method``, never re-derive
+                                  either from the ARC project or the RMG ``pdep/`` directory --
+                                  both of which are expected to be gone by consumption time.
 
     Returns:
         str: The path the manifest was written to.
@@ -574,6 +902,9 @@ def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entri
         # AUTHORITATIVE, unlike 'provenance' above: the sole source downstream hybrid-network
         # writing may rely on for this capture's model chemistry and atom/bond corrections.
         'energy_settings': energy_settings,
+        # AUTHORITATIVE, like 'energy_settings' above: the sole source downstream consumers may
+        # rely on for each network's vendored source file and frozen ME method.
+        'networks': networks or dict(),
     }
 
     fd, staged_path = tempfile.mkstemp(prefix='.capture-manifest-', dir=capture_dir)
@@ -698,6 +1029,37 @@ def _sha256_file(path: str) -> str:
     return hasher.hexdigest()
 
 
+def _confine_to_capture_dir(capture_dir: str, path: str) -> None:
+    """
+    Refuse a manifest-supplied path that resolves outside ``capture_dir``.
+
+    Mirrors ``t3.pdep.discovery._confine_to_project``'s exact standalone-function shape and
+    escape-polarity check (``os.path.realpath`` of both sides, then ``os.path.commonpath``): a
+    capture is supposed to be self-contained, so nothing a manifest names (``captured_artifact_path``,
+    a ``captured_log_sha256`` key, or the ``'networks'`` block's ``captured_path``) may ever be
+    allowed to resolve outside the directory that manifest lives in. Without this check,
+    ``os.path.join`` silently lets an absolute value in the manifest override ``capture_dir``
+    entirely (``os.path.join(a, '/abs/path') == '/abs/path'``), and a relative value containing
+    ``'..'`` components can walk back out of it -- either way, a tampered or corrupted manifest
+    could make verification read (and "pass") an external file that happens to match, rather than
+    the capture's own vendored copy.
+
+    Args:
+        capture_dir (str): The capture directory a manifest-supplied path must stay under.
+        path (str): The candidate path (already joined onto ``capture_dir``) to check.
+
+    Raises:
+        ValueError: If ``path`` resolves to a location outside ``capture_dir``.
+    """
+    resolved_capture_dir = os.path.realpath(capture_dir)
+    resolved_path = os.path.realpath(path)
+    if resolved_path == resolved_capture_dir \
+            or os.path.commonpath([resolved_capture_dir, resolved_path]) != resolved_capture_dir:
+        raise ValueError(f"Refusing to verify '{path}': it resolves to '{resolved_path}', which is outside the "
+                         f"capture directory '{capture_dir}' (resolved to '{resolved_capture_dir}'). A capture "
+                         f"must be self-contained; a manifest-supplied path may never escape it.")
+
+
 def _refuse_capture_dir_inside_arc_project(arc_project_directory: str, capture_dir: str) -> None:
     """
     Refuse a ``capture_dir`` that resolves inside ``arc_project_directory``.
@@ -789,6 +1151,251 @@ def _refuse_unowned_capture_dir(capture_dir: str) -> None:
     )
 
 
+def _capture_lock_path(capture_dir: str) -> str:
+    """
+    The interprocess lock file path for a given ``capture_dir``.
+
+    Always a sibling of ``capture_dir`` (never inside it), so the lock file itself can never be
+    mistaken for capture content by ``_refuse_unowned_capture_dir``, ``_has_valid_capture_manifest``
+    or ``verify_capture``, and so it survives across the rename-aside/``os.replace`` swap (which
+    only ever touches ``capture_dir`` and its ``.capture-old-*``/``.capture-staging-*`` siblings).
+
+    Args:
+        capture_dir (str): The capture directory this lock guards.
+
+    Returns:
+        str: The lock file's path.
+    """
+    return os.path.abspath(capture_dir).rstrip(os.sep) + '.capture-lock'
+
+
+def _is_stale_capture_lock(lock_path: str) -> bool:
+    """
+    Whether ``lock_path`` was written by a process that is now confirmed dead.
+
+    Best-effort, and deliberately biased toward "not stale" whenever it cannot be sure: unreadable
+    or unparsable lock content, or a PID belonging to a live process (whether or not this process
+    can signal it), are all treated as "still held". Only ``os.kill(pid, 0)`` raising
+    ``ProcessLookupError`` -- meaning the PID no longer identifies any process at all -- counts as
+    proof of death. A ``PermissionError`` means the PID exists but is owned by a different user, so
+    it is NOT stale from this function's point of view; treating "cannot confirm" as "confirmed
+    dead" would turn an ordinary permissions quirk into a false stale-lock removal, which is exactly
+    the failure mode this function must avoid given it directly precedes deleting the lock file.
+
+    Args:
+        lock_path (str): The lock file to inspect.
+
+    Returns:
+        bool: True only if the lock file's recorded PID is confirmed to no longer exist.
+    """
+    try:
+        with open(lock_path) as f:
+            content = f.read().strip()
+        pid = int(content.splitlines()[0]) if content else None
+    except (OSError, ValueError, IndexError):
+        return False  # unreadable/unparsable: cannot confirm anything, so do not treat as stale
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    else:
+        return False
+
+
+def _read_capture_lock_holder(lock_path: str) -> str:
+    """Best-effort, human-readable description of a capture lock's holder, for error messages only."""
+    try:
+        with open(lock_path) as f:
+            content = f.read().strip()
+        return f'pid {content}' if content else '(lock file is empty)'
+    except OSError as e:
+        return f'(could not read lock file: {e})'
+
+
+def _acquire_capture_lock(capture_dir: str) -> str:
+    """
+    Take an exclusive, interprocess lock on ``capture_dir`` before any capture work begins.
+
+    Without this, two concurrent T3 processes capturing the same ``capture_dir`` could interleave
+    their staging and swap (e.g. both build a staging directory, then race each other's
+    rename-aside/``os.replace`` swap), producing a capture neither of them individually verified.
+
+    Implemented with ``os.open(..., os.O_CREAT | os.O_EXCL)``: POSIX guarantees the
+    create-if-absent check and the file's creation happen as a single atomic operation, so two
+    processes racing to create the same lock path can never both "win" -- exactly one ``os.open``
+    call succeeds, no matter how closely timed, and every other one raises ``FileExistsError``. The
+    winning process's PID is written into the file afterward purely for diagnosability (so a human
+    staring at a stuck lock can identify who holds it); the lock's exclusivity comes entirely from
+    the atomic file creation, never from the PID written afterward.
+
+    Stale-lock handling: if a lock file already exists but ``_is_stale_capture_lock`` confirms its
+    recorded PID no longer corresponds to any live process (e.g. that process was killed without
+    reaching its ``finally``), the stale lock is removed and acquisition is retried exactly once.
+    This is inherently best-effort (there is an unavoidable race between the liveness check and the
+    removal, and PIDs can in principle be recycled by the OS in that window), but the retried
+    ``os.open`` is itself the atomic check, so a genuine concurrent live holder is still caught even
+    if the stale-cleanup race is lost.
+
+    Args:
+        capture_dir (str): The capture directory about to be captured into.
+
+    Returns:
+        str: The lock file path, to be passed to ``_release_capture_lock`` once the caller is done
+            (regardless of success or failure).
+
+    Raises:
+        RuntimeError: If the lock is already held by a live (or unidentifiable) process, or a
+                     retried acquisition after stale-lock cleanup still fails. Fails CLOSED: this
+                     function never returns normally without truly holding the lock.
+    """
+    lock_path = _capture_lock_path(capture_dir)
+    parent_dir = os.path.dirname(lock_path)
+    if parent_dir and not os.path.isdir(parent_dir):
+        os.makedirs(parent_dir)
+
+    for attempt in range(2):
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            if attempt == 0 and _is_stale_capture_lock(lock_path):
+                try:
+                    os.remove(lock_path)
+                except FileNotFoundError:
+                    pass  # another process already reclaimed it; the retry below is still safe
+                continue
+            holder = _read_capture_lock_holder(lock_path)
+            raise RuntimeError(
+                f"Refusing to capture into '{capture_dir}': its lock file '{lock_path}' is already "
+                f"held ({holder}). Another process appears to be capturing this same directory "
+                f"concurrently. Failing closed rather than racing an in-progress capture; if the "
+                f"holding process is confirmed dead, remove the lock file manually and retry."
+            )
+        else:
+            try:
+                os.write(fd, f'{os.getpid()}\n'.encode('utf-8'))
+            finally:
+                os.close(fd)
+            return lock_path
+    # Unreachable: every iteration above either returns or raises. Kept only so this function can
+    # never silently fall through to "no lock, no error" if that analysis is ever wrong.
+    raise RuntimeError(f"Refusing to capture into '{capture_dir}': could not acquire its lock "
+                      f"'{lock_path}' after stale-lock recovery.")
+
+
+def _release_capture_lock(lock_path: str) -> None:
+    """
+    Release a capture lock previously taken by ``_acquire_capture_lock``.
+
+    Always called from a ``finally`` block, so the lock is released whether the capture it guarded
+    succeeded or raised. Tolerates the file already being gone rather than raising during cleanup,
+    since raising here would mask whatever real exception is already in flight in the caller.
+
+    Args:
+        lock_path (str): The lock file path returned by ``_acquire_capture_lock``.
+    """
+    try:
+        os.remove(lock_path)
+    except FileNotFoundError:
+        pass
+
+
+def _recover_capture_swap_state(capture_dir: str) -> None:
+    """
+    Self-heal ``capture_dir`` from a crash inside a PRIOR call's atomic swap, and clear leftover
+    staging scratch. Called at the start of every ``capture_ts_artifacts`` call, while this process
+    already holds ``capture_dir``'s lock (see ``_acquire_capture_lock``), so nothing else can be
+    concurrently mid-build or mid-swap while this runs.
+
+    Why this exists: the swap that promotes a fully-staged, self-verified new capture into
+    ``capture_dir``'s place (see ``_capture_ts_artifacts_locked``) works by renaming any existing
+    ``capture_dir`` aside to a sibling ``.capture-old-*`` path, then ``os.replace``-ing the staging
+    directory into the now-vacant ``capture_dir`` path. ``os.replace`` itself is atomic, but POSIX
+    has no primitive that atomically replaces a non-empty directory's contents in one step, so the
+    rename-aside and the ``os.replace`` are necessarily two separate syscalls. A process that dies
+    (``kill -9``, OOM-kill, power loss -- anything that skips the in-process ``except``/``finally``
+    handlers already in ``_capture_ts_artifacts_locked``) BETWEEN those two syscalls leaves
+    ``capture_dir`` completely ABSENT, with the last known-good capture sitting under the
+    ``.capture-old-*`` name, which nothing else recognizes or recovers on its own.
+
+    What this function actually guarantees, stated honestly: ``capture_dir`` is never left
+    permanently missing after such a crash, because the very next call that takes the lock finds
+    and restores it here, before doing anything else. What it does NOT provide: a single atomic
+    syscall that makes the swap itself crash-proof in real time -- some other process reading
+    ``capture_dir`` directly, bypassing this module's lock, between the crash and this recovery
+    would transiently see it absent (never corrupt, just momentarily missing) until this function
+    next runs. True real-time atomicity would require ``capture_dir`` to be something other than an
+    ordinary directory (e.g. a symlink swapped with ``os.replace``) -- a larger change to this
+    module's on-disk contract, which every consumer of ``capture_dir`` would need to tolerate, that
+    this fix does not take on.
+
+    Args:
+        capture_dir (str): The capture directory about to be populated.
+
+    Raises:
+        ValueError: If ``capture_dir`` itself is missing or empty AND more than one sibling
+                   ``.capture-old-*`` directory holds a valid capture manifest -- an ambiguous state
+                   that should never arise from a single crashed swap. Refuses to guess which one is
+                   the real prior capture rather than silently picking one.
+    """
+    abs_capture_dir = os.path.abspath(capture_dir)
+    parent_dir = os.path.dirname(abs_capture_dir)
+    if not os.path.isdir(parent_dir):
+        return  # capture_dir's parent does not even exist yet; nothing to recover
+
+    def _sibling_dirs(prefix):
+        return sorted(
+            os.path.join(parent_dir, name) for name in os.listdir(parent_dir)
+            if name.startswith(prefix) and os.path.isdir(os.path.join(parent_dir, name))
+        )
+
+    if _has_valid_capture_manifest(capture_dir):
+        # The swap already completed (or never started). Any '.capture-old-*' siblings are
+        # leftover garbage from a crash AFTER os.replace succeeded but before the old tree's
+        # cleanup rmtree ran; any '.capture-staging-*' siblings are leftover garbage from a crash
+        # before some capture's swap ever ran. Both are safe to discard now: this process holds
+        # capture_dir's lock, so nothing else can be concurrently mid-build against it.
+        for stale_dir in _sibling_dirs(_CAPTURE_OLD_DIR_PREFIX) + _sibling_dirs(_CAPTURE_STAGING_DIR_PREFIX):
+            shutil.rmtree(stale_dir, ignore_errors=True)
+        return
+
+    # capture_dir itself is missing or invalid. Only ever treat it as recoverable-from when it is
+    # actually absent or empty -- if it exists and holds unrelated, non-empty content, leave it
+    # alone entirely and let _refuse_unowned_capture_dir raise its own clear error, rather than ever
+    # deleting content this module cannot prove it owns.
+    capture_dir_absent_or_empty = not os.path.isdir(capture_dir) or not os.listdir(capture_dir)
+    if not capture_dir_absent_or_empty:
+        return
+
+    old_dirs = _sibling_dirs(_CAPTURE_OLD_DIR_PREFIX)
+    valid_old_dirs = [d for d in old_dirs if _has_valid_capture_manifest(d)]
+    if not valid_old_dirs:
+        return  # nothing recoverable; leave any (manifest-less) old/staging siblings alone
+
+    if len(valid_old_dirs) > 1:
+        raise ValueError(
+            f"Refusing to recover '{capture_dir}': found {len(valid_old_dirs)} sibling "
+            f"'{_CAPTURE_OLD_DIR_PREFIX}*' directories that each hold a valid capture manifest "
+            f"({valid_old_dirs!r}), while capture_dir itself is missing or empty. This should never "
+            f"happen from a single crashed swap; refusing to guess which one is the real prior "
+            f"capture rather than silently picking one -- resolve this manually."
+        )
+
+    recovered_dir = valid_old_dirs[0]
+    if os.path.isdir(capture_dir):
+        os.rmdir(capture_dir)  # confirmed empty above
+    os.rename(recovered_dir, capture_dir)
+
+    # Now that capture_dir holds the recovered, valid capture, clear every other leftover
+    # '.capture-old-*'/'.capture-staging-*' sibling the same way the already-valid branch above
+    # does (recovered_dir itself no longer appears in the listing, having just been renamed away).
+    for stale_dir in _sibling_dirs(_CAPTURE_OLD_DIR_PREFIX) + _sibling_dirs(_CAPTURE_STAGING_DIR_PREFIX):
+        shutil.rmtree(stale_dir, ignore_errors=True)
+
+
 def verify_capture(capture_dir: str) -> VerifyResult:
     """
     Re-read a capture's manifest and confirm every captured file still matches its recorded hash.
@@ -826,8 +1433,15 @@ def verify_capture(capture_dir: str) -> VerifyResult:
     Raises:
         ValueError: If the manifest is missing, malformed, or structurally empty (no transition
                    state entries at all); a captured file the manifest references is missing from
-                   disk; or a captured file's actual sha256 does not match the hash recorded for it
-                   in the manifest.
+                   disk; a captured file's actual sha256 does not match the hash recorded for it
+                   in the manifest; or the ``'networks'`` block is absent, does not exactly cover
+                   the networks the transition state entries reference (in either direction), or
+                   names a vendored network file that is missing or no longer hashes to its
+                   recorded ``source_sha256``. The networks check is structurally non-vacuous:
+                   ``transition_states`` is non-empty (enforced above) and every entry names a
+                   ``network_id``, so the referenced-network set an empty ``'networks'`` block is
+                   compared against is never empty -- an absent or empty block always fails here,
+                   it can never pass because there was nothing to iterate over.
     """
     manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
     if not os.path.isfile(manifest_path):
@@ -854,12 +1468,60 @@ def verify_capture(capture_dir: str) -> VerifyResult:
 
     record_count = 0
     captured_artifact_count = 0
+    referenced_network_ids = set()
+    ts_records = list()
     for entry in transition_states:
         record_count += 1
+        network_id = entry.get('network_id')
+        if not network_id:
+            raise ValueError(
+                f"Refusing to verify '{capture_dir}': a transition state entry in the manifest at "
+                f"'{manifest_path}' has no network_id ({entry!r}). Every entry capture_ts_artifacts "
+                f"ever wrote names the network its transition state belongs to; a missing one means "
+                f"the manifest is malformed or was hand-edited."
+            )
+        referenced_network_ids.add(network_id)
         ts_label = entry.get('arc_ts_label')
+        status = entry.get('status')
+        # Fail closed on the status itself before trusting any path derived from it: a manifest is
+        # untrusted data re-read off disk, not something this function produced, so an unrecognized
+        # status (hand-edited, corrupted, or from a newer/older capture format) must be refused
+        # rather than silently falling through whichever branch below happens to match its path.
+        if status not in TS_ARTIFACT_STATUSES:
+            raise ValueError(
+                f"Refusing to verify '{capture_dir}': the manifest entry for transition state "
+                f"{ts_label!r} at '{manifest_path}' has an unrecognized status {status!r}; expected "
+                f"one of {sorted(TS_ARTIFACT_STATUSES)}. A missing or unrecognized status means the "
+                f"manifest is malformed, hand-edited, or predates this capture format."
+            )
         captured_artifact_path = entry.get('captured_artifact_path')
+        # Enforce the status/path pairing discovery itself would have produced (see the two
+        # frozensets' definitions in t3.pdep.discovery): counting captured_artifact_count purely off
+        # "is captured_artifact_path non-None" -- without ever looking at status -- let a manifest
+        # hand-edited to 'status: usable' with a null captured_artifact_path verify cleanly and then
+        # silently vanish from every downstream count, even though nothing was ever actually
+        # captured for it.
+        if status in TS_ARTIFACT_STATUSES_REQUIRING_ARTIFACT_PATH and captured_artifact_path is None:
+            raise ValueError(
+                f"Refusing to verify '{capture_dir}': the manifest entry for transition state "
+                f"{ts_label!r} at '{manifest_path}' has status {status!r}, which must always carry a "
+                f"captured_artifact_path, but captured_artifact_path is None. This status/path "
+                f"combination is never produced by capture_ts_artifacts; the manifest is malformed or "
+                f"was hand-edited."
+            )
+        if status in TS_ARTIFACT_STATUSES_REQUIRING_NO_ARTIFACT_PATH and captured_artifact_path is not None:
+            raise ValueError(
+                f"Refusing to verify '{capture_dir}': the manifest entry for transition state "
+                f"{ts_label!r} at '{manifest_path}' has status {status!r}, which must never carry a "
+                f"captured_artifact_path, but captured_artifact_path is {captured_artifact_path!r}. This "
+                f"status/path combination is never produced by capture_ts_artifacts; the manifest is "
+                f"malformed or was hand-edited."
+            )
+        resolved_artifact_path = None
         if captured_artifact_path is not None:
             captured_artifact_count += 1
+            resolved_artifact_path = os.path.join(capture_dir, captured_artifact_path)
+            _confine_to_capture_dir(capture_dir=capture_dir, path=resolved_artifact_path)
             _verify_one_captured_file(
                 capture_dir=capture_dir,
                 relpath=captured_artifact_path,
@@ -873,6 +1535,17 @@ def verify_capture(capture_dir: str) -> VerifyResult:
                 expected_sha256=expected_log_sha256,
                 ts_label=ts_label,
             )
+        ts_records.append(TSArtifactRecord(
+            network_id=network_id,
+            network_ts_label=entry.get('network_ts_label'),
+            arc_ts_label=ts_label,
+            status=status,
+            artifact_path=resolved_artifact_path,
+            converged=entry.get('converged'),
+            reason=entry.get('reason') or '',
+            coefficient=entry.get('coefficient'),
+            delta_ln_k=entry.get('delta_ln_k'),
+        ))
 
     if captured_artifact_count > 0:
         energy_settings = content.get('energy_settings')
@@ -889,8 +1562,57 @@ def verify_capture(capture_dir: str) -> VerifyResult:
         # to be re-checked against the one authoritative definition of the frozen block's shape.
         validate_frozen_energy_settings(energy_settings, context=f"the capture manifest at '{manifest_path}'")
 
+    # Verify the AUTHORITATIVE networks block. Structurally non-vacuous by construction: the
+    # transition_states loop above enforced record_count >= 1 and a network_id on every entry, so
+    # referenced_network_ids is never empty here -- an absent or empty 'networks' block therefore
+    # always fails the coverage check inside validate_networks_block; it can never slip through
+    # as "nothing to iterate over".
+    if 'networks' not in content:
+        raise ValueError(
+            f"Refusing to verify '{capture_dir}': the manifest at '{manifest_path}' has no 'networks' "
+            f"key. Every capture freezes, per network its transition states belong to, the vendored "
+            f"network source file, its hash, and the ME method (the authoritative identity downstream "
+            f"consumers must read instead of the long-gone RMG pdep/ directory) -- a manifest without "
+            f"it is malformed or predates this capture format, and there is no safe fallback."
+        )
+    if len(referenced_network_ids) == 0:
+        raise ValueError(
+            f"Refusing to verify '{capture_dir}': no transition state entry in the manifest at "
+            f"'{manifest_path}' references a network, so the networks block has nothing to be checked "
+            f"against and this verification would be vacuous."
+        )
+    networks = content['networks'] or dict()
+    validate_networks_block(referenced_network_ids=referenced_network_ids,
+                            networks=networks,
+                            context=f"the capture manifest at '{manifest_path}'")
+    for network_id, entry in networks.items():
+        captured_path = entry.get('captured_path')
+        if not isinstance(captured_path, str) or not captured_path.strip():
+            raise ValueError(
+                f"Refusing to verify '{capture_dir}': the networks entry for '{network_id}' in the "
+                f"manifest at '{manifest_path}' has an invalid captured_path ({captured_path!r}); "
+                f"expected the vendored network file's path relative to the capture directory."
+            )
+        captured_abs_path = os.path.join(capture_dir, captured_path)
+        _confine_to_capture_dir(capture_dir=capture_dir, path=captured_abs_path)
+        if not os.path.isfile(captured_abs_path):
+            raise ValueError(
+                f"Torn capture detected in '{capture_dir}': the manifest records a vendored network "
+                f"source for '{network_id}' at '{captured_path}', but it no longer exists on disk. "
+                f"Refusing to use a capture whose vendored networks disagree with its own manifest."
+            )
+        actual_sha256 = hash_file(captured_abs_path)
+        if actual_sha256 != entry['source_sha256']:
+            raise ValueError(
+                f"Torn or tampered capture detected in '{capture_dir}': the vendored network source "
+                f"for '{network_id}' at '{captured_path}' hashes to {actual_sha256}, but the manifest "
+                f"records {entry['source_sha256']}. Refusing to use it."
+            )
+
     return VerifyResult(capture_dir=capture_dir, manifest_path=manifest_path, record_count=record_count,
-                        captured_artifact_count=captured_artifact_count)
+                        captured_artifact_count=captured_artifact_count,
+                        networks=networks, energy_settings=content.get('energy_settings'),
+                        ts_records=tuple(ts_records))
 
 
 def _verify_one_captured_file(capture_dir: str, relpath: str, expected_sha256: str | None, ts_label) -> None:
@@ -908,6 +1630,7 @@ def _verify_one_captured_file(capture_dir: str, relpath: str, expected_sha256: s
                    file's actual hash does not match the recorded one.
     """
     abs_path = os.path.join(capture_dir, relpath)
+    _confine_to_capture_dir(capture_dir=capture_dir, path=abs_path)
     if not os.path.isfile(abs_path):
         raise ValueError(
             f"Torn capture detected in '{capture_dir}': the manifest for transition state "

@@ -62,6 +62,7 @@ from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           arc_ts_label,
                           expected_ts_artifact_path,
                           merge_ts_join_records,
+                          read_ts_join_networks,
                           read_ts_join_sidecar,
                           ts_join_sidecar_path,
                           write_ts_join_sidecar,
@@ -197,6 +198,11 @@ class T3:
         # iteration alongside the QM queue they describe, since the ARC project directory they are
         # written to is per-iteration.
         self.pdep_ts_join_records = list()
+        # The frozen identity of every network the join records reference:
+        # network_id -> {source_path, source_sha256, method}. Written to the join sidecar alongside
+        # the records, so the post-ARC capture step can vendor the exact network file this
+        # iteration's selection examined. Reset per iteration together with the records.
+        self.pdep_ts_join_networks = dict()
 
         if self.qm:
             self.check_arc_args()
@@ -905,6 +911,10 @@ class T3:
             join_records=join_records,
             arc_project_directory=self.paths['ARC'],
             capture_dir=capture_dir,
+            # The sidecar's frozen network identities (source path, content hash at selection time,
+            # ME method), read from disk for the same restart-survival reason join_records is:
+            # capture_ts_artifacts re-hashes each LIVE network file against these and vendors it.
+            networks=read_ts_join_networks(self.paths['ARC']),
         )
         self.logger.info(f'Captured {len(result.records)} PDep transition state QM artifact '
                          f'record(s) into {result.capture_dir}.')
@@ -1508,6 +1518,7 @@ class T3:
         # carried-over record would point at a previous iteration's artifact path, and re-selecting
         # the same transition state would collide with its own stale entry.
         self.pdep_ts_join_records = list()
+        self.pdep_ts_join_networks = dict()
         if self.t3['sensitivity']['pdep_SA_threshold'] is None:
             return species_keys
         if not os.path.isdir(self.paths['PDep SA']):
@@ -1659,6 +1670,10 @@ class T3:
                                                           structures=structures,
                                                           network_name=network_name,
                                                           )
+                        self._record_pdep_network_identity(network_name=network_name,
+                                                           network_path=network_path,
+                                                           selection=selection,
+                                                           )
 
                 # The selector resolves the SA key more robustly than an exact string match (it also
                 # handles label legalization and a network reaction stored in the opposite direction),
@@ -1707,7 +1722,8 @@ class T3:
         self.logger.log_pdep_network_summary(selections=self.pdep_network_selections)
         if self.pdep_ts_join_records:
             sidecar_path = write_ts_join_sidecar(arc_project_directory=self.paths['ARC'],
-                                                 records=self.pdep_ts_join_records)
+                                                 records=self.pdep_ts_join_records,
+                                                 networks=self.pdep_ts_join_networks)
             self.logger.info(f'Wrote the PDep transition state join for '
                              f'{len(self.pdep_ts_join_records)} transition state(s) to {sidecar_path}.')
         else:
@@ -1839,6 +1855,73 @@ class T3:
                                             **record_kwargs))
         self.pdep_ts_join_records = merge_ts_join_records(existing=self.pdep_ts_join_records, new=records)
         return records
+
+    def _record_pdep_network_identity(self,
+                                      network_name: str,
+                                      network_path: str,
+                                      selection,
+                                      ):
+        """
+        Freeze the identity of a qualified network into ``self.pdep_ts_join_networks``.
+
+        The identity -- the network file's path, its content hash at selection time (computed with
+        ``t3.pdep.hashing``'s ``'sha256:<hex>'`` format, taken from the selection rather than re-read), and the
+        master-equation method the selection's SA actually used -- is what the post-ARC capture
+        step needs to vendor the exact network file this selection examined. Recorded only when at
+        least one join record references the network, so the sidecar's networks block and its
+        records always cover each other exactly (see ``t3.pdep.join.validate_ts_join_networks``).
+
+        The method is taken from ``selection.method`` (the object appended to
+        ``self.pdep_network_selections``) rather than from the loop-local ``method_used``: the two
+        are assigned from the same value on every path that reaches a qualified selection, and the
+        selection is the durable record of the decision.
+
+        Args:
+            network_name (str): The network file stem, e.g. ``'network4_2'``.
+            network_path (str): The path of the network file the selection examined.
+            selection (PDepNetworkSelection): The qualified decision for this network.
+
+        Raises:
+            ValueError: If the selection's resolved method is ``None`` (an identity without a
+                method cannot drive the downstream hybrid Arkane input); if the network file is
+                gone before it could be hashed; or if a second reaction pointing at the same
+                network resolves to a conflicting identity within one iteration (e.g. the network
+                file changed on disk mid-iteration).
+        """
+        if not any(record.network_id == network_name for record in self.pdep_ts_join_records):
+            # Nothing references this network (every uncertain transition state was already
+            # recorded under it in an earlier call and none exist -- not reachable today, since a
+            # qualified selection always yields at least one record on its first offering, but an
+            # entry written here without a referencing record would be refused by the sidecar's
+            # own cross-validation).
+            return
+        if selection.method is None:
+            raise ValueError(f'The selection for PDep network {network_name} resolved no master-equation '
+                             f'method, so its identity cannot be frozen for QM refinement. A qualified '
+                             f'selection must carry the ME method its sensitivity analysis used.')
+        if selection.network_source_hash is None:
+            raise ValueError(f'The selection for PDep network {network_name} recorded no content hash of the '
+                             f'network file it examined, so its identity cannot be frozen for QM refinement. '
+                             f'A selection computed from a parsed network file always records one.')
+        if not os.path.isfile(network_path):
+            raise ValueError(f'The PDep network file {network_path} is gone before its identity could be '
+                             f'frozen for QM refinement; it existed when the selection examined it.')
+        # The hash the SELECTION recorded, not a fresh hash_file(network_path). This function runs
+        # after determine_species_from_pdep_network() has already parsed and decided; re-hashing here
+        # is a second read of the same path, so if the file changed in between, the sidecar would
+        # record bytes the selection never examined -- which is precisely the claim the docstring
+        # above makes and the claim post-ARC capture relies on when it vendors this file.
+        entry = {'source_path': network_path,
+                 'source_sha256': selection.network_source_hash,
+                 'method': selection.method,
+                 }
+        existing_entry = self.pdep_ts_join_networks.get(network_name)
+        if existing_entry is not None and existing_entry != entry:
+            raise ValueError(f'Conflicting identities for PDep network {network_name} within one iteration: '
+                             f'{existing_entry} vs {entry}. The network file or the resolved ME method '
+                             f'changed between two reactions of the same network; the join sidecar cannot '
+                             f'record both, and picking one would silently misattribute the other.')
+        self.pdep_ts_join_networks[network_name] = entry
 
     def build_pdep_path_reaction(self,
                                  path_reaction,
