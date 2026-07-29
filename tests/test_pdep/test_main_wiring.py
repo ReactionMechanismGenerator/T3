@@ -1525,7 +1525,14 @@ class TestProcessArcRunHybridWiring(object):
         assert len(result.ilt_ts_labels) > 0
         assert 'TS9' not in result.ilt_ts_labels
         assert os.path.isfile(result.dest_path)
-        assert os.path.realpath(result.dest_path).startswith(os.path.realpath(t3.paths['PDep hybrid']))
+        # Real containment, not a prefix check: str.startswith() is exactly what
+        # T3._confine_to_pdep_hybrid_root deliberately avoids (a sibling directory like
+        # '<root>-old' shares '<root>' as a string prefix but is NOT contained in it), so a test
+        # asserting containment via startswith would pass on an escape the production code
+        # refuses. os.path.commonpath on realpath'd paths is what the production code itself uses.
+        resolved_hybrid_root = os.path.realpath(t3.paths['PDep hybrid'])
+        resolved_dest_path = os.path.realpath(result.dest_path)
+        assert os.path.commonpath([resolved_hybrid_root, resolved_dest_path]) == resolved_hybrid_root
         with open(result.dest_path, 'r') as f:
             written = f.read()
         assert "transitionState('TS9', 'qm/TS9.py')" in written
