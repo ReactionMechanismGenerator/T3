@@ -10,6 +10,70 @@ their k(T,P) kinetics.
 from abc import ABC, abstractmethod
 
 
+def validate_explorer_seed(seed_species, transition_state_seeds, max_source_species: int,
+                           supports_transition_state_seeds: bool) -> tuple:
+    """
+    Apply the seed and capability rules, returning the normalized seed.
+
+    A module-level function rather than a method, because it has two callers on two different entry
+    paths and must be the same rule on both: ``PESExplorerAdapter.__init__`` (so direct construction
+    is safe) and ``t3.pdep.explorer.factory.explorer_factory`` (so the blessed entry point is safe
+    even for an adapter whose ``__init__`` never reached the base class -- see the Note on
+    ``PESExplorerAdapter``). Being module-level is the point: a subclass cannot override it, so the
+    factory's enforcement cannot be weakened by the very class it is checking. The capability values
+    are passed in rather than read off a class, so the caller decides whose limits apply.
+
+    Args:
+        seed_species (list | tuple): The labels of the species forming the source configuration.
+        transition_state_seeds (list | tuple): The labels of any transition states offered as seeds.
+        max_source_species (int): The maximum number of source species this explorer allows.
+        supports_transition_state_seeds (bool): Whether this explorer can seed from transition states.
+
+    Raises:
+        ValueError: If the seed is empty, has more than ``max_source_species`` entries, or carries
+                   transition states when the explorer does not support them.
+
+    Returns:
+        tuple: ``(seed_species, transition_state_seeds)``, each normalized to a tuple.
+    """
+    # Refused BEFORE tuple(), because a str is a sequence and ``tuple('OH')`` is ``('O', 'H')``:
+    # ``seed_species='OH'`` -- a plausible thing to write for a single seed -- silently became a
+    # two-species bimolecular source channel, which passes the count rule below (2 <= 2) and, if the
+    # network happens to declare species named 'O' and 'H', every later check as well. Arkane then
+    # explores a different reaction than the one asked for. bytes is refused for the same reason.
+    for name, value in (('seed_species', seed_species), ('transition_state_seeds', transition_state_seeds)):
+        if isinstance(value, (str, bytes)):
+            raise ValueError(f"'{name}' must be a sequence of label strings, not a bare "
+                             f"{type(value).__name__} ({value!r}). A string is itself a sequence, so this "
+                             f"would silently be read character by character -- {tuple(value)!r} -- rather "
+                             f"than as the single label it was meant to be.")
+    seed_species = tuple(seed_species or tuple())
+    transition_state_seeds = tuple(transition_state_seeds or tuple())
+    for name, values in (('seed_species', seed_species), ('transition_state_seeds', transition_state_seeds)):
+        for value in values:
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"Every entry of '{name}' must be a non-empty label string, got "
+                                 f"{value!r} of type {type(value).__name__} in {values!r}.")
+
+    # An EMPTY seed is refused separately from a too-large one. Arkane reaches the same else
+    # branch for both and reports each as "Reactant channels with greater than 2 reactants not
+    # supported" (arkane/explorer.py:159-169) -- a message that is simply false for an empty
+    # seed, and would send a caller looking for a seed they never supplied.
+    if not seed_species:
+        raise ValueError(f'A PES exploration requires at least one source species, got '
+                         f'{seed_species}.')
+    if len(seed_species) > max_source_species:
+        raise ValueError(f'A PES exploration source is a single reactant channel, so it may '
+                         f'name at most {max_source_species} source species; got '
+                         f'{len(seed_species)}: {seed_species}.')
+    if transition_state_seeds and not supports_transition_state_seeds:
+        raise ValueError(f'This explorer does not support transition-state-seeded exploration, '
+                         f'yet {len(transition_state_seeds)} transition state(s) were given as '
+                         f'seeds: {transition_state_seeds}.')
+
+    return seed_species, transition_state_seeds
+
+
 class PESExplorerAdapter(ABC):
     """
     The abstract PESExplorerAdapter class.
@@ -73,27 +137,16 @@ class PESExplorerAdapter(ABC):
             ValueError: If the seed is empty, has more than ``max_source_species`` entries, or
                         carries transition states when the adapter does not support them.
         """
-        seed_species = tuple(seed_species or tuple())
-        transition_state_seeds = tuple(transition_state_seeds or tuple())
-
-        # An EMPTY seed is refused separately from a too-large one. Arkane reaches the same else
-        # branch for both and reports each as "Reactant channels with greater than 2 reactants not
-        # supported" (arkane/explorer.py:159-169) -- a message that is simply false for an empty
-        # seed, and would send a caller looking for a seed they never supplied.
-        if not seed_species:
-            raise ValueError(f'A PES exploration requires at least one source species, got '
-                             f'{seed_species}.')
-        if len(seed_species) > self.max_source_species:
-            raise ValueError(f'A PES exploration source is a single reactant channel, so it may '
-                             f'name at most {self.max_source_species} source species; got '
-                             f'{len(seed_species)}: {seed_species}.')
-        if transition_state_seeds and not self.supports_transition_state_seeds:
-            raise ValueError(f'This explorer does not support transition-state-seeded exploration, '
-                             f'yet {len(transition_state_seeds)} transition state(s) were given as '
-                             f'seeds: {transition_state_seeds}.')
-
-        self.seed_species = seed_species
-        self.transition_state_seeds = transition_state_seeds
+        # The rules live in ``validate_explorer_seed``, not inline here, because ``explorer_factory``
+        # has to apply the identical rules on its own path -- a subclass that overrides ``__init__``
+        # and forgets ``super().__init__(...)`` never reaches this line at all. Two call sites, one
+        # rule; duplicating the checks would let the two entry points drift apart silently.
+        self.seed_species, self.transition_state_seeds = validate_explorer_seed(
+            seed_species=seed_species,
+            transition_state_seeds=transition_state_seeds,
+            max_source_species=self.max_source_species,
+            supports_transition_state_seeds=self.supports_transition_state_seeds,
+        )
 
     @abstractmethod
     def set_up(self):
