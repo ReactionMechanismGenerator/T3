@@ -49,6 +49,11 @@ class MESolverAdapter(ABC):
         """
         Obtain the solved k(T,P) results.
 
+        Implementations return entries directed as the underlying tool wrote them, which is NOT
+        guaranteed to match the direction the caller asked about. A consumer needing a specific
+        direction must resolve it and reverse the entry itself. See the full reasoning on
+        ``t3.pdep.explorer.arkane.ArkaneExplorerAdapter.get_k_tp``.
+
         Returns:
             k_tp: The solved k(T,P) results.
         """

@@ -168,6 +168,12 @@ class ArkaneMESolverAdapter(MESolverAdapter):
         """
         Obtain the solved k(T,P) results.
 
+        DIRECTION IS ARKANE'S, NOT THE CALLER'S. Each entry carries the ``reactants``/``products`` as
+        Arkane wrote them in ``output.py``; that ordering is not guaranteed to match the direction of
+        anything the caller asked about, so a consumer needing a specific direction must resolve it
+        and reverse the entry when required. The same contract holds for the explorer adapter's
+        ``get_k_tp`` (t3/pdep/explorer/arkane.py), where the reasoning is written out in full.
+
         Raises:
             RuntimeError: If ``solve()`` has not been called yet, or was called and did not
                          succeed. A caller must never silently receive ``None``/NaN kinetics as

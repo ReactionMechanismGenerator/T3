@@ -90,6 +90,31 @@ def _canonical_channel(labels) -> tuple:
     return tuple(sorted(labels))
 
 
+def canonical_channel_pair(reactant_labels, product_labels) -> tuple:
+    """
+    Canonically order the two sides of one net reaction into a direction-insensitive pair key.
+
+    This is the identity of a net reaction as far as the network's topology is concerned: the two
+    channels it connects, with no direction. Both the prediction
+    (``PDepNetwork.expected_net_reaction_channel_pairs``) and the observation (a parsed
+    ``pdepreaction(...)`` entry) must be keyed through THIS function -- a check that canonicalizes
+    the two sides differently compares two things that were never the same shape, and passes.
+
+    Either side may be passed already canonical: ``_canonical_channel`` sorts, so applying it to an
+    already-sorted channel is a no-op. That idempotence is why the enumeration in
+    ``PDepNetwork.expected_net_reaction_channel_pairs`` can feed its own canonical channels straight
+    back in rather than needing a second, subtly-different helper.
+
+    Args:
+        reactant_labels (iterable): The species labels on one side of the net reaction.
+        product_labels (iterable): The species labels on the other side.
+
+    Returns:
+        tuple: A 2-tuple of canonical channels, itself in a canonical order.
+    """
+    return tuple(sorted((_canonical_channel(reactant_labels), _canonical_channel(product_labels))))
+
+
 def _derive_product_channels(path_reactions: tuple,
                              isomers: tuple,
                              reactant_channels: tuple,
@@ -167,6 +192,20 @@ class PDepNetwork:
         """
         The number of live ``pdepreaction(...)`` entries Arkane writes for this network.
 
+        This is deliberately just the length of ``expected_net_reaction_channel_pairs()`` rather
+        than a second, independent enumeration. The count and the pair set are two views of one
+        prediction, and a consumer that checks both against the same output must not be able to
+        get contradictory answers from them.
+
+        Returns:
+            int: The expected number of live ``pdepreaction(...)`` entries.
+        """
+        return len(self.expected_net_reaction_channel_pairs())
+
+    def expected_net_reaction_channel_pairs(self) -> tuple:
+        """
+        The channel pairs Arkane writes a live ``pdepreaction(...)`` entry for, as a set.
+
         Arkane enumerates net reactions in ``PressureDependenceJob.save()`` as a double loop whose
         source index runs over the isomers and reactant channels only, and whose destination index
         runs over those plus the product channels, skipping the diagonal. Within the
@@ -190,12 +229,21 @@ class PDepNetwork:
         a complete solve. Measured: a network with one such overlapping channel writes 15 live
         entries where the closed form predicts 18.
 
+        Pairs are returned canonically unordered (``_canonical_channel_pair``) because the
+        enumeration's own duplicate suppression is direction-insensitive -- Arkane compares by label
+        in either direction -- so which side of a live entry is the reactant side is a detail of the
+        solver's net-reaction ordering, not part of the network's identity. That canonicalization
+        cannot collapse two live entries into one: the suppression already guarantees that if
+        ``(a, b)`` was printed then ``(b, a)`` never is, so the returned tuple has exactly one entry
+        per live ``pdepreaction(...)``, which is what lets ``expected_net_reaction_count()`` be its
+        length.
+
         Returns:
-            int: The expected number of live ``pdepreaction(...)`` entries.
+            tuple: The expected live channel pairs, each a canonically ordered 2-tuple of channels.
         """
         sources = self.isomers_as_channels() + self.reactant_channels
         destinations = sources + self.product_channels
-        printed, live_count = list(), 0
+        printed = list()
         for destination_index, destination in enumerate(destinations):
             for source_index, source in enumerate(sources):
                 if source_index == destination_index:
@@ -205,8 +253,7 @@ class PDepNetwork:
                        for other_source, other_destination in printed):
                     continue
                 printed.append((source, destination))
-                live_count += 1
-        return live_count
+        return tuple(canonical_channel_pair(source, destination) for source, destination in printed)
 
     def isomers_as_channels(self) -> tuple:
         """

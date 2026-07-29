@@ -152,6 +152,13 @@ class PESExplorerAdapter(ABC):
     def set_up(self):
         """
         Set up the job directory and write the explorer's input file for the given seed.
+
+        MUST be called by ``explore()``, never from ``__init__``. Constructing an adapter is
+        required to be side-effect-free: an explorer that judges its run directory before
+        launching (to prove no stale artifact can be mistaken for a fresh result) cannot make that
+        judgement honestly if construction has already written into the directory. Several
+        adapters elsewhere in T3 do call ``set_up()`` from ``__init__``; that idiom is a known
+        sharp edge there and must not be inherited here, where the ordering is load-bearing.
         """
         pass
 
@@ -187,6 +194,11 @@ class PESExplorerAdapter(ABC):
     def get_k_tp(self):
         """
         Obtain the parsed k(T,P) results for the explored network(s).
+
+        Implementations return entries directed as the underlying tool wrote them, which is NOT
+        guaranteed to match the direction the caller asked about. A consumer needing a specific
+        direction must resolve it and reverse the entry itself. See the full reasoning on
+        ``t3.pdep.explorer.arkane.ArkaneExplorerAdapter.get_k_tp``.
 
         Raises:
             RuntimeError: If ``explore()`` has not been called yet, or was called and did not
