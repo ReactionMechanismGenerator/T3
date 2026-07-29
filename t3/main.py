@@ -915,6 +915,10 @@ class T3:
             # ME method), read from disk for the same restart-survival reason join_records is:
             # capture_ts_artifacts re-hashes each LIVE network file against these and vendors it.
             networks=read_ts_join_networks(self.paths['ARC']),
+            # The sensitivity evidence that justified selecting each transition state, read off the
+            # DURABLE join records (frozen there at queue time by `queue_pdep_transition_states`) --
+            # never re-derived from `self.pdep_network_selections`, which is empty on a restart.
+            sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k) for record in join_records},
         )
         self.logger.info(f'Captured {len(result.records)} PDep transition state QM artifact '
                          f'record(s) into {result.capture_dir}.')
@@ -1771,6 +1775,18 @@ class T3:
         """
         path_reactions_by_ts = network.path_reactions_by_ts()
         records = list()
+        # Freeze the sensitivity evidence that justified selecting each transition state onto its
+        # `TSJoinRecord` NOW, while `selection` is in memory, so it survives into the durable join
+        # sidecar and is still available at capture time on a restart (where `self.pdep_network_
+        # selections` is empty). Several `uncertain_path_reactions` entries can share one `ts_label`
+        # (e.g. a shared transition state reached via more than one path reaction, or evaluated under
+        # more than one condition); pick the one with the largest |coefficient|, mirroring `selector`'s
+        # own ranking convention ("ranking is by absolute value").
+        sensitivity_by_ts_label = dict()
+        for entry in selection.uncertain_path_reactions:
+            current = sensitivity_by_ts_label.get(entry.ts_label)
+            if current is None or abs(entry.coefficient) > abs(current[0]):
+                sensitivity_by_ts_label[entry.ts_label] = (entry.coefficient, entry.delta_ln_k)
         # Several sensitive PDep reactions can belong to the same network, so
         # `determine_species_from_pdep_network` calls this method more than once with the same
         # `network_name` within one iteration (`self.pdep_ts_join_records` is only reset at entry to
@@ -1782,6 +1798,16 @@ class T3:
         for ts_label in selection.uncertain_ts_labels():
             if (network_name, ts_label) in already_recorded_keys:
                 continue
+            if ts_label not in sensitivity_by_ts_label:
+                # `uncertain_ts_labels()` is derived from `uncertain_path_reactions`, so every label it
+                # yields must have a matching evidence entry; this should be unreachable in practice,
+                # and is refused rather than silently queued with no evidence to avoid the capture
+                # manifest ever recording a selected transition state with no sensitivity evidence at all.
+                raise ValueError(f'Transition state {ts_label} of network {network_name} is reported as '
+                                 f'uncertain by its selection, but no matching entry was found in '
+                                 f"selection.uncertain_path_reactions. This is an internal invariant "
+                                 f'violation.')
+            coefficient, delta_ln_k = sensitivity_by_ts_label[ts_label]
             path_reactions = path_reactions_by_ts.get(ts_label, tuple())
             record_kwargs = {
                 'network_id': network_name,
@@ -1789,6 +1815,8 @@ class T3:
                 'path_reaction_labels': tuple(reaction.label for reaction in path_reactions),
                 'path_reaction_strs': tuple(f"{' + '.join(reaction.reactants)} <=> {' + '.join(reaction.products)}"
                                             for reaction in path_reactions),
+                'coefficient': coefficient,
+                'delta_ln_k': delta_ln_k,
             }
             try:
                 label = arc_ts_label(network_id=network_name, network_ts_label=ts_label)

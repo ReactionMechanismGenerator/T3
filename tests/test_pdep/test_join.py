@@ -157,6 +157,62 @@ def test_record_round_trips_with_no_arc_ts_label():
     assert TSJoinRecord.from_dict(record.as_dict()).arc_ts_label is None
 
 
+def test_record_round_trips_sensitivity_evidence():
+    """Test that a record carrying the sensitivity evidence that justified its selection survives
+    the YAML rendering it is stored as.
+
+    This is the fix for the capture-manifest gap: without ``coefficient``/``delta_ln_k`` frozen onto
+    the join record at queue time, a restart (where in-memory selections are gone) cannot recover the
+    sensitivity evidence that justified selecting this transition state.
+    """
+    record = _record(coefficient=-0.0042, delta_ln_k=0.021)
+    rendered = record.as_dict()
+    assert rendered['coefficient'] == -0.0042
+    assert rendered['delta_ln_k'] == 0.021
+    round_tripped = TSJoinRecord.from_dict(rendered)
+    assert round_tripped == record
+    assert round_tripped.coefficient == -0.0042
+    assert round_tripped.delta_ln_k == 0.021
+
+
+def test_record_defaults_sensitivity_evidence_to_none():
+    """Test that a record built without sensitivity evidence (e.g. a NOT_QUEUED record for a
+    transition state that was never actually sensitivity-selected) defaults both fields to `None`
+    rather than to a numeric placeholder that could be mistaken for real evidence."""
+    record = _record()
+    assert record.coefficient is None
+    assert record.delta_ln_k is None
+    rendered = record.as_dict()
+    assert rendered['coefficient'] is None
+    assert rendered['delta_ln_k'] is None
+
+
+@pytest.mark.parametrize('coefficient, delta_ln_k', [(-0.0042, None), (None, 0.021)])
+def test_record_refuses_sensitivity_evidence_supplied_only_partially(coefficient, delta_ln_k):
+    """Test that supplying only one of `coefficient`/`delta_ln_k` is refused.
+
+    Both fields describe the same piece of evidence (`delta_ln_k` is derived from `coefficient`), so
+    a record with exactly one set is internally inconsistent and must not be silently accepted.
+    """
+    with pytest.raises(ValueError, match='coefficient.*delta_ln_k|delta_ln_k.*coefficient'):
+        _record(coefficient=coefficient, delta_ln_k=delta_ln_k)
+
+
+@pytest.mark.parametrize('coefficient, delta_ln_k', [
+    (float('nan'), 0.021),
+    (-0.0042, float('nan')),
+    (float('inf'), 0.021),
+    ('not_a_number', 0.021),
+    (True, 0.021),
+])
+def test_record_refuses_non_finite_or_non_numeric_sensitivity_evidence(coefficient, delta_ln_k):
+    """Test that non-finite (NaN/inf) or non-numeric (str/bool) sensitivity evidence is refused
+    rather than silently persisted, mirroring `selector._is_finite`'s own convention that a sensitivity
+    coefficient must be a finite real number and that `bool` (a subtype of `int`) does not count."""
+    with pytest.raises(ValueError, match='coefficient|delta_ln_k'):
+        _record(coefficient=coefficient, delta_ln_k=delta_ln_k)
+
+
 def test_validate_refuses_one_network_ts_mapped_twice():
     """Test that a duplicated network TS is refused: T3 would not know which result to read back."""
     records = [_record(), _record(arc_ts_label='T3PDep_network4_1_TS3_other')]

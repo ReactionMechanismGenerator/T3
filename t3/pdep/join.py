@@ -23,6 +23,7 @@ join a network to another network's quantum-chemistry result -- a far worse outc
 to queue an oddly-named network.
 """
 
+import math
 import os
 import re
 
@@ -117,6 +118,50 @@ def expected_ts_artifact_path(arc_project_directory: str, label: str) -> str:
     return os.path.join(arc_project_directory, 'calcs', 'statmech', 'kinetics', 'TSs', f'{label}.py')
 
 
+def _is_finite_number(value) -> bool:
+    """
+    Whether ``value`` is a usable finite real number (mirrors ``selector._is_finite``).
+
+    ``bool`` is deliberately excluded even though it is an ``int`` subtype: a stray ``True``/``False``
+    sensitivity value would silently be treated as ``1``/``0``.
+
+    Args:
+        value: The value to check.
+
+    Returns:
+        bool: ``True`` if ``value`` is a finite, non-boolean ``int``/``float``.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _validate_sensitivity_evidence(coefficient, delta_ln_k) -> None:
+    """
+    Refuse sensitivity evidence that is only partially supplied or not a finite real number.
+
+    ``coefficient`` and ``delta_ln_k`` describe one piece of evidence (``delta_ln_k`` is derived from
+    ``coefficient``), so a record with exactly one set, or with a NaN/inf/non-numeric value, is
+    internally inconsistent and must not be silently persisted into the durable join sidecar.
+
+    Args:
+        coefficient: The candidate ``coefficient`` value (or ``None``).
+        delta_ln_k: The candidate ``delta_ln_k`` value (or ``None``).
+
+    Raises:
+        ValueError: If exactly one of the two is ``None``, or either supplied value is not a finite
+            real number.
+    """
+    if (coefficient is None) != (delta_ln_k is None):
+        raise ValueError(f"A transition state join record's sensitivity evidence must supply both "
+                         f"'coefficient' and 'delta_ln_k' or neither; got coefficient={coefficient!r}, "
+                         f"delta_ln_k={delta_ln_k!r}.")
+    if coefficient is not None and not _is_finite_number(coefficient):
+        raise ValueError(f"A transition state join record's 'coefficient' must be a finite real "
+                         f"number; got {coefficient!r}.")
+    if delta_ln_k is not None and not _is_finite_number(delta_ln_k):
+        raise ValueError(f"A transition state join record's 'delta_ln_k' must be a finite real "
+                         f"number; got {delta_ln_k!r}.")
+
+
 class TSJoinRecord:
     """
     One network transition state, and the ARC transition state it was tied to.
@@ -137,6 +182,13 @@ class TSJoinRecord:
         t3_reaction_key (int, optional): The T3 reaction key, when one is known.
         expected_artifact_path (str, optional): Where the statmech input is expected, if resolved.
         reason (str): Why this record has the status it has, in particular when it was not queued.
+        coefficient (float, optional): The signed sensitivity coefficient (dln(k)/dE0, mol/J) that
+            justified selecting this transition state for QM refinement, frozen at queue time so it
+            survives a restart. ``None`` when no sensitivity evidence applies (e.g. a NOT_QUEUED
+            record). Must be supplied together with ``delta_ln_k``, never alone.
+        delta_ln_k (float, optional): The corresponding sensitivity magnitude
+            (``abs(coefficient) * perturbation``). Must be supplied together with ``coefficient``,
+            never alone.
     """
 
     def __init__(self,
@@ -149,10 +201,13 @@ class TSJoinRecord:
                  t3_reaction_key: int | None = None,
                  expected_artifact_path: str | None = None,
                  reason: str = '',
+                 coefficient: float | None = None,
+                 delta_ln_k: float | None = None,
                  ):
         if status not in TS_JOIN_STATUSES:
             raise ValueError(f"Unrecognized transition state join status '{status}'; "
                              f"expected one of {list(TS_JOIN_STATUSES)}.")
+        _validate_sensitivity_evidence(coefficient=coefficient, delta_ln_k=delta_ln_k)
         self.network_id = network_id
         self.network_ts_label = network_ts_label
         self.arc_ts_label = arc_ts_label
@@ -162,6 +217,8 @@ class TSJoinRecord:
         self.t3_reaction_key = t3_reaction_key
         self.expected_artifact_path = expected_artifact_path
         self.reason = reason
+        self.coefficient = coefficient
+        self.delta_ln_k = delta_ln_k
 
     @property
     def key(self) -> tuple:
@@ -190,6 +247,8 @@ class TSJoinRecord:
             't3_reaction_key': self.t3_reaction_key,
             'expected_artifact_path': self.expected_artifact_path,
             'reason': self.reason,
+            'coefficient': self.coefficient,
+            'delta_ln_k': self.delta_ln_k,
         }
 
     @classmethod
@@ -220,6 +279,8 @@ class TSJoinRecord:
             t3_reaction_key=record_dict.get('t3_reaction_key'),
             expected_artifact_path=record_dict.get('expected_artifact_path'),
             reason=record_dict.get('reason') or '',
+            coefficient=record_dict.get('coefficient'),
+            delta_ln_k=record_dict.get('delta_ln_k'),
         )
 
     def __repr__(self) -> str:

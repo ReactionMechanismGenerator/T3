@@ -56,7 +56,8 @@ frequencies = Log('{rel}')
         f.write(content)
 
 
-def _queued_record(network_id='network4_1', network_ts_label='TS3', arc_project_directory=None):
+def _queued_record(network_id='network4_1', network_ts_label='TS3', arc_project_directory=None,
+                   coefficient=0.05, delta_ln_k=0.02):
     label = arc_ts_label(network_id, network_ts_label)
     expected_path = expected_ts_artifact_path(arc_project_directory, label) if arc_project_directory else None
     return TSJoinRecord(
@@ -66,6 +67,8 @@ def _queued_record(network_id='network4_1', network_ts_label='TS3', arc_project_
         arc_ts_label=label,
         expected_artifact_path=expected_path,
         reason='Queued to ARC.',
+        coefficient=coefficient,
+        delta_ln_k=delta_ln_k,
     )
 
 
@@ -152,6 +155,11 @@ def _capture(join_records, arc_project_directory, capture_dir, networks=None, **
     ``pdep/``), unless the test supplies its own."""
     if networks is None:
         networks = _networks_for(join_records, networks_dir=f'{arc_project_directory}_rmg_pdep')
+    if 'sensitivity_by_ts' not in kwargs:
+        # Mirror `main.py::_capture_pdep_ts_artifacts`'s own derivation: the sensitivity evidence a
+        # captured transition state requires comes off the (durable) join record's own frozen
+        # `coefficient`/`delta_ln_k`, not from some separate in-memory selection.
+        kwargs['sensitivity_by_ts'] = {record.key: (record.coefficient, record.delta_ln_k) for record in join_records}
     return capture_ts_artifacts(join_records, arc_project_directory, capture_dir,
                                 networks=networks, **kwargs)
 
@@ -1493,6 +1501,96 @@ class TestCaptureTsArtifacts:
         result = verify_capture(capture_dir)
 
         assert result.captured_artifact_count == 0
+
+    def test_sensitivity_evidence_is_frozen_into_manifest_when_artifact_captured(self, tmp_path):
+        # The evidence that justified selecting this transition state (frozen onto the join record
+        # at queue time, per _queued_record's defaults) must be carried into the manifest entry, so
+        # a partial-capture decision can be made from the capture alone -- never re-derived from an
+        # in-memory selection, which is empty on a restart.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        entry = manifest['transition_states'][0]
+        assert entry['coefficient'] == 0.05
+        assert entry['delta_ln_k'] == 0.02
+
+    def test_sensitivity_evidence_is_frozen_for_a_not_queued_entry_too(self, tmp_path):
+        # A transition state that never reached ARC (NOT_QUEUED, no captured artifact) still carries
+        # the evidence that made it a candidate: a partial capture needs to be able to tell whether a
+        # transition state that never got queued was in fact the dominant one.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = TSJoinRecord(
+            network_id='network4_1',
+            network_ts_label='TS_none',
+            status=JOIN_STATUS_NOT_QUEUED,
+            reason='Could not build the species for this transition state.',
+            coefficient=0.07,
+            delta_ln_k=0.03,
+        )
+        capture_dir = str(tmp_path / 'capture')
+
+        result = _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        assert manifest['transition_states'], 'the not-queued entry must still be recorded in the manifest'
+        entry = manifest['transition_states'][0]
+        assert entry['coefficient'] == 0.07
+        assert entry['delta_ln_k'] == 0.03
+        assert entry['captured_artifact_path'] is None
+
+    def test_verify_capture_raises_when_a_captured_entrys_sensitivity_evidence_is_missing(self, tmp_path):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        del manifest['transition_states'][0]['coefficient']
+        del manifest['transition_states'][0]['delta_ln_k']
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='coefficient'):
+            verify_capture(capture_dir)
+
+    @pytest.mark.parametrize('field_name, tampered_value', [
+        ('coefficient', None),
+        ('delta_ln_k', None),
+        ('coefficient', float('nan')),
+        ('delta_ln_k', float('inf')),
+        ('coefficient', 'not_a_number'),
+        ('delta_ln_k', True),
+    ])
+    def test_verify_capture_raises_on_a_non_finite_or_missing_captured_sensitivity_value(
+            self, tmp_path, field_name, tampered_value):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['transition_states'][0][field_name] = tampered_value
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='coefficient|delta_ln_k'):
+            verify_capture(capture_dir)
 
 
 class TestNetworkVendoring:

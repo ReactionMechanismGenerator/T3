@@ -61,6 +61,7 @@ correctly and exclusively points at its own already-verified vendored logs."
 """
 
 import hashlib
+import math
 import os
 import shutil
 import tempfile
@@ -840,6 +841,8 @@ def _manifest_entry(record: TSArtifactRecord, source_hashes: dict | None, captur
         'source_artifact_path': record.artifact_path,
         'source_artifact_sha256': source_hashes['artifact'] if source_hashes is not None else None,
         'source_logs': source_logs,
+        'coefficient': record.coefficient,
+        'delta_ln_k': record.delta_ln_k,
         'captured_artifact_path': captured_artifact_path,
         'captured_log_paths': captured_log_paths or dict(),
         'captured_artifact_sha256': captured_artifact_sha256,
@@ -1528,6 +1531,21 @@ def verify_capture(capture_dir: str) -> VerifyResult:
                 expected_sha256=entry.get('captured_artifact_sha256'),
                 ts_label=ts_label,
             )
+            # A captured artifact must carry the sensitivity evidence that justified selecting this
+            # transition state in the first place: without it, a partial-capture / "is the dominant
+            # transition state missing?" decision cannot be made from the capture alone, including on
+            # a restart where the in-memory selection that originally produced this evidence is gone.
+            coefficient, delta_ln_k = entry.get('coefficient'), entry.get('delta_ln_k')
+            if not _is_finite_manifest_number(coefficient) or not _is_finite_manifest_number(delta_ln_k):
+                raise ValueError(
+                    f"Refusing to verify '{capture_dir}': the manifest entry for transition state "
+                    f"{ts_label!r} at '{manifest_path}' has a captured artifact but no valid "
+                    f"'coefficient'/'delta_ln_k' sensitivity evidence (got coefficient={coefficient!r}, "
+                    f"delta_ln_k={delta_ln_k!r}). Every captured transition state must have been queued "
+                    f"with the sensitivity evidence that justified its selection frozen onto its join "
+                    f"record -- a missing or malformed value here means the manifest is malformed or "
+                    f"predates this capture format."
+                )
         for log_relpath, expected_log_sha256 in (entry.get('captured_log_sha256') or dict()).items():
             _verify_one_captured_file(
                 capture_dir=capture_dir,
@@ -1652,3 +1670,20 @@ def _verify_one_captured_file(capture_dir: str, relpath: str, expected_sha256: s
             f"captured file '{relpath}' has sha256 {actual_sha256}, but the manifest records "
             f"{expected_sha256}. Refusing to use it."
         )
+
+
+def _is_finite_manifest_number(value) -> bool:
+    """
+    Whether a value read back from a manifest is a usable finite real number.
+
+    Mirrors ``t3.pdep.join._is_finite_number``/``t3.pdep.selector._is_finite``: ``bool`` is
+    deliberately excluded even though it is an ``int`` subtype, and NaN/inf are refused since YAML
+    can round-trip them but they carry no usable sensitivity information.
+
+    Args:
+        value: The value to check, as read back from the manifest (already YAML-deserialized).
+
+    Returns:
+        bool: ``True`` if ``value`` is a finite, non-boolean ``int``/``float``.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)

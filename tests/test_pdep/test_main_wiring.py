@@ -104,6 +104,27 @@ def _selection(ts_labels: list) -> PDepNetworkSelection:
                                 )
 
 
+def _selection_with_evidence(entries: list) -> PDepNetworkSelection:
+    """A qualified selection whose ``uncertain_path_reactions`` carry the given
+    ``(ts_label, coefficient, delta_ln_k)`` evidence tuples verbatim, allowing several entries to
+    share one ``ts_label`` (unlike ``_selection``, which assigns a single uniform pair per label).
+    """
+    built = [SensitiveTransitionState(ts_label=ts_label,
+                                      coefficient=coefficient,
+                                      condition=CONDITION,
+                                      path_reaction_label=None,
+                                      path_reaction_str=None,
+                                      kinetics_comment='',
+                                      uncertain=True,
+                                      delta_ln_k=delta_ln_k,
+                                      ) for ts_label, coefficient, delta_ln_k in entries]
+    return PDepNetworkSelection(network_id=NETWORK_NAME,
+                                qualified=True,
+                                selected_ts=list(built),
+                                uncertain_path_reactions=list(built),
+                                )
+
+
 class TestDetermineSpeciesFromPdepNetworkWiring(object):
 
     def test_cached_valid_path_never_invokes_arkane(self, tmp_path, monkeypatch):
@@ -603,6 +624,113 @@ class TestQueuePdepTransitionStates(object):
         assert t3.pdep_ts_join_records, 'this pass should have produced its own records'
         assert 'network9_9' not in {record.network_id for record in t3.pdep_ts_join_records}
 
+    def test_a_queued_record_freezes_the_sensitivity_evidence_that_justified_its_selection(self, tmp_path):
+        """Test that the evidence which justified selecting a transition state is frozen onto its
+        join record at queue time -- the whole point of this design: a restart cannot re-derive it
+        from ``self.pdep_network_selections``, since that in-memory attribute is empty on a restart,
+        so it must already live on the record itself.
+        """
+        t3 = _build_t3(tmp_path)
+        network = parse_pdep_network_file(_network_path(t3))
+        structures = _build_sa_dict(t3)['structures']
+
+        records = t3.queue_pdep_transition_states(network=network,
+                                                  selection=_selection(['TS2']),
+                                                  structures=structures,
+                                                  network_name=NETWORK_NAME,
+                                                  )
+
+        assert len(records) == 1
+        assert records[0].status == JOIN_STATUS_QUEUED
+        assert records[0].coefficient == 0.05
+        assert records[0].delta_ln_k == 0.05
+
+    def test_a_not_queued_record_still_freezes_the_sensitivity_evidence(self, tmp_path):
+        """Test that a transition state recorded as NOT_QUEUED (here: missing adjacency lists) still
+        carries the evidence that made it a candidate in the first place -- a partial capture must be
+        able to tell, from the record alone, whether the missing transition state was in fact the
+        dominant one, and that requires the evidence regardless of whether ARC ever saw the reaction.
+        """
+        t3 = _build_t3(tmp_path)
+        network = parse_pdep_network_file(_network_path(t3))
+
+        records = t3.queue_pdep_transition_states(network=network,
+                                                  selection=_selection(['TS1']),
+                                                  structures=_build_sa_dict(t3)['structures'],
+                                                  network_name=NETWORK_NAME,
+                                                  )
+
+        assert len(records) == 1
+        assert records[0].status == JOIN_STATUS_NOT_QUEUED
+        assert records[0].coefficient == 0.05
+        assert records[0].delta_ln_k == 0.05
+
+    def test_an_already_present_record_freezes_the_sensitivity_evidence(self, tmp_path):
+        """Test that re-offering an already-known reaction still freezes the evidence onto its
+        ALREADY_PRESENT record, not just the original QUEUED one.
+        """
+        t3 = _build_t3(tmp_path)
+        network = parse_pdep_network_file(_network_path(t3))
+        structures = _build_sa_dict(t3)['structures']
+        kwargs = dict(network=network, structures=structures, network_name=NETWORK_NAME)
+
+        t3.queue_pdep_transition_states(selection=_selection(['TS2']), **kwargs)
+        t3.pdep_ts_join_records = list()  # a later iteration starts with an empty record set
+        second = t3.queue_pdep_transition_states(selection=_selection(['TS2']), **kwargs)
+
+        assert second[0].status == JOIN_STATUS_ALREADY_PRESENT
+        assert second[0].coefficient == 0.05
+        assert second[0].delta_ln_k == 0.05
+
+    def test_the_dominant_entry_by_max_abs_coefficient_is_frozen_when_several_entries_share_one_label(
+            self, tmp_path):
+        """Test the aggregation rule: when several ``uncertain_path_reactions`` entries share one
+        ``ts_label`` (several path reactions of the same network route through the same transition
+        state), the single frozen ``(coefficient, delta_ln_k)`` pair must be the entry with the
+        largest magnitude coefficient -- the one that actually justifies the selection, not merely
+        whichever entry happened to be seen last or first.
+        """
+        t3 = _build_t3(tmp_path)
+        network = parse_pdep_network_file(_network_path(t3))
+        structures = _build_sa_dict(t3)['structures']
+        selection = _selection_with_evidence([
+            ('TS2', 0.02, 0.01),
+            ('TS2', -0.09, 0.45),  # largest magnitude: this one must win
+            ('TS2', 0.03, 0.015),
+        ])
+
+        records = t3.queue_pdep_transition_states(network=network,
+                                                  selection=selection,
+                                                  structures=structures,
+                                                  network_name=NETWORK_NAME,
+                                                  )
+
+        assert len(records) == 1
+        assert records[0].coefficient == -0.09
+        assert records[0].delta_ln_k == 0.45
+
+    def test_an_internal_invariant_raises_when_a_reported_label_has_no_matching_evidence(self, tmp_path,
+                                                                                          monkeypatch):
+        """Test the defensive internal-invariant guard: ``uncertain_ts_labels()`` is derived from
+        ``uncertain_path_reactions`` in production ``PDepNetworkSelection``, so this mismatch cannot
+        arise through ordinary use -- but if a future refactor ever broke that derivation silently, a
+        transition state would be queued (or recorded) with no sensitivity evidence at all, which is
+        exactly the defect this whole change exists to prevent. The guard is exercised directly here
+        by monkeypatching ``uncertain_ts_labels`` to report a label absent from the evidence list.
+        """
+        t3 = _build_t3(tmp_path)
+        network = parse_pdep_network_file(_network_path(t3))
+        structures = _build_sa_dict(t3)['structures']
+        selection = _selection(['TS2'])
+        monkeypatch.setattr(selection, 'uncertain_ts_labels', lambda: ['TS2', 'TS_GHOST'])
+
+        with pytest.raises(ValueError, match='TS_GHOST'):
+            t3.queue_pdep_transition_states(network=network,
+                                            selection=selection,
+                                            structures=structures,
+                                            network_name=NETWORK_NAME,
+                                            )
+
 
 def _write_arc_info(t3, species=None, reactions=None) -> None:
     """Write a minimal ARC ``project_info.yml`` at ``t3.paths['ARC info']``.
@@ -739,6 +867,8 @@ def _queue_usable_ts(t3, network_id='network4_2', network_ts_label='TS9') -> TSJ
                           arc_ts_label=label,
                           expected_artifact_path=expected_path,
                           reason='Queued to ARC.',
+                          coefficient=0.05,
+                          delta_ln_k=0.02,
                           )
     _write_ts_artifact(expected_path)
     _write_ts_status_yml(arc_dir, label, converged=True)
@@ -995,6 +1125,8 @@ class TestProcessArcRunFinalizationWiring(object):
                                 arc_ts_label=captured_label,
                                 expected_artifact_path=captured_path,
                                 reason='Queued to ARC.',
+                                coefficient=0.05,
+                                delta_ln_k=0.02,
                                 ),
                    # queued, but ARC never produced this one
                    TSJoinRecord(network_id='network4_2',
