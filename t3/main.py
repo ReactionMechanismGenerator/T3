@@ -53,7 +53,11 @@ from t3.common import (DATA_BASE_PATH,
 from t3.logger import Logger
 from t3.pdep.cache import validate_sa_cache, write_sa_cache_metadata
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
-from t3.pdep.discovery import ARTIFACT_STATUS_MISSING
+from t3.pdep.discovery import (ARTIFACT_STATUS_MISSING,
+                               ARTIFACT_STATUS_USABLE,
+                               evaluate_pdep_hybrid,
+                               )
+from t3.pdep.hybrid import QMEnergySettings, write_hybrid_network_input_file
 from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           JOIN_STATUS_ALREADY_PRESENT,
                           JOIN_STATUS_NOT_QUEUED,
@@ -85,10 +89,32 @@ from t3.utils.cantera_parser import load_cantera_yaml_file
 from t3.utils.uncertainty import is_this_reaction_uncertain
 
 
+# Version of the ARC finalization marker FORMAT. Bump this whenever finalization gains a step whose
+# outputs a restart depends on, so that a marker written by an older finalization (which never
+# performed the new step) reads as "not finalized" and the whole finalization is redone -- redoing
+# it is recoverable, silently trusting a stale marker is not. Redoing is safe only because EVERY
+# step of process_arc_run() is individually idempotent, each for its own reason, not because of any
+# single guard: the capture is protected by the authoritative-capture check, the hybrid write is a
+# deterministic rewrite from that capture, the ARC-info pass only re-assigns t3_status, and the RMG
+# library append skips entries whose label is already in the destination (see
+# t3.utils.libraries.append_to_rmg_library, and the idempotency tests in
+# tests/test_utils/test_libraries.py). Bumping this version is only safe while that stays true of
+# the new step too. KNOWN LIMITATION, deliberately not fixed here: the library append's idempotency
+# is dedup-by-LABEL, so it guarantees a redo adds no DUPLICATE entries -- not that it converges on
+# the newer values. If an ARC re-run produced a library carrying the same labels with different
+# values, the redo would silently keep the destination's existing entries and drop the new ones.
+# That is pre-existing behavior of append_to_rmg_library() and out of scope for the P-dep work, but
+# the marker-version redo now leans on it, so it is recorded here rather than left implicit.
+# v2: finalization now also writes the hybrid P-dep network inputs; a v1 (unversioned) marker
+# predates them.
+ARC_FINALIZATION_MARKER_VERSION = 2
 # Leading text of the durable ARC finalization marker. Its presence is what tells a restart that an
 # already-terminated ARC run was fully finalized; the content is checked so that an empty or
-# truncated file reads as "not finalized" rather than as done.
-ARC_FINALIZATION_MARKER_TEXT = 'ARC finalization completed'
+# truncated file reads as "not finalized" rather than as done. The version token is part of the
+# checked prefix (writer and reader share this one constant), so a marker from any OTHER format
+# version -- older or newer -- fails the check and finalization is redone rather than skipped. The
+# closing parenthesis keeps the match exact: 'v2)' can never prefix-match a hypothetical 'v20)'.
+ARC_FINALIZATION_MARKER_TEXT = f'ARC finalization completed (v{ARC_FINALIZATION_MARKER_VERSION})'
 
 
 class T3:
@@ -421,6 +447,13 @@ class T3:
             # subtrees (including calcs/statmech/kinetics/) on every rate pass, and the whole point of
             # capturing is durability against exactly that.
             'PDep capture': os.path.join(iteration_path, 'PDep_capture'),
+            # Where the per-network hybrid Arkane P-dep inputs are written (one
+            # '<network_id>/input.py' plus its vendored 'qm/' payload per accepted network).
+            # A sibling of 'PDep capture', never nested inside it: the capture directory's contents
+            # are owned and hash-verified by t3.pdep.capture (verify_capture walks the manifest and
+            # _refuse_unowned_capture_dir refuses unrecognized content), so regenerable consumables
+            # like these must live outside it.
+            'PDep hybrid': os.path.join(iteration_path, 'PDep_hybrid'),
             # A T3-owned, durable completion marker for ARC finalization (capture + ARC-info
             # processing), written only as the LAST step of process_arc_run(). Deliberately a
             # sibling FILE at the iteration level, not nested inside 'PDep capture': nesting it there
@@ -612,6 +645,13 @@ class T3:
         mere existence as proof would turn a crash mid-write into finalization being skipped forever
         -- redoing finalization is recoverable, silently never doing it is not.
 
+        The recognized prefix is VERSIONED (see ``ARC_FINALIZATION_MARKER_VERSION``): a marker
+        written by an older finalization format -- including the original, unversioned one -- names
+        a finalization that did not perform every step this version guarantees (e.g. the hybrid
+        P-dep network write), so it reads as not finalized and finalization is redone. A marker
+        carrying a NEWER version than this code writes likewise fails the check: this code cannot
+        know what a future format promised, so it fails closed the same way.
+
         Returns:
             bool: True if a valid marker is present.
         """
@@ -775,9 +815,11 @@ class T3:
             - Check for non-physical species in unconverged species.
         """
         if self.check_arc_finalization_complete():
-            # This ARC run was already finalized. Re-running would append the same converged results
-            # to the RMG libraries a second time and re-capture over a good capture, so a redundant
-            # call has to be a no-op rather than a duplicating one.
+            # This ARC run was already finalized, so a redundant call is skipped outright rather
+            # than relying on each step below to no-op. That the steps DO each no-op is a separate,
+            # deliberately maintained property (see ARC_FINALIZATION_MARKER_VERSION) -- it is what
+            # makes a marker-version redo safe, and this guard never fires on that path, since a
+            # legacy or future marker reads as "not finalized" by design.
             self.logger.info(f'ARC finalization already completed for iteration {self.iteration}, skipping.')
             return
 
@@ -786,6 +828,19 @@ class T3:
         # reads durable state, so if the ARC-info parsing or the library append were to raise with
         # capture sequenced after them, the artifacts would be gone before capture ever ran.
         self._capture_pdep_ts_artifacts()
+
+        # Build the hybrid P-dep network inputs from the capture ALONE, immediately after it: the
+        # capture is the hybrid write's only input, and doing it here (before ARC-info processing)
+        # keeps everything that depends on the ephemeral ARC artifacts together at the top.
+        # Gated on the capture directory existing rather than done unconditionally: when
+        # _capture_pdep_ts_artifacts() returned without creating one, it has ALREADY proven that
+        # nothing PDep was queued this iteration (an empty sidecar with orphaned artifacts raises
+        # there, it never falls through to here), so a missing capture directory at this exact
+        # point is positive evidence of "no PDep work", not missing evidence being shrugged off.
+        # _write_pdep_hybrid_network_inputs() itself stays strict: called with no capture on disk
+        # it raises (via verify_capture) rather than skipping.
+        if os.path.isdir(self.paths['PDep capture']):
+            self._write_pdep_hybrid_network_inputs()
 
         unconverged_spc_keys, converged_spc_keys = list(), list()
         unconverged_rxn_keys, converged_rxn_keys = list(), list()
@@ -926,6 +981,252 @@ class T3:
             statuses_by_key={record.key: record.status for record in result.records},
             join_records=join_records,
         )
+
+    def _confine_to_pdep_hybrid_root(self, network_id: str) -> str:
+        """
+        Resolve ``network_id`` to its per-network directory under ``self.paths['PDep hybrid']``,
+        refusing any id that escapes that root.
+
+        ``network_id`` comes straight from the capture manifest -- an artifact this code trusts for
+        its CONTENTS but never as a raw filesystem path segment. A crafted or corrupted manifest
+        could carry ``'../../etc'`` or an absolute path, which ``os.path.join()`` would happily
+        honor, placing a generated Arkane input outside the iteration entirely. Producer-side ids
+        being well-formed today is not a property of the id at this read site.
+
+        Mirrors ``t3.pdep.capture._confine_to_capture_dir`` and ``t3.pdep.discovery._confine_to_
+        project``: realpath + commonpath, never ``str.startswith()``, which a sibling directory
+        sharing the root's name as a prefix defeats ('<root>-old' passes a prefix test against
+        '<root>'). Kept local rather than reusing capture.py's helper, whose message speaks of a
+        capture directory and verification -- a non-sequitur on this write path.
+
+        Args:
+            network_id (str): The manifest-supplied network id to use as a path segment.
+
+        Returns:
+            str: The resolved, confined per-network directory.
+
+        Raises:
+            ValueError: If ``network_id`` resolves outside the hybrid root, or to the root itself;
+                       or if ``network_id`` is not a single, safe filename component (contains a
+                       path separator, or is empty/'.'/'..'/absolute).
+        """
+        hybrid_root = self.paths['PDep hybrid']
+        # A network_id containing a path separator (e.g. 'a/b') still resolves UNDER the hybrid
+        # root and would pass the realpath+commonpath check below -- but
+        # _prune_stale_pdep_hybrid_outputs compares raw accepted network_ids against TOP-LEVEL
+        # os.listdir() names, so 'a/b' and a top-level 'a' entry would collide there. Requiring a
+        # single safe path component here closes that collision at the source, before any path is
+        # ever built from it.
+        if (not network_id or network_id in ('.', '..') or os.path.isabs(network_id)
+                or os.sep in network_id or (os.altsep and os.altsep in network_id)):
+            raise ValueError(
+                f"The PDep capture manifest's network_id {network_id!r} is not a single, safe "
+                f"filename component (it is empty, '.', '..', absolute, or contains a path "
+                f"separator). Refusing to write a hybrid input for it.")
+        resolved_hybrid_root = os.path.realpath(hybrid_root)
+        resolved_network_dir = os.path.realpath(os.path.join(hybrid_root, network_id))
+        if resolved_network_dir == resolved_hybrid_root \
+                or os.path.commonpath([resolved_hybrid_root, resolved_network_dir]) != resolved_hybrid_root:
+            raise ValueError(
+                f"The PDep capture manifest's network_id '{network_id}' resolves outside its "
+                f"allowed 'PDep hybrid' root: '{network_id}' resolves to '{resolved_network_dir}', "
+                f"which is not under '{resolved_hybrid_root}'. Refusing to write a hybrid input "
+                f"for it.")
+        return resolved_network_dir
+
+    def _prune_stale_pdep_hybrid_outputs(self, accepted_network_ids: set) -> None:
+        """
+        Remove every per-network directory under ``self.paths['PDep hybrid']`` that is NOT in
+        ``accepted_network_ids``.
+
+        ``_write_pdep_hybrid_network_inputs`` is re-entrant across restarts (e.g. a legacy or
+        future-version finalization marker forces ``process_arc_run()`` to redo finalization over
+        an iteration that may already carry hybrid outputs from a PRIOR pass). Without this prune,
+        three cases leak a prior pass's ``input.py`` forward: a network refused THIS pass (partial
+        QM coverage), a network entirely absent from THIS pass's manifest (dropped between passes),
+        and a capture that now resolves to zero captured artifacts. Any of the three would let a
+        downstream consumer read a hybrid QM P-dep input for a network T3 no longer stands behind.
+
+        Only entries actually listed by ``os.listdir()`` are ever joined onto ``hybrid_root`` here
+        -- never a manifest-supplied ``network_id`` -- so this helper is confinement-safe by
+        construction regardless of the separate network_id confinement check in the caller.
+
+        Args:
+            accepted_network_ids (set): The network_ids accepted on THIS pass; every other entry
+                                        found under the hybrid root is removed.
+
+        Raises:
+            ValueError: If an entry under the hybrid root is not a plain directory (e.g. a file or
+                       a symlink) -- something T3 itself would never have written there, so fail
+                       closed rather than silently deleting (or silently leaving) unexpected
+                       content of unknown provenance; or if an ACCEPTED network's destination
+                       exists as something other than a plain directory (e.g. a file blocking the
+                       writer from later creating it).
+        """
+        hybrid_root = self.paths['PDep hybrid']
+        if not os.path.isdir(hybrid_root):
+            return
+        # Preflight the ENTIRE root before deleting anything: judge every entry -- both what will
+        # be removed and what will be kept -- acceptable first, and only once the whole root has
+        # passed does this function delete a single thing. Validating and deleting in the same
+        # os.listdir() pass let a stale directory be rmtree'd before a LATER entry was ever
+        # inspected; if that later entry then turned out to be unacceptable, the raise left a
+        # half-pruned tree behind (the already-removed entries gone, the rest still present).
+        # Preflighting first means a raise here can never follow a deletion.
+        stale_dirs_to_remove = list()
+        for entry_name in os.listdir(hybrid_root):
+            entry_path = os.path.join(hybrid_root, entry_name)
+            if entry_name in accepted_network_ids:
+                # An accepted network's destination must itself already be a plain directory (or
+                # not exist yet at all) -- if a prior pass (or anything else) left a plain FILE at
+                # this name, the writer would later try to create this network's input.py
+                # underneath it and blow up well AFTER this prune had already deleted other,
+                # unrelated stale entries. Catching it here, before any deletion, gives an accepted
+                # destination the same all-or-nothing guarantee a stale entry already gets below.
+                if os.path.islink(entry_path) or (os.path.exists(entry_path) and not os.path.isdir(entry_path)):
+                    raise ValueError(
+                        f"Refusing to write PDep hybrid outputs: the destination for accepted "
+                        f"network '{entry_name}' at '{entry_path}' exists but is not a plain "
+                        f"directory T3 itself would have written (e.g. a file or a symlink). Manual "
+                        f"inspection is required before this iteration's hybrid outputs can be "
+                        f"safely written.")
+                continue
+            if os.path.islink(entry_path) or not os.path.isdir(entry_path):
+                raise ValueError(
+                    f"Refusing to prune stale PDep hybrid outputs: '{entry_path}' under "
+                    f"'{hybrid_root}' is not a plain directory T3 itself would have written "
+                    f"(e.g. a file or a symlink). Manual inspection is required before this "
+                    f"iteration's hybrid outputs can be safely rebuilt.")
+            stale_dirs_to_remove.append(entry_path)
+
+        for entry_path in stale_dirs_to_remove:
+            self.logger.info(f"Removing stale PDep hybrid output '{entry_path}': its network is not "
+                             f'among those accepted on this pass.')
+            shutil.rmtree(entry_path)
+
+    def _write_pdep_hybrid_network_inputs(self) -> dict:
+        """
+        Build one hybrid Arkane P-dep input file per captured network, from the capture ALONE.
+
+        Every input comes from the durable capture directory (``self.paths['PDep capture']``): the
+        vendored network source and frozen ME method from the manifest's authoritative ``networks``
+        block, the frozen energy-reference settings from its ``energy_settings`` block, and the
+        vendored QM artifacts under ``qm/``. Neither the ARC project directory nor the RMG
+        ``pdep/`` directory is ever read -- both may already be gone by the time this runs (ARC
+        deletes and recreates ``calcs/statmech/kinetics/`` at the top of its next rate pass, RMG
+        regenerates ``pdep/`` on its next run), and surviving exactly that is the reason the
+        capture exists. This method deliberately touches no ``self.paths`` key other than
+        ``'PDep capture'`` (input) and ``'PDep hybrid'`` (output).
+
+        Only transition states whose captured artifact status is ``ARTIFACT_STATUS_USABLE`` are
+        switched to QM/RRKM; every other transition state in a written network stays RMG/ILT.
+        Whether a network's usable coverage is good enough to hybridize AT ALL is decided per
+        network by ``evaluate_pdep_hybrid`` with its strict default (every selected transition
+        state must be usable): a partially-covered network is refused -- left entirely RMG/ILT and
+        loudly logged -- rather than half-written, because a hybrid missing QM for one of its most
+        uncertain transition states is a degradation of what was asked for, not a free win.
+
+        Returns:
+            dict: ``network_id -> HybridNetworkResult`` for every network whose hybrid input was
+                  written under ``self.paths['PDep hybrid']/<network_id>/input.py``. Networks the
+                  evaluation refused, and captures holding zero captured artifacts, contribute no
+                  entry.
+
+        Raises:
+            ValueError: If no capture exists at ``self.paths['PDep capture']`` or the one that does
+                       fails ``verify_capture`` -- a missing capture is never treated as "nothing
+                       to do" here; the only caller allowed to skip this method is
+                       ``process_arc_run()``, which first proves no capture was ever taken. Also if
+                       a manifest entry carries an unrecognized status or claims usable status
+                       without a captured artifact (both surface through ``TSArtifactRecord`` /
+                       ``evaluate_pdep_hybrid``), or if the writer itself refuses (see
+                       ``write_hybrid_network_input_file``).
+        """
+        capture_dir = self.paths['PDep capture']
+        verified = verify_capture(capture_dir)
+        if verified.captured_artifact_count == 0:
+            # A VERIFIED capture with zero captured artifacts (every transition state not_queued /
+            # already_present / unusable) has nothing to hybridize. This is a positive verdict off
+            # a verified manifest, not missing evidence being shrugged off: verify_capture raised
+            # above if the capture was absent, torn, or malformed. It is NOT license to leave a
+            # PRIOR pass's hybrid outputs in place: a re-run of the same iteration (e.g. over a
+            # legacy finalization marker) that now resolves to zero captured artifacts must clear
+            # 'PDep hybrid' just like the ordinary path below does, or a stale QM/RRKM input for a
+            # network this pass no longer stands behind would survive undetected.
+            self._prune_stale_pdep_hybrid_outputs(accepted_network_ids=set())
+            self.logger.info(f'The PDep capture at {capture_dir} holds no captured QM artifacts; '
+                             f'no hybrid network inputs to write.')
+            return dict()
+
+        # Group the records verify_capture ALREADY built and validated (status/path consistency,
+        # confined artifact paths) -- never re-read the manifest here. A second, independent read
+        # of the same file (via read_yaml_file) would trust whatever is on disk at THIS moment
+        # rather than what was actually verified a moment ago, reopening exactly the
+        # check-then-use race verify_capture's re-verification exists to close (e.g. a concurrent
+        # re-capture, or a manifest edited between the two reads). Structurally non-vacuous:
+        # verify_capture refuses a manifest whose transition_states list is empty and one whose
+        # entries lack a network_id, so records_by_network below is never empty when this point is
+        # reached.
+        records_by_network = dict()
+        for record in verified.ts_records:
+            records_by_network.setdefault(record.network_id, list()).append(record)
+
+        # The ONE way to turn the frozen manifest block into validated settings; shared by every
+        # network in this capture (the capture froze a single energy reference for the iteration).
+        energy_settings = QMEnergySettings.from_frozen(verified.energy_settings)
+
+        # Evaluate every network's accept/refuse verdict UP FRONT, before writing or pruning
+        # anything. This is what lets pruning happen strictly BEFORE the write loop below: a
+        # network refused THIS pass (or dropped from the manifest since a prior pass) must have
+        # its 'PDep hybrid' output removed, and a network accepted this pass must still land its
+        # input.py afterwards -- reversing that order (prune-after-write) would risk a refused
+        # network's stale directory surviving a raise partway through the loop, or an accepted
+        # network's fresh write being deleted by a pruning pass that runs too late.
+        evaluations = {network_id: evaluate_pdep_hybrid(artifacts=records)
+                       for network_id, records in records_by_network.items()}
+        accepted_network_ids = {network_id for network_id, evaluation in evaluations.items()
+                                if evaluation.accepted}
+        # Confine EVERY network_id in the manifest before the prune below deletes anything. The
+        # prune is destructive and is driven by these very ids (an id not among them marks a
+        # directory for removal), so validating them only at the write site would let a manifest
+        # T3 is about to REFUSE still delete a previous pass's legitimate outputs on its way to
+        # being rejected. A manifest that fails validation must not get to touch the output tree
+        # at all -- validate the whole thing, then destroy.
+        network_dirs = {network_id: self._confine_to_pdep_hybrid_root(network_id)
+                        for network_id in records_by_network}
+        self._prune_stale_pdep_hybrid_outputs(accepted_network_ids=accepted_network_ids)
+
+        results = dict()
+        for network_id, records in records_by_network.items():
+            evaluation = evaluations[network_id]
+            if not evaluation.accepted:
+                self.logger.warning(f"Not writing a hybrid P-dep input for network '{network_id}': "
+                                    f'{evaluation.reason} The network stays entirely RMG/ILT.')
+                continue
+            qm_transition_states = {record.network_ts_label: record.artifact_path
+                                    for record in records
+                                    if record.status == ARTIFACT_STATUS_USABLE}
+            # The manifest's authoritative networks block covers exactly the networks the
+            # transition state entries reference (verify_capture enforces both directions), so
+            # this lookup cannot miss -- and if it somehow did, the KeyError is the correct,
+            # loud outcome.
+            network_entry = verified.networks[network_id]
+            result = write_hybrid_network_input_file(
+                source_path=os.path.join(capture_dir, network_entry['captured_path']),
+                # Already confined to the 'PDep hybrid' root above, before the prune ran.
+                dest_path=os.path.join(network_dirs[network_id], 'input.py'),
+                method=network_entry['method'],
+                qm_transition_states=qm_transition_states,
+                energy_settings=energy_settings,
+                qm_artifacts_root=capture_dir,
+            )
+            self.logger.info(f"Wrote a hybrid P-dep network input for '{network_id}' to "
+                             f'{result.dest_path}: QM/RRKM for {list(result.qm_ts_labels)}, '
+                             f'RMG/ILT for {list(result.ilt_ts_labels)}.')
+            for warning in result.warnings:
+                self.logger.warning(warning)
+            results[network_id] = result
+        return results
 
     def _refuse_if_queued_ts_lack_artifacts(self, statuses_by_key: dict, join_records: list):
         """

@@ -546,3 +546,152 @@ def test_merge_real_kinetics_libraries(tmp_path):
     # New species were added with the correct structure
     assert merged_dict['HO2'].is_isomorphic(Molecule(smiles='[O]O'))
     assert merged_dict['H2'].is_isomorphic(Molecule(smiles='[H][H]'))
+
+
+def test_appending_the_same_thermo_library_twice_is_idempotent(tmp_path):
+    """
+    Appending the *same* ARC thermo library into the same destination a second time must be a
+    no-op, byte for byte.
+
+    This is the property the versioned ARC finalization marker leans on: a marker written by an
+    older finalization format reads as "not finalized", so ``T3.process_arc_run()`` redoes the
+    whole finalization -- including ``append_to_rmg_libraries()`` -- for an ARC run whose
+    converged results were already appended once. That redo is only safe if a second append adds
+    nothing; otherwise every legacy marker silently duplicates thermo entries.
+    """
+    dest_lib_path = tmp_path / "dest_thermo.py"
+    src_lib_path = tmp_path / "src_thermo.py"
+    shutil.copy(REAL_DEST_THERMO_PATH, dest_lib_path)
+    shutil.copy(REAL_SRC_THERMO_PATH, src_lib_path)
+
+    paths = {
+        'ARC thermo lib': str(src_lib_path),
+        'T3 thermo lib': str(dest_lib_path),
+        'shared T3 thermo lib': None,
+        'ARC kinetics lib': None,
+        'T3 kinetics lib': None,
+        'shared T3 kinetics lib': None,
+    }
+
+    append_to_rmg_libraries(library_name="TestLib", shared_library_name="T3_test_dest_thermo",
+                            paths=paths, logger=logger)
+    with open(dest_lib_path, 'r') as f:
+        after_first = f.read()
+
+    append_to_rmg_libraries(library_name="TestLib", shared_library_name="T3_test_dest_thermo",
+                            paths=paths, logger=logger)
+    with open(dest_lib_path, 'r') as f:
+        after_second = f.read()
+
+    assert after_second == after_first, 'a repeated thermo append was not a no-op'
+
+    # And spell the consequence out, so a regression that changes the file in some other way but
+    # still duplicates entries cannot hide behind the byte comparison alone.
+    merged = rmg_shim.parse_rmg_library(after_second)
+    labels = [e.label for e in merged.entries]
+    assert labels == ["H", "H2", "OH", "HO2", "H2O2"]
+    assert len(labels) == len(set(labels))
+
+
+def test_appending_the_same_kinetics_library_twice_is_idempotent(tmp_path):
+    """
+    Appending the *same* ARC kinetics library into the same destination a second time must be a
+    no-op, for both ``reactions.py`` and ``dictionary.txt``.
+
+    See ``test_appending_the_same_thermo_library_twice_is_idempotent`` for why the versioned ARC
+    finalization marker depends on this.
+    """
+    dest_dir = tmp_path / "dest_kinetics"
+    src_dir = tmp_path / "src_kinetics"
+    shutil.copytree(REAL_DEST_KINETICS_DIR, dest_dir)
+    shutil.copytree(REAL_SRC_KINETICS_DIR, src_dir)
+
+    paths = {
+        'ARC thermo lib': None,
+        'T3 thermo lib': None,
+        'shared T3 thermo lib': None,
+        'ARC kinetics lib': str(src_dir),
+        'T3 kinetics lib': str(dest_dir),
+        'shared T3 kinetics lib': None,
+    }
+
+    def _snapshot() -> tuple:
+        with open(dest_dir / "reactions.py", 'r') as f:
+            reactions = f.read()
+        with open(dest_dir / "dictionary.txt", 'r') as f:
+            dictionary = f.read()
+        return reactions, dictionary
+
+    append_to_rmg_libraries(library_name="TestLib", shared_library_name="T3_test_dest_kinetics",
+                            paths=paths, logger=logger)
+    after_first = _snapshot()
+
+    append_to_rmg_libraries(library_name="TestLib", shared_library_name="T3_test_dest_kinetics",
+                            paths=paths, logger=logger)
+    after_second = _snapshot()
+
+    assert after_second == after_first, 'a repeated kinetics append was not a no-op'
+
+    merged = rmg_shim.parse_rmg_library(after_second[0])
+    labels = [e.label for e in merged.entries]
+    assert labels == [
+        "H + O2 <=> O + OH",
+        "OH + OH <=> O + H2O",
+        "H2 + OH <=> H2O + H",
+        "H + HO2 <=> H2 + O2",
+    ]
+    assert len(labels) == len(set(labels))
+    merged_dict = load_rmg_species_dictionary_file(str(dest_dir / "dictionary.txt"))
+    assert sorted(merged_dict.keys()) == ['H', 'H2', 'H2O', 'HO2', 'O', 'O2', 'OH']
+
+
+@pytest.mark.parametrize('token', ['thermo', 'kinetics'])
+def test_appending_twice_is_idempotent_when_the_first_append_created_the_library(tmp_path, token):
+    """
+    The same no-op-on-redo property must hold when the FIRST append is the one that *created* the
+    destination library.
+
+    That is the real first-iteration path: T3 has no library yet, so ``append_to_rmg_libraries()``
+    copies the ARC library wholesale instead of merging into it. A redo then takes the merge path
+    for the first time, against a destination whose entries came from the very source being
+    merged -- the case a pre-existing-destination test never exercises.
+    """
+    dest = tmp_path / f"dest_{token}"
+    if token == 'thermo':
+        src = tmp_path / "src_thermo.py"
+        shutil.copy(REAL_SRC_THERMO_PATH, src)
+        dest = tmp_path / "dest_thermo.py"
+    else:
+        src = tmp_path / "src_kinetics"
+        shutil.copytree(REAL_SRC_KINETICS_DIR, src)
+    assert not os.path.exists(dest)
+
+    other = 'kinetics' if token == 'thermo' else 'thermo'
+    paths = {
+        f'ARC {token} lib': str(src),
+        f'T3 {token} lib': str(dest),
+        f'shared T3 {token} lib': None,
+        f'ARC {other} lib': None,
+        f'T3 {other} lib': None,
+        f'shared T3 {other} lib': None,
+    }
+
+    def _snapshot() -> str:
+        py_path = str(dest) if token == 'thermo' else os.path.join(str(dest), 'reactions.py')
+        with open(py_path, 'r') as f:
+            return f.read()
+
+    append_to_rmg_libraries(library_name="TestLib", shared_library_name="T3_test_dest",
+                            paths=paths, logger=logger)
+    after_first = _snapshot()
+    first_labels = [e.label for e in rmg_shim.parse_rmg_library(after_first).entries]
+
+    append_to_rmg_libraries(library_name="TestLib", shared_library_name="T3_test_dest",
+                            paths=paths, logger=logger)
+    after_second = _snapshot()
+
+    assert after_second == after_first, f'a repeated {token} append onto a just-created library ' \
+                                        f'was not a no-op'
+    second_labels = [e.label for e in rmg_shim.parse_rmg_library(after_second).entries]
+    assert second_labels == first_labels
+    assert len(second_labels) == len(set(second_labels))

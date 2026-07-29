@@ -20,6 +20,7 @@ ever written to.
 import builtins
 import hashlib
 import os
+import shutil
 
 import pytest
 
@@ -27,6 +28,7 @@ import t3.main as t3_main
 from t3.chem import T3Species
 from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
+from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
                           JOIN_STATUS_NOT_QUEUED,
                           JOIN_STATUS_QUEUED,
@@ -799,11 +801,16 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
     """Write a minimal, valid ARC energy-settings fixture -- ``calcs/statmech/<statmech_subdir>/
     input.py`` and ``output/output.yml`` -- under ``arc_dir``, exactly what
     ``t3.pdep.energy_settings.read_arc_energy_settings`` requires to freeze a complete
-    energy-settings block. Mirrors ``tests/test_pdep/test_capture.py::_write_energy_settings_fixture``.
-    Deliberately sets ``useAtomCorrections``/``useBondCorrections`` both ``False`` so no
-    cross-validation against ``output.yml`` is ever triggered by this fixture. Gated so it never
-    overwrites an ``output.yml`` a test has already written of its own (``output.yml`` is
-    project-global, shared across statmech subdirs)."""
+    energy-settings block. Mirrors ``tests/test_pdep/test_capture.py::_write_energy_settings_fixture``,
+    including its ``useAtomCorrections = True`` + populated ``atomEnergies`` pairing: ARC computes
+    ``useAtomCorrections`` as ``bool(model_chemistry or atom_energies)`` and records the correction
+    values alongside it, so a fixture with the flag on but no values would be an ARC-impossible
+    state that ``write_hybrid_network_input_file`` rightly refuses (its atom-energies guard) --
+    leaving it out would make every capture-to-hybrid wiring test fail on that guard instead of on
+    what it actually tests. ``useBondCorrections`` stays ``False`` so no cross-validation against
+    ``output.yml`` is ever triggered by this fixture. Gated so it never overwrites an ``output.yml``
+    a test has already written of its own (``output.yml`` is project-global, shared across statmech
+    subdirs)."""
     statmech_dir = os.path.join(arc_dir, 'calcs', 'statmech', statmech_subdir)
     os.makedirs(statmech_dir, exist_ok=True)
     input_py_path = os.path.join(statmech_dir, 'input.py')
@@ -813,6 +820,7 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
                 "modelChemistry = 'CBS-QB3'\n\n"
                 "useHinderedRotors = True\n\n"
                 "useAtomCorrections = True\n\n"
+                "atomEnergies = {'C': -37.844411, 'H': -0.499818, 'N': -54.581501, 'O': -75.062219}\n\n"
                 "useBondCorrections = False\n"
             )
     output_dir = os.path.join(arc_dir, 'output')
@@ -1419,3 +1427,592 @@ class TestProcessArcRunFinalizationWiring(object):
         t3.process_arc_run()
 
         assert os.path.isfile(t3.paths['ARC finalization marker'])
+
+
+def _queue_ts_set(t3, ts_specs: list) -> list:
+    """Queue several PDep transition states of ``network4_2`` in ONE join sidecar (unlike
+    ``_queue_usable_ts``, which writes a single-record sidecar), each with its own ARC artifact and
+    a per-transition-state convergence verdict. ``ts_specs`` entries are
+    ``(network_ts_label, converged)`` pairs: ``converged=False`` yields an artifact that discovery
+    classifies UNUSABLE (present but explicitly unconverged), which is what the partial-hybrid
+    refusal tests need to exist alongside a usable sibling."""
+    arc_dir = t3.paths['ARC']
+    records = list()
+    for network_ts_label, converged in ts_specs:
+        label = arc_ts_label('network4_2', network_ts_label)
+        expected_path = expected_ts_artifact_path(arc_dir, label)
+        records.append(TSJoinRecord(network_id='network4_2',
+                                    network_ts_label=network_ts_label,
+                                    status=JOIN_STATUS_QUEUED,
+                                    arc_ts_label=label,
+                                    expected_artifact_path=expected_path,
+                                    reason='Queued to ARC.',
+                                    coefficient=0.05,
+                                    delta_ln_k=0.02,
+                                    ))
+        _write_ts_artifact(expected_path)
+        _write_ts_status_yml(arc_dir, label, converged=converged)
+    _write_sidecar(t3, records)
+    _write_energy_settings_fixture(arc_dir)
+    return records
+
+
+class TestProcessArcRunHybridWiring(object):
+    """Acceptance tests for the hybrid-network wiring added to ``process_arc_run()``: one hybrid
+    Arkane P-dep input file per network, built exclusively from the durable capture (never from the
+    live ARC project directory or the live RMG pdep directory), with only USABLE captured
+    transition states switched to QM/RRKM and every other transition state left as RMG/ILT.
+    Also covers the finalization-marker VERSIONING that keeps a marker written by an older,
+    pre-hybrid finalization format from being silently treated as current.
+    """
+
+    def test_process_arc_run_writes_a_hybrid_network_input_from_the_capture(self, tmp_path):
+        """The ordinary path: after capture, process_arc_run() must write one hybrid Arkane input
+        for network4_2 under 'PDep hybrid', with the captured-usable TS9 switched to QM/RRKM (its
+        vendored artifact referenced and present) and the other transition states left ILT."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)  # network4_2 / TS9, against the REAL network4_2.py fixture
+
+        t3.process_arc_run()
+
+        hybrid_network_dir = os.path.join(t3.paths['PDep hybrid'], 'network4_2')
+        hybrid_input_path = os.path.join(hybrid_network_dir, 'input.py')
+        assert os.path.isfile(hybrid_input_path)
+        with open(hybrid_input_path, 'r') as f:
+            written = f.read()
+        # TS9 must be QM/RRKM: its transitionState entry now points at the vendored artifact ...
+        assert "transitionState('TS9', 'qm/TS9.py')" in written
+        assert os.path.isfile(os.path.join(hybrid_network_dir, 'qm', 'TS9.py'))
+        # ... while a never-selected transition state survives as ILT rather than being dropped.
+        assert "'TS1'" in written
+        # The frozen energy reference must have been injected from the capture's manifest.
+        assert 'useAtomCorrections = True' in written
+        assert os.path.isfile(t3.paths['ARC finalization marker'])
+
+    def test_the_capture_alone_drives_the_production_hybrid_write_with_arc_absent(self, tmp_path):
+        """THE acceptance property this whole capture layer exists for, on the PRODUCTION path:
+        with the ARC project directory and the RMG pdep directory both deleted entirely, the
+        production hybrid writer must still rebuild every hybrid network input from the capture
+        alone -- vendored network source, frozen ME method, frozen energy settings, and vendored
+        QM artifacts. Reaching for either deleted directory fails loudly here."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+
+        # Non-vacuity: the capture must actually hold a usable TS9 artifact before anything is
+        # deleted -- otherwise the assertions below would exercise an empty QM set and prove
+        # nothing about the capture driving a hybrid write.
+        manifest = read_yaml_file(path=os.path.join(t3.paths['PDep capture'], CAPTURE_MANIFEST_FILE_NAME))
+        usable_labels = [entry['network_ts_label'] for entry in manifest['transition_states']
+                         if entry['status'] == ARTIFACT_STATUS_USABLE]
+        assert usable_labels == ['TS9']
+
+        shutil.rmtree(t3.paths['ARC'])
+        shutil.rmtree(t3.paths['RMG PDep'])
+        shutil.rmtree(t3.paths['PDep hybrid'])  # force a full rebuild, not a stale leftover
+        assert not os.path.exists(t3.paths['ARC'])
+        assert not os.path.exists(t3.paths['RMG PDep'])
+
+        results = t3._write_pdep_hybrid_network_inputs()
+
+        assert sorted(results.keys()) == ['network4_2']
+        result = results['network4_2']
+        # Both sides of the hybrid must be non-empty: an empty QM set would mean the capture drove
+        # nothing, and an empty ILT set would mean this is not a hybrid at all.
+        assert result.qm_ts_labels == ('TS9',)
+        assert len(result.ilt_ts_labels) > 0
+        assert 'TS9' not in result.ilt_ts_labels
+        assert os.path.isfile(result.dest_path)
+        assert os.path.realpath(result.dest_path).startswith(os.path.realpath(t3.paths['PDep hybrid']))
+        with open(result.dest_path, 'r') as f:
+            written = f.read()
+        assert "transitionState('TS9', 'qm/TS9.py')" in written
+        assert 'useAtomCorrections = True' in written
+
+    def test_hybrid_write_refuses_when_no_capture_exists(self, tmp_path):
+        """Fail-closed: the production hybrid writer must never treat a missing capture as 'nothing
+        to do' -- called without a capture on disk it must raise (via verify_capture), because a
+        silently-skipped hybrid write is indistinguishable from a successful empty one."""
+        t3 = _build_t3(tmp_path)
+        assert not os.path.exists(t3.paths['PDep capture'])
+
+        with pytest.raises(ValueError, match='no capture manifest'):
+            t3._write_pdep_hybrid_network_inputs()
+
+    def test_no_hybrid_is_written_for_a_verified_zero_artifact_capture(self, tmp_path):
+        """A capture that verified but holds zero captured artifacts (here: the only queued
+        transition state came back explicitly unconverged, i.e. UNUSABLE and never vendored) has
+        nothing to hybridize: finalization must complete (marker written) with no hybrid directory
+        materialized, and the skip must be the outcome of a VERIFIED capture, not of a missing
+        one."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_ts_set(t3, [('TS9', False)])
+
+        t3.process_arc_run()
+
+        # Non-vacuity: the capture exists, verified, and its single record is UNUSABLE.
+        manifest = read_yaml_file(path=os.path.join(t3.paths['PDep capture'], CAPTURE_MANIFEST_FILE_NAME))
+        assert [entry['status'] for entry in manifest['transition_states']] == ['unusable']
+        assert not os.path.exists(t3.paths['PDep hybrid'])
+        assert os.path.isfile(t3.paths['ARC finalization marker'])
+
+    def test_a_partially_usable_selected_set_refuses_the_network_hybrid(self, tmp_path):
+        """Strict-by-default gate (evaluate_pdep_hybrid): when only SOME of a network's selected
+        transition states came back usable (TS9 converged, TS10 explicitly unconverged), the
+        network must NOT get a half-QM hybrid input -- a hybrid missing QM for one of its most
+        uncertain transition states is a degradation of what was asked for, accepted only by
+        explicit opt-in. Finalization itself still completes: the refusal is a recorded decision
+        about this network, not a crash."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_ts_set(t3, [('TS9', True), ('TS10', False)])
+
+        t3.process_arc_run()
+
+        # Non-vacuity: a usable TS9 artifact WAS captured, so the absent hybrid below is the
+        # gate's doing, not a consequence of having nothing to write.
+        manifest = read_yaml_file(path=os.path.join(t3.paths['PDep capture'], CAPTURE_MANIFEST_FILE_NAME))
+        statuses = {entry['network_ts_label']: entry['status'] for entry in manifest['transition_states']}
+        assert statuses == {'TS9': ARTIFACT_STATUS_USABLE, 'TS10': 'unusable'}
+        assert not os.path.isfile(os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py'))
+        assert os.path.isfile(t3.paths['ARC finalization marker'])
+
+    def test_process_arc_run_propagates_a_hybrid_write_failure_and_leaves_marker_absent(self, tmp_path,
+                                                                                        monkeypatch):
+        """Fail-closed: if the hybrid write raises, process_arc_run() must propagate the exception
+        rather than swallow it, and the finalization marker must be left absent so a subsequent
+        restart() retries finalization instead of treating the failed run as done."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+
+        def _boom(**kwargs):
+            raise ValueError('simulated hybrid write failure')
+
+        monkeypatch.setattr(t3_main, 'write_hybrid_network_input_file', _boom)
+
+        with pytest.raises(ValueError, match='simulated hybrid write failure'):
+            t3.process_arc_run()
+
+        assert not os.path.isfile(t3.paths['ARC finalization marker'])
+
+    def test_an_unversioned_legacy_marker_reads_as_not_finalized(self, tmp_path):
+        """Marker versioning, backward direction: a marker written by the pre-versioning format
+        (the bare legacy text, no version token) must read as NOT finalized -- that marker was
+        written by a finalization that never produced hybrid network inputs, and trusting it would
+        skip the hybrid write forever. The legacy text is pinned literally here on purpose: writing
+        it via the (now versioned) constant would make this test vacuously compare the marker with
+        itself."""
+        t3 = _build_t3(tmp_path)
+        marker_path = t3.paths['ARC finalization marker']
+        os.makedirs(os.path.dirname(marker_path), exist_ok=True)
+        with open(marker_path, 'w') as f:
+            f.write('ARC finalization completed at 2026-01-01T00:00:00\n')
+
+        assert t3.check_arc_finalization_complete() is False
+
+    def test_a_future_version_marker_reads_as_not_finalized(self, tmp_path):
+        """Marker versioning, forward direction: a marker carrying a NEWER version token than this
+        code writes must also read as not finalized (fail closed) -- this code cannot know what a
+        future finalization format guaranteed, so it must redo finalization rather than assume."""
+        t3 = _build_t3(tmp_path)
+        marker_path = t3.paths['ARC finalization marker']
+        os.makedirs(os.path.dirname(marker_path), exist_ok=True)
+        with open(marker_path, 'w') as f:
+            f.write('ARC finalization completed (v99) at 2026-01-01T00:00:00\n')
+
+        assert t3.check_arc_finalization_complete() is False
+
+    def test_a_marker_written_by_this_code_reads_as_finalized(self, tmp_path):
+        """The positive control for the two versioning tests above: a marker written by
+        _mark_arc_finalization_complete() itself must read back as finalized -- without this, the
+        versioning checks could 'pass' by rejecting every marker including our own."""
+        t3 = _build_t3(tmp_path)
+
+        t3._mark_arc_finalization_complete()
+
+        assert t3.check_arc_finalization_complete() is True
+
+    def test_process_arc_run_redoes_finalization_over_a_legacy_marker(self, tmp_path):
+        """End-to-end consequence of marker versioning: with a legacy (unversioned) marker on disk
+        and real queued work present, process_arc_run() must NOT take the already-finalized
+        short-circuit -- it must redo finalization (capture + hybrid write) and leave a
+        current-version marker behind."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        marker_path = t3.paths['ARC finalization marker']
+        os.makedirs(os.path.dirname(marker_path), exist_ok=True)
+        with open(marker_path, 'w') as f:
+            f.write('ARC finalization completed at 2026-01-01T00:00:00\n')
+
+        t3.process_arc_run()
+
+        assert os.path.isdir(t3.paths['PDep capture'])
+        assert os.path.isfile(os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py'))
+        assert t3.check_arc_finalization_complete() is True
+
+
+class TestWritePdepHybridNetworkInputsPruning(object):
+    """Acceptance tests for the stale-output pruning and network_id path confinement added to
+    ``_write_pdep_hybrid_network_inputs()``. The method's documented guarantee is that a network
+    this pass REFUSES (or does not even see) stays entirely RMG/ILT -- which means it must have no
+    hybrid input file at all. Without pruning, a directory this method wrote on a PRIOR call (a
+    prior run of the same iteration, e.g. via the legacy-marker redo path covered above) survives a
+    later call that refuses or drops that network, so a downstream consumer can read a hybrid QM
+    input for a network T3 no longer stands behind.
+    """
+
+    @staticmethod
+    def _manifest_path(t3):
+        return os.path.join(t3.paths['PDep capture'], CAPTURE_MANIFEST_FILE_NAME)
+
+    def test_a_refused_networks_stale_hybrid_input_is_removed_on_rerun(self, tmp_path):
+        """A network accepted (and written) on one call must have its hybrid input REMOVED by a
+        later call that refuses it -- here, because a second, unconverged transition state
+        (TS10) was added to the manifest, tipping the strict-by-default gate to refuse the whole
+        network. Before the fix, the ``continue`` on a refused network left the previous call's
+        ``input.py`` on disk untouched."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        hybrid_input_path = os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py')
+        assert os.path.isfile(hybrid_input_path), 'setup: the first pass must have written the hybrid input'
+
+        manifest = read_yaml_file(path=self._manifest_path(t3))
+        first_entry = manifest['transition_states'][0]
+        stale_entry = dict(first_entry)
+        stale_entry.update(network_ts_label='TS10', arc_ts_label='T3PDep_network4_2_TS10', status='unusable',
+                            converged=False, reason='simulated unconverged transition state',
+                            captured_artifact_path=None, captured_artifact_sha256=None, captured_log_paths=dict(),
+                            captured_log_sha256=dict())
+        manifest['transition_states'].append(stale_entry)
+        save_yaml_file(path=self._manifest_path(t3), content=manifest)
+
+        results = t3._write_pdep_hybrid_network_inputs()
+
+        assert 'network4_2' not in results
+        assert not os.path.isfile(hybrid_input_path), \
+            'a network refused on THIS pass must not leave a hybrid input written by a prior pass'
+        assert not os.path.isdir(os.path.dirname(hybrid_input_path)), \
+            'the whole stale per-network directory must be gone, not merely its input.py'
+
+    def test_a_stale_network_absent_from_the_current_capture_is_removed(self, tmp_path):
+        """A per-network output directory left by a prior run, for a network that is not merely
+        refused but entirely ABSENT from the current capture's manifest, must also be removed --
+        nothing in the transition_states loop ever revisits a network it never iterates over, so
+        this case needs pruning against what is actually on disk under 'PDep hybrid', not against
+        the manifest."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        hybrid_input_path = os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py')
+        assert os.path.isfile(hybrid_input_path), 'setup: the first pass must have written the hybrid input'
+
+        ghost_dir = os.path.join(t3.paths['PDep hybrid'], 'ghost_network')
+        os.makedirs(ghost_dir)
+        with open(os.path.join(ghost_dir, 'input.py'), 'w') as f:
+            f.write('# stale hybrid input from a network absent from the current capture\n')
+
+        results = t3._write_pdep_hybrid_network_inputs()
+
+        assert sorted(results.keys()) == ['network4_2']
+        assert not os.path.exists(ghost_dir), 'a network absent from the current capture must not survive'
+        # No over-deletion regression: the network THIS pass accepts must still be written.
+        assert os.path.isfile(hybrid_input_path)
+
+    def test_zero_captured_artifacts_clears_stale_hybrid_outputs(self, tmp_path):
+        """The zero-captured-artifact early return is a positive verdict ('nothing to
+        hybridize'), not an excuse to leave a prior pass's outputs in place: it must clear the
+        'PDep hybrid' tree before returning ``dict()``, exactly like the ordinary path does."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        hybrid_input_path = os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py')
+        assert os.path.isfile(hybrid_input_path), 'setup: the first pass must have written the hybrid input'
+
+        manifest = read_yaml_file(path=self._manifest_path(t3))
+        only_entry = manifest['transition_states'][0]
+        only_entry.update(status='unusable', converged=False, reason='simulated unconverged transition state',
+                          captured_artifact_path=None, captured_artifact_sha256=None, captured_log_paths=dict(),
+                          captured_log_sha256=dict())
+        save_yaml_file(path=self._manifest_path(t3), content=manifest)
+
+        results = t3._write_pdep_hybrid_network_inputs()
+
+        assert results == dict()
+        assert not os.path.isfile(hybrid_input_path)
+        assert not os.path.isdir(os.path.join(t3.paths['PDep hybrid'], 'network4_2'))
+
+    def test_a_manifest_network_id_containing_dotdot_is_refused(self, tmp_path):
+        """A corrupted or crafted manifest whose network_id contains '..' must never be allowed to
+        escape 'PDep hybrid' via a raw os.path.join(): the method must refuse it with a ValueError
+        rather than write outside its own output root."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+
+        manifest = read_yaml_file(path=self._manifest_path(t3))
+        for entry in manifest['transition_states']:
+            entry['network_id'] = '../escaped'
+        manifest['networks'] = {'../escaped': manifest['networks'].pop('network4_2')}
+        save_yaml_file(path=self._manifest_path(t3), content=manifest)
+
+        escaped_dir = os.path.realpath(os.path.join(t3.paths['PDep hybrid'], '..', 'escaped'))
+        assert not os.path.exists(escaped_dir), 'setup: nothing must already exist at the escape target'
+
+        # '../escaped' contains a path separator, so it is now refused by the single-safe-filename-
+        # component check (added for P2 #4) before the realpath+commonpath "resolves outside" check
+        # below it is ever reached -- either message proves the escape is refused.
+        with pytest.raises(ValueError, match='resolves outside|filename component'):
+            t3._write_pdep_hybrid_network_inputs()
+
+        assert not os.path.exists(escaped_dir), 'the manifest must never be able to write outside PDep hybrid'
+
+    def test_an_escaping_network_id_is_refused_before_anything_is_pruned(self, tmp_path):
+        """Refusing a manifest is not enough: the refusal must come BEFORE the stale-output prune
+        touches anything.
+
+        Pruning is destructive and is driven by the manifest's own network_ids -- so running it
+        against a manifest that has not been validated yet lets a corrupt or crafted manifest
+        delete a legitimate prior pass's hybrid outputs on its way to being rejected. The method
+        still fails closed either way, but 'validate the whole manifest, then destroy' is the
+        invariant worth holding: a manifest T3 refuses to act on must not be able to act on the
+        output tree at all."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        surviving_input_path = os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py')
+        assert os.path.isfile(surviving_input_path), 'setup: the first pass must write a hybrid input'
+
+        manifest = read_yaml_file(path=self._manifest_path(t3))
+        for entry in manifest['transition_states']:
+            entry['network_id'] = '../escaped'
+        manifest['networks'] = {'../escaped': manifest['networks'].pop('network4_2')}
+        save_yaml_file(path=self._manifest_path(t3), content=manifest)
+
+        # See the sibling dotdot test above: '../escaped' is now refused by the single-safe-
+        # filename-component check before the "resolves outside" check is reached.
+        with pytest.raises(ValueError, match='resolves outside|filename component'):
+            t3._write_pdep_hybrid_network_inputs()
+
+        assert os.path.isfile(surviving_input_path), \
+            'a manifest that is refused must not have pruned the previous pass\'s outputs first'
+
+    def test_a_manifest_network_id_that_is_absolute_is_refused(self, tmp_path):
+        """A manifest network_id that is an absolute path must also be refused: os.path.join()
+        with an absolute second argument discards the first entirely, so this is a second,
+        independent way the same defect is reachable."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+
+        evil_abs = str(tmp_path / 'evil_abs')
+        manifest = read_yaml_file(path=self._manifest_path(t3))
+        for entry in manifest['transition_states']:
+            entry['network_id'] = evil_abs
+        manifest['networks'] = {evil_abs: manifest['networks'].pop('network4_2')}
+        save_yaml_file(path=self._manifest_path(t3), content=manifest)
+
+        assert not os.path.exists(evil_abs), 'setup: nothing must already exist at the escape target'
+
+        # See the sibling dotdot test above: an absolute network_id is now refused by the
+        # single-safe-filename-component check before the "resolves outside" check is reached.
+        with pytest.raises(ValueError, match='resolves outside|filename component'):
+            t3._write_pdep_hybrid_network_inputs()
+
+        assert not os.path.exists(evil_abs), 'the manifest must never be able to write outside PDep hybrid'
+
+    def test_a_manifest_network_id_containing_a_path_separator_is_refused(self, tmp_path):
+        """A network_id like 'a/b' passes ``_confine_to_pdep_hybrid_root``'s realpath+commonpath
+        check (it still resolves under the hybrid root), but ``_prune_stale_pdep_hybrid_outputs``
+        compares TOP-LEVEL ``os.listdir()`` names against the raw accepted ids, so 'a/b' and a
+        top-level 'a' entry would collide there. A network_id must be a single safe filename
+        component -- no path separator, not '.'/'..'  -- so this collision can never arise."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+
+        evil_id = 'a/b'
+        manifest = read_yaml_file(path=self._manifest_path(t3))
+        for entry in manifest['transition_states']:
+            entry['network_id'] = evil_id
+        manifest['networks'] = {evil_id: manifest['networks'].pop('network4_2')}
+        save_yaml_file(path=self._manifest_path(t3), content=manifest)
+
+        escape_target = os.path.realpath(os.path.join(t3.paths['PDep hybrid'], evil_id))
+        assert not os.path.exists(escape_target), 'setup: nothing must already exist at the escape target'
+
+        with pytest.raises(ValueError, match='filename component'):
+            t3._write_pdep_hybrid_network_inputs()
+
+        assert not os.path.exists(escape_target), \
+            "a network_id containing a path separator must never be written under 'PDep hybrid'"
+
+    def test_writer_consumes_only_the_records_verify_capture_already_verified(self, tmp_path, monkeypatch):
+        """The writer used to re-read the manifest itself (via ``read_yaml_file(verified.manifest_
+        path)``) AFTER ``verify_capture`` had already read and validated it, and rebuild
+        TSArtifactRecords from that second, untrusted read. Proves that re-read is gone: the
+        manifest is deleted entirely right after ``verify_capture`` returns (from inside a wrapper
+        substituted for ``t3_main.verify_capture``), so any second read of it would raise. The
+        writer must still succeed, using only the records ``verify_capture`` already handed back."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        hybrid_input_path = os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py')
+        assert os.path.isfile(hybrid_input_path), 'setup: first pass wrote the hybrid input'
+        os.remove(hybrid_input_path)
+        assert not os.path.isfile(hybrid_input_path), 'setup: removed so a second, real write can be observed'
+
+        real_verify_capture = t3_main.verify_capture
+
+        def verify_then_delete_manifest(capture_dir):
+            result = real_verify_capture(capture_dir)
+            os.remove(result.manifest_path)
+            return result
+
+        monkeypatch.setattr(t3_main, 'verify_capture', verify_then_delete_manifest)
+
+        # Must NOT raise: a second read of the (now-deleted) manifest would raise
+        # arc.common.read_yaml_file's "could not find the YAML file" InputError.
+        t3._write_pdep_hybrid_network_inputs()
+
+        assert os.path.isfile(hybrid_input_path), \
+            'the writer must rebuild the hybrid input from the records verify_capture already ' \
+            'returned, never by re-reading the manifest a second time'
+
+    def test_an_accepted_networks_destination_that_is_a_plain_file_is_refused(self, tmp_path):
+        """An ACCEPTED network's destination under 'PDep hybrid' must itself be a plain directory
+        (or absent) before anything is pruned. If a prior pass (or anything else) left a plain FILE
+        at that path, the writer would later try to create this network's input.py underneath it
+        and blow up -- but only AFTER the same call had already deleted other, unrelated stale
+        directories, leaving a half-pruned tree behind. This must be caught during the preflight,
+        before any deletion, exactly like an unacceptable stale entry is."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        hybrid_root = t3.paths['PDep hybrid']
+        network_dir = os.path.join(hybrid_root, 'network4_2')
+        hybrid_input_path = os.path.join(network_dir, 'input.py')
+        assert os.path.isfile(hybrid_input_path), 'setup: the first pass must have written the hybrid input'
+
+        # A genuinely stale, otherwise-legitimate directory that a same-pass validate-and-delete
+        # implementation WOULD remove before ever reaching the accepted network's corrupted
+        # destination below (network4_2 sorts after this name).
+        stale_dir = os.path.join(hybrid_root, 'aaa_stale_network')
+        os.makedirs(stale_dir)
+        with open(os.path.join(stale_dir, 'input.py'), 'w') as f:
+            f.write('# stale hybrid input from a prior pass, no longer among the accepted networks\n')
+
+        # Replace the accepted network's own destination with a plain FILE -- something T3 itself
+        # would never have written there.
+        shutil.rmtree(network_dir)
+        with open(network_dir, 'w') as f:
+            f.write('not a directory T3 itself would have written\n')
+
+        with pytest.raises(ValueError, match='not a plain directory'):
+            t3._write_pdep_hybrid_network_inputs()
+
+        assert os.path.isdir(stale_dir), (
+            'a half-pruned tree must be impossible: the pre-existing stale directory must still be '
+            'intact after the accepted network destination check raises'
+        )
+
+    def test_a_pre_existing_stale_directory_survives_when_a_later_entry_makes_pruning_raise(self, tmp_path,
+                                                                                            monkeypatch):
+        """A half-pruned tree must be impossible: ``_prune_stale_pdep_hybrid_outputs`` must judge
+        every entry under the hybrid root acceptable BEFORE deleting any of them, not
+        validate-and-delete in the same ``os.listdir()`` pass. Forces a deterministic iteration
+        order (a stale, otherwise-legitimate directory sorts before an unacceptable top-level file)
+        so that, pre-fix, the stale directory is rmtree'd before the later entry is ever reached and
+        raises -- leaving a half-pruned tree behind."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        hybrid_root = t3.paths['PDep hybrid']
+
+        # Sorts before 'network4_2' (the accepted network) and, more importantly, before the bad
+        # entry below -- so a same-pass validate-and-delete loop reaches (and removes) it first.
+        stale_dir = os.path.join(hybrid_root, 'aaa_stale_network')
+        os.makedirs(stale_dir)
+        with open(os.path.join(stale_dir, 'input.py'), 'w') as f:
+            f.write('# stale hybrid input from a prior pass, no longer among the accepted networks\n')
+
+        # Sorts after both of the above, so it is only reached once the stale directory has
+        # already been removed by a same-pass implementation.
+        bad_entry = os.path.join(hybrid_root, 'zzz_bad_entry')
+        with open(bad_entry, 'w') as f:
+            f.write('not a directory T3 itself would have written\n')
+
+        real_listdir = os.listdir
+
+        def sorted_listdir(path):
+            names = real_listdir(path)
+            if os.path.realpath(path) == os.path.realpath(hybrid_root):
+                return sorted(names)
+            return names
+
+        monkeypatch.setattr(os, 'listdir', sorted_listdir)
+
+        assert os.path.isdir(stale_dir), 'setup: the stale directory exists before pruning runs'
+
+        with pytest.raises(ValueError, match='not a plain directory'):
+            t3._write_pdep_hybrid_network_inputs()
+
+        assert os.path.isdir(stale_dir), (
+            'a half-pruned tree must be impossible: this pre-existing stale directory must still '
+            'be intact after pruning raises on a later, unacceptable entry'
+        )
+
+    def test_a_usable_status_with_a_null_captured_artifact_path_is_refused_through_process_arc_run(self, tmp_path, monkeypatch):
+        """P1 #2, driven through the real, end-to-end path (not just verify_capture in isolation):
+        a manifest hand-edited (or corrupted) to claim status: usable with a null
+        captured_artifact_path must be refused by process_arc_run(), and must leave the hybrid
+        output tree unpruned and the finalization marker absent -- exactly as any other refused
+        capture does."""
+        t3 = _build_t3(tmp_path)
+        _write_arc_info(t3)
+        _queue_usable_ts(t3)
+        t3.process_arc_run()
+        hybrid_input_path = os.path.join(t3.paths['PDep hybrid'], 'network4_2', 'input.py')
+        assert os.path.isfile(hybrid_input_path), 'setup: first pass wrote the hybrid input'
+        assert t3.check_arc_finalization_complete(), 'setup: first pass finalized cleanly'
+
+        t3._clear_arc_finalization_marker()
+        manifest = read_yaml_file(path=self._manifest_path(t3))
+        entry = manifest['transition_states'][0]
+        assert entry['status'] == ARTIFACT_STATUS_USABLE
+        entry['captured_artifact_path'] = None
+        entry['captured_artifact_sha256'] = None
+        save_yaml_file(path=self._manifest_path(t3), content=manifest)
+
+        # _capture_pdep_ts_artifacts() would otherwise treat this corrupted manifest as "nothing
+        # valid to reuse" (verify_capture raises -> _pdep_capture_is_authoritative catches that and
+        # returns False), and silently HEAL the corruption by recapturing a fresh, valid manifest
+        # from the still-live ARC project directory before process_arc_run ever reaches the writer
+        # -- which would make this test pass for the wrong reason (recapture, not the P1 #2 guard).
+        # Forcing the "an authoritative capture already exists" branch here is what actually
+        # exercises _write_pdep_hybrid_network_inputs() -> verify_capture() against the hand-edited
+        # manifest, which is the real target of this test.
+        monkeypatch.setattr(t3, '_pdep_capture_is_authoritative', lambda capture_dir, join_records: True)
+
+        with pytest.raises(ValueError, match='usable'):
+            t3.process_arc_run()
+
+        assert os.path.isfile(hybrid_input_path), \
+            'a refused manifest must not prune the still-valid hybrid output from the prior pass'
+        assert not t3.check_arc_finalization_complete(), \
+            'the finalization marker must not be (re-)written when process_arc_run raises'
