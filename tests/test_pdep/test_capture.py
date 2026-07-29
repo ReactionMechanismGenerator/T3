@@ -1451,6 +1451,31 @@ class TestCaptureTsArtifacts:
         with pytest.raises(ValueError, match=field_name):
             verify_capture(capture_dir)
 
+    def test_verify_capture_raises_when_a_single_frozen_energy_setting_key_is_missing(self, tmp_path):
+        # Distinct from test_verify_capture_raises_when_energy_settings_block_is_missing_but_
+        # artifacts_were_captured (which drops the WHOLE 'energy_settings' key) and from
+        # test_verify_capture_raises_on_a_wrongly_typed_frozen_energy_setting (which always
+        # re-assigns a field to a tampered VALUE, never removes it): this drops exactly one field
+        # from an otherwise-intact 'energy_settings' dict. QMEnergySettings.from_frozen must fail
+        # closed on a missing key rather than defaulting it to None, since a manifest hand-edited to
+        # drop e.g. 'atom_energies' would otherwise silently reach write_hybrid_network_input_file
+        # as if atom_energies had legitimately never been set.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        del manifest['energy_settings']['atom_energies']
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='atom_energies'):
+            verify_capture(capture_dir)
+
     def test_verify_capture_accepts_zero_artifact_capture_with_no_energy_settings_block(self, tmp_path):
         # The flip side of the two guards above: a capture that legitimately never fetched any
         # artifact must still verify cleanly with no 'energy_settings' block at all.
@@ -1940,14 +1965,7 @@ def test_a_capture_alone_can_drive_a_hybrid_network_write(tmp_path):
         method=network_entry['method'],
         qm_transition_states={entry['network_ts_label']: os.path.join(capture_dir,
                                                                      entry['captured_artifact_path'])},
-        energy_settings=QMEnergySettings(
-            model_chemistry=energy_settings['model_chemistry'],
-            frequency_scale_factor=energy_settings['frequency_scale_factor'],
-            use_hindered_rotors=energy_settings['use_hindered_rotors'],
-            use_bond_corrections=energy_settings['use_bond_corrections'],
-            bond_correction_type=energy_settings['bond_correction_type'],
-            atom_energies=energy_settings['atom_energies'],
-            use_atom_corrections=energy_settings['use_atom_corrections']),
+        energy_settings=QMEnergySettings.from_frozen(energy_settings),
         qm_artifacts_root=capture_dir,
     )
 

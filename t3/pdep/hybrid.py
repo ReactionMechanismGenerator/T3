@@ -34,6 +34,7 @@ import shutil
 import tempfile
 import warnings
 from dataclasses import dataclass, field
+from dataclasses import fields as dataclass_fields
 
 from t3.pdep.parser import (NetworkTextUnparseable, format_skipped_species, network_thermo_t_max,
                             parse_pdep_network_file)
@@ -255,29 +256,18 @@ def _validate_model_chemistry_expression(field_name: str, value: str) -> None:
         _validate_composite_level_of_theory_call(call, value)
 
 
-# The exact Python type every QMEnergySettings field must have, mapped to whether None is also
-# allowed. QMEnergySettings is a plain dataclass, so its annotations enforce NOTHING at runtime,
-# and the values reaching it come from a YAML-loaded capture manifest that can carry any type at
-# all. A wrongly typed value here is more dangerous than a missing one: a non-empty string such as
-# 'False' is TRUTHY, so `if not energy_settings.use_atom_corrections` never fires -- while
+# Every QMEnergySettings field carries its own expected-type metadata (see the ``field(...)``
+# calls in the dataclass below) rather than being validated against a second, hand-maintained
+# table here. QMEnergySettings is a plain dataclass, so its annotations enforce NOTHING at
+# runtime, and the values reaching it come from a YAML-loaded capture manifest that can carry any
+# type at all. A wrongly typed value here is more dangerous than a missing one: a non-empty string
+# such as 'False' is TRUTHY, so `if not energy_settings.use_atom_corrections` never fires -- while
 # _build_energy_header's f-string renders it straight back out as a bare `useAtomCorrections =
 # False` that Arkane evaluates as the boolean. The guard is bypassed and the directive inverted in
 # a single step, and the resulting hybrid network is silently on the wrong energy scale. Types are
 # compared by exact type() membership, not isinstance: isinstance(True, int) is True in Python's
 # numeric tower, so an isinstance check would accept frequency_scale_factor=True and silently
 # scale every frequency by 1.0.
-_ENERGY_SETTINGS_FIELD_TYPES = {
-    'model_chemistry': ((str,), False),
-    'frequency_scale_factor': ((int, float), True),
-    'use_hindered_rotors': ((bool,), False),
-    'use_bond_corrections': ((bool,), False),
-    'bond_correction_type': ((str,), True),
-    'atom_energies': ((dict,), True),
-    'use_atom_corrections': ((bool,), False),
-    'tunneling': ((str,), True),
-}
-
-
 def _validate_energy_settings_types(energy_settings) -> None:
     """
     Enforce that every ``QMEnergySettings`` field has exactly the type it claims, before any other
@@ -285,7 +275,10 @@ def _validate_energy_settings_types(energy_settings) -> None:
 
     This runs FIRST, ahead of every truthiness-based guard in
     ``write_hybrid_network_input_file``, because those guards are precisely what a wrongly typed
-    value defeats; see ``_ENERGY_SETTINGS_FIELD_TYPES``.
+    value defeats. The type table consulted here is ``QMEnergySettings.field_types()`` -- derived
+    from each field's own ``metadata=...`` -- so it is the SAME table
+    ``t3.pdep.energy_settings.validate_frozen_energy_settings`` consults for the frozen capture
+    manifest; there is no second, hand-maintained copy to drift out of sync.
 
     Args:
         energy_settings (QMEnergySettings): The settings to type-check.
@@ -293,7 +286,7 @@ def _validate_energy_settings_types(energy_settings) -> None:
     Raises:
         ValueError: If any field's exact type is not one this dataclass permits for it.
     """
-    for field_name, (expected_types, none_allowed) in _ENERGY_SETTINGS_FIELD_TYPES.items():
+    for field_name, (expected_types, none_allowed) in QMEnergySettings.field_types().items():
         value = getattr(energy_settings, field_name)
         if value is None:
             if none_allowed:
@@ -350,6 +343,20 @@ class QMEnergySettings:
                                                docstring); ``write_hybrid_network_input_file``
                                                raises ``ValueError`` rather than honoring
                                                ``False``.
+        bond_additivity_corrections (dict, optional): The BAC VALUES ARC's ``output.yml`` records
+                                                      (as opposed to ``bond_correction_type``,
+                                                      which merely names a SCHEME). PROVENANCE
+                                                      ONLY: Arkane's input DSL has no directive
+                                                      that pins bond additivity correction values
+                                                      the way ``atomEnergies`` pins atom energy
+                                                      corrections, so this field is never rendered
+                                                      by ``_build_energy_header`` and
+                                                      ``write_hybrid_network_input_file`` refuses
+                                                      ``use_bond_corrections=True`` unconditionally
+                                                      regardless of what this holds. Carried through
+                                                      purely so a frozen capture manifest does not
+                                                      silently drop a value ARC computed. Default:
+                                                      ``None``.
         tunneling (str, optional): The tunneling model name (e.g. ``'Eckart'``) written onto every
                                    QM'd reaction's ``reaction(...)`` block. Set to ``None`` to
                                    omit ``tunneling = ...`` entirely. Default: ``'Eckart'``. Left
@@ -358,15 +365,93 @@ class QMEnergySettings:
                                    height (``rmgpy/kinetics/tunneling.pyx``) instead of silently
                                    proceeding without a needed correction. Set this to ``None`` as
                                    an explicit escape hatch if that loud failure is not wanted.
+                                   Unlike every other field above, this one is write-time-only: it
+                                   is supplied directly by the caller of
+                                   ``write_hybrid_network_input_file`` and never appears in a
+                                   frozen capture manifest's ``energy_settings`` block (see
+                                   ``field_types(frozen=True)``).
     """
-    model_chemistry: str
-    frequency_scale_factor: float | None = None
-    use_hindered_rotors: bool = True
-    use_bond_corrections: bool = False
-    bond_correction_type: str | None = None
-    atom_energies: dict | None = None
-    use_atom_corrections: bool = True
-    tunneling: str | None = 'Eckart'
+    model_chemistry: str = field(
+        metadata={'types': (str,), 'none_allowed': False, 'in_frozen_manifest': True})
+    frequency_scale_factor: float | None = field(
+        default=None, metadata={'types': (int, float), 'none_allowed': True, 'in_frozen_manifest': True})
+    use_hindered_rotors: bool = field(
+        default=True, metadata={'types': (bool,), 'none_allowed': False, 'in_frozen_manifest': True})
+    use_bond_corrections: bool = field(
+        default=False, metadata={'types': (bool,), 'none_allowed': False, 'in_frozen_manifest': True})
+    bond_correction_type: str | None = field(
+        default=None, metadata={'types': (str,), 'none_allowed': True, 'in_frozen_manifest': True})
+    atom_energies: dict | None = field(
+        default=None, metadata={'types': (dict,), 'none_allowed': True, 'in_frozen_manifest': True})
+    use_atom_corrections: bool = field(
+        default=True, metadata={'types': (bool,), 'none_allowed': False, 'in_frozen_manifest': True})
+    bond_additivity_corrections: dict | None = field(
+        default=None, metadata={'types': (dict,), 'none_allowed': True, 'in_frozen_manifest': True})
+    tunneling: str | None = field(
+        default='Eckart', metadata={'types': (str,), 'none_allowed': True, 'in_frozen_manifest': False})
+
+    @classmethod
+    def field_types(cls, *, frozen: bool = False) -> dict:
+        """
+        The single authoritative type table for every field this dataclass declares.
+
+        This is the ONE definition of the settings' shape. Both the write-time guard
+        (``_validate_energy_settings_types``, run first inside
+        ``write_hybrid_network_input_file``) and the frozen-capture-manifest guard
+        (``t3.pdep.energy_settings.validate_frozen_energy_settings``, run by ``verify_capture``)
+        read this same table -- derived from each field's own ``metadata=...`` above -- instead of
+        each maintaining its own hand-written copy. Adding a field to this dataclass (with its
+        ``metadata``) is therefore the only edit needed to validate it at both boundaries.
+
+        Args:
+            frozen (bool): If True, omit fields whose ``metadata['in_frozen_manifest']`` is False
+                          -- i.e. fields that are write-time-only (supplied directly by the caller
+                          of ``write_hybrid_network_input_file``, such as ``tunneling``) and never
+                          appear in the frozen block a capture manifest stores.
+
+        Returns:
+            dict: Field name -> (expected types tuple, whether ``None`` is allowed).
+        """
+        return {f.name: (f.metadata['types'], f.metadata['none_allowed'])
+                for f in dataclass_fields(cls)
+                if not frozen or f.metadata.get('in_frozen_manifest', True)}
+
+    @classmethod
+    def from_frozen(cls, frozen: dict, *, tunneling: str | None = 'Eckart') -> 'QMEnergySettings':
+        """
+        Build a validated ``QMEnergySettings`` from a frozen energy-settings block.
+
+        This is the ONE place a frozen block -- as returned by
+        ``t3.pdep.energy_settings.read_arc_energy_settings`` and stored verbatim under a capture
+        manifest's ``'energy_settings'`` key -- is turned into the object
+        ``write_hybrid_network_input_file`` actually consumes. Every frozen key this dataclass
+        recognizes (``field_types(frozen=True)``) is threaded through structurally, so a caller
+        never has to remember to map each field by hand (and cannot forget one, the way a manual
+        ``QMEnergySettings(model_chemistry=..., atom_energies=..., ...)`` call site could).
+
+        Args:
+            frozen (dict): The frozen energy-settings block. Must contain every key
+                          ``field_types(frozen=True)`` names. Any other key (e.g. ``source_paths``)
+                          is ignored: it is manifest provenance, not a ``QMEnergySettings`` field.
+            tunneling (str, optional): The tunneling model to use. Write-time-only, never part of
+                                       a frozen block -- see the class docstring. Default:
+                                       ``'Eckart'``.
+
+        Returns:
+            QMEnergySettings: Validated against ``field_types()``.
+
+        Raises:
+            ValueError: If ``frozen`` is missing a required key, or any value's exact type is not
+                       one ``field_types()`` permits for it.
+        """
+        kwargs = {}
+        for name in cls.field_types(frozen=True):
+            if name not in frozen:
+                raise ValueError(f"The frozen energy-settings block is missing the required key '{name}'.")
+            kwargs[name] = frozen[name]
+        instance = cls(tunneling=tunneling, **kwargs)
+        _validate_energy_settings_types(instance)
+        return instance
 
 
 @dataclass(frozen=True)

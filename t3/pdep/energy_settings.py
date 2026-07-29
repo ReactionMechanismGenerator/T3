@@ -64,6 +64,8 @@ import os
 
 import yaml
 
+from t3.pdep.hybrid import QMEnergySettings
+
 # The two Arkane DSL call forms a modelChemistry directive may legitimately use in place of a
 # plain string label; kept in sync with t3.pdep.hybrid._MODEL_CHEMISTRY_CALL_NAMES.
 _MODEL_CHEMISTRY_CALL_NAMES = ('LevelOfTheory', 'CompositeLevelOfTheory')
@@ -243,26 +245,19 @@ def read_arc_energy_settings(arc_project_directory: str, statmech_subdir: str = 
     }
 
 
-# The exact type every key of a FROZEN energy-settings block must have, mapped to whether None is
-# also allowed for it. This is the single authoritative definition of the frozen block's shape:
-# read_arc_energy_settings produces it, the capture manifest stores it, and verify_capture checks a
-# manifest read back off disk against it -- a manifest is a file, so it can be hand-edited into any
-# shape at all between those two points, which is exactly what verify_capture exists to catch.
-_FROZEN_FIELD_TYPES = {
-    'model_chemistry': ((str,), False),
-    'frequency_scale_factor': ((int, float), True),
-    'use_hindered_rotors': ((bool,), False),
-    'use_atom_corrections': ((bool,), False),
-    'atom_energies': ((dict,), True),
-    'use_bond_corrections': ((bool,), False),
-    'bond_correction_type': ((str,), True),
-    'bond_additivity_corrections': ((dict,), True),
-}
-
-
 def validate_frozen_energy_settings(energy_settings: dict, context: str) -> None:
     """
     Validate a frozen energy-settings block's keys and value types.
+
+    This block's shape has exactly ONE authoritative definition:
+    ``QMEnergySettings.field_types(frozen=True)`` (see ``t3/pdep/hybrid.py``), derived straight
+    from that dataclass's own field ``metadata=...``. ``read_arc_energy_settings`` produces a
+    block of this shape, the capture manifest stores it verbatim, and this function -- called by
+    ``verify_capture`` -- checks a manifest read back off disk against that SAME definition, since
+    a manifest is a file and can be hand-edited into any shape at all between those two points.
+    Delegating to ``QMEnergySettings.from_frozen`` here (rather than re-deriving the same key list
+    and type table by hand) means a field added to the dataclass is validated at this boundary for
+    free.
 
     Args:
         energy_settings (dict): The frozen block to validate.
@@ -270,31 +265,23 @@ def validate_frozen_energy_settings(energy_settings: dict, context: str) -> None
                        '<path>'").
 
     Raises:
-        ValueError: If ``energy_settings`` is not a mapping, is missing a required key, or holds a
-                   value whose exact type is not the one that key requires.
+        ValueError: If ``energy_settings`` is not a mapping, is missing a required key, holds a
+                   value whose exact type is not the one that key requires, or has a blank
+                   'model_chemistry'.
     """
     if not isinstance(energy_settings, dict):
         raise ValueError(f"The frozen 'energy_settings' block in {context} is not a mapping "
                          f"(got {type(energy_settings).__name__}).")
-    for field_name, (expected_types, none_allowed) in _FROZEN_FIELD_TYPES.items():
-        if field_name not in energy_settings:
-            raise ValueError(f"The frozen 'energy_settings' block in {context} is missing the required key "
-                             f"'{field_name}'. Every block is written whole by read_arc_energy_settings, so a "
-                             f"missing key means it was truncated or hand-edited.")
-        value = energy_settings[field_name]
-        expected_names = ' or '.join(t.__name__ for t in expected_types)
-        if value is None:
-            if none_allowed:
-                continue
-            raise ValueError(f"The frozen 'energy_settings' block in {context} has '{field_name}' set to None; "
-                             f"it must be a {expected_names}.")
-        if type(value) not in expected_types:
-            raise ValueError(f"The frozen 'energy_settings' block in {context} has '{field_name}' set to a "
-                             f"{type(value).__name__} ({value!r}); expected a {expected_names}. A wrongly typed "
-                             f"frozen setting is refused rather than coerced: a non-empty string such as 'False' "
-                             f"is truthy, so it would slip past every truthiness guard downstream while rendering "
-                             f"into the generated Arkane input as a bare, falsy token.")
-    if not energy_settings['model_chemistry'].strip():
+    try:
+        settings = QMEnergySettings.from_frozen(energy_settings)
+    except ValueError as e:
+        message = str(e)
+        # from_frozen's own "missing required key" message names the key but not this call's
+        # context; every other message (from _validate_energy_settings_types) already carries the
+        # field name, so prefixing context onto either one keeps error text greppable by field
+        # name (as existing tests do) while still saying which manifest/context failed.
+        raise ValueError(f"The frozen 'energy_settings' block in {context} is invalid: {message}") from e
+    if not settings.model_chemistry.strip():
         raise ValueError(f"The frozen 'energy_settings' block in {context} has a blank 'model_chemistry'. Without "
                          f"it, Arkane cannot apply atom energy corrections, so a QM'd transition state's E0 would "
                          f"not be on the same energy reference scale as the RMG wells around it.")

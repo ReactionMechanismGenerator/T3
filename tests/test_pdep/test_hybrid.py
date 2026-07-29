@@ -226,6 +226,25 @@ def test_refuses_use_atom_corrections_false(tmp_path):
         )
 
 
+def test_refuses_use_atom_corrections_false_even_with_atom_energies_present(tmp_path):
+    """Part 2, isolated: use_atom_corrections=False must be refused on its own, not merely as a
+    side effect of atom_energies also being unset. Supplying a non-None atom_energies here means
+    the ONLY guard that can fire is the use_atom_corrections=False check itself; without this test,
+    that guard could be deleted entirely and test_refuses_use_atom_corrections_false above would
+    still pass (via the atom_energies-is-None guard raising instead), silently dissolving this
+    refusal."""
+    energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', use_atom_corrections=False,
+                                       atom_energies={'H': -0.5})
+    with pytest.raises(ValueError, match='use_atom_corrections'):
+        write_hybrid_network_input_file(
+            source_path=NETWORK_FIXTURE,
+            dest_path=str(tmp_path / 'input.py'),
+            method='CSE',
+            qm_transition_states={'TS1': TS1_ARTIFACT},
+            energy_settings=energy_settings,
+        )
+
+
 def test_emits_use_atom_corrections_true_by_default(tmp_path):
     """Part 2: the header unconditionally emits useAtomCorrections = True (the only value that
     ever reaches this point, since False is rejected up front)."""
