@@ -308,42 +308,51 @@ def test_write_t3_input_file():
 def test_set_paths():
     """Test updating self.paths"""
     t3 = run_minimal(iteration=1, set_paths=True)
-    paths = {'ARC': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC',
-             'ARC info': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3_minimal_example_info.yml',
-             'ARC input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/input.yml',
-             'ARC kinetics lib': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
+    paths = {'ARC': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC',
+             'ARC info': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3_minimal_example_info.yml',
+             'ARC input': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/input.yml',
+             'ARC kinetics lib': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
                                  'libraries/kinetics',
-             'ARC log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/arc.log',
-             'ARC restart': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/restart.yml',
-             'ARC thermo lib': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
+             'ARC log': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/arc.log',
+             'ARC restart': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/restart.yml',
+             'ARC thermo lib': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
                                'libraries/thermo/T3_minimal_example.py',
-             'PDep SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/PDep_SA',
-             'RMG': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG',
-             'RMG PDep': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/pdep',
-             'RMG coll vio': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/collision_rate_violators.log',
-             'RMG input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/input.py',
-             'RMG log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
-             'RMG job log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/job.log',
-             'RMS': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
-             'figs': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/Figures',
-             'SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA',
-             'SA input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
-             'SA coefficients': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_coefficients.yml',
-             'SA dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
-             'SA IDT dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
-             'SA IDT dict top X': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
-             'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
-             'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera_from_ck/chem_annotated.yaml',
-             'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
-             'flux diagrams': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/flux',
-             'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
-             'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
+             'PDep SA': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_SA',
+             'PDep capture': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_capture',
+             'PDep hybrid': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_hybrid',
+             'ARC finalization marker': 'Projects/test_minimal_delete_after_usage/iteration_1/arc_finalization_complete.marker',
+             'RMG': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG',
+             'RMG PDep': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/pdep',
+             'RMG coll vio': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/collision_rate_violators.log',
+             'RMG input': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/input.py',
+             'RMG log': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
+             'RMG job log': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/job.log',
+             'RMS': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
+             'figs': 'Projects/test_minimal_delete_after_usage/iteration_1/Figures',
+             'SA': 'Projects/test_minimal_delete_after_usage/iteration_1/SA',
+             'SA input': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
+             'SA coefficients': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_coefficients.yml',
+             'SA dict': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
+             'SA IDT dict': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
+             'SA IDT dict top X': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
+             'SA solver': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
+             'cantera annotated': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera_from_ck/chem_annotated.yaml',
+             'chem annotated': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
+             'flux diagrams': 'Projects/test_minimal_delete_after_usage/iteration_1/flux',
+             'iteration': 'Projects/test_minimal_delete_after_usage/iteration_1',
+             'species dict': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
                              'species_dictionary.txt',
              'T3 thermo lib': 'test_minimal_delete_after_usage/Libraries/T3lib.py',
              'T3 kinetics lib': 'test_minimal_delete_after_usage/Libraries/T3',
              'shared T3 thermo lib': None,
              'shared T3 kinetics lib': None,
              }
+    # Iterate the LIVE paths, so a key added to set_paths() without being added here is a failure
+    # rather than a silent omission -- assert the key set first so that shows up as a readable
+    # message instead of a bare KeyError from the lookup below.
+    assert set(t3.paths) == set(paths), (f'set_paths() keys drifted from this test: '
+                                         f'only in set_paths: {sorted(set(t3.paths) - set(paths))}, '
+                                         f'only in this test: {sorted(set(paths) - set(t3.paths))}')
     for key, path in t3.paths.items():
         if path is None:
             assert paths[key] is None
