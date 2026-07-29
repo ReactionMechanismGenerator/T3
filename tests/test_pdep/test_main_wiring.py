@@ -574,11 +574,41 @@ def _write_ts_status_yml(arc_dir: str, label: str, converged: bool) -> None:
         )
 
 
+def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetics') -> None:
+    """Write a minimal, valid ARC energy-settings fixture -- ``calcs/statmech/<statmech_subdir>/
+    input.py`` and ``output/output.yml`` -- under ``arc_dir``, exactly what
+    ``t3.pdep.energy_settings.read_arc_energy_settings`` requires to freeze a complete
+    energy-settings block. Mirrors ``tests/test_pdep/test_capture.py::_write_energy_settings_fixture``.
+    Deliberately sets ``useAtomCorrections``/``useBondCorrections`` both ``False`` so no
+    cross-validation against ``output.yml`` is ever triggered by this fixture. Gated so it never
+    overwrites an ``output.yml`` a test has already written of its own (``output.yml`` is
+    project-global, shared across statmech subdirs)."""
+    statmech_dir = os.path.join(arc_dir, 'calcs', 'statmech', statmech_subdir)
+    os.makedirs(statmech_dir, exist_ok=True)
+    input_py_path = os.path.join(statmech_dir, 'input.py')
+    if not os.path.isfile(input_py_path):
+        with open(input_py_path, 'w') as f:
+            f.write(
+                "modelChemistry = 'CBS-QB3'\n\n"
+                "useHinderedRotors = True\n\n"
+                "useAtomCorrections = False\n\n"
+                "useBondCorrections = False\n"
+            )
+    output_dir = os.path.join(arc_dir, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    output_yml_path = os.path.join(output_dir, 'output.yml')
+    if not os.path.isfile(output_yml_path):
+        with open(output_yml_path, 'w') as f:
+            f.write('{}\n')
+
+
 def _queue_usable_ts(t3, network_id='network4_2', network_ts_label='TS9') -> TSJoinRecord:
     """Queue one usable PDep transition state against ``t3``'s current ARC directory: write the
     join sidecar record T3 would have written pre-ARC, plus the converged ARC artifact and status
     entry ARC would have produced, so ``process_arc_run()``'s capture step has something real to
-    discover and vendor."""
+    discover and vendor. Also writes the ARC energy-settings fixture (``calcs/statmech/kinetics/
+    input.py`` + ``output/output.yml``) that ``capture_ts_artifacts`` now requires -- without it,
+    ``read_arc_energy_settings`` fails closed and every caller of this helper would raise."""
     arc_dir = t3.paths['ARC']
     label = arc_ts_label(network_id, network_ts_label)
     expected_path = expected_ts_artifact_path(arc_dir, label)
@@ -592,6 +622,7 @@ def _queue_usable_ts(t3, network_id='network4_2', network_ts_label='TS9') -> TSJ
     _write_ts_artifact(expected_path)
     _write_ts_status_yml(arc_dir, label, converged=True)
     write_ts_join_sidecar(arc_dir, [record])
+    _write_energy_settings_fixture(arc_dir)
     return record
 
 
@@ -835,6 +866,7 @@ class TestProcessArcRunFinalizationWiring(object):
         captured_path = expected_ts_artifact_path(arc_dir, captured_label)
         _write_ts_artifact(captured_path)
         _write_ts_status_yml(arc_dir, captured_label, converged=True)
+        _write_energy_settings_fixture(arc_dir)
         missing_label = arc_ts_label('network4_2', 'TS7')
         records = [TSJoinRecord(network_id='network4_2',
                                 network_ts_label='TS9',

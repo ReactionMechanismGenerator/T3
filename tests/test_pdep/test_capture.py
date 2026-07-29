@@ -86,13 +86,43 @@ def _sha256_of(path: str) -> str:
     return hasher.hexdigest()
 
 
+def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetics') -> None:
+    """Write a minimal, valid ARC energy-settings fixture -- ``calcs/statmech/<statmech_subdir>/input.py``
+    and ``output/output.yml`` -- under ``arc_dir``, exactly what
+    ``t3.pdep.energy_settings.read_arc_energy_settings`` requires to freeze a complete energy-settings
+    block. Deliberately sets ``useAtomCorrections``/``useBondCorrections`` both ``False`` so no
+    cross-validation against ``output.yml`` (frequencyScaleFactor/atomEnergies/bondCorrectionType) is
+    ever triggered by this fixture. Gated so it never overwrites an ``output.yml`` a test has already
+    written of its own (``output.yml`` is project-global, shared across statmech subdirs -- see the
+    module docstring of ``t3.pdep.energy_settings``)."""
+    statmech_dir = os.path.join(arc_dir, 'calcs', 'statmech', statmech_subdir)
+    os.makedirs(statmech_dir, exist_ok=True)
+    input_py_path = os.path.join(statmech_dir, 'input.py')
+    if not os.path.isfile(input_py_path):
+        with open(input_py_path, 'w') as f:
+            f.write(
+                "modelChemistry = 'CBS-QB3'\n\n"
+                "useHinderedRotors = True\n\n"
+                "useAtomCorrections = False\n\n"
+                "useBondCorrections = False\n"
+            )
+    output_dir = os.path.join(arc_dir, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    output_yml_path = os.path.join(output_dir, 'output.yml')
+    if not os.path.isfile(output_yml_path):
+        with open(output_yml_path, 'w') as f:
+            f.write('{}\n')
+
+
 def _usable_record(tmp_path, network_id='network4_1', network_ts_label='TS3'):
-    """Build one USABLE queued join record, plus its converged status.yml entry, entirely under
-    ``tmp_path`` (the ARC project directory)."""
+    """Build one USABLE queued join record, plus its converged status.yml entry and a minimal valid
+    energy-settings fixture (required now that any capture with >=1 artifact must freeze one),
+    entirely under ``tmp_path`` (the ARC project directory)."""
     arc_dir = str(tmp_path)
     record = _queued_record(network_id=network_id, network_ts_label=network_ts_label, arc_project_directory=arc_dir)
     _write_artifact(record.expected_artifact_path)
     _write_status_yml(arc_dir, record.arc_ts_label, converged=True)
+    _write_energy_settings_fixture(arc_dir)
     return record
 
 
@@ -149,6 +179,10 @@ class TestCaptureTsArtifacts:
         # status source at all).
         arc_dir = str(tmp_path / 'arc_project')
         os.makedirs(arc_dir)
+        # This test builds every record's artifacts directly (not via _usable_record), so the
+        # mandatory energy-settings fixture must be written into the shared arc_dir here too --
+        # two of the records below (usable, unverified) do carry an artifact.
+        _write_energy_settings_fixture(arc_dir)
 
         usable = _queued_record(network_id='network4_1', network_ts_label='TS_usable',
                                  arc_project_directory=arc_dir)
@@ -377,16 +411,24 @@ class TestCaptureTsArtifacts:
         arc_dir = str(tmp_path / 'arc_project')
         os.makedirs(arc_dir)
         record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
-        # _usable_record only writes status.yml; write output.yml too so both provenance entries
-        # exercise the "present and archived" path, not the "absent" one.
+        # _usable_record writes status.yml and the mandatory kinetics energy-settings fixture
+        # (calcs/statmech/kinetics/input.py + output/output.yml); overwrite output.yml with our own
+        # content here so both provenance entries exercise the "present and archived" path with
+        # bytes/hashes we control. The thermo statmech pass is deliberately never written, so its
+        # provenance entry exercises the "absent" path in the same test (its dedicated "absent"
+        # sibling below only re-exercises the fully-zero-artifact scenario).
         output_yml_path = os.path.join(arc_dir, 'output', 'output.yml')
         with open(output_yml_path, 'w') as f:
             f.write('some_key: some_value\n')
         status_yml_path = os.path.join(arc_dir, 'output', 'status.yml')
+        kinetics_input_py_path = os.path.join(arc_dir, 'calcs', 'statmech', 'kinetics', 'input.py')
+        thermo_input_py_path = os.path.join(arc_dir, 'calcs', 'statmech', 'thermo', 'input.py')
         status_sha256 = _sha256_of(status_yml_path)
         output_sha256 = _sha256_of(output_yml_path)
+        kinetics_input_sha256 = _sha256_of(kinetics_input_py_path)
         status_mtime = os.path.getmtime(status_yml_path)
         output_mtime = os.path.getmtime(output_yml_path)
+        kinetics_input_mtime = os.path.getmtime(kinetics_input_py_path)
         capture_dir = str(tmp_path / 'capture')
 
         capture_ts_artifacts([record], arc_dir, capture_dir)
@@ -396,11 +438,15 @@ class TestCaptureTsArtifacts:
             manifest = yaml.safe_load(f)
 
         provenance = manifest['provenance']
-        assert len(provenance) == 2
-        by_source = {os.path.basename(entry['source_path']): entry for entry in provenance}
-        assert set(by_source) == {'status.yml', 'output.yml'}
+        assert len(provenance) == 4
+        # Both the kinetics and thermo statmech input.py sources are literally named "input.py",
+        # so keying by os.path.basename(source_path) (the prior version of this test) would silently
+        # collide two of the four entries; key by the full source_path instead.
+        by_source_path = {entry['source_path']: entry for entry in provenance}
+        assert set(by_source_path) == {status_yml_path, output_yml_path, kinetics_input_py_path,
+                                        thermo_input_py_path}
 
-        status_entry = by_source['status.yml']
+        status_entry = by_source_path[status_yml_path]
         assert status_entry['captured_path'] == os.path.join('provenance', 'status.yml')
         assert status_entry['sha256'] == status_sha256
         assert status_entry['source_mtime'] == pytest.approx(status_mtime)
@@ -408,7 +454,7 @@ class TestCaptureTsArtifacts:
         assert os.path.isfile(captured_status_path)
         assert _sha256_of(captured_status_path) == status_sha256
 
-        output_entry = by_source['output.yml']
+        output_entry = by_source_path[output_yml_path]
         assert output_entry['captured_path'] == os.path.join('provenance', 'output.yml')
         assert output_entry['sha256'] == output_sha256
         assert output_entry['source_mtime'] == pytest.approx(output_mtime)
@@ -416,14 +462,37 @@ class TestCaptureTsArtifacts:
         assert os.path.isfile(captured_output_path)
         assert _sha256_of(captured_output_path) == output_sha256
 
+        kinetics_entry = by_source_path[kinetics_input_py_path]
+        assert kinetics_entry['captured_path'] == os.path.join('provenance', 'statmech_kinetics_input.py')
+        assert kinetics_entry['sha256'] == kinetics_input_sha256
+        assert kinetics_entry['source_mtime'] == pytest.approx(kinetics_input_mtime)
+        captured_kinetics_path = os.path.join(capture_dir, kinetics_entry['captured_path'])
+        assert os.path.isfile(captured_kinetics_path)
+        assert _sha256_of(captured_kinetics_path) == kinetics_input_sha256
+
+        thermo_entry = by_source_path[thermo_input_py_path]
+        assert thermo_entry['captured_path'] is None
+        assert thermo_entry['sha256'] is None
+        assert thermo_entry['source_mtime'] is None
+
     def test_archives_provenance_absence_when_status_or_output_yml_missing(self, tmp_path):
-        # A transition state can be resolved without ARC ever having written output/output.yml
-        # (e.g. it never reached the finalization step); absence must be recorded, not raise.
+        # A capture with zero usable artifacts (e.g. ARC never even reached the finalization step
+        # for this transition state) never has status.yml, output.yml, or either statmech input.py
+        # to archive; absence must be recorded, not raise. A capture that DOES have >=1 artifact now
+        # requires a valid, complete energy-settings fixture to exist at all (see
+        # test_archives_status_and_output_yml_as_inert_provenance for that "present" path, which also
+        # covers the thermo input.py "absent" case) -- so the clean way to exercise a genuinely
+        # *missing* output.yml, without also having to satisfy that mandatory energy-settings
+        # contract, is the same zero-artifact scenario used by
+        # test_zero_usable_artifacts_produces_well_formed_empty_capture.
         arc_dir = str(tmp_path / 'arc_project')
         os.makedirs(arc_dir)
-        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
-        # _usable_record writes status.yml but not output.yml -- exercise the "absent" path for
-        # output.yml specifically.
+        record = TSJoinRecord(
+            network_id='network4_1',
+            network_ts_label='TS_none',
+            status=JOIN_STATUS_NOT_QUEUED,
+            reason='Could not build the species for this transition state.',
+        )
         capture_dir = str(tmp_path / 'capture')
 
         capture_ts_artifacts([record], arc_dir, capture_dir)
@@ -432,15 +501,16 @@ class TestCaptureTsArtifacts:
         with open(manifest_path) as f:
             manifest = yaml.safe_load(f)
 
-        by_source = {os.path.basename(entry['source_path']): entry for entry in manifest['provenance']}
-        output_entry = by_source['output.yml']
-        assert output_entry['captured_path'] is None
-        assert output_entry['sha256'] is None
-        assert output_entry['source_mtime'] is None
-        # And nothing was ever created under provenance/ for the missing file.
+        assert manifest.get('energy_settings') is None
+        provenance = manifest['provenance']
+        assert len(provenance) == 4
+        for entry in provenance:
+            assert entry['captured_path'] is None
+            assert entry['sha256'] is None
+            assert entry['source_mtime'] is None
+        # And nothing was ever created under provenance/ at all.
         provenance_dir = os.path.join(capture_dir, 'provenance')
-        if os.path.isdir(provenance_dir):
-            assert 'output.yml' not in os.listdir(provenance_dir)
+        assert not os.path.isdir(provenance_dir)
 
     def test_mid_capture_failure_leaves_previous_capture_intact(self, tmp_path):
         arc_dir = str(tmp_path / 'arc_project')
@@ -846,3 +916,161 @@ class TestCaptureTsArtifacts:
             capture_ts_artifacts([record], arc_dir, capture_dir)
 
         assert 'Torn or corrupt' in str(exc_info.value)
+
+    def test_energy_settings_is_frozen_into_result_and_manifest_when_artifact_captured(self, tmp_path):
+        # Any capture with >=1 usable artifact must freeze the ARC energy-reference settings that
+        # produced it (t3/pdep/hybrid.py::write_hybrid_network_input_file requires a non-blank
+        # model_chemistry downstream); _usable_record's fixture sets modelChemistry = 'CBS-QB3'.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+
+        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+
+        assert isinstance(result.energy_settings, dict)
+        # A plain string label is frozen as its string VALUE, WITHOUT the surrounding quotes, so that
+        # it drops straight into QMEnergySettings.model_chemistry (whose validator rejects embedded
+        # quotes, and which re-quotes the label at render time). Freezing the raw source segment
+        # instead would round-trip a legitimate Arkane input into a frozen capture value that the
+        # hybrid writer then refuses -- possibly with the ARC project directory already gone. Only
+        # the bare LevelOfTheory(...)/CompositeLevelOfTheory(...) forms are frozen verbatim; see
+        # tests/test_pdep/test_energy_settings.py::
+        # test_frozen_model_chemistry_round_trips_into_the_hybrid_writer, which covers both.
+        assert result.energy_settings['model_chemistry'] == 'CBS-QB3'
+        assert result.energy_settings['use_hindered_rotors'] is True
+        assert result.energy_settings['use_atom_corrections'] is False
+        assert result.energy_settings['use_bond_corrections'] is False
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        assert manifest['energy_settings']['model_chemistry'] == 'CBS-QB3'
+
+    def test_energy_settings_is_none_with_zero_captured_artifacts(self, tmp_path):
+        # No artifact was ever fetched from ARC, so there is nothing whose provenance needs
+        # freezing; this must not raise even if ARC never wrote a statmech kinetics input.py at all
+        # (which is exactly the case here -- arc_dir has no calcs/ directory whatsoever).
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = TSJoinRecord(
+            network_id='network4_1',
+            network_ts_label='TS_none',
+            status=JOIN_STATUS_NOT_QUEUED,
+            reason='Could not build the species for this transition state.',
+        )
+        capture_dir = str(tmp_path / 'capture')
+
+        result = capture_ts_artifacts([record], arc_dir, capture_dir)
+
+        assert result.energy_settings is None
+
+    def test_capture_raises_when_energy_settings_fixture_is_missing_and_leaves_capture_dir_untouched(self, tmp_path):
+        # capture_ts_artifacts's energy-settings preflight must fail closed and, per the
+        # pre-flight-before-any-write convention, must not have written anything to capture_dir yet.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        # Remove the kinetics input.py that _usable_record wrote, so read_arc_energy_settings has
+        # nothing to read.
+        kinetics_input_py_path = os.path.join(arc_dir, 'calcs', 'statmech', 'kinetics', 'input.py')
+        os.remove(kinetics_input_py_path)
+        capture_dir = str(tmp_path / 'capture')
+
+        with pytest.raises(ValueError, match='ARC statmech'):
+            capture_ts_artifacts([record], arc_dir, capture_dir)
+
+        assert not os.path.exists(capture_dir), (
+            'a capture refused during the energy-settings preflight must not leave a capture '
+            'directory behind -- the preflight runs before any write, per capture_ts_artifacts\' '
+            'read-everything-before-writing-anything convention.'
+        )
+
+    def test_verify_capture_raises_when_energy_settings_block_is_missing_but_artifacts_were_captured(self, tmp_path):
+        # A hand-edited or otherwise malformed manifest that dropped its 'energy_settings' key (or
+        # zeroed it out) despite having captured artifact(s) must be refused by verify_capture, not
+        # silently accepted -- t3/pdep/hybrid.py::write_hybrid_network_input_file has no other source
+        # of truth for the model chemistry once ARC's calcs/ directory may have moved on.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        capture_ts_artifacts([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        del manifest['energy_settings']
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='energy_settings'):
+            verify_capture(capture_dir)
+
+    def test_verify_capture_raises_when_energy_settings_lacks_model_chemistry(self, tmp_path):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        capture_ts_artifacts([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['energy_settings']['model_chemistry'] = ''
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match='energy_settings'):
+            verify_capture(capture_dir)
+
+    @pytest.mark.parametrize('field_name, tampered_value', [
+        # 'False' is a NON-EMPTY string, therefore truthy: it slips past every truthiness guard
+        # downstream while rendering back into the generated Arkane input as a bare, falsy
+        # `useAtomCorrections = False`. verify_capture exists precisely to catch a hand-edited
+        # manifest, so a wrongly typed frozen setting must be refused here too, not only at the
+        # hybrid writer.
+        ('use_atom_corrections', 'False'),
+        ('use_atom_corrections', None),
+        ('use_hindered_rotors', 1),
+        ('use_bond_corrections', 'True'),
+        ('frequency_scale_factor', '0.988'),
+        ('bond_correction_type', 5),
+        ('atom_energies', 'H: -0.5'),
+        ('model_chemistry', 3.14),
+    ])
+    def test_verify_capture_raises_on_a_wrongly_typed_frozen_energy_setting(self, tmp_path, field_name,
+                                                                            tampered_value):
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = _usable_record(tmp_path=tmp_path.__class__(arc_dir))
+        capture_dir = str(tmp_path / 'capture')
+        _capture([record], arc_dir, capture_dir)
+
+        manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        manifest['energy_settings'][field_name] = tampered_value
+        with open(manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+
+        with pytest.raises(ValueError, match=field_name):
+            verify_capture(capture_dir)
+
+    def test_verify_capture_accepts_zero_artifact_capture_with_no_energy_settings_block(self, tmp_path):
+        # The flip side of the two guards above: a capture that legitimately never fetched any
+        # artifact must still verify cleanly with no 'energy_settings' block at all.
+        arc_dir = str(tmp_path / 'arc_project')
+        os.makedirs(arc_dir)
+        record = TSJoinRecord(
+            network_id='network4_1',
+            network_ts_label='TS_none',
+            status=JOIN_STATUS_NOT_QUEUED,
+            reason='Could not build the species for this transition state.',
+        )
+        capture_dir = str(tmp_path / 'capture')
+        capture_ts_artifacts([record], arc_dir, capture_dir)
+
+        result = verify_capture(capture_dir)
+
+        assert result.captured_artifact_count == 0

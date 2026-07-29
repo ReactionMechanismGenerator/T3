@@ -1,0 +1,39 @@
+arc_git_commit: 1234567890abcdef1234567890abcdef12345678
+arkane_git_commit: fedcba0987654321fedcba0987654321fedcba09
+schema_version: 1
+project: i014_benzyl_sp
+sp_level:
+  method: dlpno-ccsd(t)-f12
+  basis: cc-pvtz-f12
+  auxiliary_basis: aug-cc-pvtz/c
+  cabs: cc-pvtz-f12-optri
+  method_type: wavefunction
+  software: orca
+freq_level:
+  method: wb97xd
+  basis: def2tzvp
+  method_type: dft
+  software: gaussian
+arkane_level_of_theory:
+  method: dlpno-ccsd(t)-f12
+  basis: cc-pvtz-f12
+  auxiliary_basis: aug-cc-pvtz/c
+  cabs: cc-pvtz-f12-optri
+  method_type: wavefunction
+  software: orca
+composite_method: null
+freq_scale_factor: null
+freq_scale_factor_source: null
+bac_type: p
+atom_energy_corrections:
+  C: -37.78475071221127
+  H: -0.982597271828914
+  N: -54.59
+  O: -74.98
+  S: -397.9
+bond_additivity_corrections:
+  C-C: -459.69651810328156
+  C-H: -99.65901652526594
+  'C#N': -0.3283125828210814
+  C-N: 0.17286574008491584
+transition_states: {}

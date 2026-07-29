@@ -1,0 +1,40 @@
+arc_git_commit: 1234567890abcdef1234567890abcdef12345678
+arkane_git_commit: fedcba0987654321fedcba0987654321fedcba09
+schema_version: 1
+project: xl1001
+sp_level:
+  method: wb97xd2023
+  basis: def2tzvp
+  method_type: dft
+  software: gaussian
+freq_level:
+  method: wb97xd2023
+  basis: def2tzvp
+  method_type: dft
+  software: gaussian
+arkane_level_of_theory:
+  method: wb97xd2023
+  basis: def2tzvp
+  method_type: dft
+  software: gaussian
+composite_method: null
+freq_scale_factor: 0.988
+freq_scale_factor_source: "Calculated as described in 10.1021/ct100326h"
+bac_type: p
+atom_energy_corrections:
+  Br: -2574.174533595486
+  C: -37.84706210301937
+  Cl: -460.1467876783656
+  F: -99.73955550924293
+  H: -0.5006557872395249
+  N: -54.584995947182875
+  O: -75.07252406126821
+  S: -398.1105530401693
+bond_additivity_corrections:
+  C-C: 2.9585184472615715
+  C-H: 0.7891610772258629
+  C-N: 1.7702965975878437
+  C-O: 2.5823551057599605
+  C-S: 2.403228751492449
+  H-H: -3.6243516474330164
+transition_states: {}

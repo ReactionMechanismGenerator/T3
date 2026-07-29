@@ -1,0 +1,26 @@
+arc_git_commit: 1234567890abcdef1234567890abcdef12345678
+arkane_git_commit: fedcba0987654321fedcba0987654321fedcba09
+schema_version: 1
+project: e2e_inspect_rate3
+sp_level:
+  method: mock
+  basis: mockbasis
+  method_type: dft
+  software: mockter
+freq_level:
+  method: mock
+  basis: mockbasis
+  method_type: dft
+  software: mockter
+arkane_level_of_theory:
+  method: mock
+  basis: mockbasis
+  method_type: dft
+  software: mockter
+composite_method: null
+freq_scale_factor: 1.0
+freq_scale_factor_source: null
+bac_type: p
+atom_energy_corrections: null
+bond_additivity_corrections: null
+transition_states: {}

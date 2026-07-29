@@ -69,6 +69,7 @@ from dataclasses import dataclass
 from arc.common import read_yaml_file, save_yaml_file
 
 from t3.pdep.discovery import TSArtifactRecord, discover_ts_artifacts
+from t3.pdep.energy_settings import read_arc_energy_settings, validate_frozen_energy_settings
 from t3.pdep.hybrid import _read_qm_artifact, _vendor_qm_artifacts, _vendored_log_names
 from t3.pdep.join import validate_ts_join_records
 
@@ -101,10 +102,17 @@ class CaptureResult:
                          ``ARTIFACT_STATUS_UNVERIFIED``), ``artifact_path`` now points INTO
                          ``capture_dir``, never at the (ephemeral) ARC project directory. Every
                          other field is exactly what discovery resolved, frozen at capture time.
+        energy_settings (dict, optional): The frozen, AUTHORITATIVE energy-reference settings block
+                                          (see ``t3.pdep.energy_settings.read_arc_energy_settings``),
+                                          or ``None`` if this capture found zero usable artifacts (no
+                                          transition state had anything to freeze a model chemistry
+                                          for). Also recorded under the manifest's ``'energy_settings'``
+                                          key -- unlike ``'provenance'``, this key IS authoritative.
     """
     capture_dir: str
     manifest_path: str
     records: tuple
+    energy_settings: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -266,6 +274,19 @@ def capture_ts_artifacts(join_records: list,
                 f"arc_ts_label, so it cannot be captured without silently corrupting the "
                 f"per-label keying capture_ts_artifacts relies on."
             )
+
+    # Pre-flight: freeze the AUTHORITATIVE energy-reference settings block (model chemistry, atom/
+    # bond corrections, frequency scale factor) from ARC's OWN statmech input directives, before any
+    # vendoring starts -- mirrors the artifact/log pre-flight below for the same reason: a capture
+    # that cannot freeze a complete energy-reference is worthless to downstream hybrid-network
+    # writing regardless of whether its QM artifacts parsed cleanly, so this must fail before
+    # touching capture_dir at all, never partway through. Only attempted when at least one record
+    # actually carries an artifact: a zero-artifact capture (nothing ever reached ARC) has no energy
+    # reference to freeze, and read_arc_energy_settings is fail-closed on ARC files that a
+    # legitimately artifact-free capture has no reason to expect exist.
+    energy_settings = None
+    if records_with_artifact:
+        energy_settings = read_arc_energy_settings(arc_project_directory, statmech_subdir='kinetics')
 
     # Pre-flight: parse every QM artifact and resolve (and hash) every Log(...) file it references
     # BEFORE anything is written to capture_dir. Mirrors write_hybrid_network_input_file's own
@@ -435,9 +456,11 @@ def capture_ts_artifacts(join_records: list,
                                                    capture_dir=capture_dir)
 
     manifest_path = _write_manifest(capture_dir=capture_dir, arc_project_directory=arc_project_directory,
-                                    manifest_entries=manifest_entries, provenance_entries=provenance_entries)
+                                    manifest_entries=manifest_entries, provenance_entries=provenance_entries,
+                                    energy_settings=energy_settings)
 
-    return CaptureResult(capture_dir=capture_dir, manifest_path=manifest_path, records=tuple(captured_records))
+    return CaptureResult(capture_dir=capture_dir, manifest_path=manifest_path, records=tuple(captured_records),
+                         energy_settings=energy_settings)
 
 
 def _manifest_entry(record: TSArtifactRecord, source_hashes: dict | None, captured_artifact_path: str | None,
@@ -507,7 +530,7 @@ def _manifest_entry(record: TSArtifactRecord, source_hashes: dict | None, captur
 
 
 def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entries: list,
-                    provenance_entries: list | None = None) -> str:
+                    provenance_entries: list | None = None, energy_settings: dict | None = None) -> str:
     """
     Write the capture manifest atomically: stage it under a temp name inside ``capture_dir``, then
     ``os.replace`` it onto ``CAPTURE_MANIFEST_FILE_NAME``, so a write failure partway through (e.g.
@@ -529,6 +552,14 @@ def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entri
                                             this key back as authority. The frozen ``status``/
                                             ``converged``/``reason`` fields already written per
                                             transition state above remain the sole authority.
+        energy_settings (dict, optional): The frozen energy-reference settings block (see
+                                          ``t3.pdep.energy_settings.read_arc_energy_settings``), or
+                                          ``None`` if this capture found zero usable artifacts.
+                                          Recorded under the manifest's ``'energy_settings'`` key.
+                                          Unlike ``'provenance'``, this key IS authoritative: it is
+                                          the sole source downstream hybrid-network writing may rely
+                                          on for a captured transition state's model chemistry and
+                                          atom/bond corrections.
 
     Returns:
         str: The path the manifest was written to.
@@ -540,6 +571,9 @@ def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entri
         # INERT provenance only -- never read back as authority by anything in the
         # capture-consumption path. See _capture_provenance_files and the module docstring.
         'provenance': provenance_entries or list(),
+        # AUTHORITATIVE, unlike 'provenance' above: the sole source downstream hybrid-network
+        # writing may rely on for this capture's model chemistry and atom/bond corrections.
+        'energy_settings': energy_settings,
     }
 
     fd, staged_path = tempfile.mkstemp(prefix='.capture-manifest-', dir=capture_dir)
@@ -555,7 +589,8 @@ def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entri
 
 def _capture_provenance_files(arc_project_directory: str, capture_dir: str) -> list:
     """
-    Archive ARC's ``output/status.yml`` and ``output/output.yml`` as INERT provenance.
+    Archive ARC's ``output/status.yml``, ``output/output.yml``, and the ``calcs/statmech/kinetics``/
+    ``calcs/statmech/thermo`` ``input.py`` files as INERT provenance.
 
     ``t3.pdep.discovery.read_arc_convergence`` uses ``getmtime(status.yml) > getmtime(output.yml)``
     as a restart tiebreak when the two files disagree about convergence -- a decision this module's
@@ -579,24 +614,42 @@ def _capture_provenance_files(arc_project_directory: str, capture_dir: str) -> l
     tiebreak depends on) -- so each source file's mtime is recorded explicitly, as a manifest VALUE,
     alongside its sha256, rather than relied upon to survive the copy.
 
-    Either or both files may legitimately not exist (e.g. a transition state resolved from ARC
-    without ever going through the ``output/`` finalization step); absence is recorded, not raised.
+    Any of these files may legitimately not exist (e.g. a transition state resolved from ARC
+    without ever going through the ``output/`` finalization step, or a project that never ran a
+    ``thermo`` statmech pass at all); absence is recorded, not raised. The kinetics/thermo
+    ``input.py`` files are archived here as inert provenance ONLY -- the AUTHORITATIVE energy
+    settings frozen from ``calcs/statmech/kinetics/input.py`` live in the manifest's separate,
+    authoritative ``'energy_settings'`` key (see ``read_arc_energy_settings`` and
+    ``capture_ts_artifacts``); nothing may read these archived copies back as authority for
+    anything, same as ``status.yml``/``output.yml`` above.
 
     Args:
-        arc_project_directory (str): The ARC project directory to read ``output/status.yml`` and
-                                     ``output/output.yml`` from.
+        arc_project_directory (str): The ARC project directory to read ``output/status.yml``,
+                                     ``output/output.yml``, ``calcs/statmech/kinetics/input.py``, and
+                                     ``calcs/statmech/thermo/input.py`` from.
         capture_dir (str): The capture directory being populated.
 
     Returns:
-        list: One dict per file (``status.yml`` then ``output.yml``), each with keys
-             ``source_path``, ``captured_path`` (relative to ``capture_dir``, or ``None`` if the
-             source file did not exist), ``sha256`` (or ``None``), and ``source_mtime`` (the
-             source file's ``os.path.getmtime`` result at archive time, or ``None``).
+        list: One dict per file (``status.yml``, ``output.yml``, ``statmech_kinetics_input.py``,
+             then ``statmech_thermo_input.py``), each with keys ``source_path``, ``captured_path``
+             (relative to ``capture_dir``, or ``None`` if the source file did not exist), ``sha256``
+             (or ``None``), and ``source_mtime`` (the source file's ``os.path.getmtime`` result at
+             archive time, or ``None``).
     """
     provenance_dir = os.path.join(capture_dir, _CAPTURE_PROVENANCE_SUBDIR)
+    # (source_path, captured_file_name): captured_file_name is distinct for the two input.py files
+    # (kinetics/thermo) so they never clobber each other under provenance/, since both are literally
+    # named 'input.py' at their respective sources.
+    files_to_archive = (
+        (os.path.join(arc_project_directory, 'output', 'status.yml'), 'status.yml'),
+        (os.path.join(arc_project_directory, 'output', 'output.yml'), 'output.yml'),
+        (os.path.join(arc_project_directory, 'calcs', 'statmech', 'kinetics', 'input.py'),
+         'statmech_kinetics_input.py'),
+        (os.path.join(arc_project_directory, 'calcs', 'statmech', 'thermo', 'input.py'),
+         'statmech_thermo_input.py'),
+    )
     entries = list()
-    for file_name in ('status.yml', 'output.yml'):
-        source_path = os.path.join(arc_project_directory, 'output', file_name)
+    for source_path, captured_file_name in files_to_archive:
         if not os.path.isfile(source_path):
             entries.append({'source_path': source_path, 'captured_path': None, 'sha256': None,
                             'source_mtime': None})
@@ -611,9 +664,10 @@ def _capture_provenance_files(arc_project_directory: str, capture_dir: str) -> l
 
         if not os.path.isdir(provenance_dir):
             os.makedirs(provenance_dir)
-        captured_relpath = os.path.join(_CAPTURE_PROVENANCE_SUBDIR, file_name)
+        captured_relpath = os.path.join(_CAPTURE_PROVENANCE_SUBDIR, captured_file_name)
         captured_abs_path = os.path.join(capture_dir, captured_relpath)
-        fd, staged_path = tempfile.mkstemp(prefix=f'.provenance-{file_name}-', dir=provenance_dir)
+        fd, staged_path = tempfile.mkstemp(prefix=f'.provenance-{captured_file_name}-',
+                                           dir=provenance_dir)
         os.close(fd)
         try:
             shutil.copyfile(source_path, staged_path)
@@ -819,6 +873,21 @@ def verify_capture(capture_dir: str) -> VerifyResult:
                 expected_sha256=expected_log_sha256,
                 ts_label=ts_label,
             )
+
+    if captured_artifact_count > 0:
+        energy_settings = content.get('energy_settings')
+        if not isinstance(energy_settings, dict) or not energy_settings.get('model_chemistry'):
+            raise ValueError(
+                f"Refusing to verify '{capture_dir}': the manifest at '{manifest_path}' captured "
+                f"{captured_artifact_count} artifact(s) but has no valid 'energy_settings' block "
+                f"with a non-blank 'model_chemistry'. A capture with at least one captured artifact "
+                f"must always have frozen its authoritative energy settings at capture time (see "
+                f"capture_ts_artifacts/read_arc_energy_settings) -- a missing or incomplete block "
+                f"here means the manifest is malformed or was hand-edited."
+            )
+        # Presence is not enough: the block came back off disk as YAML, so every value's TYPE has
+        # to be re-checked against the one authoritative definition of the frozen block's shape.
+        validate_frozen_energy_settings(energy_settings, context=f"the capture manifest at '{manifest_path}'")
 
     return VerifyResult(capture_dir=capture_dir, manifest_path=manifest_path, record_count=record_count,
                         captured_artifact_count=captured_artifact_count)

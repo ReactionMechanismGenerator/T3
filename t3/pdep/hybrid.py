@@ -71,6 +71,243 @@ def _validate_no_injection_chars(field_name: str, value: str) -> None:
                          f"backslash, got {value!r}.")
 
 
+# The two Arkane DSL call forms a modelChemistry directive may legitimately use in place of a
+# plain string label; see arkane/encorr/models.py. Only these two bare (unquoted) object
+# expressions are ever allowed through _validate_model_chemistry_expression -- anything else that
+# happens to parse as an ast.Call is rejected just like any other non-object-expression string.
+_MODEL_CHEMISTRY_CALL_NAMES = ('LevelOfTheory', 'CompositeLevelOfTheory')
+
+# The real Arkane LevelOfTheory constructor schema (arkane/modelchem.py, class LevelOfTheory,
+# lines 98-121 as of this writing: ``method: str``, ``basis: str = None``,
+# ``auxiliary_basis: str = None``, ``cabs: str = None``, ``software: str = None``,
+# ``software_version: Union[int, float, str] = None``, ``solvent: str = None``,
+# ``solvation_method: str = None``, ``args: Union[str, Iterable[str]] = None``). This maps each
+# real field name to the exact Python type(s) its literal value is allowed to have: every field is
+# str-only EXCEPT ``software_version`` (int/float/str). ``args`` genuinely also accepts an iterable
+# of str (e.g. a tuple), but that collection form is deliberately NOT accepted here (kept str-only):
+# T3/ARC never emit anything but a scalar for it, and there is no concrete real-world case to widen
+# the allowlist for -- narrowing the accepted surface below the real schema is always safe, only
+# widening it is not. 'method' has no default in the dataclass, i.e. it is required.
+_LEVEL_OF_THEORY_REQUIRED_FIELDS = ('method',)
+_LEVEL_OF_THEORY_FIELD_TYPES = {
+    'method': (str,),
+    'basis': (str,),
+    'auxiliary_basis': (str,),
+    'cabs': (str,),
+    'software': (str,),
+    'software_version': (int, float, str),
+    'solvent': (str,),
+    'solvation_method': (str,),
+    'args': (str,),
+}
+
+# The real Arkane CompositeLevelOfTheory constructor schema (arkane/modelchem.py, class
+# CompositeLevelOfTheory, lines 174-191 as of this writing): exactly two fields, ``freq`` and
+# ``energy``, both of type ``LevelOfTheory`` and both required (no defaults) -- a
+# CompositeLevelOfTheory with either one missing is vacuous/malformed.
+_COMPOSITE_LEVEL_OF_THEORY_REQUIRED_FIELDS = ('freq', 'energy')
+
+
+def _model_chemistry_ast_call(value: str) -> ast.Call | None:
+    """
+    Classify a ``model_chemistry`` value as either a plain string label or a
+    ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)`` bare object-expression.
+
+    ``ast.parse(value, mode='eval')`` is used purely as a classifier here: a plain label like
+    ``'wb97xd/def2tzvp'`` also happens to parse (as an ``ast.BinOp``, dividing two ``ast.Name``
+    nodes), so the discriminator is specifically "is the parsed expression an ``ast.Call`` to one
+    of the two known constructor names", not "did it parse at all". A value that fails to parse at
+    all (e.g. it contains a newline) is treated as a plain string label, deferring to
+    ``_validate_no_injection_chars`` for that case.
+
+    Args:
+        value (str): The ``model_chemistry`` value to classify.
+
+    Returns:
+        ast.Call | None: The parsed call node if ``value`` is a ``LevelOfTheory(...)`` or
+                         ``CompositeLevelOfTheory(...)`` object-expression, else ``None``.
+    """
+    try:
+        node = ast.parse(value, mode='eval').body
+    except SyntaxError:
+        return None
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _MODEL_CHEMISTRY_CALL_NAMES:
+        return node
+    return None
+
+
+def _validate_level_of_theory_call(call: ast.Call, value: str) -> None:
+    """
+    Structurally validate a ``LevelOfTheory(...)`` call node against the real Arkane
+    ``LevelOfTheory`` constructor schema (see ``_LEVEL_OF_THEORY_FIELD_TYPES``): only keyword
+    arguments (no positional args, no ``**kwargs``, no duplicates), each keyword restricted to a
+    real ``LevelOfTheory`` field name, each value a literal ``ast.Constant`` of the exact Python
+    type that field accepts, and the required ``method`` keyword present. An AST-structural check
+    alone (any keyword name, any ``ast.Constant`` type) is not arbitrary-code-safe as a validator:
+    it would let a keyword like ``__class__`` or a value like ``method=True``/``method=...``
+    through, since those only fail once Arkane itself executes and constructs the object.
+
+    Args:
+        call (ast.Call): The ``LevelOfTheory(...)`` call node to validate.
+        value (str): The original ``model_chemistry`` string (used in error messages).
+
+    Raises:
+        ValueError: If ``call`` has positional args, ``**kwargs``, a duplicate keyword, a keyword
+                   that is not a real ``LevelOfTheory`` field, a keyword value that is not a
+                   literal constant of the type that field accepts, or is missing the required
+                   ``method`` keyword.
+    """
+    if call.args:
+        raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call must not have positional "
+                         f"arguments, got {value!r}.")
+    seen_keywords = set()
+    for kw in call.keywords:
+        if kw.arg is None:
+            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call must not use "
+                             f"**kwargs, got {value!r}.")
+        if kw.arg in seen_keywords:
+            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call must not repeat "
+                             f"keyword {kw.arg!r}, got {value!r}.")
+        seen_keywords.add(kw.arg)
+        allowed_types = _LEVEL_OF_THEORY_FIELD_TYPES.get(kw.arg)
+        if allowed_types is None:
+            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call has unknown keyword "
+                             f"{kw.arg!r}, got {value!r}.")
+        # Compare exact type(), not isinstance(): isinstance(True, int) is True in Python's numeric
+        # tower, so an isinstance check would silently accept e.g. method=True as if it were a str.
+        if not isinstance(kw.value, ast.Constant) or type(kw.value.value) not in allowed_types:
+            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) keyword {kw.arg!r} must be a "
+                             f"literal of type {allowed_types!r}, got {value!r}.")
+    missing = [field for field in _LEVEL_OF_THEORY_REQUIRED_FIELDS if field not in seen_keywords]
+    if missing:
+        raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call is missing required "
+                         f"keyword(s) {missing!r}, got {value!r}.")
+
+
+def _validate_composite_level_of_theory_call(call: ast.Call, value: str) -> None:
+    """
+    Structurally validate a ``CompositeLevelOfTheory(...)`` call node against the real Arkane
+    ``CompositeLevelOfTheory`` constructor schema (see
+    ``_COMPOSITE_LEVEL_OF_THEORY_REQUIRED_FIELDS``): only ``freq=``/``energy=`` keywords (no
+    positional args, no ``**kwargs``, no duplicates), each a nested, itself-valid
+    ``LevelOfTheory(...)`` call, and BOTH required keywords present -- ``freq`` and ``energy`` have
+    no defaults in Arkane's dataclass, so e.g. a bare ``CompositeLevelOfTheory()`` with neither is
+    vacuous and must be rejected, not silently accepted as structurally valid.
+
+    Args:
+        call (ast.Call): The ``CompositeLevelOfTheory(...)`` call node to validate.
+        value (str): The original ``model_chemistry`` string (used in error messages).
+
+    Raises:
+        ValueError: If ``call`` has positional args, ``**kwargs``, a duplicate keyword, a keyword
+                   other than ``freq``/``energy``, a keyword value that is not a valid
+                   ``LevelOfTheory(...)`` call, or is missing ``freq`` and/or ``energy``.
+    """
+    if call.args:
+        raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call must not have "
+                         f"positional arguments, got {value!r}.")
+    seen_keywords = set()
+    for kw in call.keywords:
+        if kw.arg not in _COMPOSITE_LEVEL_OF_THEORY_REQUIRED_FIELDS:
+            raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call only accepts "
+                             f"'freq'/'energy' keywords, got {kw.arg!r} in {value!r}.")
+        if kw.arg in seen_keywords:
+            raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call must not "
+                             f"repeat keyword {kw.arg!r}, got {value!r}.")
+        seen_keywords.add(kw.arg)
+        if not (isinstance(kw.value, ast.Call) and isinstance(kw.value.func, ast.Name)
+                and kw.value.func.id == 'LevelOfTheory'):
+            raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) keyword {kw.arg!r} "
+                             f"must be a LevelOfTheory(...) call, got {value!r}.")
+        _validate_level_of_theory_call(kw.value, value)
+    missing = [field for field in _COMPOSITE_LEVEL_OF_THEORY_REQUIRED_FIELDS if field not in seen_keywords]
+    if missing:
+        raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call is missing "
+                         f"required keyword(s) {missing!r}, got {value!r}.")
+
+
+def _validate_model_chemistry_expression(field_name: str, value: str) -> None:
+    """
+    Validate a ``model_chemistry`` value destined for the generated (executable) Arkane input,
+    accepting either a plain string label (subject to ``_validate_no_injection_chars``) or a
+    structurally-validated ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)`` bare object
+    expression, which ARC's real ``modelChemistry`` directives commonly use and which
+    ``_validate_no_injection_chars`` alone would incorrectly reject (these expressions legitimately
+    contain quote characters).
+
+    Args:
+        field_name (str): The name of the field ``value`` came from (used in error messages).
+        value (str): The ``model_chemistry`` value to validate.
+
+    Raises:
+        ValueError: If ``value`` is a plain string label containing a newline, quote character or
+                   backslash; or if it is a ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)``
+                   call that fails structural validation (positional args, ``**kwargs``,
+                   unexpected keyword, or a non-literal/non-nested-call keyword value).
+    """
+    call = _model_chemistry_ast_call(value)
+    if call is None:
+        _validate_no_injection_chars(field_name, value)
+        return
+    if call.func.id == 'LevelOfTheory':
+        _validate_level_of_theory_call(call, value)
+    else:
+        _validate_composite_level_of_theory_call(call, value)
+
+
+# The exact Python type every QMEnergySettings field must have, mapped to whether None is also
+# allowed. QMEnergySettings is a plain dataclass, so its annotations enforce NOTHING at runtime,
+# and the values reaching it come from a YAML-loaded capture manifest that can carry any type at
+# all. A wrongly typed value here is more dangerous than a missing one: a non-empty string such as
+# 'False' is TRUTHY, so `if not energy_settings.use_atom_corrections` never fires -- while
+# _build_energy_header's f-string renders it straight back out as a bare `useAtomCorrections =
+# False` that Arkane evaluates as the boolean. The guard is bypassed and the directive inverted in
+# a single step, and the resulting hybrid network is silently on the wrong energy scale. Types are
+# compared by exact type() membership, not isinstance: isinstance(True, int) is True in Python's
+# numeric tower, so an isinstance check would accept frequency_scale_factor=True and silently
+# scale every frequency by 1.0.
+_ENERGY_SETTINGS_FIELD_TYPES = {
+    'model_chemistry': ((str,), False),
+    'frequency_scale_factor': ((int, float), True),
+    'use_hindered_rotors': ((bool,), False),
+    'use_bond_corrections': ((bool,), False),
+    'bond_correction_type': ((str,), True),
+    'atom_energies': ((dict,), True),
+    'use_atom_corrections': ((bool,), False),
+    'tunneling': ((str,), True),
+}
+
+
+def _validate_energy_settings_types(energy_settings) -> None:
+    """
+    Enforce that every ``QMEnergySettings`` field has exactly the type it claims, before any other
+    guard reads it.
+
+    This runs FIRST, ahead of every truthiness-based guard in
+    ``write_hybrid_network_input_file``, because those guards are precisely what a wrongly typed
+    value defeats; see ``_ENERGY_SETTINGS_FIELD_TYPES``.
+
+    Args:
+        energy_settings (QMEnergySettings): The settings to type-check.
+
+    Raises:
+        ValueError: If any field's exact type is not one this dataclass permits for it.
+    """
+    for field_name, (expected_types, none_allowed) in _ENERGY_SETTINGS_FIELD_TYPES.items():
+        value = getattr(energy_settings, field_name)
+        if value is None:
+            if none_allowed:
+                continue
+            raise ValueError(f"QMEnergySettings.{field_name} must not be None; it must be a "
+                             f"{' or '.join(t.__name__ for t in expected_types)}.")
+        if type(value) not in expected_types:
+            raise ValueError(f"QMEnergySettings.{field_name} must be a "
+                             f"{' or '.join(t.__name__ for t in expected_types)}, got a "
+                             f"{type(value).__name__} ({value!r}). A wrongly typed setting is refused rather than "
+                             f"coerced: a non-empty string such as 'False' is truthy, so it would slip past the "
+                             f"guards below while rendering into the generated Arkane input as a bare, falsy token.")
+
+
 @dataclass(frozen=True)
 class QMEnergySettings:
     """
@@ -95,6 +332,14 @@ class QMEnergySettings:
                                               Default: ``None``.
         atom_energies (dict, optional): Arkane's ``atomEnergies`` mapping. Omitted from the
                                         header entirely when ``None``.
+        use_atom_corrections (bool, optional): Arkane's ``useAtomCorrections``. Default: ``True``.
+                                               Must not be ``False``: that directive silently
+                                               disables the atom energy corrections that put a
+                                               QM'd TS's E0 on the same enthalpy-of-formation scale
+                                               as the RMG wells around it (see the module
+                                               docstring); ``write_hybrid_network_input_file``
+                                               raises ``ValueError`` rather than honoring
+                                               ``False``.
         tunneling (str, optional): The tunneling model name (e.g. ``'Eckart'``) written onto every
                                    QM'd reaction's ``reaction(...)`` block. Set to ``None`` to
                                    omit ``tunneling = ...`` entirely. Default: ``'Eckart'``. Left
@@ -110,6 +355,7 @@ class QMEnergySettings:
     use_bond_corrections: bool = False
     bond_correction_type: str | None = None
     atom_energies: dict | None = None
+    use_atom_corrections: bool = True
     tunneling: str | None = 'Eckart'
 
 
@@ -172,7 +418,8 @@ def write_hybrid_network_input_file(source_path: str,
                                           non-negotiable: the vendoring step COPIES these files.
 
     Raises:
-        ValueError: If ``energy_settings.model_chemistry`` is missing/blank; if
+        ValueError: If ``energy_settings.model_chemistry`` is missing/blank or fails validation; if
+                   ``energy_settings.use_atom_corrections`` is ``False``; if
                    ``qm_transition_states`` is empty; if a key of ``qm_transition_states`` is not
                    a transition state label in the source network; if a QM artifact file (or a
                    ``Log(...)`` file it references) does not exist; if a ``Log(...)`` path
@@ -187,11 +434,17 @@ def write_hybrid_network_input_file(source_path: str,
     Returns:
         HybridNetworkResult: The outcome of the write.
     """
+    _validate_energy_settings_types(energy_settings)
     if not energy_settings.model_chemistry or not energy_settings.model_chemistry.strip():
         raise ValueError("QMEnergySettings.model_chemistry is required and must not be blank: without it, Arkane "
                          "cannot apply atom energy corrections, so a QM'd transition state's E0 would not be on "
                          "the same energy reference scale as the RMG wells around it.")
-    _validate_no_injection_chars('model_chemistry', energy_settings.model_chemistry)
+    _validate_model_chemistry_expression('model_chemistry', energy_settings.model_chemistry)
+    if not energy_settings.use_atom_corrections:
+        raise ValueError("QMEnergySettings.use_atom_corrections is False: this directive silently disables "
+                         "Arkane's atom energy corrections, so a QM'd transition state's E0 would not be on the "
+                         "same energy reference scale as the RMG wells around it. Leave use_atom_corrections=True "
+                         "(the default).")
     if energy_settings.tunneling is not None:
         _validate_no_injection_chars('tunneling', energy_settings.tunneling)
     if energy_settings.use_bond_corrections and energy_settings.bond_correction_type is None:
@@ -691,7 +944,14 @@ def _build_energy_header(energy_settings: QMEnergySettings) -> str:
 
     Never emits ``useAtomCorrections = False``: that directive silently disables Arkane's atom
     energy corrections rather than loudly failing without them, which is exactly the dangerous
-    case this module exists to avoid.
+    case this module exists to avoid (``write_hybrid_network_input_file`` already raises before
+    this function is ever reached if ``energy_settings.use_atom_corrections`` is ``False``, so
+    this function always renders ``useAtomCorrections = True``).
+
+    ``modelChemistry`` is rendered bare (unquoted) when ``energy_settings.model_chemistry`` is a
+    ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)`` object expression (it must stay
+    executable Arkane syntax, not become a quoted string containing that syntax as text), and
+    quoted otherwise (the plain string label case).
 
     Args:
         energy_settings (QMEnergySettings): The settings to render.
@@ -699,7 +959,10 @@ def _build_energy_header(energy_settings: QMEnergySettings) -> str:
     Returns:
         str: The header text, terminated with a blank line.
     """
-    lines = [f'modelChemistry = "{energy_settings.model_chemistry}"']
+    if _model_chemistry_ast_call(energy_settings.model_chemistry) is not None:
+        lines = [f'modelChemistry = {energy_settings.model_chemistry}']
+    else:
+        lines = [f'modelChemistry = "{energy_settings.model_chemistry}"']
     if energy_settings.frequency_scale_factor is not None:
         lines.append(f'frequencyScaleFactor = {energy_settings.frequency_scale_factor}')
     lines.append(f'useHinderedRotors = {energy_settings.use_hindered_rotors}')
@@ -708,6 +971,7 @@ def _build_energy_header(energy_settings: QMEnergySettings) -> str:
         lines.append(f'bondCorrectionType = {energy_settings.bond_correction_type!r}')
     if energy_settings.atom_energies is not None:
         lines.append(f'atomEnergies = {energy_settings.atom_energies!r}')
+    lines.append(f'useAtomCorrections = {energy_settings.use_atom_corrections}')
     lines.append('')
     return '\n'.join(lines) + '\n'
 

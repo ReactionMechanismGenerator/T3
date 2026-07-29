@@ -23,6 +23,7 @@ All test outputs are written to pytest's ``tmp_path``, never into ``tests/data/`
 """
 
 import ast
+import dataclasses
 import os
 import re
 import shutil
@@ -191,6 +192,111 @@ def test_rejects_tunneling_with_injection_characters(tmp_path, bad_tunneling):
     than being raw-interpolated into the generated (executable) Arkane input."""
     energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', tunneling=bad_tunneling)
     with pytest.raises(ValueError, match='tunneling'):
+        write_hybrid_network_input_file(
+            source_path=NETWORK_FIXTURE,
+            dest_path=str(tmp_path / 'input.py'),
+            method='CSE',
+            qm_transition_states={'TS1': TS1_ARTIFACT},
+            energy_settings=energy_settings,
+        )
+
+
+def test_refuses_use_atom_corrections_false(tmp_path):
+    """Part 2: use_atom_corrections=False raises ValueError, since that directive silently
+    disables Arkane's atom energy corrections."""
+    energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', use_atom_corrections=False)
+    with pytest.raises(ValueError, match='use_atom_corrections'):
+        write_hybrid_network_input_file(
+            source_path=NETWORK_FIXTURE,
+            dest_path=str(tmp_path / 'input.py'),
+            method='CSE',
+            qm_transition_states={'TS1': TS1_ARTIFACT},
+            energy_settings=energy_settings,
+        )
+
+
+def test_emits_use_atom_corrections_true_by_default(tmp_path):
+    """Part 2: the header unconditionally emits useAtomCorrections = True (the only value that
+    ever reaches this point, since False is rejected up front)."""
+    dest_path = str(tmp_path / 'input.py')
+    write_hybrid_network_input_file(
+        source_path=NETWORK_FIXTURE,
+        dest_path=dest_path,
+        method='CSE',
+        qm_transition_states={'TS1': TS1_ARTIFACT},
+        energy_settings=DEFAULT_ENERGY_SETTINGS,
+    )
+    with open(dest_path, 'r') as f:
+        text = f.read()
+    assert 'useAtomCorrections = True' in text
+
+
+@pytest.mark.parametrize('model_chemistry_expr', [
+    "LevelOfTheory(method='wb97xd2023', basis='def2tzvp', software='gaussian')",
+    "CompositeLevelOfTheory(freq=LevelOfTheory(method='wb97xd', basis='def2tzvp', software='gaussian'), "
+    "energy=LevelOfTheory(method='dlpnoccsd(t)f122023', basis='ccpvtzf12', software='orca'))",
+    # software_version is the one genuinely non-str LevelOfTheory field (Union[int, float, str]
+    # in arkane/encorr/modelchem.py); it must be allowed, not blanket-rejected as non-str.
+    "LevelOfTheory(method='wb97xd', basis='def2tzvp', software='gaussian', software_version=16)",
+    "LevelOfTheory(method='wb97xd', basis='def2tzvp', software='gaussian', software_version=16.0)",
+])
+def test_accepts_and_renders_bare_level_of_theory_model_chemistry(tmp_path, model_chemistry_expr):
+    """Part 2: a real ARC-shaped LevelOfTheory(...)/CompositeLevelOfTheory(...) object expression
+    is accepted (it legitimately contains quote characters that _validate_no_injection_chars alone
+    would reject) and rendered bare (unquoted), not as a quoted string containing that syntax."""
+    dest_path = str(tmp_path / 'input.py')
+    energy_settings = QMEnergySettings(model_chemistry=model_chemistry_expr)
+    write_hybrid_network_input_file(
+        source_path=NETWORK_FIXTURE,
+        dest_path=dest_path,
+        method='CSE',
+        qm_transition_states={'TS1': TS1_ARTIFACT},
+        energy_settings=energy_settings,
+    )
+    with open(dest_path, 'r') as f:
+        text = f.read()
+    assert f'modelChemistry = {model_chemistry_expr}' in text
+    assert f'modelChemistry = "{model_chemistry_expr}"' not in text
+    # The generated file must itself remain valid, executable-shaped Arkane syntax.
+    ast.parse(text)
+
+
+@pytest.mark.parametrize('bad_model_chemistry_expr', [
+    "LevelOfTheory('wb97xd2023', basis='def2tzvp')",  # positional arg
+    "LevelOfTheory(**{'method': 'wb97xd2023'})",  # **kwargs, dict-valued
+    "LevelOfTheory(**'not_a_mapping')",  # **kwargs, constant-valued: isolates the `kw.arg is None`
+                                         # guard, since kw.value here IS an ast.Constant and would
+                                         # otherwise slip past the isinstance(Constant) check
+    "LevelOfTheory(method=some_name)",  # non-literal keyword value
+    "CompositeLevelOfTheory(LevelOfTheory(method='a'), energy=LevelOfTheory(method='b'))",  # positional arg
+    "CompositeLevelOfTheory(freq=LevelOfTheory(method='a'), sp=LevelOfTheory(method='b'))",  # bad keyword
+    "CompositeLevelOfTheory(freq='not_a_level_of_theory_call', energy=LevelOfTheory(method='b'))",
+    # round 22 P1 #4: AST-structural allowlist accepted any keyword NAME and any ast.Constant
+    # VALUE type, and a vacuous CompositeLevelOfTheory() with no freq/energy at all.
+    "LevelOfTheory(__class__='x')",  # not a real LevelOfTheory field name
+    "LevelOfTheory(method='a', extra_bogus_field='x')",  # not a real LevelOfTheory field name
+    "LevelOfTheory(method=True)",  # method must be str, not bool
+    "LevelOfTheory(method=...)",  # method must be str, not Ellipsis
+    "LevelOfTheory(method=b'x')",  # method must be str, not bytes
+    "LevelOfTheory(method=3)",  # method must be str, not int
+    "LevelOfTheory(basis='def2tzvp')",  # method is a required LevelOfTheory field
+    "CompositeLevelOfTheory()",  # vacuous: no freq/energy at all
+    "CompositeLevelOfTheory(freq=LevelOfTheory(method='a'))",  # missing required energy keyword
+    "CompositeLevelOfTheory(energy=LevelOfTheory(method='b'))",  # missing required freq keyword
+    "CompositeLevelOfTheory(freq=LevelOfTheory(method='a'), energy=LevelOfTheory(method='b'), "
+    "extra=LevelOfTheory(method='c'))",  # not a real CompositeLevelOfTheory field name
+    "LevelOfTheory(method='a', method='b')",  # duplicate keyword: ast.parse alone permits this
+                                               # even though CPython's compile() step rejects it
+    "CompositeLevelOfTheory(freq=LevelOfTheory(method='a'), freq=LevelOfTheory(method='b'), "
+    "energy=LevelOfTheory(method='c'))",  # duplicate keyword
+])
+def test_rejects_structurally_invalid_model_chemistry_object_expression(tmp_path, bad_model_chemistry_expr):
+    """Part 2: a LevelOfTheory(...)/CompositeLevelOfTheory(...)-shaped model_chemistry that fails
+    structural validation (positional args, **kwargs, unexpected keyword, non-literal/non-nested-
+    call keyword value) is rejected rather than silently interpolated bare into the generated
+    (executable) Arkane input."""
+    energy_settings = QMEnergySettings(model_chemistry=bad_model_chemistry_expr)
+    with pytest.raises(ValueError, match='model_chemistry'):
         write_hybrid_network_input_file(
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
@@ -1638,6 +1744,39 @@ def test_refuses_non_literal_log_argument(tmp_path):
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
     assert 'TS1.py' in str(excinfo.value)
+
+
+@pytest.mark.parametrize('field_name, value', [
+    # The quoted 'False' is the dangerous shape: non-empty, hence TRUTHY, so
+    # `if not energy_settings.use_atom_corrections` never fires -- while the f-string in
+    # _build_energy_header renders it back out as a bare `useAtomCorrections = False` that Arkane
+    # evaluates as the boolean. The guard is bypassed and the directive inverted in one step.
+    ('use_atom_corrections', 'False'),
+    ('use_atom_corrections', 0),
+    ('use_atom_corrections', None),
+    ('use_hindered_rotors', 'False'),
+    ('use_hindered_rotors', 1),
+    ('use_bond_corrections', 'True'),
+    ('frequency_scale_factor', '0.988'),
+    ('frequency_scale_factor', True),
+    ('bond_correction_type', 5),
+    ('atom_energies', 'H: -0.5'),
+    ('model_chemistry', 3.14),
+    ('tunneling', 7),
+])
+def test_refuses_wrongly_typed_energy_settings_fields(tmp_path, field_name, value):
+    """QMEnergySettings is a plain dataclass, so it enforces nothing: the values reaching it come
+    from a YAML-loaded capture manifest, which can carry any type at all. The write must therefore
+    type-check every field itself, at the boundary, rather than trusting the annotation."""
+    energy_settings = dataclasses.replace(DEFAULT_ENERGY_SETTINGS, **{field_name: value})
+    with pytest.raises(ValueError, match=field_name):
+        write_hybrid_network_input_file(
+            source_path=NETWORK_FIXTURE,
+            dest_path=str(tmp_path / 'input.py'),
+            method='CSE',
+            qm_transition_states={'TS1': TS1_ARTIFACT},
+            energy_settings=energy_settings,
+        )
 
 
 class TestKwargsUnpackingIsRefusedByTheRewriterToo:
