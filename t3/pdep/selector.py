@@ -320,11 +320,15 @@ class PDepNetworkSelection:
         not "different", so the combined field is set to ``None`` with a warning rather than adopting
         the one real hash -- which would assert a content binding part of the aggregate does not have.
 
-        ``evaluation_status`` is ``'not_evaluated'`` if any component was not evaluated AND the
-        aggregate did not qualify -- an aggregate "does not qualify" drawn from a partially evaluated
-        set is not a decision anyone made, since an unevaluated component might have been the one
-        that qualified. An aggregate that DID qualify keeps ``'evaluated'``, because the component
-        that qualified backs it. Either way a warning records how many components were not evaluated.
+        ``evaluation_status`` is ``'not_evaluated'`` if ANY component was not evaluated, and a warning
+        records how many. This is a statement of coverage, not of usability: whether a partially
+        evaluated aggregate may still be acted on is a policy question, answered by the consumer
+        (``t3.pdep.api.explore_pdep_network`` accepts one that qualified and refuses one that did not).
+
+        ``qualified`` is unioned over the EVALUATED components only. This class is a mutable dataclass
+        with no invariant enforcement, so a component can carry ``qualified=True`` alongside
+        ``evaluation_status='not_evaluated'``; counting its vote would let a flag its own status
+        declares meaningless decide the aggregate.
 
         ``network_reaction`` is set to ``None`` on the result, since it now represents the whole
         network rather than one reaction, and ``network_reactions_examined`` is set to the number
@@ -382,10 +386,20 @@ class PDepNetworkSelection:
                             f'({sorted(str(s) for s in cache_statuses)}); recording None rather than '
                             f'silently adopting one.')
 
+        # Only EVALUATED components get a vote on qualification. ``PDepNetworkSelection`` is a mutable
+        # dataclass with no invariant enforcement, so `qualified=True, evaluation_status='not_evaluated'`
+        # is a constructible state; ``any(decision.qualified ...)`` over every component would let a
+        # component that was never evaluated carry the aggregate to `qualified=True` on a flag that,
+        # by that component's own status, means nothing.
+        not_evaluated = [decision for decision in decisions
+                         if decision.evaluation_status != EVALUATION_STATUS_EVALUATED]
+        qualified = any(decision.qualified for decision in decisions
+                        if decision.evaluation_status == EVALUATION_STATUS_EVALUATED)
+
         combined = cls(
             network_id=first.network_id,
             network_source_hash=network_source_hash,
-            qualified=any(decision.qualified for decision in decisions),
+            qualified=qualified,
             network_reaction=None,
             direction_ambiguous=any(decision.direction_ambiguous for decision in decisions),
             method=method,
@@ -398,17 +412,20 @@ class PDepNetworkSelection:
         # PDepNetworkSelection is 'evaluated', so combining components that were never evaluated used
         # to produce a confidently 'evaluated', qualified=False aggregate -- precisely the "reports a
         # decision nobody made" failure ``evaluation_status`` exists to prevent, reintroduced one
-        # level up. An aggregate 'does not qualify' is only backed if EVERY component was actually
-        # evaluated, since an unevaluated component might have been the one that qualified. An
-        # aggregate that DID qualify is backed regardless, by whichever component qualified -- but
-        # the gap is recorded as a warning either way, so a partial evaluation is never invisible.
-        not_evaluated = [decision for decision in decisions
-                         if decision.evaluation_status != EVALUATION_STATUS_EVALUATED]
+        # level up.
+        #
+        # The status states a FACT about coverage ("was every component evaluated"), unconditionally.
+        # It deliberately does NOT also encode the policy question "is this aggregate usable as a
+        # gate" -- an earlier version exempted aggregates that qualified, on the reasoning that the
+        # positive claim is backed by whichever component qualified. That reasoning is sound about
+        # USABILITY and false as a statement of coverage: it made a partially evaluated aggregate
+        # report that it was fully evaluated. The usability judgement now lives where it belongs, in
+        # ``t3.pdep.api.explore_pdep_network``, which accepts a not_evaluated aggregate that
+        # qualified and refuses one that did not.
         if not_evaluated:
             warnings.append(f'{len(not_evaluated)} of {len(decisions)} combined decisions were not '
                             f'evaluated; the aggregate covers only the evaluated ones.')
-            if not combined.qualified:
-                combined.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+            combined.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
         combined.direction_keys = [decision.direction_key for decision in decisions]
         combined.selected_ts = _union_preserving_order(decision.selected_ts for decision in decisions)
         combined.uncertain_path_reactions = _union_preserving_order(

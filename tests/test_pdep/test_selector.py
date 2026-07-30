@@ -1080,17 +1080,30 @@ def test_combine_handles_every_dataclass_field():
         f'{ {name: getattr(combined, name) for name in failures} }.')
 
 
-def test_combine_keeps_evaluated_when_a_component_qualified():
-    """Test that an aggregate which DID qualify stays 'evaluated' even though another component was
-    not evaluated: the qualification is backed by the component that qualified, so refusing it would
-    be an over-refusal. The gap is still recorded as a warning."""
+def test_combine_reports_partial_coverage_even_when_the_aggregate_qualified():
+    """Test that evaluation_status states a FACT about coverage, not a judgement about usability: an
+    aggregate that qualified is still 'not_evaluated' when a component was not evaluated, because it
+    was not. Whether such an aggregate may be acted on is the consumer's call -- see
+    test_api.py::test_explore_pdep_network_accepts_a_qualified_but_partially_evaluated_selection."""
     qualifying = _make_full_decision(uncertain_path_reactions=[_make_ts_entry('TS1')])
     qualifying.qualified = True
     unevaluated = _make_full_decision(direction_key=None, evaluation_status=EVALUATION_STATUS_NOT_EVALUATED)
     combined = PDepNetworkSelection.combine([qualifying, unevaluated])
     assert combined.qualified is True
-    assert combined.evaluation_status == EVALUATION_STATUS_EVALUATED
+    assert combined.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
     assert any('were not evaluated' in warning for warning in combined.warnings)
+
+
+def test_combine_ignores_the_qualified_flag_of_an_unevaluated_component():
+    """Test that a component carrying qualified=True alongside evaluation_status='not_evaluated' does
+    not carry the aggregate. PDepNetworkSelection is mutable and enforces no invariant, so that state
+    is constructible; counting its vote would let a flag its own status declares meaningless decide
+    whether the network gets expensive QM."""
+    unevaluated = _make_full_decision(evaluation_status=EVALUATION_STATUS_NOT_EVALUATED)
+    unevaluated.qualified = True
+    evaluated = _make_full_decision(direction_key=None)
+    combined = PDepNetworkSelection.combine([unevaluated, evaluated])
+    assert combined.qualified is False
 
 
 def test_combine_warns_about_unevaluated_components_and_counts_them():

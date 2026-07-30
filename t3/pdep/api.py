@@ -348,7 +348,16 @@ def explore_pdep_network(network_path: str,
         # made, phrased as though it had been. Raise rather than pick a side -- exploring anyway and
         # skipping are both guesses about what the caller meant, and the caller can express either
         # deliberately (re-run the selection, or pass selection=None).
-        if selection.evaluation_status != EVALUATION_STATUS_EVALUATED:
+        #
+        # `qualified` is the exception, and it is why this is `and not selection.qualified` rather
+        # than a bare status check. PDepNetworkSelection.combine() marks an aggregate 'not_evaluated'
+        # whenever ANY component was not evaluated, because that is the truth about coverage -- but a
+        # partially evaluated aggregate that DID qualify is backed by whichever evaluated component
+        # qualified, and combine() only counts evaluated components' votes. Refusing it would refuse
+        # a positive verdict that real evidence supports: the over-refusal failure mode, not the
+        # fail-open one. The asymmetry is the point -- a partial 'no' is unsupported (an unevaluated
+        # component might have been the one that qualified), a partial 'yes' is not.
+        if selection.evaluation_status != EVALUATION_STATUS_EVALUATED and not selection.qualified:
             raise ValueError(
                 f"selection.evaluation_status is {selection.evaluation_status!r}, so its "
                 f"'qualified' field ({selection.qualified!r}) carries no verdict and cannot be used "

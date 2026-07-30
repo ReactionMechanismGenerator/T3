@@ -496,6 +496,27 @@ def test_explore_pdep_network_forwards_the_parsed_content_hash_to_the_factory(tm
     assert calls[0]['expected_source_hash'] == NETWORK_SOURCE_HASH
 
 
+def test_explore_pdep_network_accepts_a_qualified_but_partially_evaluated_selection(tmp_path, monkeypatch):
+    """Test that a selection which qualified but whose coverage was partial is ACCEPTED. combine()
+    marks any partially covered aggregate 'not_evaluated' because that is the truth about coverage,
+    but a positive verdict there is backed by whichever evaluated component qualified -- and
+    combine() only counts evaluated components' votes. Refusing it would be an over-refusal, this
+    branch's other failure mode. The asymmetry is deliberate: a partial 'no' is unsupported, a
+    partial 'yes' is not."""
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=True, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
+    selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+
+    assert len(calls) == 1
+    assert result.status == EXPLORATION_STATUS_SUCCEEDED
+
+
 def test_explore_pdep_network_refuses_a_selection_with_no_source_hash(tmp_path, monkeypatch):
     """Test that a selection carrying no content binding is refused rather than gated on its file
     stem. network_id matches every revision of network4_2.py, so accepting a hash-less selection
