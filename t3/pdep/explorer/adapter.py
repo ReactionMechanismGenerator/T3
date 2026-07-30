@@ -10,6 +10,33 @@ their k(T,P) kinetics.
 from abc import ABC, abstractmethod
 
 
+def refuse_bare_string_seed(field_name: str, value) -> None:
+    """
+    Refuse a bare ``str``/``bytes`` offered where a sequence of labels is expected.
+
+    A module-level function rather than an inline check, because this rule MUST run before anything
+    calls ``tuple()`` on the value, and there are now two places that do: ``validate_explorer_seed``
+    below, and ``t3.pdep.explorer.config.PDepExplorerConfig``, which normalizes its seed fields to
+    tuples at construction. Whichever of them runs first destroys the evidence for the other -- once
+    ``'OH'`` has become ``('O', 'H')`` it is indistinguishable from a caller who deliberately asked
+    for a bimolecular O + H source channel, so a later check cannot recover the distinction. Sharing
+    one function keeps the refusal at every point of entry instead of only the first one that
+    happened to be written.
+
+    Args:
+        field_name (str): The name of the field being checked, for the error message.
+        value: The offered value.
+
+    Raises:
+        ValueError: If ``value`` is a ``str`` or ``bytes``.
+    """
+    if isinstance(value, (str, bytes)):
+        raise ValueError(f"'{field_name}' must be a sequence of label strings, not a bare "
+                         f"{type(value).__name__} ({value!r}). A string is itself a sequence, so this "
+                         f"would silently be read character by character -- {tuple(value)!r} -- rather "
+                         f"than as the single label it was meant to be.")
+
+
 def validate_explorer_seed(seed_species, transition_state_seeds, max_source_species: int,
                            supports_transition_state_seeds: bool) -> tuple:
     """
@@ -42,11 +69,7 @@ def validate_explorer_seed(seed_species, transition_state_seeds, max_source_spec
     # network happens to declare species named 'O' and 'H', every later check as well. Arkane then
     # explores a different reaction than the one asked for. bytes is refused for the same reason.
     for name, value in (('seed_species', seed_species), ('transition_state_seeds', transition_state_seeds)):
-        if isinstance(value, (str, bytes)):
-            raise ValueError(f"'{name}' must be a sequence of label strings, not a bare "
-                             f"{type(value).__name__} ({value!r}). A string is itself a sequence, so this "
-                             f"would silently be read character by character -- {tuple(value)!r} -- rather "
-                             f"than as the single label it was meant to be.")
+        refuse_bare_string_seed(field_name=name, value=value)
     seed_species = tuple(seed_species or tuple())
     transition_state_seeds = tuple(transition_state_seeds or tuple())
     for name, values in (('seed_species', seed_species), ('transition_state_seeds', transition_state_seeds)):

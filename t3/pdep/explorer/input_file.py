@@ -298,9 +298,9 @@ def write_arkane_explorer_input_file(source_path: str,
     # Rebound from the return value, not merely called for its side effect: an integer-only field
     # coerces an integral float (2.0 -> 2), and rendering the un-coerced argument would write a count
     # as a non-count into the generated file.
-    field_values = _validate_explorer_field_values(explore_tol=explore_tol, energy_tol=energy_tol,
-                                                   flux_tol=flux_tol,
-                                                   maximum_radical_electrons=maximum_radical_electrons)
+    field_values = validate_explorer_field_values(explore_tol=explore_tol, energy_tol=energy_tol,
+                                                  flux_tol=flux_tol,
+                                                  maximum_radical_electrons=maximum_radical_electrons)
     explore_tol, energy_tol = field_values['explore_tol'], field_values['energy_tol']
     flux_tol, maximum_radical_electrons = field_values['flux_tol'], field_values['maximum_radical_electrons']
     # Checked here rather than left to ``METHOD_MAP[method]`` inside
@@ -615,9 +615,18 @@ _EXPLORER_NUMBER_CONTRACTS = {
 }
 
 
-def _validate_explorer_field_values(explore_tol, energy_tol, flux_tol, maximum_radical_electrons) -> dict:
+def validate_explorer_field_values(explore_tol, energy_tol, flux_tol, maximum_radical_electrons) -> dict:
     """
     Check every numeric ``explorer(...)`` field against its own contract in ``_EXPLORER_NUMBER_CONTRACTS``.
+
+    Public (no leading underscore): it is the single numeric-contract rule shared by TWO entry
+    points -- this module's own ``write_arkane_explorer_input_file``, and
+    ``t3.pdep.explorer.config.PDepExplorerConfig``, which delegates to it in ``__post_init__`` so a
+    config built directly (never passed through the writer) is refused at construction time rather
+    than only when it is later rendered. Duplicating the per-field contracts in ``config.py`` instead
+    would let the two entry points' rules drift apart, which is exactly the antipattern
+    ``t3.pdep.explorer.adapter.validate_explorer_seed``'s docstring warns about for the seed rules.
+    So this is module-level public API now, not an internal helper.
 
     A None value is skipped rather than checked: the writer omits the keyword entirely for None, which
     is how a caller asks for Arkane's own default, and validating an absent field would refuse the one

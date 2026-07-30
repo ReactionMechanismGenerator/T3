@@ -582,7 +582,7 @@ def test_refuses_to_write_when_generated_block_value_fails_the_load_self_check(t
     # The stub returns its keywords unchanged rather than None: the real function's contract is to
     # hand back the validated (possibly coerced) values for the caller to render, so a None-returning
     # stub would simulate a DIFFERENT bug -- a crash in the caller -- and never reach the self-check.
-    monkeypatch.setattr(input_file_module, '_validate_explorer_field_values', lambda **kwargs: kwargs)
+    monkeypatch.setattr(input_file_module, 'validate_explorer_field_values', lambda **kwargs: kwargs)
 
     source_path = _write_source(tmp_path, SOURCE_NO_KINETICS)
     dest_path = str(tmp_path / 'input.py')
