@@ -124,6 +124,14 @@ class PESExplorerAdapter(ABC):
         of a genuine exploration.
 
     Attributes:
+        reasons (tuple): Human-readable reasons the exploration did not succeed; empty until
+                         ``explore()`` has run and failed. An adapter that returns ``False`` from
+                         ``explore()`` MUST populate this: a negative outcome with no stated reason
+                         is unusable to the caller deciding what to do next.
+        output_paths (tuple): The solver output artifact path(s) produced by the run; empty until a
+                              successful ``explore()``.
+        manifest (dict): Provenance recorded for the run (inputs, hashes, tool revisions); empty
+                         until ``explore()`` has run.
         max_source_species (int): The maximum number of source (seed) species an exploration may
                                   start from. Defaults to 2, Arkane's hard limit: Arkane's
                                   ``explorer`` block accepts a ``source`` of one or two species
@@ -170,6 +178,18 @@ class PESExplorerAdapter(ABC):
             max_source_species=self.max_source_species,
             supports_transition_state_seeds=self.supports_transition_state_seeds,
         )
+        # The three reporting attributes below are part of the ADAPTER CONTRACT, not incidental state
+        # of one concrete adapter, because the public API boundary reads all three off whatever
+        # adapter the factory returned (``t3.pdep.api.explore_pdep_network``). They were previously
+        # set only by ``ArkaneExplorerAdapter``, which meant the "pluggable explorer" the factory
+        # advertises was pluggable in name only: a second, fully conforming adapter -- one
+        # implementing every abstract method -- would have satisfied the ABC and then raised
+        # AttributeError at the API boundary the first time it failed. Initializing them here gives
+        # every adapter the correct "nothing has run yet" state for free, and makes reading them at
+        # the boundary legitimate rather than a bet on the concrete class.
+        self.reasons = tuple()
+        self.output_paths = tuple()
+        self.manifest = dict()
 
     @abstractmethod
     def set_up(self):

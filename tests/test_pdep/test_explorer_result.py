@@ -188,3 +188,45 @@ def test_as_dict_renders_none_k_tp_direction_leaf():
     )
     as_dict = result.as_dict()
     assert as_dict['k_tp_as_written'][0]['kinetics_params']['coeffs'][1][0] is None
+
+
+def test_a_failed_result_may_not_claim_a_usable_network_or_rate():
+    """
+    status='failed' carrying network_paths or k(T,P) must be refused.
+
+    Those fields assert a usable result exists, which is the claim the failure denies. Would catch a
+    caller (or a future refactor of explore_pdep_network) that forwards the adapter's artifacts
+    uniformly on both outcomes, producing a record that reads as a success to anyone checking the
+    artifact fields rather than the status.
+    """
+    with pytest.raises(ValueError, match='assert a usable result exists'):
+        PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_FAILED,
+                              reasons=('did not converge',), network_paths=('/x/net.py',))
+
+
+def test_a_failed_result_may_still_carry_its_output_paths():
+    """
+    The refusal above must not over-refuse into discarding failure diagnostics.
+
+    A failed run's own logs are what a human needs to diagnose it. Refusing them alongside
+    network_paths would be the tidier-looking rule and the wrong one -- the same over-refusal shape
+    (refusing something that prevents nothing) this package has now corrected three times.
+    """
+    result = PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_FAILED,
+                                   reasons=('did not converge',), output_paths=('/x/output.py',))
+    assert result.output_paths == ('/x/output.py',)
+
+
+def test_the_manifest_is_copied_so_a_reported_result_cannot_be_rewritten():
+    """
+    Mutating the dict passed in must not change the result's manifest.
+
+    A frozen dataclass holding someone else's live dict is frozen in name only: whoever passed it in
+    can keep editing the provenance of a run that has already been reported.
+    """
+    manifest = {'rmgpy_revision': 'abc123'}
+    result = PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_SUCCEEDED,
+                                   network_paths=('/x/net.py',), manifest=manifest)
+    manifest['rmgpy_revision'] = 'tampered'
+    manifest['injected'] = True
+    assert result.manifest == {'rmgpy_revision': 'abc123'}

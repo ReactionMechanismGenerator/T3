@@ -8,6 +8,8 @@ string, evidence fields, and an ``as_dict()`` that renders everything as plain J
 types.
 """
 
+import copy
+
 from dataclasses import dataclass, field
 
 from t3.pdep.parser import PDepArkaneReaction, to_json_safe
@@ -57,7 +59,10 @@ class PDepExplorationResult:
             from ``ArkaneExplorerAdapter.get_networks()``. Must be empty unless ``status`` is
             ``'succeeded'``, and non-empty when it is (success with no artifact is a fail-open shape).
         output_paths (tuple): The raw Arkane ``output*.py`` path(s) an exploration wrote. Must be
-            empty unless ``status`` is ``'succeeded'``.
+            empty when ``status`` is ``'skipped'`` (nothing ran), but is CARRIED on ``'failed'`` as
+            well as ``'succeeded'``: a failed run's own logs and partial output are exactly what
+            someone diagnosing the failure needs, and this result is the only record they get of
+            where to find them.
         k_tp_as_written (tuple): The parsed ``PDepArkaneReaction`` entries for the explored network(s),
             e.g. from ``ArkaneExplorerAdapter.get_k_tp()``. DIRECTION IS ARKANE'S, NOT THE CALLER'S:
             each entry carries ``reactants``/``products`` exactly as Arkane wrote them, which is NOT
@@ -77,7 +82,9 @@ class PDepExplorationResult:
             ``status`` is ``'skipped'`` and any of ``network_paths``/``output_paths``/
             ``k_tp_as_written`` is non-empty (nothing ran, so there can be no artifacts); if
             ``status`` is ``'failed'`` or ``'skipped'`` and ``reasons`` is empty; if ``status`` is
-            ``'succeeded'`` and ``network_paths`` is empty.
+            ``'succeeded'`` and ``network_paths`` is empty; or if ``status`` is ``'failed'`` and
+            ``network_paths``/``k_tp_as_written`` is non-empty (those assert a usable result the
+            failure denies).
     """
     network_id: str | None
     status: str
@@ -109,6 +116,18 @@ class PDepExplorationResult:
             raise ValueError(
                 "PDepExplorationResult with status='succeeded' must carry at least one entry in "
                 "network_paths: success with no artifact is a fail-open shape.")
+        if self.status == EXPLORATION_STATUS_FAILED and (self.network_paths or self.k_tp_as_written):
+            raise ValueError(
+                "PDepExplorationResult with status='failed' cannot carry network_paths or "
+                "k_tp_as_written: those assert a usable result exists, which is the claim the "
+                "failure denies. A failed run MAY carry output_paths -- Arkane's own logs and "
+                "partial output are exactly what a human diagnosing the failure needs.")
+        # Copied, not aliased. A frozen dataclass holding someone else's live dict is frozen in name
+        # only: whoever passed the manifest in can keep editing the provenance of a run that has
+        # already been reported. (``selection`` is deliberately NOT copied -- it is the caller's own
+        # decision object, passed back so they can correlate it by identity, and this dataclass is
+        # not the thing that made it.)
+        object.__setattr__(self, 'manifest', copy.deepcopy(self.manifest))
 
     def as_dict(self) -> dict:
         """

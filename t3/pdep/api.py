@@ -18,21 +18,33 @@ module therefore only supports the RMG ``network.py`` path (parsed via
 directly (a ``PDepNetwork`` and/or a loaded sensitivity dict) so callers who already have these in
 memory can skip the file-parsing step. No YAML network schema is invented here.
 
-``explore``/``how`` are trigger-channel arguments for a PES explorer that does not exist yet (it
-lands in a future commit). The signature accepts them now, on purpose, so it stays stable once the
-explorer is implemented; passing ``explore=True`` today raises ``NotImplementedError`` rather than
-silently doing nothing.
+``explore``/``how`` used to be reserved trigger-channel arguments for a PES explorer that did not
+exist yet. That explorer now exists as ``explore_pdep_network()`` (below), which is the real entry
+point for running one; ``select_pdep_network()`` itself never explores -- passing ``explore=True``
+or ``how=<anything>`` to it raises ``ValueError`` redirecting the caller to
+``explore_pdep_network()``. The parameters are kept on the signature (deprecated) purely so a
+caller still passing them gets that redirect rather than an opaque ``TypeError``.
 """
 
+import copy
+import os
 from pathlib import Path
 
 from arc.common import save_yaml_file
 
 from t3.pdep.cache import validate_sa_cache
+from t3.pdep.explorer.config import PDepExplorerConfig, deep_thaw
+from t3.pdep.explorer.factory import explorer_factory
+from t3.pdep.explorer.result import (EXPLORATION_STATUS_FAILED,
+                                     EXPLORATION_STATUS_SKIPPED,
+                                     EXPLORATION_STATUS_SUCCEEDED,
+                                     PDepExplorationResult,
+                                     )
 from t3.pdep.parser import PDepNetwork, parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_UNVALIDATED,
                               E0_PERTURBATION_J_PER_MOL,
+                              EVALUATION_STATUS_EVALUATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
                               SELECTOR_VERSION,
                               STRUCTURES_KEY,
@@ -105,27 +117,32 @@ def select_pdep_network(network: str | PDepNetwork,
             ``validate_cache`` is ``True``.
         validate_cache (bool, optional): Whether to validate ``sa_path`` against its T3 sidecar
             before trusting it. Ignored when ``sa_dict`` is given directly. Defaults to ``True``.
-        explore (bool, optional): Reserved for the upcoming PES explorer adapter (Commit 4, not yet
-            implemented). Must be left ``False``.
-        how (str, optional): Reserved alongside ``explore`` for the upcoming PES explorer adapter.
-            Only meaningful when ``explore`` is truthy.
+        explore (bool, optional): Deprecated in favour of ``explore_pdep_network()``. This function
+            never explores; passing ``explore=True`` raises ``ValueError`` naming
+            ``explore_pdep_network()`` as the real entry point. Kept on the signature only so a
+            caller still passing it gets that redirect rather than an opaque ``TypeError``.
+        how (str, optional): Deprecated in favour of ``PDepExplorerConfig.explorer``, which replaces
+            it. Passing any value raises ``ValueError``. Kept on the signature only so a caller
+            still passing it gets that redirect rather than an opaque ``TypeError``.
 
     Raises:
-        ValueError: If neither or both of ``sa_path``/``sa_dict`` are given, or if ``how`` is given
-            without ``explore`` being truthy.
-        NotImplementedError: If ``explore`` is truthy -- the PES explorer adapter lands in a future
-            commit (Commit 4) and does not exist yet.
+        ValueError: If neither or both of ``sa_path``/``sa_dict`` are given; if ``explore`` is
+            truthy; or if ``how`` is given at all. The latter two redirect the caller to
+            ``explore_pdep_network()`` / ``PDepExplorerConfig.explorer``, which replace them.
 
     Returns:
         PDepNetworkSelection: The decision (a combined one, if ``network_reaction`` is ``None``).
     """
     if explore:
-        raise NotImplementedError(
-            'The PES explorer adapter (explore/how) is not implemented yet; it lands in a future commit '
-            '(Commit 4, PES explorer). Call select_pdep_network() without explore=True for now.')
+        raise ValueError(
+            "select_pdep_network() never explores a PES; 'explore'/'how' are deprecated no-ops here. "
+            'Call explore_pdep_network() instead -- it is the real entry point for running a PES '
+            "explorer, and 'how' is replaced there by PDepExplorerConfig.explorer.")
     if how is not None:
-        raise ValueError(f"'how'={how!r} was given without explore=True; 'how' only has meaning for "
-                         f"the PES explorer adapter, which is only engaged when explore=True.")
+        raise ValueError(
+            f"'how'={how!r} was given, but 'how' is deprecated and has no meaning on "
+            f"select_pdep_network() (it never explores). Use explore_pdep_network() with a "
+            f"PDepExplorerConfig(explorer=...) instead -- 'explorer' replaces 'how'.")
     if (sa_path is None) == (sa_dict is None):
         sa_dict_repr = '<dict>' if sa_dict is not None else None
         raise ValueError(f'Exactly one of sa_path or sa_dict must be given, '
@@ -200,6 +217,224 @@ def select_pdep_network(network: str | PDepNetwork,
             f'The sensitivity data for network {parsed_network.network_id} has no reaction keys to evaluate.')
         return selection
     return PDepNetworkSelection.combine(decisions)
+
+
+def explore_pdep_network(network_path: str,
+                         config: PDepExplorerConfig,
+                         selection: PDepNetworkSelection | None = None,
+                         logger=None,
+                         ) -> PDepExplorationResult:
+    """
+    Run a PES explorer against a PDep network, as a standalone call, optionally gated by a budget.
+
+    Asymmetric with ``select_pdep_network()`` ON PURPOSE: that function accepts ``str |
+    PDepNetwork``, this one accepts ONLY a path string. The explorer input writer
+    (``t3.pdep.explorer.input_file.write_arkane_explorer_input_file``, via its ``source_path``
+    parameter) needs the network's SOURCE TEXT read from a file on disk -- and an already-parsed
+    ``PDepNetwork`` is not that: its ``.path`` may be ``None``, may be stale, or may point at a file
+    that has since changed on disk. A parsed object is refused here rather than silently re-read
+    from a ``.path`` that might not mean what it used to.
+
+    Budget gate (only when ``selection`` is given -- see the ``selection`` Args entry below):
+    select-first is a BUDGET POLICY, never a correctness claim. ``select_pdep_network()`` only sees
+    reactions already present in the SA dict and the network file, so a network missing the very
+    channel that would dominate its sensitivity can never qualify -- and would then never be
+    explored, even though exploring it might reveal exactly that missing channel. Passing
+    ``selection=None`` is the deliberate "explore regardless of budget" path for a caller who wants
+    that.
+
+    Filesystem state (``config.trusted_output_root``, ``config.output_directory``) is checked HERE,
+    not in ``PDepExplorerConfig.__post_init__``: the config deliberately checks none of it (see its
+    class docstring's "what is validated WHERE" section) because a filesystem fact checked at
+    construction time can already be stale by the time this function runs.
+
+    Args:
+        network_path (str): The path to an existing RMG P-dep network file. Unlike
+            ``select_pdep_network()``'s ``network`` argument, a parsed ``PDepNetwork`` is NOT
+            accepted here; see above.
+        config (PDepExplorerConfig): The validated description of the exploration request.
+        selection (PDepNetworkSelection, optional): The budget-gate decision for this network, e.g.
+            from ``select_pdep_network()``. When given, ``selection.method`` must equal
+            ``config.method`` and ``selection.network_id`` must equal the parsed network's
+            ``network_id`` (both checked here; see Raises). When ``selection.qualified`` is
+            ``False``, the exploration is skipped -- no adapter is ever constructed -- and a
+            ``'skipped'`` result carrying ``selection.reason()`` is returned. When ``None`` (the
+            default), the exploration runs unconditionally.
+        logger (Logger, optional): The current T3 Logger instance, passed through to the explorer
+            adapter.
+
+    Raises:
+        ValueError: If ``network_path`` is not a ``str`` (see above); if ``selection`` is given and
+            its ``method`` does not equal ``config.method``, or its ``network_id`` does not equal
+            the parsed network's ``network_id``; if ``config.trusted_output_root`` does not exist,
+            is not a directory, or is a symlink; or if ``config.output_directory`` does not resolve
+            strictly inside the realpath'd ``config.trusted_output_root``.
+        RuntimeError: Propagated verbatim from the explorer adapter (e.g. a rule-0 run-directory
+            claim collision surfaced as an exception, rather than as a recorded 'failed' result).
+            This is deliberate -- see the module-level note in the function body just above the
+            ``adapter.explore()`` call.
+
+    Returns:
+        PDepExplorationResult: The outcome -- 'skipped' (budget gate declined it), 'failed' (the
+            explorer ran and did not succeed), or 'succeeded'.
+    """
+    if not isinstance(network_path, str):
+        raise ValueError(
+            f'explore_pdep_network() requires network_path to be a path string to an existing '
+            f'network file, not a parsed object (got {type(network_path).__name__}). Unlike '
+            f"select_pdep_network(), which accepts str | PDepNetwork, this function does not accept "
+            f"an already-parsed PDepNetwork: the explorer input writer needs the network's SOURCE "
+            f"TEXT read from a file on disk (see write_arkane_explorer_input_file's source_path "
+            f"parameter), and a parsed object is not that -- its .path may be None, stale, or point "
+            f"at a file that has since changed. Pass the path string instead.")
+
+    parsed_network = parse_pdep_network_file(path=network_path)
+
+    if selection is not None:
+        if selection.method != config.method:
+            raise ValueError(
+                f"selection.method ({selection.method!r}) does not match config.method "
+                f"({config.method!r}). Gating a decision made under one master-equation method and "
+                f"then exploring under another is silent provenance corruption: the recorded "
+                f"decision would not be about the run that actually happened.")
+        if selection.network_id != parsed_network.network_id:
+            raise ValueError(
+                f"selection.network_id ({selection.network_id!r}) does not match the parsed "
+                f"network's network_id ({parsed_network.network_id!r}). A decision about a "
+                f"different network used as this one's budget gate fabricates confidence in a "
+                f"result nothing actually justifies -- the same hazard "
+                f"PDepNetworkSelection.combine() already refuses for the same reason.")
+        # `qualified` carries NO signal unless the decision was actually evaluated. When
+        # select_pdep_network() rejects a stale SA cache it returns qualified=False AND
+        # evaluation_status='not_evaluated' (api.py:174, :208), and reason() nonetheless renders the
+        # full "does not qualify: no transition state the network is sensitive to ..." sentence.
+        # Gating on `qualified` alone therefore reads a missing evaluation as a negative verdict:
+        # the exploration is silently skipped and the caller is handed a decision that was never
+        # made, phrased as though it had been. Raise rather than pick a side -- exploring anyway and
+        # skipping are both guesses about what the caller meant, and the caller can express either
+        # deliberately (re-run the selection, or pass selection=None).
+        if selection.evaluation_status != EVALUATION_STATUS_EVALUATED:
+            raise ValueError(
+                f"selection.evaluation_status is {selection.evaluation_status!r}, so its "
+                f"'qualified' field ({selection.qualified!r}) carries no verdict and cannot be used "
+                f"as a budget gate -- a decision that was never evaluated is not a decision to not "
+                f"explore. Re-run the selection against usable SA data, or pass selection=None to "
+                f"explore without gating.")
+        if not selection.qualified:
+            # Nothing runs: no adapter is constructed, no filesystem state below is touched.
+            return PDepExplorationResult(
+                network_id=parsed_network.network_id,
+                status=EXPLORATION_STATUS_SKIPPED,
+                reasons=(selection.reason(),),
+                selection=selection,
+            )
+
+    # Filesystem state, checked HERE and not in PDepExplorerConfig -- see the function docstring.
+    # T3 must never CREATE the trusted root: creating it would mean claiming a path whose ownership
+    # the caller never demonstrated (it only ever demonstrated a path STRING).
+    if not os.path.isdir(config.trusted_output_root) or os.path.islink(config.trusted_output_root):
+        raise ValueError(
+            f"config.trusted_output_root ({config.trusted_output_root!r}) must already exist as a "
+            f"real (non-symlink) directory; explore_pdep_network() never creates it.")
+
+    # Re-verified rather than trusted from PDepExplorerConfig.__post_init__: that check compared
+    # path STRINGS (via realpath) at construction time, when trusted_output_root/output_directory
+    # need not have existed at all. Only now, with the root confirmed to exist, can realpath resolve
+    # any symlink that actually exists on disk -- so this re-check can catch something the
+    # construction-time one structurally could not.
+    resolved_root = os.path.realpath(config.trusted_output_root)
+    resolved_output_directory = os.path.realpath(config.output_directory)
+    if resolved_output_directory == resolved_root \
+            or os.path.commonpath([resolved_root, resolved_output_directory]) != resolved_root:
+        raise ValueError(
+            f"config.output_directory ({config.output_directory!r}, resolved to "
+            f"{resolved_output_directory!r}) must resolve to a location strictly inside "
+            f"config.trusted_output_root ({config.trusted_output_root!r}, resolved to "
+            f"{resolved_root!r}).")
+
+    # Intermediate directories BETWEEN the root and output_directory are created here -- permitted
+    # precisely because they are inside a root the caller has already vouched for (checked above).
+    # config.output_directory ITSELF is deliberately NOT created: the adapter's rule-0 os.mkdir
+    # (t3.pdep.explorer.arkane.ArkaneExplorerAdapter._claim_run_directory) must stay the SOLE creator
+    # of that leaf directory -- that mkdir winning IS the atomic claim of ownership over the run, and
+    # pre-creating the directory here would make every run look like it collided with a previous one
+    # (rule 0 refuses a pre-existing directory, even an empty one; see its docstring). Do not
+    # "helpfully" add an os.makedirs(config.output_directory, exist_ok=True) below -- that is exactly
+    # the line that would break rule 0.
+    os.makedirs(os.path.dirname(config.output_directory), exist_ok=True)
+
+    adapter = explorer_factory(
+        explorer=config.explorer,
+        seed_species=config.seed_species,
+        output_directory=config.output_directory,
+        network_path=network_path,
+        method=config.method,
+        # Thawed at this boundary, not passed frozen: the config stores bath_gas/database_kwargs
+        # DEEPLY frozen (nested lists as tuples, nested mappings as read-only views), and the input
+        # writer's _validate_database_kwarg deliberately requires a real list for the database(...)
+        # library keywords. deep_thaw hands the adapter a fresh plain-dict/list copy, so the writer's
+        # contract is met and nothing downstream can mutate the frozen config through what it got.
+        bath_gas=deep_thaw(config.bath_gas),
+        explore_tol=config.explore_tol,
+        energy_tol=config.energy_tol,
+        flux_tol=config.flux_tol,
+        maximum_radical_electrons=config.maximum_radical_electrons,
+        logger=logger,
+        transition_state_seeds=config.transition_state_seeds,
+        database_kwargs=deep_thaw(config.database_kwargs),
+    )
+
+    # adapter.explore() calls its own set_up() internally (see ArkaneExplorerAdapter.set_up's
+    # docstring on why that ordering is load-bearing); explore_pdep_network() must not call set_up()
+    # itself.
+    #
+    # No catch-all here, deliberately. An ordinary Arkane run failure is a RECORDED result
+    # (status='failed', via adapter.reasons) -- that is adapter.explore() returning False, not
+    # raising. Everything else -- a bad config, an unreadable network, an unknown explorer name from
+    # the factory, a RuntimeError out of the adapter -- must stay loud and propagate. Wrapping this
+    # call in `except Exception` would relabel T3 bugs and invalid input as "the explorer returned a
+    # negative result", which is a wrong statement of fact a caller could act on.
+    succeeded = adapter.explore()
+
+    if succeeded:
+        return PDepExplorationResult(
+            network_id=parsed_network.network_id,
+            status=EXPLORATION_STATUS_SUCCEEDED,
+            # get_networks() rather than the adapter's own final_network_paths attribute: the former
+            # is the ABC's contract (and enforces the "not before a successful explore()" rule for
+            # us), the latter is one concrete adapter's internal state that no other explorer is
+            # obliged to have.
+            network_paths=tuple(adapter.get_networks()),
+            output_paths=tuple(adapter.output_paths),
+            k_tp_as_written=tuple(adapter.get_k_tp()),
+            # Copied, not aliased. The result advertises itself as a frozen record of what happened;
+            # sharing the adapter's live dict would let anything still holding the adapter rewrite
+            # the provenance of a run that has already been reported.
+            manifest=copy.deepcopy(adapter.manifest),
+            selection=selection,
+        )
+    # An adapter that fails without saying why is violating the contract documented on
+    # PESExplorerAdapter.reasons. Say exactly that, rather than letting PDepExplorationResult's
+    # empty-reasons guard raise a ValueError that would read as though this function had built a
+    # malformed result -- the fact worth reporting is WHICH adapter broke the contract, and the
+    # underlying failure must not be swallowed on the way past.
+    reasons = tuple(adapter.reasons) or (
+        f'The {type(adapter).__name__} explorer reported failure without recording any reason. '
+        f'This is an adapter contract violation (see PESExplorerAdapter.reasons); the exploration '
+        f'genuinely did fail, but no diagnosis is available from it.',)
+    return PDepExplorationResult(
+        network_id=parsed_network.network_id,
+        status=EXPLORATION_STATUS_FAILED,
+        reasons=reasons,
+        # A failed run's artifacts are exactly what someone diagnosing the failure needs, and this
+        # is the only record they get -- 'reasons' says what T3 concluded, while output_paths say
+        # where Arkane's own logs and partial output are. Dropping them forced a human to rediscover
+        # the run directory by hand. network_paths and k(T,P) are deliberately NOT carried: those
+        # would assert a usable result exists, which is the claim the failure denies.
+        output_paths=tuple(adapter.output_paths),
+        manifest=copy.deepcopy(adapter.manifest),
+        selection=selection,
+    )
 
 
 def rank_pdep_networks(networks,

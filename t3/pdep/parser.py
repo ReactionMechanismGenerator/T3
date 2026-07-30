@@ -306,11 +306,18 @@ def to_json_safe(value):
     at the point the wrong type enters, and a caller with a dataclass converts it explicitly (as
     ``PDepExplorationResult.as_dict`` does for its selection and k(T,P) entries).
 
+    Non-finite floats (``nan``, ``inf``) are deliberately NOT refused, though they are representable
+    in YAML and not in strict JSON. A ``nan`` here is real evidence rather than a mistake: a
+    degenerate or rejected solve genuinely produces one, and it reaches this function only by having
+    been parsed out of a solver's own output. Refusing it would discard the record of a run whose
+    numbers went wrong -- precisely when the record matters most -- so the caller writing strict JSON
+    is the one that must decide what to do about it.
+
     Args:
         value: The value to convert, of arbitrary nesting depth.
 
     Raises:
-        TypeError: If a leaf is not a str, bool, int, float, or None.
+        TypeError: If a leaf is not a str, bool, int, float, or None, or a mapping key is not a str.
 
     Returns:
         The converted value, containing no tuples and no non-scalar leaves anywhere.
@@ -318,6 +325,15 @@ def to_json_safe(value):
     if isinstance(value, (tuple, list)):
         return [to_json_safe(item) for item in value]
     if isinstance(value, dict):
+        # Keys are checked, not just values. A non-str key round-trips WRONG rather than loudly:
+        # yaml.safe_dump happily writes an int or tuple key, and json.dump silently stringifies it,
+        # so {1: 'a'} reloads as {'1': 'a'} and a later lookup by the original key misses. Refusing
+        # here keeps the corruption at the point it enters instead of at some future read.
+        for key in value:
+            if not isinstance(key, str):
+                raise TypeError(f'Cannot render a mapping keyed by {key!r} of type '
+                                f'{type(key).__name__} as a JSON/YAML-safe value; keys must be '
+                                f'strings, or the key changes type across a save/load round trip.')
         return {key: to_json_safe(val) for key, val in value.items()}
     # bool before int is unnecessary here (both are allowed) but the tuple order is kept explicit
     # as a reminder that bool IS an int subclass, which matters wherever these two are told apart.

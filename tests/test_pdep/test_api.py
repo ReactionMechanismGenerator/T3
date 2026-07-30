@@ -16,14 +16,25 @@ from arc.common import read_yaml_file, save_yaml_file
 import t3.main as t3_main
 from t3.common import TEST_DATA_BASE_PATH
 from t3.logger import Logger
-from t3.pdep.api import rank_pdep_networks, save_pdep_network_selections, select_pdep_network
+import t3.pdep.api as t3_pdep_api
+from t3.pdep.api import (explore_pdep_network,
+                         rank_pdep_networks,
+                         save_pdep_network_selections,
+                         select_pdep_network,
+                         )
 from t3.pdep.cache import write_sa_cache_metadata
+from t3.pdep.explorer.config import PDepExplorerConfig
+from t3.pdep.explorer.result import (EXPLORATION_STATUS_FAILED,
+                                     EXPLORATION_STATUS_SKIPPED,
+                                     EXPLORATION_STATUS_SUCCEEDED,
+                                     )
 from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_UNVALIDATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
                               SELECTOR_VERSION,
+                              PDepNetworkSelection,
                               select_from_sa_dict,
                               )
 from t3.schema import T3Sensitivity
@@ -178,11 +189,12 @@ def test_select_pdep_network_raises_value_error_for_how_without_explore(sa_dict)
         select_pdep_network(network=NETWORK_PATH, sa_dict=sa_dict, how='some_value')
 
 
-# --- 4. NotImplementedError for explore=True -----------------------------------------------------
+# --- 4. explore=True redirects to explore_pdep_network() ----------------------------------------
 
-def test_select_pdep_network_raises_not_implemented_for_explore(sa_dict):
-    """Test that explore=True raises NotImplementedError (Commit 4 is not implemented yet)."""
-    with pytest.raises(NotImplementedError):
+def test_select_pdep_network_raises_value_error_for_explore_naming_explore_pdep_network(sa_dict):
+    """Test that explore=True raises ValueError naming explore_pdep_network() as the real entry
+    point (select_pdep_network() never explores; explore/how are retired placeholders)."""
+    with pytest.raises(ValueError, match='explore_pdep_network'):
         select_pdep_network(network=NETWORK_PATH, sa_dict=sa_dict, explore=True)
 
 
@@ -337,3 +349,362 @@ def test_log_pdep_network_summary_does_not_raise(tmp_path, sa_dict):
                     t0=datetime.datetime.now())
     logger.log_pdep_network_summary(selections=[selection, qualifying_selection])
     logger.log_pdep_network_summary(selections=[])
+
+
+# --- 9. explore_pdep_network() -------------------------------------------------------------------
+#
+# All of these use a fake explorer adapter/factory (monkeypatched onto t3.pdep.api.explorer_factory,
+# the name actually looked up inside explore_pdep_network()) rather than running real Arkane: the
+# point of these tests is to pin explore_pdep_network()'s OWN guards -- the budget gate, the
+# filesystem containment re-checks, and the no-catch-all rule around adapter.explore() -- not to
+# exercise a real PES exploration.
+
+class _FakeAdapter:
+    """
+    A minimal stand-in for a PESExplorerAdapter, recording what it was constructed with.
+
+    Deliberately models the ABC's CONTRACT (``get_networks()``, ``reasons``, ``output_paths``,
+    ``manifest``) rather than ArkaneExplorerAdapter's internals. An earlier version of this double
+    exposed ``final_network_paths``, which is Arkane's own attribute and is not part of the adapter
+    interface at all -- so the suite's model of a "conforming adapter" was one no second explorer
+    would have had to satisfy, and the API's coupling to a single concrete class was invisible here.
+    A double that testifies to a contract the real interface does not define proves nothing.
+    """
+
+    def __init__(self, succeed=True, reasons=(), raise_error=None, on_construct=None,
+                 network_paths=('/fake/final_network.py',), **kwargs):
+        self._succeed = succeed
+        self.reasons = reasons
+        self._raise_error = raise_error
+        self._network_paths = network_paths
+        self.output_paths = ('/fake/output1.py',)
+        self.manifest = {'fake': True}
+        self.construct_kwargs = kwargs
+        if on_construct is not None:
+            on_construct(kwargs)
+
+    def explore(self) -> bool:
+        if self._raise_error is not None:
+            raise self._raise_error
+        return self._succeed
+
+    def get_networks(self) -> tuple:
+        if not self._succeed:
+            raise RuntimeError('get_networks() was called after a failed explore().')
+        return self._network_paths
+
+    def get_k_tp(self):
+        return tuple()
+
+
+def _make_fake_factory(monkeypatch, **adapter_kwargs):
+    """Monkeypatch t3.pdep.api.explorer_factory with a fake that records whether it was called and
+    returns a _FakeAdapter built from adapter_kwargs. Returns the mutable call-record list."""
+    calls = []
+
+    def _fake_factory(**kwargs):
+        calls.append(kwargs)
+        return _FakeAdapter(**adapter_kwargs)
+
+    monkeypatch.setattr(t3_pdep_api, 'explorer_factory', _fake_factory)
+    return calls
+
+
+def _make_config(trusted_output_root, output_directory, method='CSE'):
+    """Build a valid PDepExplorerConfig pointed at the given (not-yet-existing) directories."""
+    return PDepExplorerConfig(
+        explorer='FakeExplorer',
+        trusted_output_root=trusted_output_root,
+        output_directory=output_directory,
+        seed_species=('H',),
+        method=method,
+    )
+
+
+def test_explore_pdep_network_refuses_parsed_network_object(tmp_path, monkeypatch):
+    """Test that a parsed PDepNetwork object (rather than a path string) is refused, with the reason
+    stated in the message."""
+    _make_fake_factory(monkeypatch)
+    parsed = parse_pdep_network_file(path=NETWORK_PATH)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'))
+    with pytest.raises(ValueError, match='path string'):
+        explore_pdep_network(network_path=parsed, config=config)
+
+
+def test_explore_pdep_network_refuses_selection_method_mismatch(tmp_path, monkeypatch):
+    """Test that a selection whose method disagrees with config.method is refused."""
+    _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=True, method='MSC')
+    with pytest.raises(ValueError, match='method'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+
+
+def test_explore_pdep_network_refuses_selection_network_id_mismatch(tmp_path, monkeypatch):
+    """Test that a selection whose network_id disagrees with the parsed network is refused."""
+    _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='some_other_network', qualified=True, method='CSE')
+    with pytest.raises(ValueError, match='network_id'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+
+
+def test_explore_pdep_network_skips_non_qualifying_selection_without_constructing_adapter(tmp_path, monkeypatch):
+    """Test that a non-qualifying selection produces status='skipped' carrying selection.reason(),
+    and -- the whole point of the budget gate -- that the explorer factory is never called."""
+    calls = _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    output_directory = os.path.join(trusted_root, 'run1')
+    config = _make_config(trusted_root, output_directory, method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE')
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+
+    assert result.status == EXPLORATION_STATUS_SKIPPED
+    assert result.reasons == (selection.reason(),)
+    assert result.selection is selection
+    assert calls == []  # the factory (and therefore any adapter) was never invoked
+    # A skipped exploration must not have touched the filesystem either.
+    assert not os.path.exists(output_directory)
+
+
+def test_explore_pdep_network_explores_anyway_when_selection_is_none(tmp_path, monkeypatch):
+    """Test that omitting selection (None) runs the exploration unconditionally."""
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=None)
+
+    assert len(calls) == 1
+    assert result.status == EXPLORATION_STATUS_SUCCEEDED
+
+
+def test_explore_pdep_network_refuses_symlinked_trusted_output_root(tmp_path, monkeypatch):
+    """Test that a trusted_output_root that is itself a symlink is refused, even though it resolves
+    to a real directory and containment checks would otherwise pass."""
+    _make_fake_factory(monkeypatch)
+    real_root = tmp_path / 'real_root'
+    os.makedirs(real_root)
+    linked_root = tmp_path / 'root_link'
+    linked_root.symlink_to(real_root, target_is_directory=True)
+    config = _make_config(str(linked_root), os.path.join(str(linked_root), 'run1'), method='CSE')
+    with pytest.raises(ValueError, match='symlink'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+
+def test_explore_pdep_network_refuses_nonexistent_trusted_output_root(tmp_path, monkeypatch):
+    """Test that a trusted_output_root that does not exist on disk is refused (explore_pdep_network()
+    never creates the root itself)."""
+    _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'does_not_exist')  # deliberately never created
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    with pytest.raises(ValueError, match='trusted_output_root'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+
+def test_explore_pdep_network_refuses_output_directory_outside_root(tmp_path, monkeypatch):
+    """Test that explore_pdep_network() independently re-verifies output_directory containment
+    rather than only trusting PDepExplorerConfig's construction-time check. A well-behaved config
+    cannot even be constructed with an out-of-root output_directory (PDepExplorerConfig.__post_init__
+    already refuses that), so this simulates a config tampered with after construction -- e.g. by a
+    stale reference or a bug elsewhere -- to prove explore_pdep_network()'s own re-check is real and
+    not merely decorative."""
+    _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    other_root = str(tmp_path / 'other_root')
+    os.makedirs(other_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    # PDepExplorerConfig is frozen; object.__setattr__ is the documented way to bypass that for a
+    # deliberate tamper, mirroring PDepExplorerConfig.__post_init__'s own use of object.__setattr__
+    # for coerced field values.
+    object.__setattr__(config, 'output_directory', os.path.join(other_root, 'run1'))
+    with pytest.raises(ValueError, match='trusted_output_root'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+
+def test_explore_pdep_network_creates_intermediate_dirs_but_not_output_directory_itself(tmp_path, monkeypatch):
+    """Test that explore_pdep_network() creates the intermediate directories between the trusted
+    root and output_directory, but never pre-creates output_directory itself -- that leaf directory
+    must stay the adapter's own rule-0 atomic os.mkdir claim (see ArkaneExplorerAdapter's
+    _claim_run_directory docstring)."""
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    output_directory = os.path.join(trusted_root, 'nested', 'deeper', 'run1')
+    observed = {}
+
+    def _on_construct(kwargs):
+        # Captured at the moment the fake adapter is constructed -- i.e. right where the real
+        # adapter's rule-0 os.mkdir claim would happen next.
+        observed['parent_exists'] = os.path.isdir(os.path.dirname(output_directory))
+        observed['output_directory_exists'] = os.path.isdir(output_directory)
+
+    _make_fake_factory(monkeypatch, succeed=True, on_construct=_on_construct)
+    config = _make_config(trusted_root, output_directory, method='CSE')
+
+    explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+    assert observed['parent_exists'] is True
+    assert observed['output_directory_exists'] is False
+
+
+def test_explore_pdep_network_reports_failed_status_with_reasons_no_exception(tmp_path, monkeypatch):
+    """Test that an ordinary Arkane run failure is a RECORDED result (status='failed' with reasons),
+    not an exception."""
+    _make_fake_factory(monkeypatch, succeed=False, reasons=('Arkane reported job failure.',))
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+    assert result.status == EXPLORATION_STATUS_FAILED
+    assert result.reasons == ('Arkane reported job failure.',)
+
+
+def test_explore_pdep_network_propagates_runtime_error_from_adapter(tmp_path, monkeypatch):
+    """Test that a RuntimeError raised out of adapter.explore() (e.g. a rule-0 directory-claim
+    collision surfaced as an exception) propagates verbatim -- explore_pdep_network() must not wrap
+    adapter.explore() in a catch-all that would relabel it as a 'failed' result."""
+    _make_fake_factory(monkeypatch, raise_error=RuntimeError('rule-0 collision'))
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    with pytest.raises(RuntimeError, match='rule-0 collision'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+
+def test_explore_pdep_network_reports_an_adapter_that_fails_without_saying_why(monkeypatch, tmp_path):
+    """
+    An adapter returning False with no reasons must yield a FAILED result naming the contract breach.
+
+    Would catch two opposite mistakes. Letting the empty tuple through reaches
+    PDepExplorationResult's empty-reasons guard, which raises a ValueError that reads as though this
+    function built a malformed result -- burying the real fact, which is that an adapter broke the
+    contract documented on PESExplorerAdapter.reasons. Silently substituting a bland "exploration
+    failed" would lose it just as thoroughly. The exploration genuinely failed and the result must
+    say so, while naming the adapter that could not diagnose itself.
+    """
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    network_path = NETWORK_PATH
+    _make_fake_factory(monkeypatch, succeed=False, reasons=tuple())
+
+    result = explore_pdep_network(network_path=network_path, config=config)
+
+    assert result.status == EXPLORATION_STATUS_FAILED
+    assert len(result.reasons) == 1
+    assert '_FakeAdapter' in result.reasons[0]
+    assert 'contract violation' in result.reasons[0]
+
+
+def test_explore_pdep_network_reads_networks_through_the_abc_contract_not_arkanes_attribute(
+        monkeypatch, tmp_path):
+    """
+    The success path must read artifacts via get_networks(), the ABC's method.
+
+    Would catch a regression to ``adapter.final_network_paths``, which is ArkaneExplorerAdapter's
+    own state and appears nowhere in PESExplorerAdapter. Reading it makes the factory's pluggability
+    a fiction: a second explorer implementing every abstract method would satisfy the ABC and then
+    raise AttributeError here. This double has no such attribute, so the coupling cannot come back
+    unnoticed.
+    """
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    network_path = NETWORK_PATH
+    _make_fake_factory(monkeypatch, network_paths=('/fake/from_get_networks.py',))
+
+    result = explore_pdep_network(network_path=network_path, config=config)
+
+    assert result.status == EXPLORATION_STATUS_SUCCEEDED
+    assert result.network_paths == ('/fake/from_get_networks.py',)
+
+
+def test_explore_pdep_network_copies_the_adapters_manifest(monkeypatch, tmp_path):
+    """
+    Mutating the adapter's manifest afterwards must not rewrite the reported result.
+
+    The result advertises itself as a frozen record of what happened. Aliasing the adapter's live
+    dict would let anything still holding the adapter edit the provenance of a run already reported
+    -- fake immutability, the same defect class as a frozen config holding a caller's mutable dict.
+    """
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    network_path = NETWORK_PATH
+    constructed = []
+
+    def _capturing_factory(**kwargs):
+        adapter = _FakeAdapter()
+        constructed.append(adapter)
+        return adapter
+
+    monkeypatch.setattr(t3_pdep_api, 'explorer_factory', _capturing_factory)
+
+    result = explore_pdep_network(network_path=network_path, config=config)
+    assert result.manifest == {'fake': True}
+
+    constructed[0].manifest['fake'] = 'tampered'
+    constructed[0].manifest['injected'] = True
+    assert result.manifest == {'fake': True}
+
+
+def test_explore_pdep_network_refuses_a_selection_that_was_never_evaluated(monkeypatch, tmp_path):
+    """
+    A not-evaluated selection must be REFUSED as a gate, not read as "does not qualify".
+
+    This is the defect the test exists for. When select_pdep_network() rejects a stale SA cache it
+    returns qualified=False AND evaluation_status='not_evaluated', and reason() still renders the
+    full "does not qualify: no transition state the network is sensitive to ..." sentence. Gating on
+    `qualified` alone therefore turns a missing evaluation into a negative verdict: the exploration
+    is silently skipped, and the caller is handed a decision that was never made, phrased as though
+    it had been. Raising is deliberate -- exploring anyway and skipping are both guesses about what
+    the caller meant.
+    """
+    _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE')
+    selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+
+    with pytest.raises(ValueError) as exc_info:
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+    message = str(exc_info.value)
+    assert 'not_evaluated' in message
+    assert 'carries no verdict' in message
+
+
+def test_explore_pdep_network_carries_output_paths_on_failure(monkeypatch, tmp_path):
+    """
+    A failed run must carry output_paths, and must NOT carry network_paths or k(T,P).
+
+    'reasons' says what T3 concluded; output_paths say where Arkane's own logs and partial output
+    are. Dropping them leaves whoever is diagnosing the failure to rediscover the run directory by
+    hand, and this result is the only record they get. network_paths/k_tp are withheld for the
+    opposite reason: they would assert a usable result exists, which is exactly what the failure
+    denies.
+    """
+    _make_fake_factory(monkeypatch, succeed=False, reasons=('Arkane exploration did not converge.',))
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+    assert result.status == EXPLORATION_STATUS_FAILED
+    assert result.output_paths == ('/fake/output1.py',)
+    assert result.network_paths == tuple()
+    assert result.k_tp_as_written == tuple()

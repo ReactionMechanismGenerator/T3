@@ -6,6 +6,7 @@ t3 tests test_pdep test_parser
 """
 
 import ast
+import math
 import os
 
 import pytest
@@ -989,3 +990,29 @@ def test_to_json_safe_still_accepts_every_scalar_it_should():
     written carelessly can drop either one.
     """
     assert to_json_safe(['s', 1, 1.5, True, False, None]) == ['s', 1, 1.5, True, False, None]
+
+
+def test_to_json_safe_refuses_a_non_string_mapping_key():
+    """
+    A non-str key must raise: it round-trips WRONG rather than loudly.
+
+    yaml.safe_dump happily writes an int key and json.dump silently stringifies it, so {1: 'a'}
+    reloads as {'1': 'a'} and a later lookup by the original key misses. Would catch a converter
+    that walks only values -- the natural way to write one, and the reason this is easy to miss.
+    """
+    with pytest.raises(TypeError, match='keys must be'):
+        to_json_safe({'outer': {1: 'a'}})
+
+
+def test_to_json_safe_keeps_non_finite_floats():
+    """
+    nan/inf must survive, deliberately, even though strict JSON cannot represent them.
+
+    A nan here is evidence, not a mistake: a degenerate or rejected solve genuinely produces one and
+    it reaches this function only by having been parsed out of a solver's own output. Refusing it
+    would discard the record of a run whose numbers went wrong, precisely when that record matters
+    most. Would catch a well-meaning tightening of the leaf check into "finite floats only".
+    """
+    rendered = to_json_safe({'coeffs': [float('nan'), float('inf')]})
+    assert math.isnan(rendered['coeffs'][0])
+    assert math.isinf(rendered['coeffs'][1])

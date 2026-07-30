@@ -151,7 +151,22 @@ class PDepExplorerConfig:
         explorer (str): The explorer adapter registry name (e.g. ``'Arkane'``). Not checked against
                         the registry itself; see the class docstring.
         trusted_output_root (str): The absolute path to the root directory explorer output is
-                                   confined to.
+                                   confined to. "Trusted" is a REQUIREMENT ON THE CALLER, not a
+                                   property T3 can verify: this root and everything on the path to
+                                   it must be writable only by principals already trusted to run
+                                   arbitrary code as this user. T3 checks that the root exists, is
+                                   a real directory rather than a symlink, and that
+                                   ``output_directory`` resolves strictly inside it -- which bounds
+                                   where output can land and refuses the obvious swaps. It does NOT
+                                   make the run safe against a writable parent: the adapter claims
+                                   its run directory with an atomic ``os.mkdir``, but every later
+                                   write reopens that directory BY PATHNAME, so anyone able to
+                                   rename the leaf and drop a symlink in its place between the
+                                   claim and the writes can still redirect them. Closing that
+                                   fully needs dir-fd / ``O_NOFOLLOW`` handling in both the adapter
+                                   and ``t3.runners.rmg_runner.run_arkane_job``; until then the
+                                   root's own permissions are the boundary, and this field exists
+                                   to make that requirement explicit rather than assumed.
         output_directory (str): The absolute path to the directory this exploration's files will be
                                 written to. Must resolve to a location strictly inside
                                 ``trusted_output_root``.
