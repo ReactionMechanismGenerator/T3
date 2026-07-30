@@ -365,6 +365,12 @@ def test_select_pdep_network_cache_rejected_carries_version_markers(tmp_path):
     assert rejected.cache_status == CACHE_STATUS_CACHED_REJECTED
     assert rejected.selection_schema_version == SELECTION_SCHEMA_VERSION
     assert rejected.selection_algorithm_version == SELECTION_ALGORITHM_VERSION
+    # The version markers above come from field DEFAULTS, so they cannot catch a construction site
+    # that forgets them. network_source_hash has no such default -- it defaults to None, and
+    # explore_pdep_network refuses a None hash BEFORE it reaches the evaluation gate. So dropping it
+    # here would turn a clean 'skipped' into a ValueError blaming the decision for the constructor's
+    # omission. Mutation-checked: deleting the kwarg at api.py:165 left the whole suite green.
+    assert rejected.network_source_hash == parse_pdep_network_file(path=network_path).source_hash
 
 
 def test_select_pdep_network_no_reaction_keys_carries_version_markers():
@@ -375,6 +381,8 @@ def test_select_pdep_network_no_reaction_keys_carries_version_markers():
                                     relative_threshold=0.001)
     assert selection.selection_schema_version == SELECTION_SCHEMA_VERSION
     assert selection.selection_algorithm_version == SELECTION_ALGORITHM_VERSION
+    # See the sibling test above: this is the assertion the defaults cannot make.
+    assert selection.network_source_hash == parse_pdep_network_file(path=NETWORK_PATH).source_hash
 
 
 # --- 7c. selection_schema_version survives nesting inside PDepExplorationResult.as_dict() --------
@@ -1934,6 +1942,44 @@ def test_load_pdep_exploration_results_refuses_a_result_missing_the_selection_ke
     message = str(exc_info.value)
     assert 'results[0]' in message
     assert "missing the required 'selection' key" in message
+
+
+def test_a_cache_rejected_selection_is_refused_for_the_RIGHT_reason(tmp_path, monkeypatch):
+    """
+    Test that a selection from select_pdep_network's cache-rejected path is refused by
+    explore_pdep_network for being UNEVALUATED, not for carrying no content hash.
+
+    Both refusals are correct behaviour and both raise ValueError, so a test asserting merely that
+    ValueError is raised would pass either way. The distinction is the whole point: the hash check
+    runs BEFORE the evaluation check, so if the cache-rejected construction site ever stopped
+    recording network_source_hash, this call would still raise -- but with a message asserting the
+    network file changed under a decision that never recorded one, blaming the wrong thing and
+    sending a reader to the wrong file. Mutation-checked: deleting the kwarg at api.py:165 left the
+    entire suite green before this test existed.
+    """
+    _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='MSC')
+
+    network_path = str(tmp_path / 'network4_2.py')
+    with open(NETWORK_PATH, 'r') as f:
+        _write(network_path, f.read())
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    save_yaml_file(path=sa_path, content=read_yaml_file(path=SA_PATH))
+
+    # No sidecar is written, so the cache is rejected and the selection is never evaluated.
+    rejected = select_pdep_network(network=network_path, sa_path=sa_path,
+                                   network_reaction=TARGET_REACTION, relative_threshold=0.001,
+                                   method='MSC')
+    assert rejected.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+
+    with pytest.raises(ValueError) as excinfo:
+        explore_pdep_network(network_path=network_path, config=config, selection=rejected)
+
+    message = str(excinfo.value)
+    assert 'carries no verdict' in message, message
+    assert 'carries no binding to the content' not in message, message
 
 
 def test_the_loaders_refuse_a_python_object_tag(tmp_path):
