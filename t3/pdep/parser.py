@@ -295,7 +295,9 @@ class PDepNetwork:
 
 def to_json_safe(value):
     """
-    Recursively convert a value into plain JSON/YAML-safe types.
+    Recursively convert a value into plain YAML-safe types (and JSON-safe apart from non-finite
+    floats -- see below; the shorthand "JSON/YAML-safe" is used throughout this module for that,
+    since the one exception is deliberate and documented rather than an oversight).
 
     Tuples and lists become lists; dicts are copied with their values recursively converted;
     everything else (including ``None``) is returned unchanged. ``None`` is deliberately passed

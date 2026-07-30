@@ -69,16 +69,13 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
     A PESExplorerAdapter that drives Arkane's PES explorer from a 1- or 2-species seed.
 
     Note:
-        ``t3.pdep.explorer.factory.explorer_factory`` does not currently pass a ``network_path``
-        or ``method`` through to the adapter it constructs, even though both are required to build
-        an Arkane explorer input file (``write_arkane_explorer_input_file`` requires a source RMG
-        P-dep network path and a method). This is a real, deliberate gap: wiring
-        ``explorer_factory``/``t3/pdep/api.py`` to supply these is out of scope for this adapter
-        and is left for a follow-up commit (the ``explore=True`` wiring). Until then, this adapter
-        must be constructed directly with ``network_path``/``method`` rather than through the
-        factory.
+        This adapter is reached through ``t3.pdep.explorer.factory.explorer_factory``, which passes
+        ``network_path``, ``method``, and ``expected_source_hash`` through from
+        ``t3.pdep.api.explore_pdep_network``. (An earlier version of this note described that wiring
+        as a deliberate gap and told callers to construct the adapter directly; the wiring landed,
+        and direct construction is now only what the tests do.)
 
-        This increment refuses (rather than resolves) a multi-network exploration: Arkane's
+        This adapter refuses (rather than resolves) a multi-network exploration: Arkane's
         explorer can, from a single seed, discover MORE than one distinct reaction network, in
         which case there is no single unambiguous "the" result to hand back from ``get_networks()``
         / ``get_k_tp()``. Detecting this case still goes through the same index-resolution logic
