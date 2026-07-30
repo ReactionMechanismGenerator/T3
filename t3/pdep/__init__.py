@@ -6,6 +6,8 @@ parsing the RMG network files that decision is based on.
 """
 
 from t3.pdep.api import (
+    load_pdep_exploration_results,
+    load_pdep_network_selections,
     rank_pdep_networks,
     save_pdep_exploration_results,
     save_pdep_network_selections,

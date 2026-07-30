@@ -30,6 +30,8 @@ import copy
 import os
 from pathlib import Path
 
+import yaml
+
 from arc.common import save_yaml_file
 
 from t3.pdep.cache import validate_sa_cache
@@ -41,15 +43,19 @@ from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
                                      EXPLORATION_STATUS_SUCCEEDED,
                                      PDepExplorationResult,
                                      )
-from t3.pdep.parser import PDepNetwork, parse_pdep_network_file
+from t3.pdep.parser import PDepArkaneReaction, PDepNetwork, parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
+                              CACHE_STATUS_CACHED_VALID,
+                              CACHE_STATUS_GENERATED,
                               CACHE_STATUS_UNVALIDATED,
                               E0_PERTURBATION_J_PER_MOL,
                               EVALUATION_STATUS_EVALUATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
+                              SELECTION_ALGORITHM_VERSION,
                               SELECTION_SCHEMA_VERSION,
                               STRUCTURES_KEY,
                               PDepNetworkSelection,
+                              SensitiveTransitionState,
                               select_from_sa_dict,
                               validate_selection_thresholds,
                               )
@@ -657,3 +663,784 @@ def save_pdep_exploration_results(path: str, results: list) -> str:
               }
     save_yaml_file(path=path, content=content)
     return str(path)
+
+
+# --- Loaders -------------------------------------------------------------------------------------
+#
+# These are the read side of ``save_pdep_network_selections``/``save_pdep_exploration_results``
+# above. Both are STRICT and carry no migration/fallback path for an older on-disk shape: as of
+# this writing ``t3/pdep`` has zero files on ``official/main``, no ``t3_sa_cache.yml`` or selections
+# YAML exists anywhere on disk, and neither writer had a caller until these loaders were added -- so
+# no file of an older shape can exist to migrate FROM, and a migration branch here would be
+# untestable dead code (there is no fixture that could ever legitimately exercise it). If a future
+# schema bump needs a migration path, add it then, driven by an actual old file that needs reading.
+
+def _require_record_field(record: dict, key: str, *, path: str, context: str):
+    """
+    Fetch ``record[key]``, or raise a diagnostic ``ValueError`` if it is absent.
+
+    Every T3-written record always carries every key its ``as_dict()`` renders, so a missing key
+    means the record was not written by the matching ``save_*`` function (or was hand-edited/
+    truncated). Without this, a missing key would surface as a raw ``KeyError`` out of a public API
+    -- naming neither the file, nor which record, nor which field -- instead of a diagnostic
+    ``ValueError`` matching the style every other refusal path in these loaders already uses.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file (e.g.
+            ``'selections[3]'`` or ``'results[2].selection'``), for diagnostics only.
+
+    Raises:
+        ValueError: If ``key`` is not present in ``record``.
+
+    Returns:
+        The value at ``record[key]``.
+    """
+    if key not in record:
+        raise ValueError(f"PDep file {path!r} has {context} missing required field {key!r}.")
+    return record[key]
+
+
+def _require_list_field(record: dict, key: str, *, path: str, context: str) -> list:
+    """
+    Fetch ``record[key]`` and require it to already be list-like (a ``list`` or ``tuple``), never a
+    bare ``str``/``bytes``.
+
+    ``list(...)``/``tuple(...)`` succeed silently on any iterable, including a string -- so
+    ``list(record['warnings'])`` on ``warnings: 'AB'`` would silently coerce it to ``['A', 'B']``,
+    character by character, instead of refusing an obviously malformed field. Every record field
+    that this module coerces via a bare ``list(...)``/``tuple(...)`` call goes through this guard
+    first so that trap is refused instead of silently "succeeding".
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is a ``str``/``bytes`` or not a list/tuple
+            at all.
+
+    Returns:
+        list: ``record[key]``, as a fresh ``list``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a list "
+                         f"(got {type(value).__name__}: {value!r}); a string is not accepted even "
+                         f"though it is iterable, since coercing it would silently shred it "
+                         f"character by character.")
+    return list(value)
+
+
+def _require_bool_field(record: dict, key: str, *, path: str, context: str) -> bool:
+    """
+    Fetch ``record[key]`` and require it to already be a real ``bool``.
+
+    A persisted record is untrusted input (see ``_read_persisted_yaml_file``'s docstring): a
+    reconstructed field feeds directly into gates like ``explore_pdep_network``'s
+    ``not selection.qualified`` check, so a truthy non-bool (a non-empty string such as ``'yes'``,
+    or an int such as ``1``) must be refused rather than silently accepted as "true". ``bool`` is a
+    subclass of ``int`` in Python, so ``isinstance(value, bool)`` is checked BEFORE any numeric
+    check would otherwise wrongly accept it -- the reverse order would let plain ints through.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is not a real ``bool``.
+
+    Returns:
+        bool: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if not isinstance(value, bool):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a bool "
+                         f"(got {type(value).__name__}: {value!r}).")
+    return value
+
+
+def _require_optional_bool_field(record: dict, key: str, *, path: str, context: str) -> bool | None:
+    """
+    Fetch ``record[key]`` and require it to be a real ``bool`` or ``None``.
+
+    See ``_require_bool_field`` for why a truthy non-bool must be refused rather than accepted.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is neither a real ``bool`` nor ``None``.
+
+    Returns:
+        bool, optional: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if value is not None and not isinstance(value, bool):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a bool or "
+                         f"null (got {type(value).__name__}: {value!r}).")
+    return value
+
+
+def _require_optional_str_field(record: dict, key: str, *, path: str, context: str) -> str | None:
+    """
+    Fetch ``record[key]`` and require it to be a ``str`` or ``None``.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is neither a ``str`` nor ``None``.
+
+    Returns:
+        str, optional: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a string or "
+                         f"null (got {type(value).__name__}: {value!r}).")
+    return value
+
+
+def _require_str_field(record: dict, key: str, *, path: str, context: str) -> str:
+    """
+    Fetch ``record[key]`` and require it to be a non-``None`` ``str``.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is not a ``str``.
+
+    Returns:
+        str: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if not isinstance(value, str):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a string "
+                         f"(got {type(value).__name__}: {value!r}).")
+    return value
+
+
+def _require_int_field(record: dict, key: str, *, path: str, context: str) -> int:
+    """
+    Fetch ``record[key]`` and require it to be a real ``int``, not a ``bool``.
+
+    ``bool`` is a subclass of ``int``, so ``isinstance(value, bool)`` is checked first and refused
+    even though ``isinstance(value, int)`` would otherwise accept ``True``/``False`` as ``0``/``1``.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is not a real ``int``.
+
+    Returns:
+        int: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be an int "
+                         f"(got {type(value).__name__}: {value!r}).")
+    return value
+
+
+def _require_numeric_field(value, *, path: str, context: str, key: str):
+    """
+    Require ``value`` to be a real number (``int`` or ``float``), not a ``bool``.
+
+    Used for ``thresholds`` dict values, which are already fetched by the time this is called (the
+    dict itself is fetched via ``_require_record_field``), so this takes the value directly rather
+    than a ``(record, key)`` pair.
+
+    Args:
+        value: The value to check.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+        key (str): The ``thresholds`` sub-key this value came from, for diagnostics only.
+
+    Raises:
+        ValueError: If ``value`` is not a real ``int``/``float``.
+
+    Returns:
+        The numeric value, unchanged.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"PDep file {path!r} has {context} field 'thresholds' entry {key!r} that "
+                         f"must be numeric (got {type(value).__name__}: {value!r}).")
+    return value
+
+
+def _require_enum_field(record: dict, key: str, *, path: str, context: str, allowed: tuple) -> str:
+    """
+    Fetch ``record[key]`` and require it to be one of ``allowed``.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+        allowed (tuple): The values ``record[key]`` is allowed to hold.
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is not one of ``allowed``.
+
+    Returns:
+        str: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if value not in allowed:
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} with value {value!r}, "
+                         f"which is not one of the recognized values {allowed!r}.")
+    return value
+
+
+def _require_optional_enum_field(record: dict, key: str, *, path: str, context: str,
+                                 allowed: tuple) -> str | None:
+    """
+    Fetch ``record[key]`` and require it to be ``None`` or one of ``allowed``.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+        allowed (tuple): The values ``record[key]`` is allowed to hold, besides ``None``.
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is neither ``None`` nor one of ``allowed``.
+
+    Returns:
+        str, optional: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if value is not None and value not in allowed:
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} with value {value!r}, "
+                         f"which is neither null nor one of the recognized values {allowed!r}.")
+    return value
+
+
+def _require_thresholds_field(record: dict, key: str, *, path: str, context: str) -> dict:
+    """
+    Fetch ``record[key]`` and require it to be a mapping whose values are all numeric.
+
+    Deliberately does NOT enforce a fixed/exact key set: ``select_from_sa_dict``'s malformed-
+    sa_dict branch records a ``coefficient_floor`` key that is absent from every other thresholds
+    dict, so pinning an exact key set here would refuse a legitimately-produced record.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, its value is not a mapping, or any of its values is not
+            numeric.
+
+    Returns:
+        dict: ``record[key]``, as a fresh ``dict``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if not isinstance(value, dict):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a mapping "
+                         f"(got {type(value).__name__}: {value!r}).")
+    return {sub_key: _require_numeric_field(sub_value, path=path, context=context, key=sub_key)
+           for sub_key, sub_value in value.items()}
+
+
+def _sensitive_transition_state_from_dict(record: dict, *, path: str,
+                                          context: str) -> SensitiveTransitionState:
+    """
+    Reconstruct one ``SensitiveTransitionState`` from its ``as_dict()`` rendering.
+
+    ``SensitiveTransitionState.as_dict()`` renders the ``condition`` tuple as a
+    ``{'T': ..., 'T_unit': ..., 'P': ..., 'P_unit': ...}`` dict when it has the expected 4-element
+    shape (see that method's docstring); this restores it to the ``(T, 'K', P, 'bar')`` tuple the
+    dataclass field expects. A condition that was instead rendered as a plain list (the malformed-
+    condition fallback in ``as_dict()``) is restored as a tuple of its elements, matching whatever
+    shape it actually has.
+
+    Args:
+        record (dict): One entry of a ``selected_ts``/``uncertain_path_reactions`` list, as rendered
+            by ``SensitiveTransitionState.as_dict()``.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file (e.g.
+            ``'selections[3].selected_ts[0]'``), for diagnostics only (see
+            ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``record`` is not a mapping, its ``condition`` field is a string (a non-dict
+            ``condition`` is coerced via ``tuple(...)``, which would otherwise silently shred a
+            string character by character -- see ``_require_list_field``'s docstring), or any other
+            field is missing or the wrong type.
+
+    Returns:
+        SensitiveTransitionState: The reconstructed record.
+    """
+    if not isinstance(record, dict):
+        raise ValueError(f"PDep file {path!r} has {context} that is not a mapping "
+                         f"(got {type(record).__name__}: {record!r}).")
+    condition = _require_record_field(record, 'condition', path=path, context=context)
+    if isinstance(condition, dict):
+        condition = (condition.get('T'), condition.get('T_unit'), condition.get('P'),
+                    condition.get('P_unit'))
+    else:
+        if isinstance(condition, (str, bytes)) or not isinstance(condition, (list, tuple)):
+            raise ValueError(f"PDep file {path!r} has {context} field 'condition' that must be a "
+                             f"mapping or a list (got {type(condition).__name__}: {condition!r}); a "
+                             f"string is not accepted even though it is iterable, since coercing it "
+                             f"would silently shred it character by character.")
+        condition = tuple(condition)
+    return SensitiveTransitionState(
+        ts_label=_require_str_field(record, 'ts_label', path=path, context=context),
+        coefficient=_require_numeric_field(
+           _require_record_field(record, 'coefficient', path=path, context=context),
+           path=path, context=context, key='coefficient'),
+        condition=condition,
+        path_reaction_label=_require_optional_str_field(record, 'path_reaction_label', path=path,
+                                                        context=context),
+        path_reaction_str=_require_optional_str_field(record, 'path_reaction_str', path=path,
+                                                      context=context),
+        kinetics_comment=_require_str_field(record, 'kinetics_comment', path=path, context=context),
+        uncertain=_require_optional_bool_field(record, 'uncertain', path=path, context=context),
+        delta_ln_k=_require_numeric_field(
+           _require_record_field(record, 'delta_ln_k', path=path, context=context),
+           path=path, context=context, key='delta_ln_k'),
+    )
+
+
+def _selection_from_dict(record, *, path: str, context: str,
+                         allow_none: bool = False) -> PDepNetworkSelection | None:
+    """
+    Reconstruct one ``PDepNetworkSelection`` from its ``as_dict()`` rendering.
+
+    Shared by ``load_pdep_network_selections`` (for each entry of the ``selections`` list) and
+    ``load_pdep_exploration_results`` (for the nested ``selection`` key of each result), so the
+    per-record shape and version checks live in exactly one place.
+
+    Args:
+        record: One selection record, as rendered by ``PDepNetworkSelection.as_dict()``, or
+            ``None``. Only meaningful when ``allow_none`` is true (the nested-selection case, where
+            an explicit ``null`` means "no gating decision"); a top-level ``selections`` list entry
+            has no such meaning for ``None`` and must never be passed with ``allow_none=True``.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file (e.g.
+            ``'selections[3]'`` or ``'results[2].selection'``), for diagnostics only.
+        allow_none (bool): Whether ``record is None`` is a legitimate value that should pass through
+            as ``None`` rather than being refused. True only for the nested ``selection`` key of an
+            exploration result, where ``PDepExplorationResult.as_dict()`` always writes this key
+            (rendering it as ``None`` when there is no gating decision -- see that method's
+            docstring) -- so an explicit ``null`` here is meaningful, but an ABSENT key is not the
+            same thing and must be refused by the caller before this function is ever invoked with
+            ``allow_none=True`` (see ``load_pdep_exploration_results``).
+
+    Raises:
+        ValueError: If ``record`` is ``None`` and ``allow_none`` is false; if ``record`` is neither
+            ``None`` nor a mapping; if it carries a ``selection_schema_version`` this code does not
+            understand; if it carries a ``selection_algorithm_version`` this code does not
+            understand; or if any required field is missing or the wrong type.
+
+    Returns:
+        PDepNetworkSelection, optional: The reconstructed selection, or ``None`` if ``record`` was
+            ``None`` and ``allow_none`` is true.
+    """
+    if record is None:
+        if allow_none:
+            return None
+        raise ValueError(f"PDep file {path!r} has {context} that is null; a selection record "
+                         f"cannot be reconstructed from nothing.")
+    if not isinstance(record, dict):
+        raise ValueError(f"PDep file {path!r} contains a selection record that is not a mapping "
+                         f"(got {type(record).__name__}: {record!r}) at {context}.")
+    record_version = record.get('selection_schema_version')
+    if record_version != SELECTION_SCHEMA_VERSION:
+        raise ValueError(f"PDep file {path!r} contains a selection record with "
+                         f"selection_schema_version={record_version!r}, which this code does not "
+                         f"understand (only {SELECTION_SCHEMA_VERSION} is supported), at {context}.")
+    # selection_algorithm_version describes the decision SEMANTICS (which gates were applied and
+    # how), not the on-disk shape -- unlike selection_schema_version, a newer algorithm version could
+    # plausibly change what 'qualified'/'selected_ts' MEAN for the same shape, so a schema match does
+    # not imply an algorithm match. t3.pdep has shipped no release and this constant has never been
+    # bumped, so there is no concrete evidence that a future bump would be safe to read forward
+    # (additively or otherwise) rather than a genuine semantic break; consistent with this package's
+    # existing strict no-migration stance (see the module comment above
+    # _sensitive_transition_state_from_dict), refuse outright rather than silently trusting a
+    # decision produced by logic this code was never shown to agree with. If a future bump turns out
+    # to be safely additive, that should be a deliberate, tested decision made at THAT time, not a
+    # default assumed here.
+    record_algorithm_version = record.get('selection_algorithm_version')
+    if record_algorithm_version != SELECTION_ALGORITHM_VERSION:
+        raise ValueError(f"PDep file {path!r} contains a selection record with "
+                         f"selection_algorithm_version={record_algorithm_version!r}, which this "
+                         f"code cannot interpret (only {SELECTION_ALGORITHM_VERSION} is supported), "
+                         f"at {context}.")
+    selection = PDepNetworkSelection(
+        network_id=_require_str_field(record, 'network_id', path=path, context=context),
+        network_source_hash=_require_optional_str_field(record, 'network_source_hash', path=path,
+                                                        context=context),
+        qualified=_require_bool_field(record, 'qualified', path=path, context=context),
+        network_reaction=_require_optional_str_field(record, 'network_reaction', path=path,
+                                                      context=context),
+        direction_key=_require_optional_str_field(record, 'direction_key', path=path,
+                                                  context=context),
+        direction_keys=_require_list_field(record, 'direction_keys', path=path, context=context),
+        direction_ambiguous=_require_bool_field(record, 'direction_ambiguous', path=path,
+                                                context=context),
+        method=_require_optional_str_field(record, 'method', path=path, context=context),
+        sa_path=_require_optional_str_field(record, 'sa_path', path=path, context=context),
+        cache_status=_require_optional_enum_field(
+           record, 'cache_status', path=path, context=context,
+           allowed=(CACHE_STATUS_GENERATED, CACHE_STATUS_CACHED_VALID, CACHE_STATUS_CACHED_REJECTED,
+                   CACHE_STATUS_UNVALIDATED)),
+        thresholds=_require_thresholds_field(record, 'thresholds', path=path, context=context),
+        selected_ts=[_sensitive_transition_state_from_dict(entry, path=path,
+                                                           context=f'{context}.selected_ts[{i}]')
+                    for i, entry in enumerate(_require_list_field(record, 'selected_ts', path=path,
+                                                                  context=context))],
+        uncertain_path_reactions=[
+           _sensitive_transition_state_from_dict(
+              entry, path=path, context=f'{context}.uncertain_path_reactions[{i}]')
+           for i, entry in enumerate(_require_list_field(record, 'uncertain_path_reactions',
+                                                         path=path, context=context))],
+        warnings=_require_list_field(record, 'warnings', path=path, context=context),
+        network_reactions_examined=_require_int_field(record, 'network_reactions_examined',
+                                                       path=path, context=context),
+        evaluation_status=_require_enum_field(
+           record, 'evaluation_status', path=path, context=context,
+           allowed=(EVALUATION_STATUS_EVALUATED, EVALUATION_STATUS_NOT_EVALUATED)),
+        selection_schema_version=record['selection_schema_version'],
+        selection_algorithm_version=record['selection_algorithm_version'],
+    )
+    _validate_selection_cross_field_invariants(selection, path=path, context=context)
+    return selection
+
+
+def _validate_selection_cross_field_invariants(selection: PDepNetworkSelection, *, path: str,
+                                               context: str) -> None:
+    """
+    Reject a reconstructed ``PDepNetworkSelection`` whose fields, though individually well-typed,
+    could not have been produced by any constructor in this package.
+
+    ``_selection_from_dict`` validates each field's TYPE independently; it does not (and, per-field,
+    cannot) validate the relationships BETWEEN fields that ``select_from_sa_dict``/``combine()``
+    always maintain. A hand-edited record can satisfy every per-field check while still fabricating
+    a positive verdict (``qualified=True``) with no evidence behind it, bypassing
+    ``explore_pdep_network``'s budget gate. This closes exactly that hole, no more.
+
+    The reachable ``(qualified, evaluation_status, uncertain_path_reactions, selected_ts)``
+    combinations, read off ``select_from_sa_dict`` (single decision) and ``combine()``
+    (aggregate), are:
+
+    1. Single decision, not evaluated (malformed sa_dict, unresolved direction, malformed SA
+       entry, or none/only-unusable/below-floor TS rows): ``qualified=False``,
+       ``uncertain_path_reactions=[]``, ``selected_ts=[]`` (the loop that would populate
+       ``selected_ts`` either never ran or ran and found nothing usable).
+    2. Single decision, evaluated: ``select_from_sa_dict`` sets
+       ``uncertain_path_reactions = [e for e in selected_ts if e.uncertain]`` and then
+       ``qualified = bool(uncertain_path_reactions)`` -- so for a single decision ``qualified``
+       and ``bool(uncertain_path_reactions)`` are always exactly equal, and every entry of
+       ``uncertain_path_reactions`` is both an element of ``selected_ts`` and has
+       ``uncertain is True``.
+    3. Combined (``combine()``): ``uncertain_path_reactions``/``selected_ts`` are each unioned
+       (order-preserving, de-duplicated) across ALL components regardless of evaluation status,
+       while ``qualified`` is unioned (``any(...)``) over EVALUATED components only. This is why
+       ``qualified=False`` with a non-empty ``uncertain_path_reactions`` IS reachable (a
+       not-evaluated component's evidence rides along on a negative aggregate) -- so the exact
+       equality from case 2 must NOT be enforced on a loaded record. What DOES still hold after
+       ``combine()``: (a) if ANY unioned component qualified, that component's own non-empty
+       ``uncertain_path_reactions`` are part of the union, so ``qualified=True`` still implies
+       ``uncertain_path_reactions`` is non-empty; (b) the union operation only selects EXISTING
+       elements, so every unioned ``uncertain_path_reactions`` entry is still an element of the
+       unioned ``selected_ts`` with ``uncertain is True``, unchanged from case 2.
+
+    So exactly two invariants survive every reachable path and are enforced here:
+
+    - ``qualified=True`` requires ``uncertain_path_reactions`` non-empty.
+    - Every entry of ``uncertain_path_reactions`` has ``uncertain is True`` and is also present in
+      ``selected_ts``.
+
+    Deliberately NOT enforced (each would refuse a legitimate, reachable record):
+
+    - ``qualified == bool(uncertain_path_reactions)`` exactly -- broken by case 3's
+      ``qualified=False`` with non-empty evidence.
+    - Any relationship between ``qualified``/``uncertain_path_reactions`` and
+      ``evaluation_status`` -- ``combine()`` produces ``qualified=True`` with
+      ``evaluation_status='not_evaluated'`` as a legitimate partial-yes (see
+      ``PDepNetworkSelection.reason()``'s docstring and ``explore_pdep_network``'s gate, which
+      accepts exactly this state).
+
+    Args:
+        selection (PDepNetworkSelection): The freshly reconstructed decision to validate.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for
+            diagnostics only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``qualified`` is true with an empty ``uncertain_path_reactions``, or if any
+            entry of ``uncertain_path_reactions`` is not marked ``uncertain is True``, or is not
+            also present in ``selected_ts``.
+    """
+    if selection.qualified and not selection.uncertain_path_reactions:
+        raise ValueError(
+            f"PDep file {path!r} has {context} with qualified=True but an empty "
+            f"uncertain_path_reactions for network {selection.network_id!r}: no code path in "
+            f"t3.pdep.selector produces a positive verdict without at least one uncertain "
+            f"transition state behind it, so this record cannot have come from a real selection "
+            f"decision and cannot be trusted to gate QM exploration.")
+    for index, entry in enumerate(selection.uncertain_path_reactions):
+        if entry.uncertain is not True:
+            raise ValueError(
+                f"PDep file {path!r} has {context}.uncertain_path_reactions[{index}] "
+                f"(ts_label={entry.ts_label!r}) with uncertain={entry.uncertain!r} for network "
+                f"{selection.network_id!r}: every entry of uncertain_path_reactions is, by "
+                f"construction, an entry of selected_ts with uncertain is True, so this record "
+                f"cannot have come from a real selection decision.")
+        if entry not in selection.selected_ts:
+            raise ValueError(
+                f"PDep file {path!r} has {context}.uncertain_path_reactions[{index}] "
+                f"(ts_label={entry.ts_label!r}) that is not among {context}.selected_ts for "
+                f"network {selection.network_id!r}: uncertain_path_reactions is always a subset of "
+                f"selected_ts, so evidence absent from selected_ts is fabricated, not real.")
+
+
+def _read_persisted_yaml_file(path: str):
+    """
+    Read a T3-written PDep YAML file with ``yaml.safe_load``, NOT ``arc.common.read_yaml_file``.
+
+    ``read_yaml_file`` uses ``yaml.FullLoader``, which constructs Python objects from tags in the
+    file. ``t3.pdep.yaml_safe``'s own module docstring already spells out why that is unacceptable
+    here: ``t3.pdep.api`` is a PUBLIC entrypoint reading a CALLER-SUPPLIED path, so anyone able to
+    influence that path fully controls what a FullLoader read constructs. The loaders below are
+    exactly that shape, and they were written against the wrong primitive.
+
+    Plain ``yaml.safe_load`` suffices -- strictly safer even than ``yaml_safe.read_sa_yaml_file``,
+    which exists only because Arkane's SA files legitimately need ``!!python/tuple``. Nothing T3
+    writes here does: ``as_dict()`` renders tuples as plain lists, which is what the round-trip
+    reconstruction then restores. So no tag support is needed at all, and any file containing one
+    is not a file T3 wrote.
+
+    Args:
+        path (str): The path to the YAML file to read.
+
+    Returns:
+        The parsed content, using only plain Python types.
+
+    Raises:
+        ValueError: If the file cannot be parsed as safe YAML (e.g. it carries a Python object tag).
+    """
+    with open(path, 'r') as f:
+        try:
+            return yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f'Could not parse {path!r} as plain YAML: {e}. A T3-written PDep file '
+                             f'contains only plain types; a Python object tag here means the file '
+                             f'was not written by T3.') from e
+
+
+def load_pdep_network_selections(path: str) -> list:
+    """
+    Load a list of PDep network selection decisions from a YAML file written by
+    ``save_pdep_network_selections``.
+
+    This is STRICT and carries no migration/fallback path for an older on-disk shape -- see the
+    module comment above ``_sensitive_transition_state_from_dict`` for why that is safe. An
+    unversioned file, a file whose version this code does not recognize, a malformed envelope, or a
+    malformed record are all refused outright rather than guessed at.
+
+    Args:
+        path (str): The path to read the YAML file from.
+
+    Raises:
+        ValueError: If the file's top level is not a mapping; if the envelope carries no
+            ``selection_schema_version`` key (an unversioned file is not "version 1", it is of
+            unknown shape); if that version is not the one this code understands; if the
+            ``selections`` key is absent or not a list; or if any entry (identified by its index in
+            the list) is ``None``, is not a mapping, is missing a required field, has a required
+            field of the wrong type (including a list-typed field given a bare string), carries a
+            ``selection_schema_version`` this code does not understand, or carries a
+            ``selection_algorithm_version`` this code does not understand.
+
+    Returns:
+        list: The reconstructed ``PDepNetworkSelection`` decisions, in file order.
+    """
+    content = _read_persisted_yaml_file(path=path)
+    if not isinstance(content, dict):
+        raise ValueError(f"PDep network selections file {path!r} does not contain a mapping at its "
+                         f"top level (got {type(content).__name__}); cannot read it as a selections "
+                         f"envelope.")
+    if 'selection_schema_version' not in content:
+        raise ValueError(f"PDep network selections file {path!r} has no 'selection_schema_version' "
+                         f"key: an unversioned file is not version {SELECTION_SCHEMA_VERSION}, it is "
+                         f"of unknown shape and cannot be trusted.")
+    envelope_version = content['selection_schema_version']
+    if envelope_version != SELECTION_SCHEMA_VERSION:
+        raise ValueError(f"PDep network selections file {path!r} has "
+                         f"selection_schema_version={envelope_version!r}, but this code only "
+                         f"understands version {SELECTION_SCHEMA_VERSION}.")
+    records = content.get('selections')
+    if not isinstance(records, list):
+        raise ValueError(f"PDep network selections file {path!r} has no 'selections' list "
+                         f"(got {type(records).__name__ if 'selections' in content else 'missing'}: "
+                         f"{records!r}).")
+    return [_selection_from_dict(record, path=path, context=f'selections[{index}]',
+                                 allow_none=False)
+           for index, record in enumerate(records)]
+
+
+def _arkane_reaction_from_dict(record: dict, *, path: str, context: str) -> PDepArkaneReaction:
+    """
+    Reconstruct one ``PDepArkaneReaction`` from its ``as_dict()`` rendering.
+
+    Args:
+        record (dict): One entry of a ``k_tp_as_written`` list, as rendered by
+            ``PDepArkaneReaction.as_dict()``.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file (e.g.
+            ``'results[2].k_tp_as_written[0]'``), for diagnostics only.
+
+    Raises:
+        ValueError: If ``record`` is not a mapping, is missing a required field, has a list-typed
+            field given a bare string (see ``_require_list_field``), ``kinetics_type`` is neither a
+            string nor null, or ``kinetics_params`` is not a mapping.
+
+    Returns:
+        PDepArkaneReaction: The reconstructed record.
+    """
+    if not isinstance(record, dict):
+        raise ValueError(f"PDep exploration results file {path!r} contains a k_tp_as_written entry "
+                         f"that is not a mapping (got {type(record).__name__}: {record!r}) "
+                         f"at {context}.")
+    kinetics_params = _require_record_field(record, 'kinetics_params', path=path, context=context)
+    if not isinstance(kinetics_params, dict):
+        raise ValueError(f"PDep file {path!r} has {context} field 'kinetics_params' that must be a "
+                         f"mapping (got {type(kinetics_params).__name__}: {kinetics_params!r}).")
+    return PDepArkaneReaction(
+        reactants=tuple(_require_list_field(record, 'reactants', path=path, context=context)),
+        products=tuple(_require_list_field(record, 'products', path=path, context=context)),
+        kinetics_type=_require_optional_str_field(record, 'kinetics_type', path=path,
+                                                  context=context),
+        kinetics_params=kinetics_params,
+        numeric_values=tuple(_require_list_field(record, 'numeric_values', path=path,
+                                                 context=context)),
+        rate_payload_numeric_values=tuple(_require_list_field(record, 'rate_payload_numeric_values',
+                                                              path=path, context=context)),
+        missing_kinetics_keys=tuple(_require_list_field(record, 'missing_kinetics_keys', path=path,
+                                                        context=context)),
+    )
+
+
+def load_pdep_exploration_results(path: str) -> list:
+    """
+    Load a list of PDep exploration results from a YAML file written by
+    ``save_pdep_exploration_results``.
+
+    This is STRICT and carries no migration/fallback path for an older on-disk shape -- see the
+    module comment above ``_sensitive_transition_state_from_dict`` for why that is safe. Each
+    result's nested ``selection`` (if any) is reconstructed via ``_selection_from_dict``, which
+    applies the same per-record checks ``load_pdep_network_selections`` does, so a result carrying a
+    selection this code does not understand is refused for exactly the same reason a bare selection
+    file would be.
+
+    Args:
+        path (str): The path to read the YAML file from.
+
+    Raises:
+        ValueError: If the file's top level is not a mapping; if the envelope carries no
+            ``exploration_result_schema_version`` key (an unversioned file is not "version 1", it is
+            of unknown shape); if that version is not the one this code understands; if the
+            ``results`` key is absent or not a list; or if any entry (identified by its index in the
+            list) is not a mapping, is missing a required field (including the nested ``'selection'``
+            key -- a T3-written record always carries it, as ``None`` when there is no gating
+            decision, so an ABSENT key is refused rather than conflated with an explicit ``null``),
+            has a required field of the wrong type (including a list-typed field given a bare
+            string), or whose nested selection is not a mapping, carries a
+            ``selection_schema_version`` this code does not understand, or carries a
+            ``selection_algorithm_version`` this code does not understand.
+
+    Returns:
+        list: The reconstructed ``PDepExplorationResult`` records, in file order.
+    """
+    content = _read_persisted_yaml_file(path=path)
+    if not isinstance(content, dict):
+        raise ValueError(f"PDep exploration results file {path!r} does not contain a mapping at its "
+                         f"top level (got {type(content).__name__}); cannot read it as an exploration "
+                         f"results envelope.")
+    if 'exploration_result_schema_version' not in content:
+        raise ValueError(f"PDep exploration results file {path!r} has no "
+                         f"'exploration_result_schema_version' key: an unversioned file is not "
+                         f"version {EXPLORATION_RESULT_SCHEMA_VERSION}, it is of unknown shape and "
+                         f"cannot be trusted.")
+    envelope_version = content['exploration_result_schema_version']
+    if envelope_version != EXPLORATION_RESULT_SCHEMA_VERSION:
+        raise ValueError(f"PDep exploration results file {path!r} has "
+                         f"exploration_result_schema_version={envelope_version!r}, but this code "
+                         f"only understands version {EXPLORATION_RESULT_SCHEMA_VERSION}.")
+    records = content.get('results')
+    if not isinstance(records, list):
+        raise ValueError(f"PDep exploration results file {path!r} has no 'results' list "
+                         f"(got {type(records).__name__ if 'results' in content else 'missing'}: "
+                         f"{records!r}).")
+    results = list()
+    for index, record in enumerate(records):
+        context = f'results[{index}]'
+        if record is None or not isinstance(record, dict):
+            raise ValueError(f"PDep exploration results file {path!r} contains a result record that "
+                             f"is not a mapping (got {type(record).__name__}: {record!r}) "
+                             f"at {context}.")
+        if 'selection' not in record:
+            # PDepExplorationResult.as_dict() ALWAYS writes the 'selection' key (as None when there
+            # is no gating decision -- see that method's docstring), so an absent key here cannot
+            # come from a file save_pdep_exploration_results wrote; conflating "key absent" with
+            # "explicit null" would let a malformed/truncated record silently pass as "explored
+            # without a gating decision", which is a real, distinct state elsewhere in this code
+            # (see PDepExplorationResult's docstring) and must not be guessed at.
+            raise ValueError(f"PDep exploration results file {path!r} has {context} missing the "
+                             f"required 'selection' key (a T3-written record always carries it, as "
+                             f"null when there is no gating decision).")
+        results.append(PDepExplorationResult(
+            network_id=_require_record_field(record, 'network_id', path=path, context=context),
+            status=_require_record_field(record, 'status', path=path, context=context),
+            reasons=tuple(_require_list_field(record, 'reasons', path=path, context=context)),
+            network_paths=tuple(_require_list_field(record, 'network_paths', path=path,
+                                                     context=context)),
+            output_paths=tuple(_require_list_field(record, 'output_paths', path=path,
+                                                    context=context)),
+            k_tp_as_written=tuple(
+                _arkane_reaction_from_dict(entry, path=path,
+                                           context=f'{context}.k_tp_as_written[{entry_index}]')
+                for entry_index, entry in enumerate(
+                    _require_list_field(record, 'k_tp_as_written', path=path, context=context))),
+            manifest=_require_record_field(record, 'manifest', path=path, context=context),
+            selection=_selection_from_dict(record['selection'], path=path,
+                                           context=f'{context}.selection', allow_none=True),
+        ))
+    return results

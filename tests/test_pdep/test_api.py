@@ -18,6 +18,8 @@ from t3.common import TEST_DATA_BASE_PATH
 from t3.logger import Logger
 import t3.pdep.api as t3_pdep_api
 from t3.pdep.api import (explore_pdep_network,
+                         load_pdep_exploration_results,
+                         load_pdep_network_selections,
                          rank_pdep_networks,
                          save_pdep_exploration_results,
                          save_pdep_network_selections,
@@ -34,11 +36,14 @@ from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
 from t3.pdep.parser import PDepArkaneReaction, parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
+                              CACHE_STATUS_GENERATED,
                               CACHE_STATUS_UNVALIDATED,
+                              EVALUATION_STATUS_EVALUATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
                               SELECTION_ALGORITHM_VERSION,
                               SELECTION_SCHEMA_VERSION,
                               PDepNetworkSelection,
+                              SensitiveTransitionState,
                               select_from_sa_dict,
                               )
 from t3.schema import T3Sensitivity
@@ -983,3 +988,979 @@ def test_explore_pdep_network_carries_output_paths_on_failure(monkeypatch, tmp_p
     assert result.output_paths == ('/fake/output1.py',)
     assert result.network_paths == tuple()
     assert result.k_tp_as_written == tuple()
+
+
+# --- 9. load_pdep_network_selections / load_pdep_exploration_results ----------------------------
+#
+# The two loaders are the read side of save_pdep_network_selections()/save_pdep_exploration_results()
+# above. Both are STRICT (no migration path for an older on-disk shape -- see the module comment in
+# t3/pdep/api.py above _sensitive_transition_state_from_dict for why that is safe to assert). These
+# tests cover: round-trip equality (built from live objects, not hand-written expected dicts), the
+# documented manifest-tuple-normalization caveat, network_source_hash preservation specifically, one
+# distinctive-wording test per refusal branch, and a reconstruction-mutation sanity target.
+
+def _build_full_selection():
+    """A PDepNetworkSelection with every field set to a non-default value, including nested
+    SensitiveTransitionState entries in both selected_ts and uncertain_path_reactions with
+    non-default (tuple) conditions -- for the round-trip equality test below."""
+    ts_a = SensitiveTransitionState(
+        ts_label='TS3', coefficient=0.5, condition=(1000.0, 'K', 1.0, 'bar'),
+        path_reaction_label='rxn1', path_reaction_str='A + B <=> C', kinetics_comment='estimate',
+        uncertain=True, delta_ln_k=0.05)
+    ts_b = SensitiveTransitionState(
+        ts_label='TS7', coefficient=-0.3, condition=(1200.0, 'K', 2.0, 'bar'),
+        path_reaction_label='rxn2', path_reaction_str='D + E <=> F', kinetics_comment='library',
+        uncertain=False, delta_ln_k=0.03)
+    return PDepNetworkSelection(
+        network_id='network4_2',
+        network_source_hash='sha256:deadbeef',
+        qualified=True,
+        network_reaction='A + B <=> C',
+        direction_key='A + B <=> C',
+        direction_keys=['A + B <=> C', 'D + E <=> F'],
+        direction_ambiguous=True,
+        method='MSC',
+        sa_path='/some/path/sa.yml',
+        cache_status=CACHE_STATUS_CACHED_VALID,
+        thresholds={'relative_threshold': 0.01, 'min_delta_ln_k': 0.001, 'perturbation': 1000.0},
+        selected_ts=[ts_a, ts_b],
+        uncertain_path_reactions=[ts_a],
+        warnings=['a warning'],
+        network_reactions_examined=2,
+        evaluation_status=EVALUATION_STATUS_EVALUATED,
+        selection_schema_version=SELECTION_SCHEMA_VERSION,
+        selection_algorithm_version=SELECTION_ALGORITHM_VERSION,
+    )
+
+
+def test_load_pdep_network_selections_round_trip_equality(tmp_path):
+    """Test that load(save(x)) equals x for a fully-populated PDepNetworkSelection, derived from the
+    live object rather than a hand-written expected dict -- so the test cannot silently pass by
+    omitting a field neither side checks."""
+    selection = _build_full_selection()
+    path = str(tmp_path / 'selections.yml')
+    save_pdep_network_selections(path=path, selections=[selection])
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded == [selection]
+
+
+def test_load_pdep_network_selections_preserves_network_source_hash(tmp_path):
+    """Test that network_source_hash survives load(save(x)) specifically: this is the field
+    explore_pdep_network() refuses a selection for lacking (see
+    test_explore_pdep_network_refuses_a_selection_with_no_source_hash above), so a loader that
+    silently dropped or mangled it would defeat that guard for any selection read back from disk."""
+    selection = PDepNetworkSelection(network_id='network4_2', network_source_hash='sha256:abc123')
+    path = str(tmp_path / 'selections.yml')
+    save_pdep_network_selections(path=path, selections=[selection])
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded[0].network_source_hash == 'sha256:abc123'
+
+
+def _build_full_arkane_reaction():
+    """A PDepArkaneReaction with every field set to a non-default value. kinetics_params
+    deliberately contains no tuples: PDepArkaneReaction.as_dict() passes kinetics_params through
+    to_json_safe just like PDepExplorationResult.as_dict() does for manifest, so a tuple nested in
+    either can never round-trip to an equal object (see
+    test_save_pdep_exploration_results_normalizes_manifest_tuples_to_lists below, which documents
+    that caveat for manifest; the same reasoning applies here)."""
+    return PDepArkaneReaction(
+        reactants=('A', 'B'),
+        products=('C',),
+        kinetics_type='Chebyshev',
+        kinetics_params={'coeffs': [[1.0, 2.0], [3.0, None]], 'Tmin': 300, 'Tmin_unit': 'K'},
+        numeric_values=(1.0, 2.0, 3.0, None, 300),
+        rate_payload_numeric_values=(1.0, 2.0, 3.0, None),
+        missing_kinetics_keys=('Pmin',),
+    )
+
+
+def test_load_pdep_exploration_results_round_trip_equality_succeeded(tmp_path):
+    """Test that load(save(x)) equals x for a fully-populated, status='succeeded'
+    PDepExplorationResult: non-empty network_paths/output_paths/k_tp_as_written, a nested
+    PDepArkaneReaction with every field set, a nested selection, and a manifest without tuples
+    (tuples inside manifest are a documented, separate caveat -- see the dedicated test below)."""
+    selection = _build_full_selection()
+    reaction = _build_full_arkane_reaction()
+    result = PDepExplorationResult(
+        network_id='network4_2', status=EXPLORATION_STATUS_SUCCEEDED,
+        reasons=(),
+        network_paths=('pdep/final/network1_full.py', 'pdep/final/network2_full.py'),
+        output_paths=('/fake/output1.py',),
+        k_tp_as_written=(reaction,),
+        manifest={'note': 'ok', 'seeds': [1, 2, 3], 'meta': {'k': 'v'}},
+        selection=selection,
+    )
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+
+    loaded = load_pdep_exploration_results(path=path)
+
+    assert loaded == [result]
+
+
+def test_load_pdep_exploration_results_round_trip_equality_failed_with_reasons(tmp_path):
+    """Test that load(save(x)) equals x for a status='failed' PDepExplorationResult with a non-empty
+    reasons tuple and a non-empty output_paths tuple -- the two fields the succeeded-status test
+    above cannot exercise non-trivially, since 'succeeded' requires reasons to stay empty."""
+    result = PDepExplorationResult(
+        network_id='network4_2', status=EXPLORATION_STATUS_FAILED,
+        reasons=('Arkane exploration did not converge.', 'timed out'),
+        output_paths=('/fake/output1.py',),
+        manifest={}, selection=None,
+    )
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+
+    loaded = load_pdep_exploration_results(path=path)
+
+    assert loaded == [result]
+
+
+def test_save_pdep_exploration_results_normalizes_manifest_tuples_to_lists(tmp_path):
+    """Document (not merely tolerate) that PDepExplorationResult.as_dict() passes manifest through
+    to_json_safe, which converts tuples anywhere inside it to lists -- so a manifest containing a
+    tuple can never round-trip to an equal object. This is a known and intended limitation of the
+    on-disk format, not a loader bug: assert the normalized (list) shape explicitly, and assert the
+    loaded object is NOT equal to the original, rather than choosing a tuple-free fixture everywhere
+    else in this file that would hide the limitation entirely."""
+    result = PDepExplorationResult(
+        network_id='network4_2', status=EXPLORATION_STATUS_SKIPPED,
+        reasons=('skipped',), manifest={'nested': [(1, 2), {'deep': (3, 4)}]}, selection=None,
+    )
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+
+    loaded = load_pdep_exploration_results(path=path)
+
+    assert loaded[0].manifest == {'nested': [[1, 2], {'deep': [3, 4]}]}
+    assert loaded[0] != result  # tuple normalization means it cannot equal the original
+
+
+# --- 9a. load_pdep_network_selections refusal branches, one test per branch ---------------------
+
+def test_load_pdep_network_selections_refuses_non_mapping_top_level(tmp_path):
+    """Test the top-level-not-a-mapping refusal, on its own distinctive wording."""
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content=[1, 2, 3])
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert 'does not contain a mapping' in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_missing_version_key(tmp_path):
+    """Test the absent-envelope-version-key refusal, on its own distinctive wording -- distinct from
+    the unknown-version wording checked below (an unversioned file is not "version 1", it is
+    unknown)."""
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selections': []})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert "no 'selection_schema_version' key" in str(exc_info.value)
+    assert 'unknown shape' in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_unknown_version(tmp_path):
+    """Test the unknown-envelope-version refusal, on its own distinctive wording."""
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': 999, 'selections': []})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert 'only understands version' in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_missing_selections_key(tmp_path):
+    """Test the missing/non-list 'selections' key refusal."""
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert "no 'selections' list" in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_non_list_selections_key(tmp_path):
+    """Test the 'selections' key being present but not a list -- the other half of the same refusal
+    branch as the missing-key test above."""
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': 'not-a-list'})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert "no 'selections' list" in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_non_mapping_record(tmp_path):
+    """Test the per-record not-a-mapping refusal."""
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [42]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert 'selection record that is not a mapping' in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_unknown_record_schema_version(tmp_path):
+    """Test the per-record unknown-selection_schema_version refusal."""
+    rendered = _build_full_selection().as_dict()
+    rendered['selection_schema_version'] = 999
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert 'which this code does not understand' in str(exc_info.value)
+
+
+# --- 9b. load_pdep_exploration_results refusal branches, one test per branch --------------------
+
+def test_load_pdep_exploration_results_refuses_non_mapping_top_level(tmp_path):
+    """Test the top-level-not-a-mapping refusal, on its own distinctive wording."""
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content=[1, 2])
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    assert 'does not contain a mapping' in str(exc_info.value)
+
+
+def test_load_pdep_exploration_results_refuses_missing_version_key(tmp_path):
+    """Test the absent-envelope-version-key refusal, distinct wording from the unknown-version case
+    checked below."""
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'results': []})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    assert "no 'exploration_result_schema_version' key" in str(exc_info.value)
+    assert 'unknown shape' in str(exc_info.value)
+
+
+def test_load_pdep_exploration_results_refuses_unknown_version(tmp_path):
+    """Test the unknown-envelope-version refusal, on its own distinctive wording."""
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': 999, 'results': []})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    assert 'only understands version' in str(exc_info.value)
+
+
+def test_load_pdep_exploration_results_refuses_missing_results_key(tmp_path):
+    """Test the missing/non-list 'results' key refusal."""
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path,
+                   content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    assert "no 'results' list" in str(exc_info.value)
+
+
+def test_load_pdep_exploration_results_refuses_non_mapping_record(tmp_path):
+    """Test the per-record not-a-mapping refusal."""
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [42]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    assert 'result record that is not a mapping' in str(exc_info.value)
+
+
+def test_load_pdep_exploration_results_refuses_unknown_nested_selection_version(tmp_path):
+    """Test that a result carrying a nested selection this code does not understand is refused via
+    the same per-record version check load_pdep_network_selections uses, proving the two loaders
+    share -- not duplicate -- that logic."""
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_SKIPPED,
+                                   reasons=('x',), selection=PDepNetworkSelection(network_id='network4_2'))
+    rendered = result.as_dict()
+    rendered['selection']['selection_schema_version'] = 999
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    assert 'which this code does not understand' in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_null_record(tmp_path):
+    """Test that a null (None) entry in the selections list is refused, not silently returned as
+    None in the loaded list for a caller to later dereference."""
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [None]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    assert 'selections[0]' in str(exc_info.value)
+    assert 'null' in str(exc_info.value)
+
+
+def test_load_pdep_network_selections_refuses_record_missing_required_field(tmp_path):
+    """Test that a record missing a required field raises a diagnostic ValueError naming the file,
+    the record's index, and the missing field -- instead of a raw KeyError('network_reaction') out
+    of a public API."""
+    rendered = _build_full_selection().as_dict()
+    del rendered['network_reaction']
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "missing required field 'network_reaction'" in message
+
+
+def test_load_pdep_network_selections_refuses_a_string_for_a_list_typed_field(tmp_path):
+    """Test that a list-typed field given a bare string is refused rather than silently coerced
+    character by character (e.g. warnings: 'AB' silently becoming ('A', 'B'))."""
+    rendered = _build_full_selection().as_dict()
+    rendered['warnings'] = 'AB'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'warnings' that must be a list" in message
+
+
+def test_load_pdep_network_selections_refuses_unknown_record_algorithm_version(tmp_path):
+    """Test the per-record unknown-selection_algorithm_version refusal, on wording distinguishable
+    from the unknown-selection_schema_version refusal above (both must be tellable apart)."""
+    rendered = _build_full_selection().as_dict()
+    rendered['selection_algorithm_version'] = 999
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert 'selection_algorithm_version=999' in message
+    assert 'cannot interpret' in message
+    assert 'which this code does not understand' not in message  # distinct from the schema-version wording
+
+
+def test_load_pdep_network_selections_refuses_the_forged_budget_gate_bypass(tmp_path):
+    """Named regression test for the exact forgery the budget gate in explore_pdep_network is
+    vulnerable to without type validation: qualified: 'yes' is a non-empty STRING, therefore
+    truthy, so a bare presence check lets it satisfy 'not selection.qualified'; combined with
+    evaluation_status: 'bogus' (which is neither EVALUATION_STATUS_EVALUATED nor
+    EVALUATION_STATUS_NOT_EVALUATED, so it does not equal EVALUATION_STATUS_EVALUATED and would
+    also happen to satisfy that half of the guard), this hand-edited record would sail straight
+    through the gate. Both must be refused at LOAD time so a forged record can never even become a
+    PDepNetworkSelection object."""
+    rendered = _build_full_selection().as_dict()
+    rendered['qualified'] = 'yes'
+    rendered['evaluation_status'] = 'bogus'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'qualified'" in message
+
+
+def test_load_pdep_network_selections_refuses_qualified_true_with_no_uncertain_evidence(tmp_path):
+    """Named regression test for the cross-field forgery the type/enum checks in
+    _selection_from_dict do not catch: a record with a well-typed bool qualified=True, a
+    recognized evaluation_status, a correct method/network/hash, and empty
+    uncertain_path_reactions. Neither select_from_sa_dict() (which sets
+    qualified = bool(uncertain_path_reactions) for a single decision) nor combine() (whose
+    qualified = any(...) over evaluated components is only ever True because the qualifying
+    component's own non-empty uncertain_path_reactions is part of the unioned result) can ever
+    produce qualified=True alongside an empty uncertain_path_reactions -- so this combination can
+    only arise from a hand-edited file, and must be refused at LOAD time. Because the record is
+    refused before load_pdep_network_selections returns, no PDepNetworkSelection object bearing
+    this lie is ever constructed, so explore_pdep_network's budget gate can never be reached with
+    it -- there is no selection object to hand it."""
+    rendered = _build_full_selection().as_dict()
+    rendered['qualified'] = True
+    rendered['uncertain_path_reactions'] = []
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert 'network4_2' in message
+    assert 'uncertain_path_reactions' in message
+
+
+def test_load_pdep_network_selections_refuses_uncertain_path_reactions_entry_not_marked_uncertain(
+        tmp_path):
+    """Named regression test for a subtler forgery of the same hole: qualified=True with a
+    NON-empty uncertain_path_reactions that nonetheless is not real evidence, because the entry it
+    contains has uncertain=False (or was never marked at all). select_from_sa_dict() builds
+    uncertain_path_reactions as exactly ``[entry for entry in selected_ts if entry.uncertain]``, so
+    every real entry has uncertain is True by construction; a record whose uncertain_path_reactions
+    entry fails that must be hand-edited, not decision output."""
+    rendered = _build_full_selection().as_dict()
+    rendered['qualified'] = True
+    # ts_b (the second selected_ts entry in _build_full_selection) has uncertain=False -- swap it in
+    # as the sole "uncertain" entry to forge evidence that was never actually uncertain.
+    rendered['uncertain_path_reactions'] = [rendered['selected_ts'][1]]
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert 'network4_2' in message
+    assert 'uncertain_path_reactions[0]' in message
+
+
+def test_load_pdep_network_selections_refuses_uncertain_path_reactions_entry_absent_from_selected_ts(
+        tmp_path):
+    """Named regression test for a third variant of the same hole: qualified=True with a
+    uncertain_path_reactions entry that is well-formed (uncertain=True) but does not appear in
+    selected_ts at all -- evidence conjured from nothing rather than drawn from the network's own
+    selected transition states. select_from_sa_dict() builds uncertain_path_reactions as a subset
+    of selected_ts by construction (a list comprehension filtering selected_ts itself), and
+    combine() only ever unions uncertain_path_reactions alongside the matching union of
+    selected_ts, so a real decision can never produce an uncertain_path_reactions entry that is not
+    also present in selected_ts. A record with such an entry must be hand-edited, not decision
+    output, and is refused at LOAD time."""
+    rendered = _build_full_selection().as_dict()
+    fabricated_entry = dict(rendered['uncertain_path_reactions'][0])
+    fabricated_entry['ts_label'] = 'TS_NOT_IN_SELECTED_TS'
+    rendered['uncertain_path_reactions'] = [fabricated_entry]
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert 'network4_2' in message
+    assert 'uncertain_path_reactions[0]' in message
+    assert 'selected_ts' in message
+
+
+def test_load_pdep_network_selections_accepts_a_qualified_but_partially_evaluated_selection(tmp_path):
+    """Over-refusal guard: a record with qualified=True, evaluation_status='not_evaluated', and
+    real, non-empty uncertain_path_reactions evidence must still LOAD. This is the documented
+    "partial yes is supported" case (see PDepNetworkSelection.reason() and the gate in
+    explore_pdep_network): select_from_sa_dict() and combine() both allow a positive verdict to
+    stand on whatever evaluated evidence qualified it, even when other components/coverage never
+    got evaluated. If the cross-field check added to _selection_from_dict() required
+    evaluation_status == EVALUATION_STATUS_EVALUATED whenever qualified is True, this legitimate
+    record would wrongly be refused -- exactly the over-refusal failure mode this test pins."""
+    rendered = _build_full_selection().as_dict()
+    assert rendered['qualified'] is True
+    assert rendered['uncertain_path_reactions'], 'fixture must carry real evidence for this to test anything'
+    rendered['evaluation_status'] = EVALUATION_STATUS_NOT_EVALUATED
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert len(loaded) == 1
+    assert loaded[0].qualified is True
+    assert loaded[0].evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+
+
+def test_load_pdep_network_selections_accepts_unqualified_with_evidence_from_a_combined_component(
+        tmp_path):
+    """Over-refusal guard for the asymmetry combine() bakes in: qualified is voted over EVALUATED
+    components only, but selected_ts/uncertain_path_reactions are unioned over ALL components
+    (t3/pdep/selector.py combine(), _union_preserving_order calls). So a not-evaluated component
+    can contribute real uncertain evidence to the aggregate's uncertain_path_reactions while the
+    aggregate's qualified stays False, because no EVALUATED component voted True. Built through the
+    real PDepNetworkSelection.combine() classmethod, not assembled by hand, so this pins the actual
+    production behaviour rather than an assumption about it. If the cross-field check required
+    qualified == bool(uncertain_path_reactions) (the single-decision equality), this legitimate
+    combined record would wrongly be refused."""
+    ts_x = SensitiveTransitionState(
+        ts_label='TSX', coefficient=0.4, condition=(900.0, 'K', 1.0, 'bar'), path_reaction_label='rxnX',
+        path_reaction_str='X + Y <=> Z', kinetics_comment='estimate', uncertain=True, delta_ln_k=0.02)
+    not_evaluated_component = PDepNetworkSelection(
+        network_id='network4_2', network_source_hash=NETWORK_SOURCE_HASH, qualified=False,
+        selected_ts=[ts_x], uncertain_path_reactions=[ts_x])
+    not_evaluated_component.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+    evaluated_negative_component = PDepNetworkSelection(
+        network_id='network4_2', network_source_hash=NETWORK_SOURCE_HASH, qualified=False)
+    assert evaluated_negative_component.evaluation_status == EVALUATION_STATUS_EVALUATED
+
+    combined = PDepNetworkSelection.combine([not_evaluated_component, evaluated_negative_component])
+    assert combined.qualified is False, 'fixture setup no longer exercises the intended combine() branch'
+    assert combined.uncertain_path_reactions == [ts_x], \
+        'fixture setup no longer exercises the intended combine() branch'
+
+    path = str(tmp_path / 'selections.yml')
+    save_pdep_network_selections(path=path, selections=[combined])
+    loaded = load_pdep_network_selections(path=path)
+
+    assert len(loaded) == 1
+    assert loaded[0].qualified is False
+    assert loaded[0].uncertain_path_reactions == [ts_x]
+    assert loaded[0].evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+
+
+def test_load_pdep_network_selections_round_trips_a_real_select_from_sa_dict_decision(tmp_path, sa_dict):
+    """Test that a PDepNetworkSelection produced by the real select_from_sa_dict() -- not a
+    hand-built fixture that happens to agree with the cross-field validator -- survives
+    save/load unchanged. Built through the real constructor so the validator is exercised against
+    genuine decision output rather than against a fixture engineered to satisfy it."""
+    network = parse_pdep_network_file(path=NETWORK_PATH)
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001)
+
+    path = str(tmp_path / 'selections.yml')
+    save_pdep_network_selections(path=path, selections=[selection])
+    loaded = load_pdep_network_selections(path=path)
+
+    assert len(loaded) == 1
+    assert loaded[0] == selection
+
+
+def test_load_pdep_network_selections_refuses_a_string_for_qualified(tmp_path):
+    """Test that qualified: 'yes' -- a non-empty string, therefore truthy -- is refused rather than
+    silently accepted as a bool, since a truthy non-bool here would forge its way past
+    explore_pdep_network's 'not selection.qualified' budget gate."""
+    rendered = _build_full_selection().as_dict()
+    rendered['qualified'] = 'yes'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'qualified' that must be a bool" in message
+
+
+def test_load_pdep_network_selections_refuses_an_int_for_qualified(tmp_path):
+    """Test that qualified: 1 is refused: bool is a subclass of int in Python, so a naive
+    isinstance(value, int) check would wrongly accept this -- isinstance(value, bool) must be
+    checked instead (and first)."""
+    rendered = _build_full_selection().as_dict()
+    rendered['qualified'] = 1
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'qualified' that must be a bool" in message
+
+
+def test_load_pdep_network_selections_refuses_none_for_qualified(tmp_path):
+    """Test that qualified: null is refused: PDepNetworkSelection.qualified is a plain bool field
+    (never optional), so None must not be silently accepted."""
+    rendered = _build_full_selection().as_dict()
+    rendered['qualified'] = None
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'qualified' that must be a bool" in message
+
+
+def test_load_pdep_network_selections_refuses_an_unrecognized_evaluation_status(tmp_path):
+    """Test that evaluation_status: 'bogus' is refused rather than silently accepted as some
+    unrecognized third state -- only EVALUATION_STATUS_EVALUATED/EVALUATION_STATUS_NOT_EVALUATED
+    are understood."""
+    rendered = _build_full_selection().as_dict()
+    rendered['evaluation_status'] = 'bogus'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'evaluation_status'" in message
+    assert 'bogus' in message
+
+
+def test_load_pdep_network_selections_refuses_an_unrecognized_cache_status(tmp_path):
+    """Test that cache_status: 'bogus' is refused; cache_status is optional (None is a legitimate
+    value when there is no cache to validate), but a non-null value must be one of the four
+    recognized CACHE_STATUS_* constants."""
+    rendered = _build_full_selection().as_dict()
+    rendered['cache_status'] = 'bogus'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'cache_status'" in message
+    assert 'bogus' in message
+
+
+def test_load_pdep_network_selections_accepts_a_null_cache_status(tmp_path):
+    """Test that cache_status: null keeps loading rather than being refused: unlike
+    evaluation_status, cache_status is a legitimately optional field."""
+    rendered = _build_full_selection().as_dict()
+    rendered['cache_status'] = None
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded[0].cache_status is None
+
+
+def test_load_pdep_network_selections_refuses_a_non_string_network_id(tmp_path):
+    """Test that network_id (a required, non-optional str) given a non-string value is refused."""
+    rendered = _build_full_selection().as_dict()
+    rendered['network_id'] = 123
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'network_id' that must be a string" in message
+
+
+def test_load_pdep_network_selections_refuses_a_non_string_network_source_hash(tmp_path):
+    """Test that network_source_hash (optional str) given a non-string, non-null value is refused
+    -- this is the field explore_pdep_network binds its budget gate to, so a wrong-typed value here
+    must never be silently accepted."""
+    rendered = _build_full_selection().as_dict()
+    rendered['network_source_hash'] = 123
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'network_source_hash' that must be a string or null" in message
+
+
+def test_load_pdep_network_selections_refuses_a_non_string_method(tmp_path):
+    """Test that method (optional str) given a non-string, non-null value is refused -- this is the
+    field explore_pdep_network compares against config.method, so a wrong-typed value must never be
+    silently accepted."""
+    rendered = _build_full_selection().as_dict()
+    rendered['method'] = 42
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'method' that must be a string or null" in message
+
+
+def test_load_pdep_network_selections_refuses_a_bool_network_reactions_examined(tmp_path):
+    """Test that network_reactions_examined: True is refused: bool is a subclass of int, so this
+    field's isinstance(value, bool) check must run before (and instead of) a bare
+    isinstance(value, int) check that would wrongly accept it."""
+    rendered = _build_full_selection().as_dict()
+    rendered['network_reactions_examined'] = True
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'network_reactions_examined' that must be an int" in message
+
+
+def test_load_pdep_network_selections_refuses_a_string_network_reactions_examined(tmp_path):
+    """Test that network_reactions_examined: '2' (a numeric-looking string) is refused rather than
+    silently coerced."""
+    rendered = _build_full_selection().as_dict()
+    rendered['network_reactions_examined'] = '2'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'network_reactions_examined' that must be an int" in message
+
+
+def test_load_pdep_network_selections_refuses_a_non_bool_direction_ambiguous(tmp_path):
+    """Test that direction_ambiguous given a non-bool value is refused."""
+    rendered = _build_full_selection().as_dict()
+    rendered['direction_ambiguous'] = 'yes'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "field 'direction_ambiguous' that must be a bool" in message
+
+
+def test_load_pdep_network_selections_refuses_a_non_numeric_threshold_value(tmp_path):
+    """Test that a thresholds dict entry given a non-numeric (bool) value is refused, WITHOUT
+    requiring a fixed key set -- select_from_sa_dict's malformed-sa_dict branch records a
+    coefficient_floor key absent from every other thresholds dict, so pinning an exact key set
+    would refuse a legitimately-produced record."""
+    rendered = _build_full_selection().as_dict()
+    rendered['thresholds']['relative_threshold'] = True
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0]' in message
+    assert "'thresholds' entry 'relative_threshold' that must be numeric" in message
+
+
+def test_load_pdep_network_selections_accepts_an_unlisted_threshold_key(tmp_path):
+    """Test that a thresholds dict with an extra key not present on any other record (e.g.
+    coefficient_floor) is accepted, confirming thresholds validation does not enforce a fixed key
+    set."""
+    rendered = _build_full_selection().as_dict()
+    rendered['thresholds']['coefficient_floor'] = 1e-8
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded[0].thresholds['coefficient_floor'] == 1e-8
+
+
+def test_load_pdep_network_selections_refuses_a_non_bool_uncertain_on_a_sensitive_ts(tmp_path):
+    """Test that a selected_ts entry's 'uncertain' field given a non-bool, non-null value is
+    refused -- sibling fix to _selection_from_dict's type validation, applied to
+    _sensitive_transition_state_from_dict, naming both the record's index AND the nested list
+    index/field so a malformed nested entry is diagnosable."""
+    rendered = _build_full_selection().as_dict()
+    rendered['selected_ts'][0]['uncertain'] = 'yes'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0].selected_ts[0]' in message
+    assert "field 'uncertain' that must be a bool or null" in message
+
+
+def test_load_pdep_network_selections_refuses_a_non_numeric_coefficient_on_a_sensitive_ts(tmp_path):
+    """Test that a selected_ts entry's 'coefficient' field given a non-numeric value is refused
+    rather than raising an opaque KeyError-adjacent TypeError deeper in the dataclass."""
+    rendered = _build_full_selection().as_dict()
+    rendered['selected_ts'][0]['coefficient'] = 'not-a-number'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0].selected_ts[0]' in message
+    assert "'coefficient' that must be numeric" in message
+
+
+def test_load_pdep_network_selections_refuses_a_missing_field_on_a_sensitive_ts(tmp_path):
+    """Test that a selected_ts entry missing a required field (e.g. ts_label) raises a diagnostic
+    ValueError naming the nested context and the field, instead of a raw KeyError('ts_label') --
+    the same fix _require_record_field already gives the top-level selection fields, now applied
+    consistently to the nested SensitiveTransitionState entries."""
+    rendered = _build_full_selection().as_dict()
+    del rendered['selected_ts'][0]['ts_label']
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_network_selections(path=path)
+    message = str(exc_info.value)
+    assert 'selections[0].selected_ts[0]' in message
+    assert "missing required field 'ts_label'" in message
+
+
+def test_load_pdep_exploration_results_refuses_a_non_string_kinetics_type(tmp_path):
+    """Test that a k_tp_as_written entry's kinetics_type field given a non-string, non-null value
+    is refused."""
+    reaction = _build_full_arkane_reaction()
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_SUCCEEDED,
+                                   reasons=(), network_paths=('pdep/final/network4_2_full.py',),
+                                   k_tp_as_written=(reaction,), selection=None)
+    rendered = result.as_dict()
+    rendered['k_tp_as_written'][0]['kinetics_type'] = 42
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    message = str(exc_info.value)
+    assert 'results[0].k_tp_as_written[0]' in message
+    assert "field 'kinetics_type' that must be a string or null" in message
+
+
+def test_load_pdep_exploration_results_refuses_a_non_mapping_kinetics_params(tmp_path):
+    """Test that a k_tp_as_written entry's kinetics_params field given a non-mapping value is
+    refused."""
+    reaction = _build_full_arkane_reaction()
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_SUCCEEDED,
+                                   reasons=(), network_paths=('pdep/final/network4_2_full.py',),
+                                   k_tp_as_written=(reaction,), selection=None)
+    rendered = result.as_dict()
+    rendered['k_tp_as_written'][0]['kinetics_params'] = 'not-a-mapping'
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    message = str(exc_info.value)
+    assert 'results[0].k_tp_as_written[0]' in message
+    assert "field 'kinetics_params' that must be a mapping" in message
+
+
+def test_load_pdep_exploration_results_refuses_record_missing_required_field(tmp_path):
+    """Test that a result record missing a required field raises a diagnostic ValueError naming the
+    file, the record's index, and the missing field."""
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_SKIPPED,
+                                   reasons=('x',), selection=None)
+    rendered = result.as_dict()
+    del rendered['network_id']
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    message = str(exc_info.value)
+    assert 'results[0]' in message
+    assert "missing required field 'network_id'" in message
+
+
+def test_load_pdep_exploration_results_refuses_a_string_for_a_list_typed_field(tmp_path):
+    """Test that a list-typed field on a result record given a bare string is refused rather than
+    silently coerced character by character."""
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_FAILED,
+                                   reasons=('x',), output_paths=('/fake/output1.py',), selection=None)
+    rendered = result.as_dict()
+    rendered['output_paths'] = 'AB'
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    message = str(exc_info.value)
+    assert 'results[0]' in message
+    assert "field 'output_paths' that must be a list" in message
+
+
+def test_load_pdep_exploration_results_refuses_unknown_nested_selection_algorithm_version(tmp_path):
+    """Test that a result carrying a nested selection with an unknown selection_algorithm_version is
+    refused, on wording distinguishable from the unknown-schema-version refusal."""
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_SKIPPED,
+                                   reasons=('x',), selection=PDepNetworkSelection(network_id='network4_2'))
+    rendered = result.as_dict()
+    rendered['selection']['selection_algorithm_version'] = 999
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    message = str(exc_info.value)
+    assert 'results[0].selection' in message
+    assert 'cannot interpret' in message
+
+
+def test_load_pdep_exploration_results_refuses_a_result_missing_the_selection_key(tmp_path):
+    """Test that a result record with NO 'selection' key at all is refused, distinct from a record
+    carrying an explicit 'selection: null' (which is the documented "explored without a gating
+    decision" state and must keep loading -- see
+    test_save_pdep_exploration_results_handles_selection_none above)."""
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_SKIPPED,
+                                   reasons=('x',), selection=None)
+    rendered = result.as_dict()
+    del rendered['selection']
+    path = str(tmp_path / 'exploration_results.yml')
+    save_yaml_file(path=path, content={'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                                       'results': [rendered]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_exploration_results(path=path)
+    message = str(exc_info.value)
+    assert 'results[0]' in message
+    assert "missing the required 'selection' key" in message
+
+
+def test_the_loaders_refuse_a_python_object_tag(tmp_path):
+    """
+    Test that the public loaders cannot be made to construct a Python object from a YAML tag.
+
+    `t3/pdep/yaml_safe.py`'s module docstring already states the rule these loaders were written
+    against and broke: `t3.pdep.api` is a PUBLIC entrypoint reading a CALLER-SUPPLIED path, so a
+    `yaml.FullLoader` read (which is what `arc.common.read_yaml_file` does) hands whoever influences
+    that path control over what gets constructed. Nothing T3 writes needs any tag at all --
+    `as_dict()` renders tuples as plain lists -- so a tag here means the file was not written by T3.
+
+    Both loaders are checked: routing only one of them through the safe reader would leave the hole
+    open, and no other test distinguishes them.
+    """
+    payload = ("selection_schema_version: 1\n"
+               "selections:\n"
+               "  - !!python/object/apply:os.system ['echo pwned']\n")
+    path = str(tmp_path / 'evil_selections.yml')
+    _write(path, payload)
+    with pytest.raises(ValueError, match='plain YAML'):
+        load_pdep_network_selections(path=path)
+
+    result_payload = ("exploration_result_schema_version: 1\n"
+                      "results:\n"
+                      "  - !!python/object/apply:os.system ['echo pwned']\n")
+    result_path = str(tmp_path / 'evil_results.yml')
+    _write(result_path, result_payload)
+    with pytest.raises(ValueError, match='plain YAML'):
+        load_pdep_exploration_results(path=result_path)
