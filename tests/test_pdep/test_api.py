@@ -33,7 +33,8 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_UNVALIDATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
-                              SELECTOR_VERSION,
+                              SELECTION_ALGORITHM_VERSION,
+                              SELECTION_SCHEMA_VERSION,
                               PDepNetworkSelection,
                               select_from_sa_dict,
                               )
@@ -323,7 +324,7 @@ def test_rank_pdep_networks_raises_for_bad_threshold_instead_of_swallowing_it():
 
 def test_save_pdep_network_selections_round_trips_and_is_json_serializable(tmp_path, sa_dict):
     """Test that saved selections round-trip through read_yaml_file and are JSON-serializable, and
-    carry a selector_version schema marker (FIX M)."""
+    carry a selection_schema_version envelope marker (FIX M)."""
     network = parse_pdep_network_file(path=NETWORK_PATH)
     selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
                                     relative_threshold=0.001)
@@ -332,9 +333,58 @@ def test_save_pdep_network_selections_round_trips_and_is_json_serializable(tmp_p
 
     assert returned_path == path
     loaded = read_yaml_file(path=path)
-    assert loaded == {'selector_version': SELECTOR_VERSION, 'selections': [selection.as_dict()]}
+    assert loaded == {'selection_schema_version': SELECTION_SCHEMA_VERSION, 'selections': [selection.as_dict()]}
     serialized = json.dumps(loaded)
     assert isinstance(serialized, str)
+
+
+# --- 7b. Every PDepNetworkSelection carries non-None schema/algorithm version markers ------------
+
+def test_select_pdep_network_cache_rejected_carries_version_markers(tmp_path):
+    """Test that a decision from the cache-rejected path (api.py's cache-rejection thresholds
+    site) carries non-None selection_schema_version/selection_algorithm_version, even though that
+    site never mentions either key explicitly -- they come from the dataclass field defaults, not
+    from anything a caller must remember to pass."""
+    network_path = str(tmp_path / 'network4_2.py')
+    with open(NETWORK_PATH, 'r') as f:
+        _write(network_path, f.read())
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    save_yaml_file(path=sa_path, content=read_yaml_file(path=SA_PATH))
+    # Deliberately no sidecar written, so this takes the cache-rejected path.
+
+    rejected = select_pdep_network(network=network_path, sa_path=sa_path, network_reaction=TARGET_REACTION,
+                                   relative_threshold=0.001, method='MSC')
+    assert rejected.cache_status == CACHE_STATUS_CACHED_REJECTED
+    assert rejected.selection_schema_version == SELECTION_SCHEMA_VERSION
+    assert rejected.selection_algorithm_version == SELECTION_ALGORITHM_VERSION
+
+
+def test_select_pdep_network_no_reaction_keys_carries_version_markers():
+    """Test that a decision from the no-SA-keys path (api.py's "no reaction keys found" thresholds
+    site) carries non-None selection_schema_version/selection_algorithm_version, for the same
+    reason as the cache-rejected case above."""
+    selection = select_pdep_network(network=NETWORK_PATH, sa_dict={}, network_reaction=None,
+                                    relative_threshold=0.001)
+    assert selection.selection_schema_version == SELECTION_SCHEMA_VERSION
+    assert selection.selection_algorithm_version == SELECTION_ALGORITHM_VERSION
+
+
+# --- 7c. selection_schema_version survives nesting inside PDepExplorationResult.as_dict() --------
+
+def test_exploration_result_as_dict_nests_selection_schema_version(sa_dict):
+    """Test that PDepExplorationResult.as_dict()['selection']['selection_schema_version'] is
+    present: a version marker on the enclosing envelope alone cannot describe a nested record, so
+    this must survive as a field on the nested selection itself."""
+    from t3.pdep.explorer.result import EXPLORATION_STATUS_SKIPPED, PDepExplorationResult
+
+    network = parse_pdep_network_file(path=NETWORK_PATH)
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001)
+    result = PDepExplorationResult(network_id=network.network_id, status=EXPLORATION_STATUS_SKIPPED,
+                                   reasons=('not qualified',), selection=selection)
+    rendered = result.as_dict()
+    assert rendered['selection']['selection_schema_version'] == SELECTION_SCHEMA_VERSION
+    assert rendered['selection']['selection_algorithm_version'] == SELECTION_ALGORITHM_VERSION
 
 
 # --- 8. log_pdep_network_summary does not raise for populated or empty lists ---------------------

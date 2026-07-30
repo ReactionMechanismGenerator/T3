@@ -46,7 +46,7 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               E0_PERTURBATION_J_PER_MOL,
                               EVALUATION_STATUS_EVALUATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
-                              SELECTOR_VERSION,
+                              SELECTION_SCHEMA_VERSION,
                               STRUCTURES_KEY,
                               PDepNetworkSelection,
                               select_from_sa_dict,
@@ -607,9 +607,12 @@ def save_pdep_network_selections(path: str, selections: list) -> str:
     """
     Save a list of PDep network selection decisions to a YAML file.
 
-    The file is a mapping with a ``selector_version`` marker (``t3.pdep.selector.SELECTOR_VERSION``)
-    and a ``selections`` list, rather than a bare list, so the on-disk format can evolve (e.g. gain
-    new top-level keys) without becoming ambiguous with an old-format file.
+    The file is a mapping with a ``selection_schema_version`` marker
+    (``t3.pdep.selector.SELECTION_SCHEMA_VERSION``) and a ``selections`` list, rather than a bare
+    list, so the on-disk format can evolve (e.g. gain new top-level keys) without becoming
+    ambiguous with an old-format file. This marker describes the SHAPE of the envelope and of each
+    selection record, not the decision logic that produced them -- see
+    ``t3.pdep.selector.SELECTION_SCHEMA_VERSION``'s own comment for why that distinction matters.
 
     Args:
         path (str): The path to write the YAML file to.
@@ -618,7 +621,7 @@ def save_pdep_network_selections(path: str, selections: list) -> str:
     Returns:
         str: ``path``, as a string, so callers can chain it.
     """
-    content = {'selector_version': SELECTOR_VERSION,
+    content = {'selection_schema_version': SELECTION_SCHEMA_VERSION,
               'selections': [selection.as_dict() for selection in selections],
               }
     save_yaml_file(path=path, content=content)

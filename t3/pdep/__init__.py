@@ -11,6 +11,7 @@ from t3.pdep.api import (
     select_pdep_network,
 )
 from t3.pdep.cache import (
+    SA_CACHE_CONTRACT_VERSION,
     sa_cache_metadata_path,
     validate_sa_cache,
     write_sa_cache_metadata,
@@ -42,7 +43,8 @@ from t3.pdep.selector import (
     EVALUATION_STATUS_EVALUATED,
     EVALUATION_STATUS_NOT_EVALUATED,
     PDepNetworkSelection,
-    SELECTOR_VERSION,
+    SELECTION_ALGORITHM_VERSION,
+    SELECTION_SCHEMA_VERSION,
     SensitiveTransitionState,
     coefficient_floor,
     resolve_direction_key,

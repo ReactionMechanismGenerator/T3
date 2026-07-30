@@ -30,13 +30,23 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
                               DEFAULT_MIN_DELTA_LN_K,
                               E0_PERTURBATION_J_PER_MOL,
-                              SELECTOR_VERSION,
                               STRUCTURES_KEY,
                               TS_ENTRY_PREFIX,
                               coefficient_floor,
                               )
 
 SA_CACHE_METADATA_FILE_NAME = 't3_sa_cache.yml'
+
+# Whether a T3-generated sensitivity YAML on disk may still be trusted -- this is the ONLY job this
+# constant has. It is deliberately separate from ``t3.pdep.selector.SELECTION_SCHEMA_VERSION`` (the
+# on-disk shape of a saved *selection* record) and ``SELECTION_ALGORITHM_VERSION`` (the selection
+# *decision logic*): a cache can go stale for reasons that have nothing to do with either of those
+# (e.g. this module starts recording a new provenance field the write side must supply), and bumping
+# either of those two must not force every cached SA YAML to be needlessly regenerated. Bump this
+# when what this module needs from the sidecar to trust a cached file changes. There is no fallback
+# to a predecessor key: no ``t3_sa_cache.yml`` sidecar has ever existed on disk anywhere under the
+# old combined marker, so a fallback would be untestable dead code, not a real migration path.
+SA_CACHE_CONTRACT_VERSION = 1
 
 # A mismatch of more than this (in J/mol) between the recorded and the assumed perturbation
 # invalidates the cache, since the absolute floor is derived from the perturbation size.
@@ -142,7 +152,7 @@ def write_sa_cache_metadata(sa_path: str,
         sa_dict = read_sa_yaml_file(sa_path)
     except Exception:
         sa_dict = None
-    metadata = {'selector_version': SELECTOR_VERSION,
+    metadata = {'sa_cache_contract_version': SA_CACHE_CONTRACT_VERSION,
                 'network_id': network_id,
                 'method': method,
                 'perturbation': perturbation,
@@ -222,10 +232,15 @@ def validate_sa_cache(sa_path: str,
     if not isinstance(metadata, dict):
         return CACHE_STATUS_CACHED_REJECTED, [f'The cache metadata at {metadata_path} is malformed. Regenerating.']
 
-    recorded_version = metadata.get('selector_version')
-    if recorded_version != SELECTOR_VERSION:
-        warnings_list.append(f'The cached sensitivity output at {sa_path} was written by selector version '
-                             f'{recorded_version}, but this is version {SELECTOR_VERSION}. Regenerating.')
+    # Fail-closed on an absent key too, not just a mismatched one: a sidecar written before this
+    # key existed (or hand-edited to drop it) provides no evidence at all that this module's
+    # current usability contract was satisfied, and ``None != SA_CACHE_CONTRACT_VERSION`` already
+    # takes this branch, so there is no separate case to add here.
+    recorded_version = metadata.get('sa_cache_contract_version')
+    if recorded_version != SA_CACHE_CONTRACT_VERSION:
+        warnings_list.append(f'The cached sensitivity output at {sa_path} was written under SA-cache '
+                             f'contract version {recorded_version}, but this is version '
+                             f'{SA_CACHE_CONTRACT_VERSION}. Regenerating.')
         return CACHE_STATUS_CACHED_REJECTED, warnings_list
 
     recorded_perturbation = metadata.get('perturbation')

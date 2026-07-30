@@ -9,9 +9,10 @@ import os
 
 import pytest
 
-from arc.common import save_yaml_file
+from arc.common import read_yaml_file, save_yaml_file
 
-from t3.pdep.cache import (SA_CACHE_METADATA_FILE_NAME,
+from t3.pdep.cache import (SA_CACHE_CONTRACT_VERSION,
+                          SA_CACHE_METADATA_FILE_NAME,
                           hash_file,
                           max_abs_ts_coefficient,
                           sa_cache_metadata_path,
@@ -99,25 +100,48 @@ def test_network_file_changed_after_write_is_rejected(tmp_path):
     assert warnings
 
 
-# --- 18. Sidecar records a different selector_version -----------------------------------------------
+# --- 18. Sidecar records a different sa_cache_contract_version ---------------------------------------
 
-def test_sidecar_with_mismatched_selector_version_is_rejected(tmp_path):
-    """Test that a sidecar recording a different ``selector_version`` is rejected."""
+def test_sidecar_with_mismatched_sa_cache_contract_version_is_rejected(tmp_path):
+    """Test that a sidecar recording a different ``sa_cache_contract_version`` is rejected."""
     network_path = str(tmp_path / 'network4_2.py')
     _write(network_path, 'reaction(label="reaction1")\n')
     sa_path = str(tmp_path / 'sa_coefficients.yml')
-    _write(sa_path, 'some: sa\n')
+    # A REALISTIC SA YAML, not a stub: a stub carries no transition-state signal and is rejected by
+    # the max_abs_ts_coefficient check before the version is ever compared, so the test would pass
+    # with the version check deleted outright. That is what this test used to do.
+    _write_realistic_sa_yaml(sa_path)
 
     write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
     metadata_path = sa_cache_metadata_path(sa_path=sa_path)
-    from arc.common import read_yaml_file, save_yaml_file
     metadata = read_yaml_file(path=metadata_path)
-    metadata['selector_version'] = metadata['selector_version'] + 1
+    metadata['sa_cache_contract_version'] = metadata['sa_cache_contract_version'] + 1
     save_yaml_file(path=metadata_path, content=metadata)
 
-    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
+    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
     assert status == CACHE_STATUS_CACHED_REJECTED
-    assert warnings
+    # Pin the REASON, not just the verdict: 'rejected' is reachable by nine other branches.
+    assert any('cache contract version' in warning for warning in warnings), warnings
+
+
+def test_sidecar_missing_sa_cache_contract_version_key_is_rejected(tmp_path):
+    """Test that a sidecar present but entirely missing the ``sa_cache_contract_version`` key is
+    rejected (fail-closed on an unversioned file), distinct from test_missing_sidecar_is_rejected
+    above (which covers the sidecar FILE being absent, not just this one key within it)."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+    metadata_path = sa_cache_metadata_path(sa_path=sa_path)
+    metadata = read_yaml_file(path=metadata_path)
+    del metadata['sa_cache_contract_version']
+    save_yaml_file(path=metadata_path, content=metadata)
+
+    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
+    assert status == CACHE_STATUS_CACHED_REJECTED
+    assert any('cache contract version' in warning for warning in warnings), warnings
 
 
 # --- 19. Sidecar records a mismatched perturbation ---------------------------------------------------

@@ -51,8 +51,31 @@ E0_PERTURBATION_J_PER_MOL = 8368.0
 # The smallest ln(k) response worth calling "sensitive", used to derive the absolute floor.
 DEFAULT_MIN_DELTA_LN_K = 1e-3
 
-# Bumped whenever the selection semantics change, so cached results can be invalidated.
-SELECTOR_VERSION = 1
+# SELECTION_SCHEMA_VERSION and SELECTION_ALGORITHM_VERSION used to be a single SELECTOR_VERSION
+# doing three unrelated jobs at once -- SA-cache usability, on-disk envelope schema, and selection
+# provenance -- so a change meant for one job forced a bump that wrongly invalidated the other two.
+# Each constant below now has exactly one job; the fourth job (SA-cache usability) lives as
+# ``t3.pdep.cache.SA_CACHE_CONTRACT_VERSION``, in cache.py, since that is the only module that
+# reads or writes it.
+
+# The SHAPE of one PDepNetworkSelection.as_dict() record: its set of keys and their types. Bump
+# this when a field is added, removed, or renamed, or a field's rendered type changes, so a
+# consumer reading an old saved-selection YAML from disk can tell it needs to migrate. Version 1
+# means "the shape as of first ship"; pre-ship development churn on this shape is deliberately NOT
+# versioned, because t3.pdep has never shipped a release -- no saved record has ever left this repo
+# under a version number that would need to keep meaning the same thing. Do NOT bump this for a
+# change to the decision LOGIC (see SELECTION_ALGORITHM_VERSION below) or to SA-cache usability
+# (see t3.pdep.cache.SA_CACHE_CONTRACT_VERSION) -- neither of those changes the shape of a record.
+SELECTION_SCHEMA_VERSION = 1
+
+# The SEMANTICS of the decision: which gates are applied and how (relative/absolute thresholds,
+# TS-only denominator, direction resolution, the uncertainty provenance predicate, ...). Bump this
+# when the selection LOGIC changes in a way that could flip a past decision, so a saved selection
+# can be told apart from one a newer selector would make given the same inputs. Do NOT bump this
+# for a change to the on-disk SHAPE of a record (see SELECTION_SCHEMA_VERSION above) or to SA-cache
+# usability (see t3.pdep.cache.SA_CACHE_CONTRACT_VERSION) -- neither of those changes what the
+# decision means.
+SELECTION_ALGORITHM_VERSION = 1
 
 CACHE_STATUS_GENERATED = 'generated'
 CACHE_STATUS_CACHED_VALID = 'cached_valid'
@@ -184,6 +207,16 @@ class PDepNetworkSelection:
             real SA data) or ``'not_evaluated'`` (it could not be: unreadable/unparseable network,
             missing SA data, or a rejected cache) -- in the latter case, ``qualified`` and
             ``selected_ts`` carry no signal and must not be read as "does not qualify".
+        selection_schema_version (int): The on-disk SHAPE this record was built under; see
+            ``SELECTION_SCHEMA_VERSION``. This is a FIELD, not a ``thresholds`` dict key, for two
+            reasons: (a) ``PDepExplorationResult.as_dict()`` nests a serialized selection
+            (``self.selection.as_dict()``); a version living only in the enclosing envelope cannot
+            describe a nested record, but a field survives nesting. (b) ``thresholds`` is built by
+            hand at four call sites, and a dict key can silently be omitted at one of them (as
+            happened here) -- a dataclass field with a default cannot be.
+        selection_algorithm_version (int): The decision SEMANTICS this record was produced by; see
+            ``SELECTION_ALGORITHM_VERSION``. A field for the same two reasons as
+            ``selection_schema_version`` above.
     """
     network_id: str
     network_source_hash: str | None = None
@@ -201,6 +234,8 @@ class PDepNetworkSelection:
     warnings: list = field(default_factory=list)
     network_reactions_examined: int = 0
     evaluation_status: str = EVALUATION_STATUS_EVALUATED
+    selection_schema_version: int = SELECTION_SCHEMA_VERSION
+    selection_algorithm_version: int = SELECTION_ALGORITHM_VERSION
 
     def uncertain_ts_labels(self) -> list:
         """
@@ -289,6 +324,8 @@ class PDepNetworkSelection:
             'warnings': copy.deepcopy(self.warnings),
             'network_reactions_examined': self.network_reactions_examined,
             'evaluation_status': self.evaluation_status,
+            'selection_schema_version': self.selection_schema_version,
+            'selection_algorithm_version': self.selection_algorithm_version,
         }
 
     @classmethod
@@ -325,6 +362,14 @@ class PDepNetworkSelection:
         evaluated aggregate may still be acted on is a policy question, answered by the consumer
         (``t3.pdep.api.explore_pdep_network`` accepts one that qualified and refuses one that did not).
 
+        ``selection_schema_version`` and ``selection_algorithm_version`` are treated as identity,
+        like ``network_id``, and for a stronger reason than ``network_source_hash``: decisions
+        combined here are always produced by ONE run of ONE process, so every component necessarily
+        went through the same import of ``t3.pdep.selector`` and therefore the same versions.
+        Disagreement is not a weaker signal to average away with a warning -- it means something is
+        deeply wrong (e.g. components were collected across a code upgrade, or fabricated by a
+        caller), so it is refused outright, exactly as a ``network_id`` disagreement is.
+
         ``qualified`` is unioned over the EVALUATED components only. This class is a mutable dataclass
         with no invariant enforcement, so a component can carry ``qualified=True`` alongside
         ``evaluation_status='not_evaluated'``; counting its vote would let a flag its own status
@@ -340,8 +385,9 @@ class PDepNetworkSelection:
             decisions (list): The per-reaction ``PDepNetworkSelection`` decisions to combine.
 
         Raises:
-            ValueError: If ``decisions`` is empty, if the decisions disagree on ``network_id``, or if
-                they carry two different non-``None`` ``network_source_hash`` values.
+            ValueError: If ``decisions`` is empty, if the decisions disagree on ``network_id``, if
+                they carry two different non-``None`` ``network_source_hash`` values, or if they
+                disagree on ``selection_schema_version`` or ``selection_algorithm_version``.
 
         Returns:
             PDepNetworkSelection: The combined decision.
@@ -352,6 +398,19 @@ class PDepNetworkSelection:
         network_ids = {decision.network_id for decision in decisions}
         if len(network_ids) > 1:
             raise ValueError(f'Cannot combine decisions for different networks: {sorted(network_ids)}.')
+
+        # ``selection_schema_version``/``selection_algorithm_version`` disagreement is refused
+        # outright, like ``network_id`` -- see the docstring section above. Unlike
+        # ``network_source_hash``, there is no "not recorded" case to tolerate: both fields always
+        # carry a concrete int (their dataclass defaults), so any disagreement is a real one.
+        schema_versions = {decision.selection_schema_version for decision in decisions}
+        if len(schema_versions) > 1:
+            raise ValueError(f'Cannot combine decisions with different selection_schema_version values '
+                             f'for network {first.network_id}: {sorted(schema_versions)}.')
+        algorithm_versions = {decision.selection_algorithm_version for decision in decisions}
+        if len(algorithm_versions) > 1:
+            raise ValueError(f'Cannot combine decisions with different selection_algorithm_version values '
+                             f'for network {first.network_id}: {sorted(algorithm_versions)}.')
 
         # ``network_source_hash`` is an IDENTITY field, not a provenance nicety, so two distinct real
         # hashes are refused outright for the same reason two distinct network_ids are: the
@@ -407,6 +466,8 @@ class PDepNetworkSelection:
             cache_status=cache_status,
             thresholds=dict(first.thresholds),
             network_reactions_examined=len(decisions),
+            selection_schema_version=first.selection_schema_version,
+            selection_algorithm_version=first.selection_algorithm_version,
         )
         # ``evaluation_status`` is NOT allowed to fall back to the dataclass default here: a fresh
         # PDepNetworkSelection is 'evaluated', so combining components that were never evaluated used
@@ -614,7 +675,6 @@ def select_from_sa_dict(sa_dict: dict,
                         'perturbation': perturbation,
                         'coefficient_floor': coefficient_floor(min_delta_ln_k=min_delta_ln_k,
                                                                perturbation=perturbation),
-                        'selector_version': SELECTOR_VERSION,
                         },
         )
         selection.warnings.append(
@@ -635,7 +695,6 @@ def select_from_sa_dict(sa_dict: dict,
                     'min_delta_ln_k': min_delta_ln_k,
                     'perturbation': perturbation,
                     'coefficient_floor': floor,
-                    'selector_version': SELECTOR_VERSION,
                     },
     )
 

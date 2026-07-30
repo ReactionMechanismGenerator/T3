@@ -18,6 +18,8 @@ from t3.pdep.parser import parse_pdep_network_file, parse_pdep_network_text
 from t3.pdep.selector import (EVALUATION_STATUS_EVALUATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
                               PDepNetworkSelection,
+                              SELECTION_ALGORITHM_VERSION,
+                              SELECTION_SCHEMA_VERSION,
                               SensitiveTransitionState,
                               coefficient_floor,
                               resolve_direction_key,
@@ -1042,6 +1044,11 @@ _COMBINE_EXPECTED = {
     # Fail-closed: an aggregate 'does not qualify' is only backed if EVERY component was actually
     # evaluated. One never-evaluated component makes the aggregate not_evaluated.
     'evaluation_status': lambda value: value == EVALUATION_STATUS_NOT_EVALUATED,
+    # Identity, like network_id: propagated from the (agreeing) components; combine() refuses
+    # outright rather than recording None+warning on disagreement, since a disagreement here can
+    # only mean something is deeply wrong (see combine()'s own comment).
+    'selection_schema_version': lambda value: value == SELECTION_SCHEMA_VERSION,
+    'selection_algorithm_version': lambda value: value == SELECTION_ALGORITHM_VERSION,
 }
 
 
@@ -1153,6 +1160,28 @@ def test_combine_of_components_without_a_source_hash_does_not_warn():
                                              _make_full_decision(network_source_hash=None)])
     assert combined.network_source_hash is None
     assert not any('network_source_hash' in warning for warning in combined.warnings)
+
+
+def test_combine_raises_for_two_different_selection_schema_versions():
+    """Test that combine() refuses two components disagreeing on selection_schema_version, unlike
+    network_source_hash's None+warning treatment: decisions combined in one call always come from
+    one run of one process, so a disagreement here means something is deeply wrong, not merely
+    unrecorded, and must not be silently averaged away."""
+    first = _make_full_decision()
+    second = _make_full_decision()
+    second.selection_schema_version = first.selection_schema_version + 1
+    with pytest.raises(ValueError):
+        PDepNetworkSelection.combine([first, second])
+
+
+def test_combine_raises_for_two_different_selection_algorithm_versions():
+    """Test that combine() refuses two components disagreeing on selection_algorithm_version, for
+    the same reason as selection_schema_version above."""
+    first = _make_full_decision()
+    second = _make_full_decision()
+    second.selection_algorithm_version = first.selection_algorithm_version + 1
+    with pytest.raises(ValueError):
+        PDepNetworkSelection.combine([first, second])
 
 
 def test_select_from_sa_dict_records_the_parsed_network_source_hash(sa_dict, network):
