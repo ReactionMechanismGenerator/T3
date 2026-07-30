@@ -19,16 +19,19 @@ from t3.logger import Logger
 import t3.pdep.api as t3_pdep_api
 from t3.pdep.api import (explore_pdep_network,
                          rank_pdep_networks,
+                         save_pdep_exploration_results,
                          save_pdep_network_selections,
                          select_pdep_network,
                          )
 from t3.pdep.cache import hash_file, write_sa_cache_metadata
 from t3.pdep.explorer.config import PDepExplorerConfig
-from t3.pdep.explorer.result import (EXPLORATION_STATUS_FAILED,
+from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
+                                     EXPLORATION_STATUS_FAILED,
                                      EXPLORATION_STATUS_SKIPPED,
                                      EXPLORATION_STATUS_SUCCEEDED,
+                                     PDepExplorationResult,
                                      )
-from t3.pdep.parser import parse_pdep_network_file
+from t3.pdep.parser import PDepArkaneReaction, parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_UNVALIDATED,
@@ -375,8 +378,6 @@ def test_exploration_result_as_dict_nests_selection_schema_version(sa_dict):
     """Test that PDepExplorationResult.as_dict()['selection']['selection_schema_version'] is
     present: a version marker on the enclosing envelope alone cannot describe a nested record, so
     this must survive as a field on the nested selection itself."""
-    from t3.pdep.explorer.result import EXPLORATION_STATUS_SKIPPED, PDepExplorationResult
-
     network = parse_pdep_network_file(path=NETWORK_PATH)
     selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
                                     relative_threshold=0.001)
@@ -385,6 +386,103 @@ def test_exploration_result_as_dict_nests_selection_schema_version(sa_dict):
     rendered = result.as_dict()
     assert rendered['selection']['selection_schema_version'] == SELECTION_SCHEMA_VERSION
     assert rendered['selection']['selection_algorithm_version'] == SELECTION_ALGORITHM_VERSION
+
+
+# --- 7d. save_pdep_exploration_results round trip, YAML-safety, and envelope shape ---------------
+
+def _make_exploration_result(sa_dict, status=EXPLORATION_STATUS_SUCCEEDED, selection=None,
+                             include_selection=True):
+    """Build a realistic ``PDepExplorationResult`` for the save-round-trip tests below: a nested
+    selection (real, from ``select_from_sa_dict``, unless the caller overrides it), a nested
+    ``PDepArkaneReaction`` k(T,P) entry, and a free-form manifest containing tuples -- so saving it
+    actually exercises the nested-selection, nested-reaction, and tuple-flattening paths at once."""
+    network = parse_pdep_network_file(path=NETWORK_PATH)
+    if include_selection and selection is None:
+        selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
+                                        relative_threshold=0.001)
+    reaction = PDepArkaneReaction(
+        reactants=('A',),
+        products=('B', 'C'),
+        kinetics_type='Chebyshev',
+        kinetics_params={'coeffs': [[1.0, 2.0], [None, 4.0]], 'Tmin': (300, 'K')},
+        numeric_values=(1.0, 2.0, None, 4.0, 300),
+    )
+    if status == EXPLORATION_STATUS_SUCCEEDED:
+        return PDepExplorationResult(network_id=network.network_id, status=status,
+                                     network_paths=('pdep/final/network1_full.py',),
+                                     k_tp_as_written=(reaction,),
+                                     manifest={'nested': [(1, 2), {'deep': (3, 4)}]},
+                                     selection=selection)
+    return PDepExplorationResult(network_id=network.network_id, status=status,
+                                 reasons=('did not qualify',), selection=selection)
+
+
+def test_save_pdep_exploration_results_round_trips_and_is_json_serializable(tmp_path, sa_dict):
+    """Test that saved exploration results round-trip through read_yaml_file, carry an
+    exploration_result_schema_version envelope marker, and are JSON-serializable -- mirroring
+    test_save_pdep_network_selections_round_trips_and_is_json_serializable above."""
+    result = _make_exploration_result(sa_dict)
+    path = str(tmp_path / 'exploration_results.yml')
+    returned_path = save_pdep_exploration_results(path=path, results=[result])
+
+    assert returned_path == path
+    loaded = read_yaml_file(path=path)
+    assert loaded == {'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+                      'results': [result.as_dict()]}
+    serialized = json.dumps(loaded)
+    assert isinstance(serialized, str)
+
+
+def test_save_pdep_exploration_results_produces_no_python_object_tags(tmp_path, sa_dict):
+    """Test that the saved file is YAML-safe: since a result nests a selection, nested
+    PDepArkaneReaction k(T,P) entries, and a free-form manifest, this is the assertion that
+    actually protects the on-disk format from silently regressing to an unsafe dump."""
+    result = _make_exploration_result(sa_dict)
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+
+    with open(path, 'r') as f:
+        raw = f.read()
+    assert '!!python/' not in raw
+
+
+def test_save_pdep_exploration_results_handles_selection_none(tmp_path):
+    """Test that a result with selection=None (the skipped-before-any-decision case) serializes
+    without blowing up, and round-trips with a null selection."""
+    result = PDepExplorationResult(network_id='network4_2', status=EXPLORATION_STATUS_SKIPPED,
+                                   reasons=('no selection available',), selection=None)
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+
+    loaded = read_yaml_file(path=path)
+    assert loaded['results'] == [result.as_dict()]
+    assert loaded['results'][0]['selection'] is None
+
+
+def test_saved_exploration_result_selection_carries_its_own_schema_version(tmp_path, sa_dict):
+    """Test that the nested selection in the SAVED file carries its own selection_schema_version --
+    the assertion that proves omitting a selection-version key from the envelope (a deliberate
+    design choice; see save_pdep_exploration_results' docstring) is safe, because each nested
+    selection record already self-describes."""
+    result = _make_exploration_result(sa_dict)
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+
+    loaded = read_yaml_file(path=path)
+    saved_selection = loaded['results'][0]['selection']
+    assert saved_selection['selection_schema_version'] == SELECTION_SCHEMA_VERSION
+    assert saved_selection['selection_algorithm_version'] == SELECTION_ALGORITHM_VERSION
+    assert 'selection_schema_version' not in loaded  # not duplicated on the envelope
+
+
+def test_save_pdep_exploration_results_writes_a_valid_envelope_for_an_empty_list(tmp_path):
+    """Test that saving an empty list still writes a valid envelope, not an omitted/empty file."""
+    path = str(tmp_path / 'exploration_results.yml')
+    returned_path = save_pdep_exploration_results(path=path, results=[])
+
+    assert returned_path == path
+    loaded = read_yaml_file(path=path)
+    assert loaded == {'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION, 'results': []}
 
 
 # --- 8. log_pdep_network_summary does not raise for populated or empty lists ---------------------
@@ -523,7 +621,11 @@ def test_explore_pdep_network_skips_non_qualifying_selection_without_constructin
 
     assert result.status == EXPLORATION_STATUS_SKIPPED
     assert result.reasons == (selection.reason(),)
-    assert result.selection is selection
+    # Identity is deliberately no longer guaranteed here: PDepExplorationResult.__post_init__ now
+    # deep-copies ``selection`` (the same defense it already gave ``manifest``), so the result
+    # snapshots the decision rather than aliasing the caller's mutable object. Equality still
+    # tests what this assertion means: the result carries the decision it was given.
+    assert result.selection == selection
     assert calls == []  # the factory (and therefore any adapter) was never invoked
     # A skipped exploration must not have touched the filesystem either.
     assert not os.path.exists(output_directory)

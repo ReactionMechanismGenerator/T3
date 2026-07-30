@@ -34,6 +34,19 @@ EXPLORATION_STATUS_SKIPPED = 'skipped'
 _VALID_EXPLORATION_STATUSES = (EXPLORATION_STATUS_SUCCEEDED, EXPLORATION_STATUS_FAILED,
                                EXPLORATION_STATUS_SKIPPED)
 
+# The SHAPE of one PDepExplorationResult.as_dict() record: its set of keys and their types. This is
+# its ONE job. It is deliberately distinct from three other version constants that already exist
+# for other jobs, none of which this one duplicates: ``t3.pdep.cache.SA_CACHE_CONTRACT_VERSION``
+# (whether a cached SA YAML on disk may still be trusted), ``t3.pdep.selector.SELECTION_SCHEMA_VERSION``
+# (the SHAPE of one saved *selection* record), and ``t3.pdep.selector.SELECTION_ALGORITHM_VERSION``
+# (the selection *decision logic*). A change to any of those three does not change the shape of an
+# exploration-result record, so it must not force a bump here -- and a change to this record's shape
+# (a field added, removed, renamed, or rendered differently) does not touch any of those three.
+# Version 1 means "the shape as of first ship"; pre-ship development churn on this shape is
+# deliberately NOT versioned, because t3.pdep has never shipped a release -- no saved record has
+# ever left this repo under a version number that would need to keep meaning the same thing.
+EXPLORATION_RESULT_SCHEMA_VERSION = 1
+
 
 @dataclass(frozen=True)
 class PDepExplorationResult:
@@ -122,12 +135,16 @@ class PDepExplorationResult:
                 "k_tp_as_written: those assert a usable result exists, which is the claim the "
                 "failure denies. A failed run MAY carry output_paths -- Arkane's own logs and "
                 "partial output are exactly what a human diagnosing the failure needs.")
-        # Copied, not aliased. A frozen dataclass holding someone else's live dict is frozen in name
-        # only: whoever passed the manifest in can keep editing the provenance of a run that has
-        # already been reported. (``selection`` is deliberately NOT copied -- it is the caller's own
-        # decision object, passed back so they can correlate it by identity, and this dataclass is
-        # not the thing that made it.)
+        # Copied, not aliased. A frozen dataclass holding someone else's live dict/object is frozen
+        # in name only: whoever passed it in can keep editing the provenance of a run that has
+        # already been reported. ``selection`` is a mutable ``PDepNetworkSelection`` (callers
+        # routinely do ``selection.warnings.append(...)`` / ``selection.evaluation_status = ...``),
+        # so it needs the same defense as ``manifest`` -- a caller still holding it could otherwise
+        # rewrite the recorded decision after the fact. Callers that want to correlate this result
+        # with the selection object they passed in must therefore do so by equality, not identity
+        # (``PDepNetworkSelection`` is a plain dataclass, so ``==`` compares field values).
         object.__setattr__(self, 'manifest', copy.deepcopy(self.manifest))
+        object.__setattr__(self, 'selection', copy.deepcopy(self.selection))
 
     def as_dict(self) -> dict:
         """

@@ -35,7 +35,8 @@ from arc.common import save_yaml_file
 from t3.pdep.cache import validate_sa_cache
 from t3.pdep.explorer.config import PDepExplorerConfig, deep_thaw
 from t3.pdep.explorer.factory import explorer_factory
-from t3.pdep.explorer.result import (EXPLORATION_STATUS_FAILED,
+from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
+                                     EXPLORATION_STATUS_FAILED,
                                      EXPLORATION_STATUS_SKIPPED,
                                      EXPLORATION_STATUS_SUCCEEDED,
                                      PDepExplorationResult,
@@ -623,6 +624,36 @@ def save_pdep_network_selections(path: str, selections: list) -> str:
     """
     content = {'selection_schema_version': SELECTION_SCHEMA_VERSION,
               'selections': [selection.as_dict() for selection in selections],
+              }
+    save_yaml_file(path=path, content=content)
+    return str(path)
+
+
+def save_pdep_exploration_results(path: str, results: list) -> str:
+    """
+    Save a list of PDep exploration results to a YAML file.
+
+    The file is a mapping with an ``exploration_result_schema_version`` marker
+    (``t3.pdep.explorer.result.EXPLORATION_RESULT_SCHEMA_VERSION``) and a ``results`` list, rather
+    than a bare list, so the on-disk format can evolve (e.g. gain new top-level keys) without
+    becoming ambiguous with an old-format file -- mirroring ``save_pdep_network_selections`` above.
+
+    The envelope deliberately does NOT carry a selection schema version, even though each result
+    nests a serialized selection (``PDepExplorationResult.as_dict()['selection']``). It does not
+    need to: ``selection_schema_version`` and ``selection_algorithm_version`` are FIELDS on
+    ``PDepNetworkSelection`` (not envelope keys), so every nested selection record already
+    self-describes. A version key on this envelope would be a second, redundant source of truth
+    that could disagree with the records it describes -- so it is deliberately omitted.
+
+    Args:
+        path (str): The path to write the YAML file to.
+        results (list): The ``PDepExplorationResult`` records to save.
+
+    Returns:
+        str: ``path``, as a string, so callers can chain it.
+    """
+    content = {'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
+              'results': [result.as_dict() for result in results],
               }
     save_yaml_file(path=path, content=content)
     return str(path)

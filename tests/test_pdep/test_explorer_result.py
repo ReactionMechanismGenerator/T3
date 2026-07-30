@@ -234,6 +234,23 @@ def test_the_manifest_is_copied_so_a_reported_result_cannot_be_rewritten():
     assert result.manifest == {'rmgpy_revision': 'abc123'}
 
 
+def test_the_selection_is_copied_so_a_reported_result_cannot_be_rewritten():
+    """
+    Mutating the selection object passed in must not change the result's selection.
+
+    Same defect class as the manifest case above: ``PDepNetworkSelection`` is a plain mutable
+    dataclass (callers routinely do ``selection.warnings.append(...)`` /
+    ``selection.evaluation_status = ...``), so a caller holding it could otherwise rewrite the
+    provenance of a decision that has already been reported.
+    """
+    selection = PDepNetworkSelection(network_id='n1', qualified=True)
+    result = PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_SUCCEEDED,
+                                   network_paths=('/x/net.py',), selection=selection)
+    selection.warnings.append('tampered')
+    selection.evaluation_status = 'not_evaluated'
+    assert result.selection == PDepNetworkSelection(network_id='n1', qualified=True)
+
+
 # --- FIELD COVERAGE: as_dict() enumerates the dataclass's fields BY HAND --------------------------
 # Same shape of defect as round-34 P2 on PDepNetworkSelection: a field added to the dataclass but
 # forgotten in as_dict() is silently absent from every saved YAML, and nothing fails. These tests
