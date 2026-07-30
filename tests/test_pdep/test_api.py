@@ -448,6 +448,40 @@ reaction(
     assert [selection.network_id for selection in ranked] == ['aaa', 'zzz']
 
 
+# --- 6f. rank_pdep_networks: _unpack_network_entry's own diagnoses survive as warning text -------
+
+def test_rank_pdep_networks_dict_entry_missing_network_path_names_the_key():
+    """Test that a mapping-form entry missing 'network_path' is recorded as not_evaluated with a
+    warning naming the missing key specifically (Mutation C6: disabling the ``network_path is
+    None`` guard would let ``entry.get('network_path')`` (``None``) flow on into
+    ``select_pdep_network``, which fails for a different reason and would no longer name
+    'network_path' at all)."""
+    networks = [{'sa_path': SA_PATH}]
+    ranked = rank_pdep_networks(networks, relative_threshold=0.001)
+
+    assert len(ranked) == 1
+    selection = ranked[0]
+    assert selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+    assert len(selection.warnings) == 1
+    assert "missing a 'network_path' key" in selection.warnings[0]
+
+
+def test_rank_pdep_networks_short_tuple_entry_names_the_required_shape():
+    """Test that a tuple/list-form entry shorter than (network_path, sa_path) is recorded as
+    not_evaluated with a warning naming the required shape and the actual element count (Mutation
+    C7: disabling the ``len(entry) < 2`` guard would let a 1-element entry unpack ``sa_path`` as
+    ``None`` and fall through to a different, unrelated failure downstream)."""
+    networks = [('only_network_path',)]
+    ranked = rank_pdep_networks(networks, relative_threshold=0.001)
+
+    assert len(ranked) == 1
+    selection = ranked[0]
+    assert selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+    assert len(selection.warnings) == 1
+    assert 'must have at least (network_path, sa_path)' in selection.warnings[0]
+    assert 'got 1 element(s)' in selection.warnings[0]
+
+
 # --- 7. save_pdep_network_selections round trip and JSON-serializability ------------------------
 
 def test_save_pdep_network_selections_round_trips_and_is_json_serializable(tmp_path, sa_dict):

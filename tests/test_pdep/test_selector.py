@@ -799,11 +799,18 @@ def test_evaluation_status_evaluated_for_a_normal_decision():
 
 
 def test_evaluation_status_not_evaluated_for_malformed_sa_dict():
-    """Test that a non-dict sa_dict sets evaluation_status to 'not_evaluated'."""
+    """Test that a non-dict sa_dict sets evaluation_status to 'not_evaluated', and that the
+    warning is select_from_sa_dict's OWN diagnosis (naming criterion (b)) rather than the
+    similar-but-distinct message resolve_direction_key would produce for the same non-dict
+    input further downstream."""
     network = parse_pdep_network_text(text=SYNTHETIC_NETWORK_TEXT, network_id='synthetic_eval_status_top')
     selection = select_from_sa_dict(sa_dict='not a dict', network=network, network_reaction='A + B <=> C',
                                     relative_threshold=0.001)
     assert selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+    assert len(selection.warnings) == 1
+    assert 'criterion (b)' in selection.warnings[0]
+    assert 'expected a dict, got str' in selection.warnings[0]
+    assert 'cannot locate reaction' not in selection.warnings[0]
 
 
 def test_evaluation_status_not_evaluated_when_direction_key_unresolved():
