@@ -80,7 +80,8 @@ def test_missing_sidecar_is_rejected(tmp_path):
 
     status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
     assert status == CACHE_STATUS_CACHED_REJECTED
-    assert warnings
+    # Pin the REASON, not just the verdict: 'rejected' is reachable by seven other branches.
+    assert any('no T3 metadata sidecar' in warning for warning in warnings), warnings
 
 
 # --- 17. Network file changed after sidecar written ------------------------------------------------
@@ -90,14 +91,42 @@ def test_network_file_changed_after_write_is_rejected(tmp_path):
     network_path = str(tmp_path / 'network4_2.py')
     _write(network_path, 'reaction(label="reaction1")\n')
     sa_path = str(tmp_path / 'sa_coefficients.yml')
-    _write(sa_path, 'some: sa\n')
+    # A REALISTIC SA YAML, not a stub: a stub carries no transition-state signal and is rejected by
+    # the max_abs_ts_coefficient floor check regardless of the network file, so the test would pass
+    # even with the network_file_hash check deleted outright.
+    _write_realistic_sa_yaml(sa_path)
 
     write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
     _write(network_path, 'reaction(label="reaction1_modified")\n')
 
-    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
+    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
     assert status == CACHE_STATUS_CACHED_REJECTED
-    assert warnings
+    # Pin the REASON, not just the verdict: 'rejected' is reachable by seven other branches. Match on
+    # both words together since 'changed' alone also appears in the (different) sa_file_hash message.
+    assert any('network file' in warning.lower() and 'changed' in warning.lower()
+              for warning in warnings), warnings
+
+
+# --- 17b. Network file missing entirely -------------------------------------------------------------
+
+def test_network_file_missing_is_rejected(tmp_path):
+    """Test that a network file removed after the sidecar was written invalidates the cache.
+
+    This is distinct from test_network_file_changed_after_write_is_rejected above: here the file is
+    gone entirely (hash_file() cannot even be computed), not merely modified.
+    """
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+    os.remove(network_path)
+
+    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
+    assert status == CACHE_STATUS_CACHED_REJECTED
+    assert any('network file' in warning.lower() and 'missing' in warning.lower()
+              for warning in warnings), warnings
 
 
 # --- 18. Sidecar records a different sa_cache_contract_version ---------------------------------------
@@ -171,7 +200,8 @@ def test_missing_sa_yaml_is_rejected(tmp_path):
 
     status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
     assert status == CACHE_STATUS_CACHED_REJECTED
-    assert warnings
+    # Pin the REASON, not just the verdict: 'rejected' is reachable by seven other branches.
+    assert any('No cached sensitivity output' in warning for warning in warnings), warnings
 
 
 # --- 21. Malformed sidecar --------------------------------------------------------------------------
@@ -188,6 +218,28 @@ def test_malformed_sidecar_is_rejected_without_raising(tmp_path):
     status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
     assert status == CACHE_STATUS_CACHED_REJECTED
     assert warnings
+
+
+# --- 21b. Sidecar parses but is not a dict -----------------------------------------------------------
+
+def test_sidecar_parsing_to_non_dict_is_rejected(tmp_path):
+    """Test that a sidecar which is valid YAML but not a mapping (e.g. a list) is rejected.
+
+    This is distinct from test_malformed_sidecar_is_rejected_without_raising above: here
+    read_sa_yaml_file() succeeds (the YAML is syntactically valid), but what it returns is not a dict,
+    so none of the metadata.get(...) lookups below it would mean anything.
+    """
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write(sa_path, 'some: sa\n')
+    metadata_path = sa_cache_metadata_path(sa_path=sa_path)
+    _write(metadata_path, '- item1\n- item2\n')  # parses to a list, not a dict
+
+    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
+    assert status == CACHE_STATUS_CACHED_REJECTED
+    # Pin the REASON, not just the verdict: 'rejected' is reachable by seven other branches.
+    assert any('malformed' in warning.lower() for warning in warnings), warnings
 
 
 # --- max_abs_ts_coefficient helper (FIX1) ------------------------------------------------------------
