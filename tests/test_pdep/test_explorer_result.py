@@ -7,6 +7,8 @@ t3 test_pdep test_explorer_result module
 Tests ``PDepExplorationResult``.
 """
 
+import dataclasses
+
 import yaml
 
 import pytest
@@ -230,3 +232,21 @@ def test_the_manifest_is_copied_so_a_reported_result_cannot_be_rewritten():
     manifest['rmgpy_revision'] = 'tampered'
     manifest['injected'] = True
     assert result.manifest == {'rmgpy_revision': 'abc123'}
+
+
+# --- FIELD COVERAGE: as_dict() enumerates the dataclass's fields BY HAND --------------------------
+# Same shape of defect as round-34 P2 on PDepNetworkSelection: a field added to the dataclass but
+# forgotten in as_dict() is silently absent from every saved YAML, and nothing fails. These tests
+# derive their expectation from ``dataclasses.fields()``, so adding a field FAILS them until it is
+# handled rather than waiting for someone to notice the gap in a file on disk.
+
+
+def test_as_dict_renders_every_dataclass_field():
+    """Test that as_dict() emits a key for EVERY declared field of PDepExplorationResult, so a
+    newly added field cannot be silently dropped from the persisted record."""
+    declared = {dataclass_field.name for dataclass_field in dataclasses.fields(PDepExplorationResult)}
+    rendered = set(PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_SUCCEEDED,
+                                         network_paths=('/x/net.py',)).as_dict().keys())
+    assert rendered == declared, (f'as_dict() does not match the dataclass fields; missing from '
+                                  f'as_dict(): {sorted(declared - rendered)}; not a field: '
+                                  f'{sorted(rendered - declared)}.')
