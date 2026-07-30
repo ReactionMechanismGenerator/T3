@@ -16,13 +16,16 @@ can never be mistaken for the block to drop.
 """
 
 import ast
+import io
 import keyword
 import math
 import os
 import tempfile
+import tokenize
 import warnings
 from dataclasses import dataclass, field
 
+from t3.pdep.hashing import hash_bytes
 from t3.utils.writer import METHOD_LINE_CANDIDATE_RE, METHOD_MAP, rewrite_arkane_method_line
 
 # The only top-level Arkane DSL calls this module needs to recognize while walking the source's
@@ -165,6 +168,7 @@ def write_arkane_explorer_input_file(source_path: str,
                                      flux_tol: float = None,
                                      maximum_radical_electrons: int = None,
                                      database_kwargs: dict = None,
+                                     expected_source_hash: str = None,
                                      ) -> ExplorerInputSummary:
     """
     Write a valid Arkane PES-explorer input file from an RMG P-dep network (or hybrid Arkane
@@ -196,6 +200,18 @@ def write_arkane_explorer_input_file(source_path: str,
         database_kwargs (dict, optional): Keyword arguments overriding/extending
                                           ``DEFAULT_DATABASE_KWARGS`` for the prepended
                                           ``database(...)`` directive.
+        expected_source_hash (str, optional): If given, the content hash (``t3.pdep.hashing``
+                                              format) that ``source_path``'s bytes must match at
+                                              the moment they are read here. A caller upstream may
+                                              have already checked the file's hash before deciding
+                                              to explore it, but that check and this read are two
+                                              separate opens of the same path; a rewrite or symlink
+                                              swap in between would let the earlier check pass on
+                                              the old bytes while this function builds the explorer
+                                              input from different ones. Passing the hash the
+                                              caller validated against closes that window, because
+                                              it is checked against the exact bytes this function
+                                              reads and uses -- not a second, independent read.
 
     Raises:
         ValueError: If the source cannot be parsed; if ``seed_species`` does not contain exactly 1
@@ -204,9 +220,11 @@ def write_arkane_explorer_input_file(source_path: str,
                    BOTH a ``species()`` and a ``transitionState()``); if a ``bath_gas`` label is
                    not a ``species()`` block, or is a ``species()`` block that does not carry a
                    literal ``reactive=False`` keyword; if the source does not contain exactly one
-                   ``pressureDependence(...)`` block; or if a ``reaction()`` block has neither an
+                   ``pressureDependence(...)`` block; if a ``reaction()`` block has neither an
                    explicit ``kinetics=`` keyword nor a literal ``label`` to target a
-                   ``kinetics('<label>')`` job directive at.
+                   ``kinetics('<label>')`` job directive at; or if ``expected_source_hash`` is
+                   given and does not match the content hash of the bytes actually read from
+                   ``source_path``.
         RuntimeError: If the generated input file text fails its own ``ast.parse(...)``
                      self-check. This should never happen in practice (every edit is computed
                      structurally from the AST), but a failure here is caught loudly, before
@@ -232,8 +250,25 @@ def write_arkane_explorer_input_file(source_path: str,
         raise ValueError(f"seed_species must contain exactly 1 or 2 labels (Arkane's explorer 'source' accepts a "
                          f"unimolecular or bimolecular seed only, see P3), got {len(seed_species)}: {seed_species}.")
 
-    with open(source_path, 'r') as f:
-        text = f.read()
+    # Read the bytes ONCE, exactly as ``t3.pdep.parser.parse_pdep_network_file`` does, rather than
+    # opening in text mode here and hashing a separate read elsewhere. Two reads would mean this
+    # function could build its explorer input from content that never got hash-checked at all: if
+    # the file changed between an earlier check and this open, the input written here would explore
+    # bytes nobody approved.
+    with open(source_path, 'rb') as f:
+        data = f.read()
+    if expected_source_hash is not None:
+        actual_hash = hash_bytes(data)
+        if actual_hash != expected_source_hash:
+            raise ValueError(f"Source file '{source_path}' changed after it was validated: expected content hash "
+                             f"{expected_source_hash!r} but the bytes read just now hash to {actual_hash!r}. "
+                             f"Writing an explorer input from this file would explore bytes nobody approved.")
+    # Decoded the way Python itself decodes source, via the PEP 263 encoding cookie, rather than with
+    # a hard-coded 'utf-8' or the locale encoding open(path, 'r') would have used. See
+    # ``t3.pdep.parser.parse_pdep_network_file`` for the full rationale; this mirrors it exactly so
+    # the same file decodes identically in both places.
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+    text = data.decode(encoding)
 
     tree = _parse_as_ast(text=text, path=source_path)
     _validate_source_statements(tree=tree, text=text, source_path=source_path)

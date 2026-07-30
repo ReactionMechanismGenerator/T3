@@ -145,6 +145,15 @@ class PDepNetworkSelection:
     Args:
         network_id (str): The network file stem, e.g. ``'network4_2'``. This is the join key
             downstream consumers (e.g. Carmel) use to identify the network.
+        network_source_hash (str, optional): The ``'sha256:<hex>'`` content hash of the network file
+            this decision was computed from, as ``t3.pdep.parser.hash_bytes`` /
+            ``t3.pdep.cache.hash_file`` spell it, or ``None`` when the network was not parsed from a
+            file. ``network_id`` is a FILE STEM and therefore names a file, not a content: a decision
+            about one revision of ``network4_2.py`` matches every later revision of it by
+            ``network_id`` alone. This field is what binds the decision to the bytes it was actually
+            made about, so a consumer acting on it much later (e.g.
+            ``t3.pdep.api.explore_pdep_network``, possibly in another process) can refuse a network
+            that has changed since.
         qualified (bool): Whether criterion (b) holds, i.e. at least one sensitive transition
             state belongs to a path reaction with uncertain kinetics. The caller is responsible
             for criterion (a).
@@ -177,6 +186,7 @@ class PDepNetworkSelection:
             ``selected_ts`` carry no signal and must not be read as "does not qualify".
     """
     network_id: str
+    network_source_hash: str | None = None
     qualified: bool = False
     network_reaction: str | None = None
     direction_key: str | None = None
@@ -264,6 +274,7 @@ class PDepNetworkSelection:
         """
         return {
             'network_id': self.network_id,
+            'network_source_hash': self.network_source_hash,
             'qualified': self.qualified,
             'network_reaction': self.network_reaction,
             'direction_key': self.direction_key,
@@ -303,6 +314,12 @@ class PDepNetworkSelection:
         set to ``None`` and a warning is recorded, rather than silently adopting the first value.
         ``sa_path`` and ``thresholds`` are taken from the first decision unconditionally.
 
+        ``network_source_hash`` is treated as identity, like ``network_id``: two components carrying
+        two DIFFERENT real hashes were computed from different revisions of the network, so combining
+        them raises. A hash present on some components and missing on others is only "not recorded",
+        not "different", so the combined field is set to ``None`` with a warning rather than adopting
+        the one real hash -- which would assert a content binding part of the aggregate does not have.
+
         ``evaluation_status`` is ``'not_evaluated'`` if any component was not evaluated AND the
         aggregate did not qualify -- an aggregate "does not qualify" drawn from a partially evaluated
         set is not a decision anyone made, since an unevaluated component might have been the one
@@ -319,7 +336,8 @@ class PDepNetworkSelection:
             decisions (list): The per-reaction ``PDepNetworkSelection`` decisions to combine.
 
         Raises:
-            ValueError: If ``decisions`` is empty, or if the decisions disagree on ``network_id``.
+            ValueError: If ``decisions`` is empty, if the decisions disagree on ``network_id``, or if
+                they carry two different non-``None`` ``network_source_hash`` values.
 
         Returns:
             PDepNetworkSelection: The combined decision.
@@ -331,9 +349,27 @@ class PDepNetworkSelection:
         if len(network_ids) > 1:
             raise ValueError(f'Cannot combine decisions for different networks: {sorted(network_ids)}.')
 
+        # ``network_source_hash`` is an IDENTITY field, not a provenance nicety, so two distinct real
+        # hashes are refused outright for the same reason two distinct network_ids are: the
+        # components describe different content and any aggregate over them describes nothing that
+        # exists. A hash missing on some components is weaker evidence -- it means "not recorded",
+        # not "different" -- so that case records None and warns, exactly as a method disagreement
+        # does. Adopting the one real hash there would be the fail-open: it would assert that the
+        # aggregate is bound to those bytes when part of it demonstrably is not.
+        source_hashes = {decision.network_source_hash for decision in decisions}
+        known_source_hashes = {value for value in source_hashes if value is not None}
+        if len(known_source_hashes) > 1:
+            raise ValueError(f'Cannot combine decisions computed from different revisions of network '
+                             f'{first.network_id}: {sorted(known_source_hashes)}.')
+
         methods = {decision.method for decision in decisions}
         cache_statuses = {decision.cache_status for decision in decisions}
         warnings = list()
+        network_source_hash = first.network_source_hash
+        if len(source_hashes) > 1:
+            network_source_hash = None
+            warnings.append(f'Only some combined decisions recorded a network_source_hash; recording None '
+                            f'rather than binding the aggregate to bytes part of it was not computed from.')
         method = first.method
         if len(methods) > 1:
             method = None
@@ -348,6 +384,7 @@ class PDepNetworkSelection:
 
         combined = cls(
             network_id=first.network_id,
+            network_source_hash=network_source_hash,
             qualified=any(decision.qualified for decision in decisions),
             network_reaction=None,
             direction_ambiguous=any(decision.direction_ambiguous for decision in decisions),
@@ -550,6 +587,7 @@ def select_from_sa_dict(sa_dict: dict,
     if not isinstance(sa_dict, dict):
         selection = PDepNetworkSelection(
             network_id=network.network_id,
+            network_source_hash=network.source_hash,
             network_reaction=network_reaction,
             method=method,
             sa_path=sa_path,
@@ -571,6 +609,7 @@ def select_from_sa_dict(sa_dict: dict,
     floor = coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
     selection = PDepNetworkSelection(
         network_id=network.network_id,
+        network_source_hash=network.source_hash,
         network_reaction=network_reaction,
         method=method,
         sa_path=sa_path,

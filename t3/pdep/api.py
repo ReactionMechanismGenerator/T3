@@ -166,6 +166,7 @@ def select_pdep_network(network: str | PDepNetwork,
             if cache_status == CACHE_STATUS_CACHED_REJECTED:
                 selection = PDepNetworkSelection(
                     network_id=parsed_network.network_id,
+                    network_source_hash=parsed_network.source_hash,
                     network_reaction=network_reaction,
                     method=method,
                     sa_path=sa_path,
@@ -204,6 +205,7 @@ def select_pdep_network(network: str | PDepNetwork,
     if not decisions:
         selection = PDepNetworkSelection(
             network_id=parsed_network.network_id,
+            network_source_hash=parsed_network.source_hash,
             method=method,
             sa_path=sa_path,
             cache_status=cache_status,
@@ -255,8 +257,19 @@ def explore_pdep_network(network_path: str,
         config (PDepExplorerConfig): The validated description of the exploration request.
         selection (PDepNetworkSelection, optional): The budget-gate decision for this network, e.g.
             from ``select_pdep_network()``. When given, ``selection.method`` must equal
-            ``config.method`` and ``selection.network_id`` must equal the parsed network's
-            ``network_id`` (both checked here; see Raises). When ``selection.qualified`` is
+            ``config.method``, ``selection.network_id`` must equal the parsed network's
+            ``network_id``, and ``selection.network_source_hash`` must be present and equal the
+            content hash of ``network_path`` (all checked here; see Raises). This check is a
+            STALE-SELECTION guard, not a run-input-integrity one: it proves only that
+            ``network_path`` held the approved bytes at the moment this function parsed it, one
+            read among several between here and Arkane actually consuming the file. What binds the
+            bytes the explorer input writer consumes is the SEPARATE ``expected_source_hash`` this
+            function forwards to ``explorer_factory()`` below, checked against the writer's own
+            single read of the same path -- and even that does not close every window: the input
+            file Arkane later reads is the one written into ``config.output_directory``, inside
+            ``config.trusted_output_root``, and a change to THAT file between the write and
+            Arkane's own read is a different exposure this function does not address. When
+            ``selection.qualified`` is
             ``False``, the exploration is skipped -- no adapter is ever constructed -- and a
             ``'skipped'`` result carrying ``selection.reason()`` is returned. When ``None`` (the
             default), the exploration runs unconditionally.
@@ -266,7 +279,10 @@ def explore_pdep_network(network_path: str,
     Raises:
         ValueError: If ``network_path`` is not a ``str`` (see above); if ``selection`` is given and
             its ``method`` does not equal ``config.method``, or its ``network_id`` does not equal
-            the parsed network's ``network_id``; if ``config.trusted_output_root`` does not exist,
+            the parsed network's ``network_id``; if ``selection.network_source_hash`` is ``None`` or
+            differs from the content hash of ``network_path`` (a decision bound to no content, or to
+            content that has since changed, is not a gate for this run); if
+            ``config.trusted_output_root`` does not exist,
             is not a directory, or is a symlink; or if ``config.output_directory`` does not resolve
             strictly inside the realpath'd ``config.trusted_output_root``.
         RuntimeError: Propagated verbatim from the explorer adapter (e.g. a rule-0 run-directory
@@ -304,6 +320,25 @@ def explore_pdep_network(network_path: str,
                 f"different network used as this one's budget gate fabricates confidence in a "
                 f"result nothing actually justifies -- the same hazard "
                 f"PDepNetworkSelection.combine() already refuses for the same reason.")
+        # network_id is a FILE STEM, so the check above only proves the decision was about a file
+        # with this NAME. RMG rewrites pdep/network4_2.py on every iteration that touches the
+        # network, and a selection is routinely made in one process and acted on in another, so
+        # "same stem" and "same network" are not the same statement. Bind to the content instead.
+        if selection.network_source_hash is None:
+            raise ValueError(
+                f"selection.network_source_hash is None, so this decision carries no binding to the "
+                f"content it was made about, and network_id ({selection.network_id!r}) is only a file "
+                f"stem -- it matches every revision of that file. Re-run the selection against the "
+                f"network file (select_pdep_network records the hash whenever it parses one), or pass "
+                f"selection=None to explore without a budget gate.")
+        if selection.network_source_hash != parsed_network.source_hash:
+            raise ValueError(
+                f"selection.network_source_hash ({selection.network_source_hash!r}) does not match the "
+                f"content hash of {network_path!r} ({parsed_network.source_hash!r}): the network file "
+                f"has changed since the decision was made. The decision describes a network that is no "
+                f"longer the one about to be explored -- its sensitivities, its channels, and the "
+                f"transition states it named may all have moved. Re-run the selection against the "
+                f"current file.")
         # `qualified` carries NO signal unless the decision was actually evaluated. When
         # select_pdep_network() rejects a stale SA cache it returns qualified=False AND
         # evaluation_status='not_evaluated' (api.py:174, :208), and reason() nonetheless renders the
@@ -382,6 +417,13 @@ def explore_pdep_network(network_path: str,
         logger=logger,
         transition_state_seeds=config.transition_state_seeds,
         database_kwargs=deep_thaw(config.database_kwargs),
+        # The check above (selection.network_source_hash vs. parsed_network.source_hash) proves only
+        # what the bytes at network_path WERE at the moment this function parsed them. It says
+        # nothing about what write_arkane_explorer_input_file() will later read, because that is a
+        # separate open() of the same path. Forwarding the hash here is what binds the two reads: the
+        # writer refuses if its own read does not match, rather than silently exploring whatever
+        # bytes happen to be there by the time it gets to them.
+        expected_source_hash=parsed_network.source_hash,
     )
 
     # adapter.explore() calls its own set_up() internally (see ArkaneExplorerAdapter.set_up's

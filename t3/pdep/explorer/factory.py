@@ -47,6 +47,7 @@ def explorer_factory(explorer: str,
                      logger: 'Logger | None' = None,
                      transition_state_seeds: tuple = None,
                      database_kwargs: dict = None,
+                     expected_source_hash: str = None,
                      ) -> PESExplorerAdapter:
     """
     A factory generating the explorer adapter corresponding to ``explorer``.
@@ -88,6 +89,10 @@ def explorer_factory(explorer: str,
                                                   True.
         database_kwargs (dict, optional): Keyword arguments describing the RMG database
                                           settings to use for the exploration.
+        expected_source_hash (str, optional): The content hash (``t3.pdep.hashing`` format)
+                                              ``network_path``'s bytes must match when the adapter's
+                                              ``set_up()`` reads them, forwarded verbatim to the
+                                              adapter's constructor.
 
     Raises:
         ValueError: If the provided explorer is not in the keys for the
@@ -145,6 +150,7 @@ def explorer_factory(explorer: str,
                              logger=logger,
                              transition_state_seeds=expected_ts_seeds,
                              database_kwargs=database_kwargs,
+                             expected_source_hash=expected_source_hash,
                              )
 
     # The quiet half of the same defect: re-running the rules above only catches a forgetful adapter

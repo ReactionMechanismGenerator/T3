@@ -705,6 +705,34 @@ class TestArkaneExplorerAdapterSetUpFailure:
         with pytest.raises(RuntimeError):
             adapter.get_networks()
 
+    def test_an_expected_source_hash_that_does_not_match_network_path_fails_rather_than_writing(
+            self, tmp_path, monkeypatch):
+        """
+        The adapter must forward ``expected_source_hash`` all the way to the writer's single read.
+
+        This is the end-to-end chain for the TOCTOU fix: ``t3.pdep.api.explore_pdep_network``
+        content-hashes the network once and hands that hash, plus only the pathname, down through
+        ``explorer_factory`` and ``ArkaneExplorerAdapter.__init__`` to
+        ``write_arkane_explorer_input_file``, which reopens the pathname. If a wrong hash reaches
+        the adapter (standing in here for a network file that changed after the API's own check),
+        ``set_up()`` (invoked via ``explore()``, per this class's convention) must raise rather than
+        silently write an explorer input from the mismatched bytes, and no Arkane subprocess may
+        run.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch, expected_source_hash='sha256:' + '0' * 64)
+        called = {'n': 0}
+        monkeypatch.setattr('t3.pdep.explorer.arkane.run_arkane_job',
+                            lambda *a, **k: called.__setitem__('n', called['n'] + 1))
+
+        with pytest.raises(ValueError, match='changed after it was validated'):
+            adapter.explore()
+
+        assert called['n'] == 0
+        assert adapter.succeeded is False
+        assert adapter.reasons != tuple()
+        assert not os.path.isfile(os.path.join(adapter.output_directory, 'input.py')), \
+            'A hash mismatch must be caught before anything is written into the run directory.'
+
     @pytest.mark.parametrize('error', [TypeError('unsupported operand'),
                                        KeyError('method'),
                                        AttributeError('lower'),

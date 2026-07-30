@@ -914,8 +914,12 @@ def test_combine_records_direction_keys_and_unions_qualified():
 # nobody thought to assert on. These two tests close that by deriving the expected field set from
 # ``dataclasses.fields()``, so adding a field to the dataclass FAILS them until it is handled.
 
+FULL_DECISION_SOURCE_HASH = 'sha256:' + '0' * 64
+
+
 def _make_full_decision(direction_key='A + B <=> C', direction_ambiguous=False, evaluation_status=None,
-                        selected_ts=None, uncertain_path_reactions=None, warnings=None):
+                        selected_ts=None, uncertain_path_reactions=None, warnings=None,
+                        network_source_hash=FULL_DECISION_SOURCE_HASH):
     """Build a PDepNetworkSelection with every field set to a non-default value, for the field-coverage
     tests below."""
     decision = _make_decision(
@@ -930,6 +934,7 @@ def _make_full_decision(direction_key='A + B <=> C', direction_ambiguous=False, 
     )
     decision.direction_ambiguous = direction_ambiguous
     decision.network_reactions_examined = 1
+    decision.network_source_hash = network_source_hash
     if evaluation_status is not None:
         decision.evaluation_status = evaluation_status
     return decision
@@ -1011,6 +1016,9 @@ def test_as_dict_containers_are_isolated_from_the_live_selection():
 _COMBINE_EXPECTED = {
     # Identity: taken from the first decision; all components must agree or combine() raises.
     'network_id': lambda value: value == 'net1',
+    # Identity too: propagated when the components agree, refused when two real hashes differ,
+    # None + warning when only some components recorded one.
+    'network_source_hash': lambda value: value == FULL_DECISION_SOURCE_HASH,
     # Unioned across components: True iff any component qualified.
     'qualified': lambda value: value is False,
     # Deliberately RESET: the aggregate no longer refers to one network reaction.
@@ -1101,6 +1109,46 @@ def test_combine_of_all_evaluated_components_records_no_unevaluated_warning():
     combined = PDepNetworkSelection.combine([_make_full_decision(), _make_full_decision()])
     assert combined.evaluation_status == EVALUATION_STATUS_EVALUATED
     assert not any('were not evaluated' in warning for warning in combined.warnings)
+
+
+# --- ROUND-34 P1: network identity bound to CONTENT, not the file stem ------------------------------
+
+def test_combine_raises_for_two_different_source_hashes():
+    """Test that combine() refuses two components computed from different revisions of the network.
+    network_id alone cannot catch this: both components name the same file stem, and an aggregate
+    over two revisions describes no network that exists."""
+    decisions = [_make_full_decision(network_source_hash='sha256:' + 'a' * 64),
+                 _make_full_decision(network_source_hash='sha256:' + 'b' * 64)]
+    with pytest.raises(ValueError):
+        PDepNetworkSelection.combine(decisions)
+
+
+def test_combine_records_none_and_warns_when_only_some_components_have_a_source_hash():
+    """Test that a hash missing on some components yields None plus a warning, rather than adopting
+    the one real hash: missing means 'not recorded', not 'different', but binding the aggregate to
+    bytes part of it was never computed from would be a fail-open."""
+    decisions = [_make_full_decision(), _make_full_decision(network_source_hash=None)]
+    combined = PDepNetworkSelection.combine(decisions)
+    assert combined.network_source_hash is None
+    assert any('network_source_hash' in warning for warning in combined.warnings)
+
+
+def test_combine_of_components_without_a_source_hash_does_not_warn():
+    """Test that components that all lack a source hash combine to None WITHOUT a warning, so the
+    warning stays a signal about disagreement rather than noise about absence."""
+    combined = PDepNetworkSelection.combine([_make_full_decision(network_source_hash=None),
+                                             _make_full_decision(network_source_hash=None)])
+    assert combined.network_source_hash is None
+    assert not any('network_source_hash' in warning for warning in combined.warnings)
+
+
+def test_select_from_sa_dict_records_the_parsed_network_source_hash(sa_dict, network):
+    """Test that a decision carries the content hash of the network file it was computed from, so a
+    consumer acting on it later can tell whether the file has changed since."""
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001)
+    assert selection.network_source_hash == network.source_hash
+    assert selection.network_source_hash.startswith('sha256:')
 def test_as_dict_does_not_hand_out_the_conditions_nested_objects():
     """Test that mutating a nested object inside the ``condition`` rendered by
     ``SensitiveTransitionState.as_dict()`` cannot reach the live record.

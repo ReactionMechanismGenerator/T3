@@ -47,6 +47,7 @@ class _DummyPESExplorerAdapter(PESExplorerAdapter):
                  logger=None,
                  transition_state_seeds: tuple = None,
                  database_kwargs: dict = None,
+                 expected_source_hash: str = None,
                  ):
         super().__init__(seed_species=seed_species, transition_state_seeds=transition_state_seeds)
         self.output_directory = output_directory
@@ -62,6 +63,7 @@ class _DummyPESExplorerAdapter(PESExplorerAdapter):
         # NORMALIZED tuple, and re-assigning would undo that normalization, leaving this "well-behaved"
         # dummy holding a list where the real adapter holds a tuple -- i.e. quietly not well-behaved.
         self.database_kwargs = database_kwargs
+        self.expected_source_hash = expected_source_hash
         self.explored = False
 
     def set_up(self):
@@ -208,6 +210,23 @@ class TestExplorerFactory(object):
                                    output_directory='out',
                                    )
         assert isinstance(adapter, _DummyPESExplorerAdapter)
+
+    def test_factory_forwards_expected_source_hash_to_the_adapter(self):
+        """explorer_factory forwards expected_source_hash to the adapter it constructs.
+
+        This is the middle link of the content-binding chain: t3.pdep.api.explore_pdep_network
+        hashes the network file and hands the digest here, and the adapter hands it to the explorer
+        input writer, which refuses if its own read of the same pathname does not match. A factory
+        that accepted the argument and dropped it would leave the writer with expected_source_hash
+        =None -- i.e. checking nothing -- and every test that asserts on exploration OUTCOMES would
+        still pass, because dropping a check never fails a happy path. Confirmed by mutation.
+        """
+        adapter = explorer_factory(explorer='DummyExplorer', network_path='network.py', method='CSE',
+                                   seed_species=['OH'],
+                                   output_directory='out',
+                                   expected_source_hash='sha256:' + 'a' * 64,
+                                   )
+        assert adapter.expected_source_hash == 'sha256:' + 'a' * 64
 
     def test_factory_lookup_is_case_sensitive(self):
         """explorer_factory lookup is case-sensitive; a wrong-case name raises ValueError."""

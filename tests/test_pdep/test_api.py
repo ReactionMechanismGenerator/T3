@@ -22,7 +22,7 @@ from t3.pdep.api import (explore_pdep_network,
                          save_pdep_network_selections,
                          select_pdep_network,
                          )
-from t3.pdep.cache import write_sa_cache_metadata
+from t3.pdep.cache import hash_file, write_sa_cache_metadata
 from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import (EXPLORATION_STATUS_FAILED,
                                      EXPLORATION_STATUS_SKIPPED,
@@ -50,6 +50,9 @@ from tests.test_pdep._wiring_helpers import (NETWORK_NAME,
 
 PDEP_NETWORK_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1', 'RMG', 'pdep')
 NETWORK_PATH = os.path.join(PDEP_NETWORK_DIR, 'network4_2.py')
+# Computed with the same primitive production code uses, rather than hardcoded: a literal here
+# would testify that a selection matches this file while actually only matching a constant.
+NETWORK_SOURCE_HASH = hash_file(path=NETWORK_PATH)
 
 # Deliberately kept OUTSIDE pdep_network/: test_main.py::test_determine_species_from_pdep_network
 # sets t3.paths['PDep SA'] to tests/data/pdep_network/iteration_1/PDep_SA and its teardown runs
@@ -463,7 +466,8 @@ def test_explore_pdep_network_skips_non_qualifying_selection_without_constructin
     os.makedirs(trusted_root)
     output_directory = os.path.join(trusted_root, 'run1')
     config = _make_config(trusted_root, output_directory, method='CSE')
-    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
 
     result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
 
@@ -475,6 +479,80 @@ def test_explore_pdep_network_skips_non_qualifying_selection_without_constructin
     assert not os.path.exists(output_directory)
 
 
+def test_explore_pdep_network_forwards_the_parsed_content_hash_to_the_factory(tmp_path, monkeypatch):
+    """Test the FIRST link of the TOCTOU chain: this function's own hash check proves only what the
+    bytes were when it parsed them, and the writer reopens the same pathname later. Forwarding
+    parsed_network.source_hash is what binds the writer's read to the approved bytes -- and deleting
+    that one keyword argument is invisible to every other test here, since they all assert on the
+    result rather than on what the factory was handed (confirmed by mutation)."""
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    explore_pdep_network(network_path=NETWORK_PATH, config=config)
+
+    assert len(calls) == 1
+    assert calls[0]['expected_source_hash'] == NETWORK_SOURCE_HASH
+
+
+def test_explore_pdep_network_refuses_a_selection_with_no_source_hash(tmp_path, monkeypatch):
+    """Test that a selection carrying no content binding is refused rather than gated on its file
+    stem. network_id matches every revision of network4_2.py, so accepting a hash-less selection
+    would be the fail-open this check exists to close."""
+    calls = _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=True, method='CSE')
+    # Matched on the wording specific to the no-hash branch, NOT merely on 'network_source_hash':
+    # a hash-less selection also trips the mismatch check below it (None != any real hash), so a
+    # loose match would pass with the no-hash branch deleted -- confirmed by mutation. The branch
+    # earns its place by DIAGNOSIS: the mismatch message says the network file has changed since
+    # the decision was made, which is a false statement about a decision that never recorded one.
+    with pytest.raises(ValueError, match='carries no binding to the content'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+    assert calls == []
+
+
+def test_explore_pdep_network_refuses_a_selection_made_against_different_content(tmp_path, monkeypatch):
+    """Test that a QUALIFYING selection whose recorded hash does not match the file on disk is
+    refused: the decision describes a revision of the network that is not the one about to be
+    explored. This is the case network_id structurally cannot catch -- same stem, different bytes."""
+    calls = _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=True, method='CSE',
+                                     network_source_hash='sha256:' + 'e' * 64)
+    with pytest.raises(ValueError, match='has changed since'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+    assert calls == []
+
+
+def test_explore_pdep_network_refuses_a_selection_after_the_network_file_is_edited(tmp_path, monkeypatch):
+    """Test the end-to-end shape of the hazard: a selection made against a real network file, the
+    file then edited on disk, and the exploration refused. Both the selection and the check compute
+    their hashes from real files, so nothing here is asserted against a constant."""
+    calls = _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    network_copy = tmp_path / 'network4_2.py'
+    network_copy.write_bytes(open(NETWORK_PATH, 'rb').read())
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(
+        network_id='network4_2', qualified=True, method='CSE',
+        network_source_hash=parse_pdep_network_file(path=str(network_copy)).source_hash)
+
+    # The exact hazard: the network file is rewritten (as RMG does every iteration) after the
+    # decision was made, but before it is acted on.
+    network_copy.write_bytes(open(NETWORK_PATH, 'rb').read() + b'\n# RMG rewrote this network\n')
+
+    with pytest.raises(ValueError, match='has changed since'):
+        explore_pdep_network(network_path=str(network_copy), config=config, selection=selection)
+    assert calls == []
+
+
 def test_explore_pdep_network_explores_anyway_when_selection_is_none(tmp_path, monkeypatch):
     """Test that omitting selection (None) runs the exploration unconditionally."""
     calls = _make_fake_factory(monkeypatch, succeed=True)
@@ -483,6 +561,29 @@ def test_explore_pdep_network_explores_anyway_when_selection_is_none(tmp_path, m
     config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
 
     result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=None)
+
+    assert len(calls) == 1
+    assert result.status == EXPLORATION_STATUS_SUCCEEDED
+
+
+def test_explore_pdep_network_accepts_a_real_selection_end_to_end(tmp_path, monkeypatch):
+    """Test that a selection produced by select_pdep_network() against the SAME file passes every gate
+    and reaches the adapter. This is the over-refusal guard for the content-hash check: every other
+    test of it asserts a refusal, so without this one the check could have made the gated path
+    impossible to use and the suite would still be green."""
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='MSC')
+
+    # network_reaction=None on purpose: this is the combined path, so the test also covers combine()
+    # carrying network_source_hash through to the aggregate decision the gate actually receives.
+    selection = select_pdep_network(network=NETWORK_PATH, sa_path=SA_PATH, network_reaction=None,
+                                    relative_threshold=0.001, method='MSC', validate_cache=False)
+    assert selection.qualified, 'fixture no longer qualifies; this test can no longer exercise the gate'
+    assert selection.network_source_hash == NETWORK_SOURCE_HASH
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
 
     assert len(calls) == 1
     assert result.status == EXPLORATION_STATUS_SUCCEEDED
@@ -677,7 +778,8 @@ def test_explore_pdep_network_refuses_a_selection_that_was_never_evaluated(monke
     trusted_root = str(tmp_path / 'root')
     os.makedirs(trusted_root)
     config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
-    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
     selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
 
     with pytest.raises(ValueError) as exc_info:

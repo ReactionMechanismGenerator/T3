@@ -32,6 +32,7 @@ from t3.pdep.explorer.input_file import (
     ExplorerInputSummary,
     write_arkane_explorer_input_file,
 )
+from t3.pdep.hashing import hash_file
 
 # A minimal but structurally realistic RMG pdep network source: two species (one of them a bath
 # gas with reactive=False), one transition state, one reaction with no explicit kinetics=, a
@@ -174,6 +175,71 @@ def test_writes_valid_python_with_all_required_blocks(tmp_path):
     # Sanity: the method line was rewritten via rewrite_arkane_method_line, not merely copied
     # verbatim -- confirmed separately (with a distinguishable method) in
     # test_rewrites_method_line_for_msc.
+
+
+def test_writes_when_expected_source_hash_matches(tmp_path):
+    """
+    A CORRECT ``expected_source_hash`` must not refuse the write.
+
+    This is the over-refusal guard for the TOCTOU fix: without it, a bug that always treats the
+    hash as mismatched (e.g. comparing against the wrong bytes, or a stale digest format) would
+    make ``expected_source_hash`` unusable for every real caller while the suite stayed green,
+    because every OTHER test in this module omits the parameter entirely.
+    """
+    source_path = _write_source(tmp_path, SOURCE_NO_KINETICS)
+    dest_path = str(tmp_path / 'input.py')
+    expected_hash = hash_file(source_path)
+
+    result = write_arkane_explorer_input_file(source_path=source_path, dest_path=dest_path,
+                                              expected_source_hash=expected_hash, **DEFAULT_KWARGS)
+
+    assert isinstance(result, ExplorerInputSummary)
+    assert os.path.isfile(dest_path)
+
+
+def test_refuses_when_source_file_changed_after_hash_was_computed(tmp_path):
+    """
+    A MISMATCHED ``expected_source_hash`` must refuse the write -- this closes the TOCTOU gap.
+
+    A caller (``t3.pdep.api.explore_pdep_network``) content-hashes the network file and then hands
+    only the PATHNAME down to this writer, which reopens it. If the file is rewritten in between,
+    the writer would otherwise silently explore bytes nobody approved. The expected hash is
+    computed from the REAL, still-original file via ``t3.pdep.hashing.hash_file`` -- not a
+    hardcoded digest -- so this test fails loudly if the hash format or algorithm ever drifts,
+    rather than passing against a stale magic string.
+    """
+    source_path = _write_source(tmp_path, SOURCE_NO_KINETICS)
+    dest_path = str(tmp_path / 'input.py')
+    expected_hash = hash_file(source_path)
+
+    # Rewrite the file after the hash was computed, simulating the TOCTOU window.
+    with open(source_path, 'w') as f:
+        f.write(SOURCE_WITH_KINETICS)
+
+    with pytest.raises(ValueError, match='changed after it was validated'):
+        write_arkane_explorer_input_file(source_path=source_path, dest_path=dest_path,
+                                         expected_source_hash=expected_hash, **DEFAULT_KWARGS)
+
+    assert not os.path.isfile(dest_path), \
+        'A hash mismatch must be caught before anything is written to dest_path.'
+
+
+def test_expected_source_hash_none_is_backwards_compatible(tmp_path):
+    """
+    Omitting ``expected_source_hash`` (the default, ``None``) must still write, unconditionally.
+
+    Every caller that predates this parameter -- and any caller with no hash to bind to, e.g. one
+    invoking this writer directly with a freshly-authored file -- must keep working exactly as
+    before.
+    """
+    source_path = _write_source(tmp_path, SOURCE_NO_KINETICS)
+    dest_path = str(tmp_path / 'input.py')
+
+    result = write_arkane_explorer_input_file(source_path=source_path, dest_path=dest_path,
+                                              expected_source_hash=None, **DEFAULT_KWARGS)
+
+    assert isinstance(result, ExplorerInputSummary)
+    assert os.path.isfile(dest_path)
 
 
 def test_rewrites_method_line_for_msc(tmp_path):

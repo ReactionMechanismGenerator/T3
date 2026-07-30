@@ -10,6 +10,7 @@ This module therefore parses the file into a syntax tree with ``ast.parse`` only
 """
 
 import ast
+import hashlib
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,32 @@ from t3.utils.network_thermo import (NetworkTextUnparseable,  # noqa: F401
                                      network_thermo_t_max)  # noqa: F401
 
 RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
+
+
+def hash_bytes(data: bytes) -> str:
+    """
+    Content-hash a byte string, in the one format T3 uses for network-file provenance.
+
+    Deliberately the same digest and the same ``'sha256:<hex>'`` spelling as
+    ``t3.pdep.cache.hash_file``, so a hash taken here is directly comparable to the
+    ``network_file_hash`` the SA cache sidecar records. It is a separate function rather than a call
+    into ``t3.pdep.cache`` only because that module imports ``t3.pdep.selector``, which imports this
+    one -- importing it back would be a cycle. The two are pinned to agree by
+    ``test_parser.py::test_parsed_source_hash_equals_cache_hash_file``, which hashes one real file
+    both ways; that test is the anti-drift mechanism for the duplicated format string.
+
+    ``hash_file`` streams the file in chunks and is the right primitive when all that is wanted is
+    a file's digest. This one exists for the case where the bytes are ALREADY in hand and must not
+    be re-read: re-opening the file to hash it would record the digest of bytes that were never
+    parsed, if the file changed in between.
+
+    Args:
+        data (bytes): The bytes to hash.
+
+    Returns:
+        str: The prefixed ``'sha256:<hexdigest>'`` string.
+    """
+    return f'sha256:{hashlib.sha256(data).hexdigest()}'
 
 # ``pdepreaction(...)`` is deliberately NOT part of ``RECOGNIZED_TOP_LEVEL_CALLS`` above: it is
 # not part of the Arkane *input* DSL that RMG pdep network files use. It is a write-only call
@@ -176,6 +203,14 @@ class PDepNetwork:
         product_channels_declared (bool): Whether ``product_channels`` were read from an explicit
                                           ``products`` keyword (``True``) or derived from the path
                                           reactions (``False``).
+        source_hash (str, optional): The ``'sha256:<hex>'`` content hash of the exact bytes this
+                                     network was parsed from, or ``None`` when there were no file
+                                     bytes to hash (i.e. ``parse_pdep_network_text``). ``network_id``
+                                     is only a FILE STEM, so it identifies a name, not a content:
+                                     two different revisions of ``network4_2.py`` share it. This is
+                                     what lets a decision made about one revision be refused as a
+                                     gate for a run against another (see
+                                     ``t3.pdep.api.explore_pdep_network``).
     """
     network_id: str
     path: str
@@ -187,6 +222,7 @@ class PDepNetwork:
     reactant_channels: tuple
     product_channels: tuple
     product_channels_declared: bool = False
+    source_hash: str | None = None
 
     def expected_net_reaction_count(self) -> int:
         """
@@ -637,15 +673,24 @@ def parse_pdep_network_file(path: str) -> PDepNetwork:
         ValueError: If the file cannot be parsed as Python, or contains no path reactions.
 
     Returns:
-        PDepNetwork: The parsed network.
+        PDepNetwork: The parsed network, with ``source_hash`` set to the content hash of the exact
+            bytes that were parsed.
     """
-    with open(path, 'r') as f:
-        text = f.read()
+    # Read the bytes ONCE and hash those bytes, rather than parsing the file and then calling
+    # t3.pdep.cache.hash_file(path) to hash it again. Two reads means the recorded hash can describe
+    # content that was never parsed: if the file is replaced between the two, the returned network is
+    # the old revision while its provenance claims the new one -- and this hash exists precisely to
+    # catch a network file changing underneath a decision.
+    with open(path, 'rb') as f:
+        data = f.read()
+    text = data.decode('utf-8')
     network_id = Path(path).stem
-    return parse_pdep_network_text(text=text, network_id=network_id, path=path)
+    return parse_pdep_network_text(text=text, network_id=network_id, path=path,
+                                   source_hash=hash_bytes(data))
 
 
-def parse_pdep_network_text(text: str, network_id: str, path: str = '') -> PDepNetwork:
+def parse_pdep_network_text(text: str, network_id: str, path: str = '',
+                            source_hash: str | None = None) -> PDepNetwork:
     """
     Parse RMG pdep network file text into a ``PDepNetwork``.
 
@@ -653,6 +698,12 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '') -> PDepN
         text (str): The RMG pdep network file content.
         network_id (str): An identifier for this network (e.g., the file stem).
         path (str, optional): The path the text was read from, if any (stored for reference).
+        source_hash (str, optional): The ``'sha256:<hex>'`` hash of the FILE BYTES ``text`` was
+            decoded from, when there was a file. Deliberately not computed from ``text`` here: a
+            hash of the decoded string would not match ``t3.pdep.cache.hash_file`` for any file
+            whose bytes differ from its decoded form (CRLF line endings, a BOM), and a provenance
+            hash that silently disagrees with the one the SA cache sidecar records is worse than no
+            hash at all. Callers with no file leave it ``None``.
 
     Raises:
         ValueError: If the text cannot be parsed as Python, or contains no path reactions.
@@ -754,6 +805,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '') -> PDepN
         reactant_channels=reactant_channels,
         product_channels=product_channels,
         product_channels_declared=product_channels_declared,
+        source_hash=source_hash,
     )
 
 

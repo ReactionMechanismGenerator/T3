@@ -99,6 +99,7 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
                  logger: 'Logger | None' = None,
                  transition_state_seeds: tuple = None,
                  database_kwargs: dict = None,
+                 expected_source_hash: str = None,
                  ):
         """
         Args:
@@ -127,6 +128,13 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
                                                       ``PESExplorerAdapter.supports_transition_state_seeds``).
             database_kwargs (dict, optional): Keyword arguments describing the RMG database
                                              settings to use for the exploration.
+            expected_source_hash (str, optional): The content hash (``t3.pdep.hashing`` format)
+                                                  ``network_path``'s bytes must match at the moment
+                                                  ``set_up()`` reads them, forwarded verbatim to
+                                                  ``write_arkane_explorer_input_file``. See that
+                                                  function's docstring for why this must be the
+                                                  hash checked against the same read that consumes
+                                                  the bytes, not an earlier, separate one.
         """
         super().__init__(seed_species=seed_species, transition_state_seeds=transition_state_seeds)
         self.output_directory = output_directory
@@ -139,6 +147,7 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
         self.maximum_radical_electrons = maximum_radical_electrons
         self.logger = logger
         self.database_kwargs = database_kwargs
+        self.expected_source_hash = expected_source_hash
 
         # Set True only by ``_claim_run_directory()`` on its success path (rule 0). ``set_up()``
         # refuses to run while this is False, so it cannot be used to bypass the claim.
@@ -190,6 +199,7 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
                                          flux_tol=self.flux_tol,
                                          maximum_radical_electrons=self.maximum_radical_electrons,
                                          database_kwargs=self.database_kwargs,
+                                         expected_source_hash=self.expected_source_hash,
                                          )
 
     def _claim_run_directory(self) -> tuple:

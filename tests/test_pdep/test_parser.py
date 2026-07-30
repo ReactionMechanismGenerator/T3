@@ -12,11 +12,13 @@ import os
 import pytest
 
 from t3.common import TEST_DATA_BASE_PATH
+from t3.pdep.cache import hash_file
 from t3.pdep.parser import (
     _call_keywords,
     PDepArkaneReaction,
     PDepNetwork,
     PDepPathReaction,
+    hash_bytes,
     parse_arkane_pdep_output_file,
     parse_arkane_pdep_output_text,
     parse_pdep_network_file,
@@ -1016,3 +1018,44 @@ def test_to_json_safe_keeps_non_finite_floats():
     rendered = to_json_safe({'coeffs': [float('nan'), float('inf')]})
     assert math.isnan(rendered['coeffs'][0])
     assert math.isinf(rendered['coeffs'][1])
+
+
+# --- ROUND-34 P1: the parsed network carries a content hash ------------------------------------------
+
+def test_parsed_source_hash_equals_cache_hash_file():
+    """Test that the hash parse_pdep_network_file records is byte-identical to what
+    t3.pdep.cache.hash_file computes for the same file. The two spell the same digest in two modules
+    (an import back into t3.pdep.cache would be a cycle), so this equality is the only thing keeping
+    them from drifting -- and if they drift, a selection's hash silently stops being comparable to
+    the network_file_hash the SA cache sidecar records."""
+    path = os.path.join(PDEP_NETWORK_DIR, 'network4_2.py')
+    assert parse_pdep_network_file(path=path).source_hash == hash_file(path=path)
+
+
+def test_hash_bytes_matches_hash_file_for_crlf_content(tmp_path):
+    """Test the agreement on content whose BYTES differ from its decoded text. Hashing the decoded
+    string instead of the raw bytes would silently disagree with hash_file for exactly these files,
+    which is why parse_pdep_network_text does not compute the hash itself."""
+    path = tmp_path / 'crlf.py'
+    path.write_bytes(b'species(label="a")\r\nreaction(label="r")\r\n')
+    assert hash_bytes(path.read_bytes()) == hash_file(path=str(path))
+
+
+def test_parse_pdep_network_text_leaves_source_hash_none():
+    """Test that text with no file behind it gets source_hash=None rather than a hash of the decoded
+    string, which would not be comparable to any file hash."""
+    text = '''species(label="a")
+reaction(label="r", reactants=["a"], products=["b"], transitionState="TS1")
+'''
+    network = parse_pdep_network_text(text=text, network_id='net1')
+    assert network.source_hash is None
+
+
+def test_parsed_source_hash_changes_when_the_file_changes(tmp_path):
+    """Test that the recorded hash actually tracks content: a network re-saved with one different
+    byte must not present the same source_hash, since that is the whole point of the field."""
+    original = os.path.join(PDEP_NETWORK_DIR, 'network4_2.py')
+    data = open(original, 'rb').read()
+    changed = tmp_path / 'network4_2.py'
+    changed.write_bytes(data + b'\n# one more byte\n')
+    assert parse_pdep_network_file(path=original).source_hash != parse_pdep_network_file(path=str(changed)).source_hash
