@@ -717,6 +717,48 @@ def test_an_explicit_none_transition_state_label_is_refused():
             "network(label='n', isomers=['A'], reactants=[], products=[])\n")
     with pytest.raises(ValueError, match='label'):
         parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+
+class TestAttributeCallsAreNotMistakenForDSLDirectives:
+    """
+    Codex's round-30 P1. ``_get_call_name`` used to return ``call.func.attr`` for an
+    ``ast.Attribute`` callee, so ``foo.reaction(...)`` reported ``'reaction'`` and every caller that
+    dispatches on that name treated it as the Arkane DSL directive it merely resembles. The parsed
+    result then served as evidence in the explorer's artifact-identity checks -- a file could look
+    like a network, or like a set of net reactions, without containing a single real directive.
+
+    Arkane loads an input file in a namespace with no builtins and no imports, so a directive can
+    only ever BE a bare name. Anything with a dot in front of it is, by construction, not it.
+    """
+
+    def test_a_network_file_of_attribute_calls_parses_as_nothing(self):
+        """A file whose every statement is an attribute call declares no species and no network."""
+        text = ("foo.species(label='A', E0=(0.0,'kJ/mol'))\n"
+                "foo.transitionState(label='TS1', E0=(1.0,'kJ/mol'))\n"
+                "foo.reaction(label='r', reactants=['A'], products=['B'], transitionState='TS1')\n"
+                "foo.network(label='n', isomers=['A'], reactants=[], products=[])\n")
+        with pytest.raises(ValueError):
+            parse_pdep_network_text(text=text, network_id='n', path='<test>')
+
+    def test_an_attribute_call_cannot_forge_a_net_reaction(self):
+        """
+        ``foo.pdepreaction(...)`` must contribute no parsed net reaction. Forging these is how a
+        crafted output.py could have satisfied the explorer's net-reaction identity check.
+        """
+        text = ("foo.pdepreaction(reactants=['A'], products=['B'], "
+                "kinetics=Arrhenius(A=(1.0,'s^-1'), n=0.0, Ea=(0.0,'kJ/mol'), T0=(1,'K')))\n")
+        reactions = parse_arkane_pdep_output_text(text=text, path='<test>')
+        assert reactions == tuple(), reactions
+
+    def test_a_real_bare_name_directive_still_parses(self):
+        """Over-refusal guard: the same content with bare-name callees parses normally."""
+        text = ("pdepreaction(reactants=['A'], products=['B'], "
+                "kinetics=Arrhenius(A=(1.0,'s^-1'), n=0.0, Ea=(0.0,'kJ/mol'), T0=(1,'K')))\n")
+        reactions = parse_arkane_pdep_output_text(text=text, path='<test>')
+        assert len(reactions) == 1
+        assert reactions[0].reactants == ('A',)
+
+
 class TestKwargsUnpackingOnRecognizedCallsIsRefused:
     """
     round-30 P2. ``_call_keywords`` maps an ``ast.Call``'s keyword arguments to their (still-AST)

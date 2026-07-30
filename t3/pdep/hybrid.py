@@ -1464,16 +1464,21 @@ def _get_call_name(call: ast.Call) -> str | None:
     """
     Get the callee name of an ``ast.Call`` node (e.g., ``'Log'`` for ``Log(...)``).
 
+    Only a bare ``ast.Name`` callee yields a name, for the same reason as
+    ``t3.pdep.parser._get_call_name``: an attribute call such as ``foo.reaction(...)`` used to report
+    ``'reaction'``, so every caller dispatching on this name treated it as the Arkane/RMG DSL
+    directive it merely resembles. Arkane's loader binds these names in a namespace with no builtins
+    and no imports, so a directive can only ever BE a bare name; anything with a dot in front of it is
+    not the directive it is named after.
+
     Args:
         call (ast.Call): The call node.
 
     Returns:
-        str: The callee name, or ``None`` if it could not be determined.
+        str: The callee name, or ``None`` if the callee is not a bare name.
     """
     if isinstance(call.func, ast.Name):
         return call.func.id
-    if isinstance(call.func, ast.Attribute):
-        return call.func.attr
     return None
 
 

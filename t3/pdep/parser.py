@@ -751,16 +751,23 @@ def _get_call_name(call: ast.Call) -> str | None:
     """
     Get the callee name of an ``ast.Call`` node (e.g., ``'Arrhenius'`` for ``Arrhenius(...)``).
 
+    Only a bare ``ast.Name`` callee yields a name. An attribute call such as ``foo.reaction(...)``
+    used to report ``'reaction'``, which made every caller that dispatches on this name treat it as
+    the Arkane DSL directive it merely resembles -- so a file containing ``foo.network(...)`` or
+    ``foo.pdepreaction(...)`` parsed as a network or a net reaction, and the resulting
+    ``PDepNetwork``/reaction list then served as evidence in the explorer's artifact-identity checks.
+    Arkane's own loader binds these names in a namespace with no builtins and no imports, so a
+    directive can only ever BE a bare name; anything with a dot in front of it is, by construction,
+    not the directive it is named after.
+
     Args:
         call (ast.Call): The call node.
 
     Returns:
-        str: The callee name, or ``None`` if it could not be determined.
+        str: The callee name, or ``None`` if the callee is not a bare name.
     """
     if isinstance(call.func, ast.Name):
         return call.func.id
-    if isinstance(call.func, ast.Attribute):
-        return call.func.attr
     return None
 
 
