@@ -12,13 +12,12 @@ import os
 import pytest
 
 from t3.common import TEST_DATA_BASE_PATH
-from t3.pdep.cache import hash_file
+from t3.pdep.hashing import hash_bytes, hash_file
 from t3.pdep.parser import (
     _call_keywords,
     PDepArkaneReaction,
     PDepNetwork,
     PDepPathReaction,
-    hash_bytes,
     parse_arkane_pdep_output_file,
     parse_arkane_pdep_output_text,
     parse_pdep_network_file,
@@ -1023,11 +1022,9 @@ def test_to_json_safe_keeps_non_finite_floats():
 # --- ROUND-34 P1: the parsed network carries a content hash ------------------------------------------
 
 def test_parsed_source_hash_equals_cache_hash_file():
-    """Test that the hash parse_pdep_network_file records is byte-identical to what
-    t3.pdep.cache.hash_file computes for the same file. The two spell the same digest in two modules
-    (an import back into t3.pdep.cache would be a cycle), so this equality is the only thing keeping
-    them from drifting -- and if they drift, a selection's hash silently stops being comparable to
-    the network_file_hash the SA cache sidecar records."""
+    """Test that the hash parse_pdep_network_file records is byte-identical to what hash_file
+    computes for the same file, so a selection's hash stays comparable to the network_file_hash the
+    SA cache sidecar records."""
     path = os.path.join(PDEP_NETWORK_DIR, 'network4_2.py')
     assert parse_pdep_network_file(path=path).source_hash == hash_file(path=path)
 
@@ -1059,3 +1056,28 @@ def test_parsed_source_hash_changes_when_the_file_changes(tmp_path):
     changed = tmp_path / 'network4_2.py'
     changed.write_bytes(data + b'\n# one more byte\n')
     assert parse_pdep_network_file(path=original).source_hash != parse_pdep_network_file(path=str(changed)).source_hash
+
+
+def test_parse_pdep_network_file_honours_a_pep_263_encoding_cookie(tmp_path):
+    """Test that a network file declaring a non-UTF-8 encoding is decoded the way Python itself
+    decodes source. RMG writes these files and a chemist may hand-edit one, so a latin-1 comment
+    behind a coding cookie is legal Python that a hard-coded utf-8 decode would reject outright."""
+    path = tmp_path / 'network_latin1.py'
+    path.write_bytes('# -*- coding: latin-1 -*-\n'
+                     '# rate from Muller\u00b4s 1998 study\n'
+                     'reaction(label="r", reactants=["a"], products=["b"], transitionState="TS1")\n'
+                     .encode('latin-1'))
+    network = parse_pdep_network_file(path=str(path))
+    assert network.network_id == 'network_latin1'
+    assert network.source_hash == hash_file(path=str(path))
+
+
+def test_parse_pdep_network_file_strips_a_utf8_bom(tmp_path):
+    """Test that a UTF-8 BOM does not reach ast.parse. Decoding as plain 'utf-8' would leave a
+    leading \ufeff, which is a syntax error -- an editor-written BOM would make an otherwise valid
+    network file unparseable."""
+    path = tmp_path / 'network_bom.py'
+    path.write_bytes(b'\xef\xbb\xbfreaction(label="r", reactants=["a"], products=["b"], transitionState="TS1")\n')
+    network = parse_pdep_network_file(path=str(path))
+    assert network.path_reactions
+    assert network.source_hash == hash_file(path=str(path))

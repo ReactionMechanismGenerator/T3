@@ -14,13 +14,16 @@ This module therefore writes a small T3-owned sidecar next to every generated se
 recording what T3 needs in order to trust it later, and refuses any cache that lacks one.
 """
 
-import hashlib
 import math
 import os
 import subprocess
 
 from arc.common import save_yaml_file
 
+# Re-exported, not defined here: ``t3.pdep.cache.hash_file`` is named as the mandated hashing
+# primitive throughout join.py, capture.py, and main.py, so the import path is kept while the
+# format itself lives in one place alongside its bytes-input sibling ``hash_bytes``.
+from t3.pdep.hashing import hash_file  # noqa: F401
 from t3.pdep.yaml_safe import read_sa_yaml_file
 
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
@@ -53,21 +56,6 @@ def sa_cache_metadata_path(sa_path: str) -> str:
     return os.path.join(os.path.dirname(sa_path), SA_CACHE_METADATA_FILE_NAME)
 
 
-def hash_file(path: str) -> str:
-    """
-    Compute a content hash of a file.
-
-    Args:
-        path (str): The path to hash.
-
-    Returns:
-        str: A ``'sha256:<hexdigest>'`` string.
-    """
-    digest = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for chunk in iter(lambda: f.read(1 << 16), b''):
-            digest.update(chunk)
-    return f'sha256:{digest.hexdigest()}'
 
 
 def max_abs_ts_coefficient(sa_dict: dict) -> float | None:

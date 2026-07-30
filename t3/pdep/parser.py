@@ -10,12 +10,14 @@ This module therefore parses the file into a syntax tree with ``ast.parse`` only
 """
 
 import ast
-import hashlib
+import io
+import tokenize
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from t3.pdep.hashing import hash_bytes
 # network_thermo_t_max is a network-file parsing concern callers reasonably look for in this
 # module, but it lives in t3.utils so that t3.utils.writer can use it without a circular import
 # (t3.pdep -> t3.utils.writer is the existing dependency direction; several t3.pdep submodules
@@ -26,32 +28,6 @@ from t3.utils.network_thermo import (NetworkTextUnparseable,  # noqa: F401
                                      network_thermo_t_max)  # noqa: F401
 
 RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
-
-
-def hash_bytes(data: bytes) -> str:
-    """
-    Content-hash a byte string, in the one format T3 uses for network-file provenance.
-
-    Deliberately the same digest and the same ``'sha256:<hex>'`` spelling as
-    ``t3.pdep.cache.hash_file``, so a hash taken here is directly comparable to the
-    ``network_file_hash`` the SA cache sidecar records. It is a separate function rather than a call
-    into ``t3.pdep.cache`` only because that module imports ``t3.pdep.selector``, which imports this
-    one -- importing it back would be a cycle. The two are pinned to agree by
-    ``test_parser.py::test_parsed_source_hash_equals_cache_hash_file``, which hashes one real file
-    both ways; that test is the anti-drift mechanism for the duplicated format string.
-
-    ``hash_file`` streams the file in chunks and is the right primitive when all that is wanted is
-    a file's digest. This one exists for the case where the bytes are ALREADY in hand and must not
-    be re-read: re-opening the file to hash it would record the digest of bytes that were never
-    parsed, if the file changed in between.
-
-    Args:
-        data (bytes): The bytes to hash.
-
-    Returns:
-        str: The prefixed ``'sha256:<hexdigest>'`` string.
-    """
-    return f'sha256:{hashlib.sha256(data).hexdigest()}'
 
 # ``pdepreaction(...)`` is deliberately NOT part of ``RECOGNIZED_TOP_LEVEL_CALLS`` above: it is
 # not part of the Arkane *input* DSL that RMG pdep network files use. It is a write-only call
@@ -69,13 +45,7 @@ ARKANE_PDEP_OUTPUT_TOP_LEVEL_CALL = 'pdepreaction'
 KINETICS_BOUNDS_AND_METADATA_KEYS = ('Tmin', 'Tmax', 'Pmin', 'Pmax', 'Tref', 'Pref', 'T0',
                                      'kunits', 'comment', 'efficiencies')
 
-# Kinetics call names that may legitimately appear nested inside a ``kinetics=`` keyword of an
-# Arkane pdep output entry (e.g., ``PDepArrhenius(arrhenius=[Arrhenius(...), ...])``). Payload
-# extraction recurses into these; any OTHER call in payload position (``float('nan')``,
-# ``array(...)``) is unverifiable and is surfaced as a ``None`` leaf so the ME-success gate
-# rejects it rather than silently skipping it.
-NESTED_KINETICS_CALL_NAMES = ('Arrhenius', 'MultiArrhenius', 'PDepArrhenius', 'MultiPDepArrhenius',
-                              'Chebyshev', 'ThirdBody', 'Lindemann', 'Troe')
+RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
 
 
 @dataclass(frozen=True)
@@ -677,13 +647,20 @@ def parse_pdep_network_file(path: str) -> PDepNetwork:
             bytes that were parsed.
     """
     # Read the bytes ONCE and hash those bytes, rather than parsing the file and then calling
-    # t3.pdep.cache.hash_file(path) to hash it again. Two reads means the recorded hash can describe
-    # content that was never parsed: if the file is replaced between the two, the returned network is
-    # the old revision while its provenance claims the new one -- and this hash exists precisely to
-    # catch a network file changing underneath a decision.
+    # t3.pdep.hashing.hash_file(path) to hash it again. Two reads means the recorded hash can
+    # describe content that was never parsed: if the file is replaced between the two, the returned
+    # network is the old revision while its provenance claims the new one -- and this hash exists
+    # precisely to catch a network file changing underneath a decision.
     with open(path, 'rb') as f:
         data = f.read()
-    text = data.decode('utf-8')
+    # Decoded the way Python itself decodes source, via the PEP 263 encoding cookie, rather than with
+    # a hard-coded 'utf-8' or the locale encoding open(path, 'r') would have used. These files ARE
+    # Python source: RMG writes them, a chemist may hand-edit one, and a '# -*- coding: latin-1 -*-'
+    # header or a UTF-8 BOM is legal in both cases. Hard-coded utf-8 rejects the first and turns the
+    # second into a leading \ufeff that ast.parse then refuses; the locale encoding makes the parse
+    # result depend on the machine's LANG. detect_encoding handles both and strips the BOM.
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+    text = data.decode(encoding)
     network_id = Path(path).stem
     return parse_pdep_network_text(text=text, network_id=network_id, path=path,
                                    source_hash=hash_bytes(data))
@@ -700,10 +677,10 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
         path (str, optional): The path the text was read from, if any (stored for reference).
         source_hash (str, optional): The ``'sha256:<hex>'`` hash of the FILE BYTES ``text`` was
             decoded from, when there was a file. Deliberately not computed from ``text`` here: a
-            hash of the decoded string would not match ``t3.pdep.cache.hash_file`` for any file
-            whose bytes differ from its decoded form (CRLF line endings, a BOM), and a provenance
-            hash that silently disagrees with the one the SA cache sidecar records is worse than no
-            hash at all. Callers with no file leave it ``None``.
+            hash of the decoded string would not match ``t3.pdep.hashing.hash_file`` for any file
+            whose bytes differ from its decoded form (CRLF line endings, a BOM, a non-UTF-8 encoding
+            cookie), and a provenance hash that silently disagrees with the one the SA cache sidecar
+            records is worse than no hash at all. Callers with no file leave it ``None``.
 
     Raises:
         ValueError: If the text cannot be parsed as Python, or contains no path reactions.
