@@ -328,6 +328,126 @@ def test_rank_pdep_networks_raises_for_bad_threshold_instead_of_swallowing_it():
         rank_pdep_networks(networks, relative_threshold=math.nan)
 
 
+# --- 6c. rank_pdep_networks orders qualified networks by descending delta_ln_k ------------------
+
+def test_rank_pdep_networks_orders_qualified_by_delta_ln_k_descending(tmp_path):
+    """Test that among qualified decisions, the one with the larger delta_ln_k (among its
+    uncertain_path_reactions) sorts first, even when that contradicts alphabetical network_id
+    order (Mutation C4: max_delta_ln_k -> 0.0 would make this fall through to the network_id
+    tiebreak and report the alphabetical order instead)."""
+    text_low = '''
+reaction(
+    label = 'reactionLow',
+    reactants = ['S1', 'S2'],
+    products = ['S3'],
+    transitionState = 'TS1',
+    kinetics = Arrhenius(A=(1.0,'s^-1'), n=0, Ea=(0,'kJ/mol'), T0=(1,'K'), comment="""Estimated template [x]"""),
+)
+'''
+    text_high = '''
+reaction(
+    label = 'reactionHigh',
+    reactants = ['S4', 'S5'],
+    products = ['S6'],
+    transitionState = 'TS9',
+    kinetics = Arrhenius(A=(1.0,'s^-1'), n=0, Ea=(0,'kJ/mol'), T0=(1,'K'), comment="""Estimated template [x]"""),
+)
+'''
+    # 'aLowDelta' sorts before 'zHighDelta' alphabetically, but carries the SMALLER delta_ln_k, so
+    # the two orderings disagree -- this is what lets the test distinguish real ranking from the
+    # network_id tiebreak alone.
+    low_path = str(tmp_path / 'aLowDelta.py')
+    _write(low_path, text_low)
+    high_path = str(tmp_path / 'zHighDelta.py')
+    _write(high_path, text_high)
+
+    sa_dict_low = {'S1 + S2 <=> S3': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS1': 0.1}}}
+    sa_dict_high = {'S4 + S5 <=> S6': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS9': 0.9}}}
+
+    networks = [
+        {'network_path': low_path, 'sa_dict': sa_dict_low},
+        {'network_path': high_path, 'sa_dict': sa_dict_high},
+    ]
+    ranked = rank_pdep_networks(networks, relative_threshold=0.001)
+
+    assert all(selection.qualified for selection in ranked)
+    assert [selection.network_id for selection in ranked] == ['zHighDelta', 'aLowDelta']
+
+
+# --- 6d. rank_pdep_networks: not_evaluated ranks ahead of evaluated-but-unqualified --------------
+
+def test_rank_pdep_networks_not_evaluated_ranks_before_unqualified(tmp_path):
+    """Test that a not_evaluated decision (tier 1) sorts before an evaluated-but-unqualified
+    decision (tier 2), even when that contradicts alphabetical network_id order (Mutation C3:
+    forcing not_evaluated's tier to 2 would collapse the two tiers together and report the
+    alphabetical order instead)."""
+    text_unqualified = '''
+reaction(
+    label = 'reactionUnqualified',
+    reactants = ['P', 'Q'],
+    products = ['R'],
+    transitionState = 'TS5',
+    kinetics = Arrhenius(A=(1.0,'s^-1'), n=0, Ea=(0,'kJ/mol'), T0=(1,'K'), comment="""Estimated template [x]"""),
+)
+'''
+    # 'aUnqualified' sorts before 'zMissing' alphabetically, but is evaluated-but-unqualified
+    # (tier 2) while 'zMissing' is not_evaluated (tier 1) -- the two orderings disagree.
+    unqualified_path = str(tmp_path / 'aUnqualified.py')
+    _write(unqualified_path, text_unqualified)
+    missing_path = str(tmp_path / 'zMissing.py')  # never written
+
+    sa_dict_unqualified = {'P + Q <=> R': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS5': 0.05}}}
+    networks = [
+        {'network_path': unqualified_path, 'sa_dict': sa_dict_unqualified},
+        {'network_path': missing_path, 'sa_dict': {}},
+    ]
+    # relative_threshold=2.0 guarantees the single TS row's coefficient never clears its own
+    # (2x-scaled) cutoff, so the unqualified network is genuinely evaluated-but-unqualified.
+    ranked = rank_pdep_networks(networks, relative_threshold=2.0)
+
+    assert [selection.network_id for selection in ranked] == ['zMissing', 'aUnqualified']
+    assert ranked[0].evaluation_status == EVALUATION_STATUS_NOT_EVALUATED
+    assert ranked[1].evaluation_status == EVALUATION_STATUS_EVALUATED
+    assert ranked[1].qualified is False
+
+
+# --- 6e. rank_pdep_networks: tiebreak is network_id ascending, not input order -------------------
+
+def test_rank_pdep_networks_ties_broken_by_network_id_ascending(tmp_path):
+    """Test that two qualified decisions with equal delta_ln_k are ordered by network_id ascending,
+    not by their order in the input list (Mutation C5: dropping network_id from the sort key would
+    leave Python's stable sort to preserve input order instead, which here is the reverse)."""
+    text = '''
+reaction(
+    label = 'reactionTie',
+    reactants = ['{r1}', '{r2}'],
+    products = ['{p1}'],
+    transitionState = '{ts}',
+    kinetics = Arrhenius(A=(1.0,'s^-1'), n=0, Ea=(0,'kJ/mol'), T0=(1,'K'), comment="""Estimated template [x]"""),
+)
+'''
+    zzz_path = str(tmp_path / 'zzz.py')
+    _write(zzz_path, text.format(r1='P1', r2='Q1', p1='R1', ts='TS5'))
+    aaa_path = str(tmp_path / 'aaa.py')
+    _write(aaa_path, text.format(r1='P2', r2='Q2', p1='R2', ts='TS6'))
+
+    sa_dict_zzz = {'P1 + Q1 <=> R1': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS5': 0.5}}}
+    sa_dict_aaa = {'P2 + Q2 <=> R2': {(300.0, 'K', 1.0, 'bar'): {'(TS) TS6': 0.5}}}
+
+    # 'zzz' appears FIRST in the input list, so if the tiebreak were dropped, stable sort would
+    # report ['zzz', 'aaa'] instead of the network_id-ascending order asserted below.
+    networks = [
+        {'network_path': zzz_path, 'sa_dict': sa_dict_zzz},
+        {'network_path': aaa_path, 'sa_dict': sa_dict_aaa},
+    ]
+    ranked = rank_pdep_networks(networks, relative_threshold=0.001)
+
+    assert all(selection.qualified for selection in ranked)
+    deltas = [selection.uncertain_path_reactions[0].delta_ln_k for selection in ranked]
+    assert deltas[0] == pytest.approx(deltas[1])  # confirms this is genuinely a tie
+    assert [selection.network_id for selection in ranked] == ['aaa', 'zzz']
+
+
 # --- 7. save_pdep_network_selections round trip and JSON-serializability ------------------------
 
 def test_save_pdep_network_selections_round_trips_and_is_json_serializable(tmp_path, sa_dict):
