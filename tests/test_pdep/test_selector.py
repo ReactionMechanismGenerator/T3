@@ -429,6 +429,18 @@ def test_resolve_direction_key_absent():
     assert len(warnings) == 1
 
 
+def test_resolve_direction_key_multiple_canonical_matches_is_ambiguous():
+    """Test that when a network reaction canonicalizes to match more than one distinct SA key
+    (here, two differently-ordered same-side legalized labels), the FIRST matching key is
+    returned but flagged ``direction_ambiguous`` True, with a warning naming every match."""
+    sa_dict = {'(A) + (B) <=> C': dict(), '(B) + (A) <=> C': dict(), 'structures': dict()}
+    key, ambiguous, warnings = resolve_direction_key(sa_dict=sa_dict, network_reaction='[A] + [B] <=> C')
+    assert key == '(A) + (B) <=> C'
+    assert ambiguous is True
+    assert len(warnings) == 1
+    assert '(A) + (B) <=> C' in warnings[0] and '(B) + (A) <=> C' in warnings[0]
+
+
 # --- 10. Reaction absent from SA dict -------------------------------------------------------------
 
 def test_select_from_sa_dict_reaction_absent_does_not_raise():
