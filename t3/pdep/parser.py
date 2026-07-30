@@ -287,6 +287,47 @@ class PDepNetwork:
         return {ts_label: tuple(reactions) for ts_label, reactions in by_ts.items()}
 
 
+def to_json_safe(value):
+    """
+    Recursively convert a value into plain JSON/YAML-safe types.
+
+    Tuples and lists become lists; dicts are copied with their values recursively converted;
+    everything else (including ``None``) is returned unchanged. ``None`` is deliberately passed
+    through untouched rather than being treated as "nothing to convert", since a ``None`` leaf
+    inside ``kinetics_params`` (e.g. a rejected CSE solve's all-``None`` Chebyshev ``coeffs``) is
+    meaningful and must survive the conversion exactly.
+
+    Anything that is not a container and not one of the scalar types below is REFUSED rather than
+    passed through. Passing it through is what a converter like this normally does, and it is the
+    fail-open shape: the object survives the "conversion" unchanged, the returned structure still
+    claims to be JSON/YAML-safe, and the failure surfaces much later at ``yaml.safe_dump`` -- or,
+    worse, does not surface at all, because ``yaml.dump`` will happily emit a ``!!python/object``
+    tag that only explodes on the way back in. The refusal keeps the function's promise checkable
+    at the point the wrong type enters, and a caller with a dataclass converts it explicitly (as
+    ``PDepExplorationResult.as_dict`` does for its selection and k(T,P) entries).
+
+    Args:
+        value: The value to convert, of arbitrary nesting depth.
+
+    Raises:
+        TypeError: If a leaf is not a str, bool, int, float, or None.
+
+    Returns:
+        The converted value, containing no tuples and no non-scalar leaves anywhere.
+    """
+    if isinstance(value, (tuple, list)):
+        return [to_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {key: to_json_safe(val) for key, val in value.items()}
+    # bool before int is unnecessary here (both are allowed) but the tuple order is kept explicit
+    # as a reminder that bool IS an int subclass, which matters wherever these two are told apart.
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    raise TypeError(f'Cannot render {value!r} of type {type(value).__name__} as a JSON/YAML-safe '
+                    f'value. Convert it explicitly at the call site; passing it through unchanged '
+                    f'would produce a structure that only claims to be serializable.')
+
+
 @dataclass(frozen=True)
 class PDepArkaneReaction:
     """
@@ -299,7 +340,15 @@ class PDepArkaneReaction:
         kinetics_params (dict): The kinetics call's keyword arguments, keyword name -> parsed
             literal value (e.g., ``'coeffs'`` -> a nested list of numbers/``None``, ``'Tmin'`` ->
             a ``(300, 'K')`` tuple). Keywords whose value could not be evaluated as a literal are
-            omitted.
+            omitted. NOTE (deliberate, documented lossiness): ``as_dict()`` renders every tuple
+            nested inside ``kinetics_params`` -- including a ``(300, 'K')`` bound pair -- as a
+            plain list for YAML-safety, so a save/load round trip through ``as_dict()`` returns a
+            list where a tuple went in. This is not a bug to fix: ``t3.pdep.yaml_safe`` deliberately
+            rejects Python type tags (``!!python/tuple`` and friends) on any file read through a
+            public entrypoint, since a caller-supplied path fully controls what such a tag would
+            construct (see that module's docstring), so tuples cannot be made to survive the round
+            trip without reopening that hole. The identical lossiness is documented for
+            ``PDepExplorationResult.manifest`` in ``t3.pdep.explorer.result``.
         numeric_values (tuple): Every numeric leaf found anywhere inside ``kinetics_params``
             (recursing into nested lists/tuples), flattened into one tuple, in traversal order.
             ``None`` entries are preserved (not skipped or coerced) since detecting them is the
@@ -325,6 +374,36 @@ class PDepArkaneReaction:
     numeric_values: tuple
     rate_payload_numeric_values: tuple = tuple()
     missing_kinetics_keys: tuple = tuple()
+
+    def as_dict(self) -> dict:
+        """
+        Render this entry as plain JSON/YAML-safe types.
+
+        ``kinetics_params`` is copied recursively rather than shallow-copied: its values may nest
+        tuples/lists/dicts several levels deep (e.g. a ``PDepArrhenius`` payload's ``arrhenius=[...]``
+        list of per-component dicts), and every tuple anywhere in that structure -- including a
+        ``(300, 'K')`` bound pair -- must become a list so the whole result stays free of dataclass
+        instances and tuples, matching the house style set by ``PDepNetworkSelection.as_dict()``.
+        ``None`` leaves (e.g. a rejected CSE solve's all-``None`` ``coeffs``) are preserved exactly:
+        detecting them is the whole point of carrying them (see the class docstring), so ``as_dict()``
+        must not drop or coerce them the way a naive "skip falsy values" copy would.
+
+        This is a deliberate, documented round-trip lossiness (see ``kinetics_params`` in the class
+        docstring): a save/load round trip through this method returns a list where a tuple went in.
+
+        Returns:
+            dict: A plain dict, containing no dataclass instances or tuples anywhere, including
+                nested inside ``kinetics_params``.
+        """
+        return {
+            'reactants': list(self.reactants),
+            'products': list(self.products),
+            'kinetics_type': self.kinetics_type,
+            'kinetics_params': to_json_safe(self.kinetics_params),
+            'numeric_values': list(self.numeric_values),
+            'rate_payload_numeric_values': list(self.rate_payload_numeric_values),
+            'missing_kinetics_keys': list(self.missing_kinetics_keys),
+        }
 
 
 def parse_arkane_pdep_output_file(path: str) -> tuple:

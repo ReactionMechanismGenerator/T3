@@ -20,6 +20,7 @@ from t3.pdep.parser import (
     parse_arkane_pdep_output_text,
     parse_pdep_network_file,
     parse_pdep_network_text,
+    to_json_safe,
 )
 
 PDEP_NETWORK_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1', 'RMG', 'pdep')
@@ -330,6 +331,64 @@ def test_parse_arkane_pdep_output_text_anti_exec_and_nested_none():
     assert None in reaction.numeric_values
     assert 1.0 in reaction.numeric_values
     assert 300 in reaction.numeric_values
+
+
+def test_pdep_arkane_reaction_as_dict_preserves_none_leaf():
+    """Test that PDepArkaneReaction.as_dict() preserves a None leaf nested inside kinetics_params
+    (e.g. a rejected CSE solve's all-None Chebyshev coeffs) rather than dropping or coercing it.
+
+    Regression this guards: a naive as_dict() implemented as a "skip falsy values" copy (a common
+    shortcut for rendering nested structures) would silently drop the None entries that are the
+    whole reason this field exists (see the class docstring / test_parse_arkane_pdep_output_text_
+    anti_exec_and_nested_none).
+    """
+    reactions = parse_arkane_pdep_output_text(text=ARKANE_OUTPUT_ANTI_EXEC_TEXT)
+    reaction = reactions[0]
+    as_dict = reaction.as_dict()
+    assert as_dict['kinetics_params']['coeffs'] == [[1.0, 2.0], [None, 4.0]]
+    assert as_dict['kinetics_params']['coeffs'][1][0] is None
+
+
+def test_pdep_arkane_reaction_as_dict_contains_no_tuples():
+    """Test that PDepArkaneReaction.as_dict() output contains no tuples anywhere, including nested
+    inside kinetics_params (e.g. a (300, 'K') Tmin/Tmax bound pair), matching the house style set
+    by PDepNetworkSelection.as_dict().
+    """
+    path = os.path.join(PDEP_ME_DIR, 'success', 'output.py')
+    reaction = parse_arkane_pdep_output_file(path=path)[0]
+    as_dict = reaction.as_dict()
+
+    def _assert_no_tuples(value):
+        assert not isinstance(value, tuple), f'Found a tuple in as_dict() output: {value!r}'
+        if isinstance(value, dict):
+            for item in value.values():
+                _assert_no_tuples(item)
+        elif isinstance(value, list):
+            for item in value:
+                _assert_no_tuples(item)
+
+    _assert_no_tuples(as_dict)
+
+
+def test_pdep_arkane_reaction_as_dict_kinetics_params_tuple_round_trips_as_a_list():
+    """Test the documented, deliberate round-trip lossiness of kinetics_params: a tuple nested
+    inside it (e.g. a (300, 'K') Tmin bound pair) comes back as a list -- not a tuple -- after
+    going through as_dict(), matching the identical documented lossiness of
+    PDepExplorationResult.manifest (t3.pdep.explorer.result). This is not a bug: t3.pdep.yaml_safe
+    deliberately rejects the Python type tags that would be needed to preserve tuples across a
+    YAML round trip.
+    """
+    reaction = PDepArkaneReaction(
+        reactants=('A',),
+        products=('B',),
+        kinetics_type='Arrhenius',
+        kinetics_params={'Tmin': (300, 'K'), 'A': 1.0},
+        numeric_values=(300, 1.0),
+    )
+    as_dict = reaction.as_dict()
+    assert isinstance(as_dict['kinetics_params']['Tmin'], list)
+    assert not isinstance(as_dict['kinetics_params']['Tmin'], tuple)
+    assert as_dict['kinetics_params']['Tmin'] == [300, 'K']
 
 
 def test_parse_arkane_pdep_output_text_invalid_syntax_raises_value_error():
@@ -903,3 +962,30 @@ class TestPositionalArgumentsOnRecognizedCallsAreRefused:
                 "network(label='n', isomers=['A'], reactants=[], products=[])\n")
         network = parse_pdep_network_text(text=text, network_id='n', path='<test>')
         assert network.path_reactions[0].reactants == ('A',)
+
+
+def test_to_json_safe_refuses_a_leaf_it_cannot_actually_render():
+    """
+    An unrenderable leaf must raise, not survive the conversion unchanged.
+
+    Would catch the fail-open shape this function started life with: a trailing ``return value``
+    that passed anything non-container straight through, so the result still claimed to be
+    JSON/YAML-safe while carrying an object ``yaml.safe_dump`` refuses -- a promise that could only
+    be checked far away from the code that broke it.
+    """
+    class _NotSerializable:
+        pass
+
+    with pytest.raises(TypeError, match='JSON/YAML-safe'):
+        to_json_safe({'nested': [{'leaf': _NotSerializable()}]})
+
+
+def test_to_json_safe_still_accepts_every_scalar_it_should():
+    """
+    The refusal must reject unrenderable leaves only, not tighten into an over-refusal.
+
+    ``None`` in particular is MEANINGFUL in this codebase (a rejected CSE solve writes
+    ``Chebyshev(coeffs=[[None, ...]])``), and ``bool`` is an ``int`` subclass, so a type check
+    written carelessly can drop either one.
+    """
+    assert to_json_safe(['s', 1, 1.5, True, False, None]) == ['s', 1, 1.5, True, False, None]
