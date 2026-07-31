@@ -1129,6 +1129,61 @@ def test_explore_pdep_network_refuses_a_selection_that_was_never_evaluated(monke
     assert 'carries no verdict' in message
 
 
+def test_explore_pdep_network_reports_every_reason_a_selection_cannot_gate(monkeypatch, tmp_path):
+    """Test that a selection which is BOTH stale (its recorded hash no longer matches the network
+    file) AND unevaluated (evaluation_status != 'evaluated', qualified=False) is refused with a
+    SINGLE error that reports BOTH diagnoses, not just whichever guard happened to run first. Each
+    of these two problems is independently sufficient to invalidate the gate, and each is diagnosed
+    by different evidence (a content hash vs. a coverage flag) -- silently discarding one diagnosis
+    because the other fired first would send the caller off to fix one problem, re-run, and hit the
+    second unannounced problem on the very next attempt."""
+    _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE',
+                                     network_source_hash='sha256:' + 'e' * 64)
+    selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+
+    with pytest.raises(ValueError) as exc_info:
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+    message = str(exc_info.value)
+    # Distinctive substrings from the hash-mismatch diagnosis:
+    assert 'has changed since' in message
+    # Distinctive substrings from the evaluation-status diagnosis:
+    assert 'not_evaluated' in message
+    assert 'carries no verdict' in message
+
+
+def test_explore_pdep_network_reports_method_and_network_id_alongside_evaluation_status(monkeypatch, tmp_path):
+    """Test that a selection failing method, network_id, AND evaluation-status simultaneously is
+    refused with a SINGLE error naming all three -- proving method/network_id are folded into the
+    same accumulator as the hash/evaluation-status checks (187b28f only accumulated the latter two;
+    method/network_id used to raise immediately on whichever was checked first, silently discarding
+    every other reason). network_id already proves this is a different network entirely, so the
+    hash-mismatch diagnosis (which reads "the network file has changed since the decision was made")
+    would be misleading here and must be short-circuited -- its wording must NOT appear."""
+    _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='some_other_network', qualified=False, method='MSC',
+                                     network_source_hash='sha256:' + 'e' * 64)
+    selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+
+    with pytest.raises(ValueError) as exc_info:
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+    message = str(exc_info.value)
+    assert 'for 3 independent reasons' in message
+    assert 'method' in message
+    assert 'network_id' in message
+    assert 'not_evaluated' in message
+    assert 'carries no verdict' in message
+    # Short-circuited: network_id already proves it, so the (misleading) hash-mismatch wording must
+    # not also appear.
+    assert 'has changed since' not in message
+
+
 def test_explore_pdep_network_carries_output_paths_on_failure(monkeypatch, tmp_path):
     """
     A failed run must carry output_paths, and must NOT carry network_paths or k(T,P).

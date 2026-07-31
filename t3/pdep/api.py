@@ -314,38 +314,50 @@ def explore_pdep_network(network_path: str,
     parsed_network = parse_pdep_network_file(path=network_path)
 
     if selection is not None:
+        # method, network_id, the hash diagnosis (no-hash vs. hash-mismatch), and the evaluation-
+        # status diagnosis below are each independently sufficient reasons this selection cannot gate
+        # an exploration, and each is established by different evidence. Accumulate every applicable
+        # diagnosis into ONE raise rather than stopping at the first: a caller who fixes only the
+        # first-reported problem, re-runs, and is then handed a second, previously unmentioned
+        # problem has been actively misled about how much was wrong.
+        reasons = []
         if selection.method != config.method:
-            raise ValueError(
+            reasons.append(
                 f"selection.method ({selection.method!r}) does not match config.method "
                 f"({config.method!r}). Gating a decision made under one master-equation method and "
                 f"then exploring under another is silent provenance corruption: the recorded "
                 f"decision would not be about the run that actually happened.")
+        # network_id is a FILE STEM, so a match only proves the decision was about a file with this
+        # NAME. RMG rewrites pdep/network4_2.py on every iteration that touches the network, and a
+        # selection is routinely made in one process and acted on in another, so "same stem" and
+        # "same network" are not the same statement. Bind to the content instead -- but only when
+        # network_id itself already matches: a network_id mismatch already proves this is a decision
+        # about a DIFFERENT network, so the hash-mismatch wording ("the network file has changed
+        # since the decision was made") would be misleading and is short-circuited (skipped) below.
         if selection.network_id != parsed_network.network_id:
-            raise ValueError(
+            reasons.append(
                 f"selection.network_id ({selection.network_id!r}) does not match the parsed "
                 f"network's network_id ({parsed_network.network_id!r}). A decision about a "
                 f"different network used as this one's budget gate fabricates confidence in a "
                 f"result nothing actually justifies -- the same hazard "
                 f"PDepNetworkSelection.combine() already refuses for the same reason.")
-        # network_id is a FILE STEM, so the check above only proves the decision was about a file
-        # with this NAME. RMG rewrites pdep/network4_2.py on every iteration that touches the
-        # network, and a selection is routinely made in one process and acted on in another, so
-        # "same stem" and "same network" are not the same statement. Bind to the content instead.
-        if selection.network_source_hash is None:
-            raise ValueError(
-                f"selection.network_source_hash is None, so this decision carries no binding to the "
-                f"content it was made about, and network_id ({selection.network_id!r}) is only a file "
-                f"stem -- it matches every revision of that file. Re-run the selection against the "
-                f"network file (select_pdep_network records the hash whenever it parses one), or pass "
-                f"selection=None to explore without a budget gate.")
-        if selection.network_source_hash != parsed_network.source_hash:
-            raise ValueError(
-                f"selection.network_source_hash ({selection.network_source_hash!r}) does not match the "
-                f"content hash of {network_path!r} ({parsed_network.source_hash!r}): the network file "
-                f"has changed since the decision was made. The decision describes a network that is no "
-                f"longer the one about to be explored -- its sensitivities, its channels, and the "
-                f"transition states it named may all have moved. Re-run the selection against the "
-                f"current file.")
+        else:
+            if selection.network_source_hash is None:
+                reasons.append(
+                    f"selection.network_source_hash is None, so this decision carries no binding to "
+                    f"the content it was made about, and network_id ({selection.network_id!r}) is "
+                    f"only a file stem -- it matches every revision of that file. Re-run the "
+                    f"selection against the network file (select_pdep_network records the hash "
+                    f"whenever it parses one), or pass selection=None to explore without a budget "
+                    f"gate.")
+            elif selection.network_source_hash != parsed_network.source_hash:
+                reasons.append(
+                    f"selection.network_source_hash ({selection.network_source_hash!r}) does not "
+                    f"match the content hash of {network_path!r} ({parsed_network.source_hash!r}): "
+                    f"the network file has changed since the decision was made. The decision "
+                    f"describes a network that is no longer the one about to be explored -- its "
+                    f"sensitivities, its channels, and the transition states it named may all have "
+                    f"moved. Re-run the selection against the current file.")
         # `qualified` carries NO signal unless the decision was actually evaluated. When
         # select_pdep_network() rejects a stale SA cache it returns qualified=False AND
         # evaluation_status='not_evaluated' (api.py:174, :208), and reason() nonetheless renders the
@@ -365,12 +377,18 @@ def explore_pdep_network(network_path: str,
         # fail-open one. The asymmetry is the point -- a partial 'no' is unsupported (an unevaluated
         # component might have been the one that qualified), a partial 'yes' is not.
         if selection.evaluation_status != EVALUATION_STATUS_EVALUATED and not selection.qualified:
-            raise ValueError(
+            reasons.append(
                 f"selection.evaluation_status is {selection.evaluation_status!r}, so its "
                 f"'qualified' field ({selection.qualified!r}) carries no verdict and cannot be used "
                 f"as a budget gate -- a decision that was never evaluated is not a decision to not "
                 f"explore. Re-run the selection against usable SA data, or pass selection=None to "
                 f"explore without gating.")
+        if reasons:
+            if len(reasons) == 1:
+                raise ValueError(reasons[0])
+            raise ValueError(
+                f"This selection cannot gate an exploration, for {len(reasons)} independent reasons: "
+                + ' '.join(f"({i}) {reason}" for i, reason in enumerate(reasons, start=1)))
         if not selection.qualified:
             # Nothing runs: no adapter is constructed, no filesystem state below is touched.
             return PDepExplorationResult(
