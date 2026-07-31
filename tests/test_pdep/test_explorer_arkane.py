@@ -360,7 +360,13 @@ def _make_fake_run_arkane_job(*, success=True, output_files=None, final_files=No
             _write(os.path.join(output_directory, 'arkane.log'), '\n'.join(arkane_log_lines) + '\n')
         if stderr_lines:
             _write(os.path.join(output_directory, 'stderr.log'), '\n'.join(stderr_lines) + '\n')
-        return success
+        # Mirror the real run_arkane_job's own gate (t3/runners/rmg_runner.py): a caller-declared
+        # required_artifact must actually exist for the run to be reported as successful, exactly
+        # as the real runner requires Arkane itself to have (re)written it. Reporting ``success``
+        # regardless of the artifact's presence would be a lie the real runner never tells, and
+        # would make the job-failure signal that depends on it untestable.
+        artifact_path = os.path.join(output_directory, required_artifact)
+        return success and os.path.isfile(artifact_path)
 
     return _fake
 
@@ -1269,6 +1275,34 @@ class TestArkaneExplorerAdapterFailureSignals:
             ))
         assert adapter.explore() is False
         assert any('job failure' in reason.lower() for reason in adapter.reasons)
+
+    def test_fake_run_arkane_job_honours_required_artifact(self, tmp_path, monkeypatch):
+        """
+        The stub backing these tests must mirror the real ``run_arkane_job``
+        (``t3/runners/rmg_runner.py``) exactly: reporting success without producing the artifact
+        it was told is required is precisely the lie the real runner refuses to tell (it deletes
+        any stale artifact up front and then requires Arkane itself to have (re)written it). A
+        stub that reports ``success`` regardless of whether ``required_artifact`` exists would
+        make this failure signal untestable and could paper over a genuine fail-open in the
+        production adapter.
+
+        This pins the job-failure reason distinctively: ``_resolve_artifacts`` would also refuse
+        a missing ``output.py`` on its own (rule 2-3), so asserting ``explore() is False`` alone
+        would not prove the stub's own gate did anything. Only the job-failure text below is
+        exclusive to ``run_arkane_job``'s own report.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+                # Deliberately no output_files: the required artifact 'output.py' is never
+                # written, exactly as if Arkane exited 0 but never produced it.
+            ))
+        assert adapter.explore() is False
+        assert any("the required 'output.py' artifact was never created" in reason
+                  for reason in adapter.reasons), adapter.reasons
 
     def test_real_stderr_content_fails(self, tmp_path, monkeypatch):
         """Failure signal 2 of 4: real (non-ignorable) stderr content alone must fail the run,
