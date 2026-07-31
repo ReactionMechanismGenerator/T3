@@ -5,13 +5,19 @@ Validity metadata for cached Arkane PDep sensitivity output.
 
 Re-using a sensitivity YAML that is already on disk saves a very expensive Arkane run, but doing
 so naively is unsafe. Nothing in Arkane's own output identifies which Arkane produced it or which
-network it came from, and a sensitivity analysis whose transition-state perturbation never reached
-the rate expression writes structurally dead transition-state rows that look exactly like "nothing
-here is sensitive". Silently trusting such a file makes a network fail criterion (b) with no
-warning -- the network is quietly never selected for QM.
+network it came from, so this module writes a small T3-owned sidecar next to every generated
+sensitivity YAML, recording what T3 needs in order to trust it later, and refuses any cache that
+lacks one.
 
-This module therefore writes a small T3-owned sidecar next to every generated sensitivity YAML,
-recording what T3 needs in order to trust it later, and refuses any cache that lacks one.
+Cache *validity* (right hashes, right method, right contract version, parseable) is a different
+question from data *usefulness* (does the SA output actually carry transition-state signal), and
+this module answers only the first one. A sensitivity analysis whose transition-state perturbation
+never reached the rate expression writes structurally dead transition-state rows that look exactly
+like "nothing here is sensitive" -- but that is a judgment about whether a network qualifies for
+QM, made per-reaction-key and at the correct granularity by
+``t3.pdep.selector.select_from_sa_dict``, not a reason to distrust the cache itself. This module
+still records ``max_abs_ts_coefficient`` in the sidecar, but purely as provenance for a human
+reading the file, not as a gate here.
 """
 
 import math
@@ -72,9 +78,10 @@ def max_abs_ts_coefficient(sa_dict: dict) -> float | None:
     """
     Scan a loaded Arkane sensitivity dictionary for the largest absolute finite TS coefficient.
 
-    This is what the T3 sidecar binds itself to: an SA output whose transition-state rows are all
-    structural zeros (i.e. this scan finds nothing above the floor) carries no criterion-(b) signal
-    at all, no matter what the caller's decision looked like at write time.
+    The T3 sidecar records this value as provenance only, for a human reading the sidecar; it is
+    not used by ``validate_sa_cache`` as a cache-validity gate. Whether an SA output whose
+    transition-state rows are all structural zeros (i.e. this scan finds nothing above the floor)
+    carries usable criterion-(b) signal is decided by ``t3.pdep.selector.select_from_sa_dict``.
 
     Args:
         sa_dict (dict): A loaded Arkane PDep sensitivity dictionary. Keys are network reaction
@@ -162,10 +169,12 @@ def write_sa_cache_metadata(sa_path: str,
                 # Binds this sidecar to the exact SA YAML content it vouches for, so the YAML
                 # cannot be replaced or hand-edited afterwards and still validate.
                 'sa_file_hash': hash_file(sa_path),
-                # The largest abs finite TS coefficient anywhere in the SA output. A cache whose
-                # TS rows are all structural zeros (e.g. from an un-patched Arkane that never
-                # propagates a TS perturbation into an ILT-based rate) must never be trusted as
-                # "valid" -- see validate_sa_cache().
+                # The largest abs finite TS coefficient anywhere in the SA output. Recorded as
+                # provenance only, useful for a human inspecting the sidecar (e.g. to see whether
+                # an un-patched Arkane failed to propagate a TS perturbation into an ILT-based
+                # rate) -- validate_sa_cache() does NOT gate cache validity on this value; whether
+                # the data is USEFUL for criterion (b) is decided by
+                # t3.pdep.selector.select_from_sa_dict, not here.
                 'max_abs_ts_coefficient': max_abs_ts_coefficient(sa_dict),
                 'rmg_py_path': rmg_py_path,
                 'rmg_py_commit': get_git_commit(rmg_py_path),
@@ -186,18 +195,26 @@ def validate_sa_cache(sa_path: str,
 
     A cache is only accepted when T3 itself wrote the sidecar, the selection semantics have not
     changed since, the perturbation matches the one the gates assume, the network file has not
-    changed, the SA YAML itself has not changed since the sidecar was written, the ME method
-    matches (when given), and the SA data itself still carries transition-state signal. Anything
-    else is rejected so the analysis is regenerated -- silently reusing a stale, foreign, or
-    signal-dead file would suppress the network from QM selection with no visible symptom.
+    changed, the SA YAML itself has not changed since the sidecar was written, and the ME method
+    matches (when given). Anything else is rejected so the analysis is regenerated -- silently
+    reusing a stale or foreign file would corrupt the decision with no visible symptom.
+
+    This function answers only cache VALIDITY (is this the right, unmodified, T3-written file).
+    Whether the SA data it validates is actually USEFUL -- i.e. whether its transition-state rows
+    carry any signal above the absolute coefficient floor -- is a different question, answered per
+    reaction-key by ``t3.pdep.selector.select_from_sa_dict``, not here. ``min_delta_ln_k`` and
+    ``perturbation`` are still validated eagerly below (see the comment ahead of ``floor``) purely
+    so a caller bug in either surfaces immediately as a ``ValueError``, regardless of which
+    validity branch a given call happens to reach first.
 
     Args:
         sa_path (str): The path to the candidate ``sa_coefficients.yml``.
         network_path (str): The path to the RMG network file it should correspond to.
         perturbation (float, optional): The E0 perturbation the selector will assume, in J/mol.
-        min_delta_ln_k (float, optional): The minimum meaningful ``ln(k)`` response used to derive
-            the absolute coefficient floor that the cached data's ``max_abs_ts_coefficient`` must
-            clear; see ``t3.pdep.selector.coefficient_floor``.
+        min_delta_ln_k (float, optional): The minimum meaningful ``ln(k)`` response; validated
+            eagerly here (via ``t3.pdep.selector.coefficient_floor``) only to surface a bad value
+            as a ``ValueError`` immediately -- the resulting floor is not otherwise used in this
+            function.
         method (str, optional): The master-equation method this call expects the cache to have
             been generated with, e.g. ``'MSC'``. If given and it disagrees with the recorded
             ``method``, the cache is rejected.
@@ -270,15 +287,7 @@ def validate_sa_cache(sa_path: str,
                              f'{recorded_method!r}, but method {method!r} was requested. Regenerating.')
         return CACHE_STATUS_CACHED_REJECTED, warnings_list
 
-    recorded_max_abs_ts_coefficient = metadata.get('max_abs_ts_coefficient')
-    if not isinstance(recorded_max_abs_ts_coefficient, (int, float)) \
-            or isinstance(recorded_max_abs_ts_coefficient, bool) \
-            or recorded_max_abs_ts_coefficient < floor:
-        warnings_list.append(
-            f'The cached sensitivity output at {sa_path} has no transition-state coefficient at or above the '
-            f'absolute floor ({floor:.3e} mol/J, recorded max was {recorded_max_abs_ts_coefficient!r}). Its '
-            f'transition state rows carry no signal -- this usually means the SA was produced by an Arkane that '
-            f'does not propagate a TS perturbation into an ILT-based rate. Regenerating.')
-        return CACHE_STATUS_CACHED_REJECTED, warnings_list
-
+    # No max_abs_ts_coefficient-vs-floor check here: cache validity and data usefulness are
+    # different questions (see module docstring). ``floor`` above exists purely to validate
+    # ``min_delta_ln_k``/``perturbation`` eagerly; it is not otherwise consulted in this function.
     return CACHE_STATUS_CACHED_VALID, warnings_list

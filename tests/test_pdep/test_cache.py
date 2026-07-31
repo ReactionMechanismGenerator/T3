@@ -91,9 +91,10 @@ def test_network_file_changed_after_write_is_rejected(tmp_path):
     network_path = str(tmp_path / 'network4_2.py')
     _write(network_path, 'reaction(label="reaction1")\n')
     sa_path = str(tmp_path / 'sa_coefficients.yml')
-    # A REALISTIC SA YAML, not a stub: a stub carries no transition-state signal and is rejected by
-    # the max_abs_ts_coefficient floor check regardless of the network file, so the test would pass
-    # even with the network_file_hash check deleted outright.
+    # A REALISTIC SA YAML, not a stub: this keeps the test meaningful in spirit even though
+    # ``validate_sa_cache`` no longer gates on TS signal at all (that judgment moved to
+    # ``t3.pdep.selector.select_from_sa_dict`` -- see FIX1 in cache.py). Using a realistic YAML here
+    # still isolates this test to the network_file_hash check alone.
     _write_realistic_sa_yaml(sa_path)
 
     write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
@@ -136,9 +137,9 @@ def test_sidecar_with_mismatched_sa_cache_contract_version_is_rejected(tmp_path)
     network_path = str(tmp_path / 'network4_2.py')
     _write(network_path, 'reaction(label="reaction1")\n')
     sa_path = str(tmp_path / 'sa_coefficients.yml')
-    # A REALISTIC SA YAML, not a stub: a stub carries no transition-state signal and is rejected by
-    # the max_abs_ts_coefficient check before the version is ever compared, so the test would pass
-    # with the version check deleted outright. That is what this test used to do.
+    # A REALISTIC SA YAML, not a stub: ``validate_sa_cache`` no longer gates on TS signal at all
+    # (that judgment moved to ``t3.pdep.selector.select_from_sa_dict`` -- see FIX1 in cache.py), so
+    # a stub would work here too now; kept realistic to match the sidecar's real-world shape.
     _write_realistic_sa_yaml(sa_path)
 
     write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
@@ -283,8 +284,18 @@ def test_max_abs_ts_coefficient_returns_none_for_non_dict_input():
 
 # --- FIX1: cache rejected when TS rows carry no signal ------------------------------------------------
 
-def test_cache_with_only_structural_zero_ts_coefficients_is_rejected(tmp_path):
-    """Test that a cache whose TS rows are all below the absolute floor is rejected (P1)."""
+def test_cache_with_only_structural_zero_ts_coefficients_is_valid(tmp_path):
+    """Test that a cache whose TS rows are all below the absolute floor is still CACHED_VALID (FIX1).
+
+    Whether the SA output is USEFUL for criterion (b) (does it carry live TS signal) is a different
+    question from whether the CACHE is trustworthy (right hashes, right method, right contract
+    version, parseable). This case used to conflate the two: validate_sa_cache() rejected a cache
+    that was, by every cache-validity measure, perfectly good -- it simply held a below-floor TS
+    reading. That floor judgment now lives in ``t3.pdep.selector.select_from_sa_dict`` (evaluated
+    per-reaction-key, not by scanning the whole dict), which is where a real trial run
+    (T3-pdep-qm-trial-001) showed the granularity actually matters: a genuine Arkane SA landed
+    real, non-zero-but-below-floor TS coefficients that this rejection would have thrown away and
+    silently regenerated forever, instead of letting the selector report a considered verdict."""
     network_path = str(tmp_path / 'network4_2.py')
     _write(network_path, 'reaction(label="reaction1")\n')
     sa_path = str(tmp_path / 'sa_coefficients.yml')
@@ -297,12 +308,15 @@ def test_cache_with_only_structural_zero_ts_coefficients_is_rejected(tmp_path):
 
     write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
     status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
-    assert status == CACHE_STATUS_CACHED_REJECTED
-    assert any('transition state' in w.lower() for w in warnings)
+    assert status == CACHE_STATUS_CACHED_VALID, warnings
 
 
-def test_cache_with_no_ts_coefficient_recorded_is_rejected(tmp_path):
-    """Test that a cache with no recorded max_abs_ts_coefficient at all is rejected (P1)."""
+def test_cache_with_no_ts_coefficient_recorded_is_valid(tmp_path):
+    """Test that a cache with no recorded max_abs_ts_coefficient at all is still CACHED_VALID (FIX1).
+
+    ``max_abs_ts_coefficient`` is recorded in the sidecar as provenance only -- useful for a human
+    to read -- not as a cache-validity gate; see the module docstring and test above for why this
+    guarantee moved to ``t3.pdep.selector.select_from_sa_dict``."""
     network_path = str(tmp_path / 'network4_2.py')
     _write(network_path, 'reaction(label="reaction1")\n')
     sa_path = str(tmp_path / 'sa_coefficients.yml')
@@ -310,8 +324,7 @@ def test_cache_with_no_ts_coefficient_recorded_is_rejected(tmp_path):
 
     write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
     status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path)
-    assert status == CACHE_STATUS_CACHED_REJECTED
-    assert any('transition state' in w.lower() for w in warnings)
+    assert status == CACHE_STATUS_CACHED_VALID, warnings
 
 
 # --- FIX2: cache bound to the specific SA YAML and method ---------------------------------------------
