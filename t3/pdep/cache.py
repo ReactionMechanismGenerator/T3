@@ -22,7 +22,9 @@ reading the file, not as a gate here.
 
 import math
 import os
+import re
 import subprocess
+
 
 from arc.common import save_yaml_file
 
@@ -42,6 +44,9 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               )
 
 SA_CACHE_METADATA_FILE_NAME = 't3_sa_cache.yml'
+
+# The label Arkane prints immediately before the RMG-Py commit hash in its own log.
+ARKANE_LOG_RMG_PY_COMMIT_LABEL = 'current git HEAD for RMG-Py'
 
 # Whether a T3-generated sensitivity YAML on disk may still be trusted -- this is the ONLY job this
 # constant has. It is deliberately separate from ``t3.pdep.selector.SELECTION_SCHEMA_VERSION`` (the
@@ -134,12 +139,54 @@ def get_git_commit(path: str | None) -> str | None:
     return result.stdout.strip() or None if result.returncode == 0 else None
 
 
+def read_arkane_log_rmg_py_commit(arkane_log_path: str | None) -> str | None:
+    """
+    Best-effort lookup of the RMG-Py commit that produced an Arkane run, from Arkane's own log.
+
+    T3 cannot identify that commit by introspecting its own interpreter: ARC runs Arkane in a
+    subprocess, in a different conda environment (``micromamba run -n rmg_env python -m arkane``),
+    so nothing of the RMG-Py that did the work is ever loaded here. Arkane, however, records its
+    own provenance in the log it writes into the output directory T3 already owns, which makes the
+    log the only first-hand witness available.
+
+    The commit is not on the label line but on the line after it, and the line after THAT is a
+    commit date, so only the first following non-empty line is considered and it is returned only
+    if it actually looks like a hash. Recording an arbitrary log line would be worse than recording
+    nothing, since it would read as real provenance to whoever audits the sidecar later.
+
+    Args:
+        arkane_log_path (str, optional): The path to an Arkane ``arkane.log``.
+
+    Returns:
+        Optional[str]: The RMG-Py commit hash, or ``None`` if it could not be determined (no log,
+            unreadable log, no RMG-Py stanza, or a value that is not a hash).
+    """
+    if not arkane_log_path or not os.path.isfile(arkane_log_path):
+        return None
+    try:
+        with open(arkane_log_path, 'r', errors='replace') as f:
+            lines = f.readlines()
+    except OSError:
+        return None
+    for index, line in enumerate(lines):
+        if ARKANE_LOG_RMG_PY_COMMIT_LABEL not in line:
+            continue
+        for candidate in lines[index + 1:]:
+            candidate = candidate.strip()
+            if not candidate:
+                continue
+            return candidate if re.fullmatch(r'[0-9a-fA-F]{7,40}', candidate) else None
+    return None
+
+
 def write_sa_cache_metadata(sa_path: str,
                             network_path: str,
                             network_id: str,
                             method: str,
                             perturbation: float = E0_PERTURBATION_J_PER_MOL,
                             rmg_py_path: str | None = None,
+                            rmg_py_commit: str | None = None,
+                            t_grid_clamp: dict | None = None,
                             ) -> str:
     """
     Write the T3 sidecar next to a freshly generated sensitivity YAML.
@@ -151,6 +198,16 @@ def write_sa_cache_metadata(sa_path: str,
         method (str): The master-equation method used, e.g. ``'MSC'``.
         perturbation (float, optional): The E0 perturbation Arkane applied, in J/mol.
         rmg_py_path (str, optional): The RMG-Py checkout used, recorded for provenance.
+        rmg_py_commit (str, optional): The RMG-Py commit that actually ran, e.g. from
+            ``read_arkane_log_rmg_py_commit``. Recorded verbatim; takes precedence over deriving
+            a commit from ``rmg_py_path``.
+        t_grid_clamp (dict, optional): ``t3.utils.network_thermo.TGridClampRecord.as_dict()`` for
+            the Arkane input file this SA was run against, i.e. whether the T grid Arkane actually
+            solved over was clamped down from what was originally requested. Written into the
+            sidecar ONLY when supplied -- so a sidecar written by a caller that never passed this
+            (an old sidecar, or SA data produced outside this code path) omits the key entirely
+            rather than recording a value that would misrepresent "unknown" as "not clamped". See
+            ``TGridClampRecord``'s docstring for why those two states must never be conflated.
 
     Returns:
         str: The path of the sidecar that was written.
@@ -177,11 +234,56 @@ def write_sa_cache_metadata(sa_path: str,
                 # t3.pdep.selector.select_from_sa_dict, not here.
                 'max_abs_ts_coefficient': max_abs_ts_coefficient(sa_dict),
                 'rmg_py_path': rmg_py_path,
-                'rmg_py_commit': get_git_commit(rmg_py_path),
+                # A commit read out of Arkane's log is first-hand evidence of what actually ran and
+                # is recorded as given; deriving one from a local checkout is the fallback for a
+                # caller that has the checkout rather than the log.
+                'rmg_py_commit': rmg_py_commit if rmg_py_commit is not None else get_git_commit(rmg_py_path),
                 }
+    if t_grid_clamp is not None:
+        # Not gated on by validate_sa_cache (see SA_CACHE_CONTRACT_VERSION's comment and this
+        # module's docstring): this is pure provenance, added without bumping the contract
+        # version, since a sidecar written before this key existed is merely missing an optional
+        # field, not misread by anything that consults sa_cache_contract_version.
+        metadata['t_grid_clamp'] = t_grid_clamp
     metadata_path = sa_cache_metadata_path(sa_path)
     save_yaml_file(path=metadata_path, content=metadata)
     return metadata_path
+
+
+def read_t_grid_clamp_record(sa_path: str) -> dict | None:
+    """
+    Best-effort read of the T-grid clamp provenance recorded alongside a sensitivity YAML.
+
+    Deliberately as lenient as ``write_sa_cache_metadata`` is strict: unlike
+    ``validate_sa_cache`` (which fails closed on anything it cannot fully trust), this function
+    exists only to *disclose* provenance, never to gate anything. A missing sidecar, an
+    unparseable sidecar, or a sidecar that predates this key all collapse to the same ``None``
+    ("unknown provenance") -- exactly as absent as if this function had never been called -- so
+    that a caller cannot mistake "I don't know" for "no clamp happened" (see
+    ``TGridClampRecord``'s docstring), and so that unknown provenance can never, by itself, cause
+    a refusal.
+
+    Args:
+        sa_path (str): The path to the ``sa_coefficients.yml`` whose sidecar should be consulted.
+
+    Returns:
+        Optional[dict]: The recorded ``TGridClampRecord.as_dict()`` mapping, or ``None`` if no
+            sidecar exists, it could not be read, or it has no ``t_grid_clamp`` key.
+    """
+    metadata_path = sa_cache_metadata_path(sa_path)
+    if not os.path.isfile(metadata_path):
+        return None
+    try:
+        # The restricted loader, not arc's read_yaml_file (yaml.FullLoader): this sidecar sits
+        # adjacent to a caller-supplied sa_path, and FullLoader constructs Python objects from tags
+        # DURING the load -- before the except below could ever collapse the read to None.
+        metadata = read_sa_yaml_file(metadata_path)
+    except Exception:
+        return None
+    if not isinstance(metadata, dict):
+        return None
+    t_grid_clamp = metadata.get('t_grid_clamp')
+    return t_grid_clamp if isinstance(t_grid_clamp, dict) else None
 
 
 def validate_sa_cache(sa_path: str,

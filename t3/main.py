@@ -51,7 +51,11 @@ from t3.common import (DATA_BASE_PATH,
                        time_lapse,
                        )
 from t3.logger import Logger
-from t3.pdep.cache import validate_sa_cache, write_sa_cache_metadata
+from t3.pdep.cache import (read_arkane_log_rmg_py_commit,
+                           read_t_grid_clamp_record,
+                           validate_sa_cache,
+                           write_sa_cache_metadata,
+                           )
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
 from t3.pdep.discovery import (ARTIFACT_STATUS_MISSING,
                                ARTIFACT_STATUS_USABLE,
@@ -1858,12 +1862,13 @@ class T3:
             sa_coefficients_path, arkane, method_used, cache_status = None, None, None, None
             network_path = os.path.join(self.paths['RMG PDep'], f'{network_name}.py')
             for method in self.t3['sensitivity']['ME_methods']:
-                isomer_labels = write_pdep_network_file(
+                write_result = write_pdep_network_file(
                     network_name=network_name,
                     method=method,
                     pdep_sa_path=self.paths['PDep SA'],
                     rmg_pdep_path=self.paths['RMG PDep'],
                 )
+                isomer_labels = write_result.isomer_labels
                 arkane_input = os.path.join(self.paths['PDep SA'], network_name, method, 'input.py')
                 arkane_output_dir = os.path.join(self.paths['PDep SA'], network_name, method)
                 candidate_sa_path = os.path.join(arkane_output_dir, 'sensitivity', 'sa_coefficients.yml')
@@ -1904,6 +1909,9 @@ class T3:
                                                 network_path=network_path,
                                                 network_id=network_name,
                                                 method=method,
+                                                rmg_py_commit=read_arkane_log_rmg_py_commit(
+                                                    os.path.join(arkane_output_dir, 'arkane.log')),
+                                                t_grid_clamp=write_result.t_grid_clamp.as_dict(),
                                                 )
                     break
             else:
@@ -1964,6 +1972,13 @@ class T3:
                         sa_path=sa_coefficients_path,
                         cache_status=cache_status,
                         perturbation=E0_PERTURBATION_J_PER_MOL,
+                        # Read back from the sidecar rather than reusing this loop iteration's
+                        # in-memory write_result: on a CACHE_STATUS_CACHED_VALID reuse (see the
+                        # 'break' above), sa_coefficients_path is a PRE-EXISTING sidecar whose
+                        # recorded clamp provenance may not match the write_result of the most
+                        # recent (unused) write_pdep_network_file call. None (unknown provenance)
+                        # is returned, never raised, if the sidecar predates this field.
+                        t_grid_clamp=read_t_grid_clamp_record(sa_coefficients_path),
                     )
                     for warning in selection.warnings:
                         self.logger.warning(warning)

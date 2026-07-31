@@ -36,8 +36,8 @@ import warnings
 from dataclasses import dataclass, field
 from dataclasses import fields as dataclass_fields
 
-from t3.pdep.parser import (NetworkTextUnparseable, format_skipped_species, network_thermo_t_max,
-                            parse_pdep_network_file)
+from t3.pdep.parser import (NetworkTextUnparseable, TGridClampRecord, format_skipped_species,
+                            network_thermo_t_max, parse_pdep_network_file)
 from t3.utils.writer import METHOD_LINE_CANDIDATE_RE, format_clamped_t_max, rewrite_arkane_method_line
 
 logger = logging.getLogger(__name__)
@@ -469,12 +469,19 @@ class HybridNetworkResult:
                                 references.
         warnings (tuple): Human-readable warnings (e.g. a QM'd path reaction that carried no
                           ``kinetics = ...`` entry to drop in the first place).
+        t_grid_clamp (TGridClampRecord): Provenance for whether the T grid written to
+                                        ``dest_path`` was clamped down from what the source
+                                        network requested. See ``TGridClampRecord``'s docstring
+                                        for the full three-state design rationale (mirrors
+                                        ``t3.utils.writer.ArkaneNetworkWriteResult``'s identical
+                                        field).
     """
     dest_path: str
     qm_ts_labels: tuple
     ilt_ts_labels: tuple
     vendored_files: tuple
     warnings: tuple = field(default_factory=tuple)
+    t_grid_clamp: TGridClampRecord | None = None
 
 
 def write_hybrid_network_input_file(source_path: str,
@@ -682,7 +689,8 @@ def write_hybrid_network_input_file(source_path: str,
     for start, end, replacement in sorted(edits, key=lambda edit: edit[0], reverse=True):
         text = text[:start] + replacement + text[end:]
 
-    text = _rewrite_method_and_sensitivity(text=text, method=method, sensitivity=sensitivity, source_path=source_path)
+    text, t_grid_clamp = _rewrite_method_and_sensitivity(text=text, method=method, sensitivity=sensitivity,
+                                                         source_path=source_path)
 
     # Self-check: the generated network file's own text must itself be valid Python before it is
     # ever written to disk. A splice bug elsewhere in this module could otherwise hand back a
@@ -757,6 +765,7 @@ def write_hybrid_network_input_file(source_path: str,
         ilt_ts_labels=tuple(sorted(known_labels - set(qm_transition_states))),
         vendored_files=vendored_files,
         warnings=tuple(warnings_list),
+        t_grid_clamp=t_grid_clamp,
     )
 
 
@@ -1144,7 +1153,8 @@ def _kinetics_removal_edit(text: str, line_starts: list, kinetics_kw: ast.keywor
     return start, end, replacement
 
 
-def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool, source_path: str) -> str:
+def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool,
+                                    source_path: str) -> tuple[str, TGridClampRecord]:
     """
     Rewrite the ``method = '...'`` line and (optionally) inject a ``sensitivity_conditions``
     directive spanning the network's T/P extrema.
@@ -1170,7 +1180,10 @@ def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool, s
                    -- grid.
 
     Returns:
-        str: The rewritten text.
+        tuple: The rewritten text (str), and the ``TGridClampRecord`` provenance for whether the
+              T grid written was clamped down from what the source network requested. See
+              ``TGridClampRecord``'s docstring for the three-state ("clamped" / "not clamped" /
+              caller never asked -- N/A here, this function always computes and returns it) design.
     """
     # Computed once, from the SAME text this function rewrites (species(...) blocks are untouched
     # by the TS/reaction/header edits applied before this is called): this is the ceiling every
@@ -1209,6 +1222,12 @@ def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool, s
     t_min, t_max, t_count, p_min, p_max = None, None, None, None, None
     parse_tp = False
     method_rewrite_count = 0
+    # T-grid clamp provenance (mirrors t3.utils.writer.write_arkane_network_input_file's
+    # identical tracking; see TGridClampRecord's docstring for why "clamped" is a three-state
+    # design and why this is tracked at all): populated as the clamp decisions below are
+    # actually made, not inferred after the fact from the final t_max/t_count.
+    requested_t_max, clamped = None, False
+    tlist_dropped, tlist_original_highest = False, None
     for line in lines:
         skip_line = False
         if 'pressureDependence(' in line:
@@ -1218,6 +1237,7 @@ def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool, s
                 t_min = line.split('(')[1].split(',')[0]
             elif 'Tmax' in line and '(' in line:
                 t_max = line.split('(')[1].split(',')[0]
+                requested_t_max = float(t_max)
                 if thermo_t_max is not None and float(t_max) > thermo_t_max:
                     if t_min is None or thermo_t_max <= float(t_min):
                         raise ValueError(
@@ -1237,6 +1257,7 @@ def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool, s
                     comma_index = line.index(',', paren_index)
                     line = line[:paren_index + 1] + formatted_t_max + line[comma_index:]
                     t_max = formatted_t_max
+                    clamped = True
             elif 'Tcount' in line and '=' in line:
                 #     Tcount = 8,
                 t_count = line.split('=', 1)[1].split(',')[0].strip()
@@ -1294,6 +1315,8 @@ def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool, s
                             f"Tcount ({t_count}) instead of using this network's original (too-high) "
                             f"grid.")
                         skip_line = True
+                        tlist_dropped = True
+                        tlist_original_highest = float(highest)
             elif 'Pmin' in line and '(' in line:
                 p_min = line.split('(')[1].split(',')[0]
             elif 'Pmax' in line and '(' in line:
@@ -1320,7 +1343,16 @@ def _rewrite_method_and_sensitivity(text: str, method: str, sensitivity: bool, s
                          f"or ambiguous (more than one) method line, rather than silently solving with the "
                          f"source file's original method.")
 
-    return ''.join(new_lines)
+    t_grid_clamp = TGridClampRecord(
+        clamped=clamped,
+        requested_t_max=requested_t_max,
+        thermo_ceiling=thermo_t_max,
+        written_t_max=float(t_max) if t_max is not None else None,
+        tlist_dropped=tlist_dropped,
+        tlist_original_highest=tlist_original_highest,
+        skipped_species=tuple(ceiling.skipped) if ceiling is not None else tuple(),
+    )
+    return ''.join(new_lines), t_grid_clamp
 
 
 def _parse_as_ast(text: str, path: str) -> ast.Module:

@@ -25,7 +25,7 @@ from t3.pdep.api import (explore_pdep_network,
                          save_pdep_network_selections,
                          select_pdep_network,
                          )
-from t3.pdep.cache import hash_file, write_sa_cache_metadata
+from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
                                      EXPLORATION_STATUS_FAILED,
@@ -250,6 +250,77 @@ def test_select_pdep_network_validate_cache_false_reports_unvalidated(tmp_path):
                                     relative_threshold=0.001, method='MSC', validate_cache=False)
     assert selection.cache_status == CACHE_STATUS_UNVALIDATED
     assert selection.selected_ts  # a real decision was computed, not a cache-rejection placeholder
+
+
+# --- 5d. t_grid_clamp provenance threading through select_pdep_network --------------------------
+
+def test_select_pdep_network_records_t_grid_clamp_from_the_sa_sidecar(tmp_path):
+    """Test that select_pdep_network(sa_path=...) reads t_grid_clamp out of the SA cache sidecar
+    (via read_t_grid_clamp_record) and carries it on the returned decision -- the whole point of
+    persisting the clamp record is for a caller acting on a saved selection to be able to recover
+    it without re-reading the sidecar itself."""
+    network_path = str(tmp_path / 'network4_2.py')
+    with open(NETWORK_PATH, 'r') as f:
+        _write(network_path, f.read())
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    save_yaml_file(path=sa_path, content=read_yaml_file(path=SA_PATH))
+    clamp_record = {'clamped': True, 'requested_t_max': 3200.0, 'thermo_ceiling': 3000.0}
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', t_grid_clamp=clamp_record)
+
+    selection = select_pdep_network(network=network_path, sa_path=sa_path, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001, method='MSC')
+    assert selection.t_grid_clamp == clamp_record
+
+
+def test_select_pdep_network_records_no_t_grid_clamp_when_the_sidecar_has_none(tmp_path):
+    """Test that a valid sidecar that simply predates t_grid_clamp (the common case for every
+    sidecar written before this feature existed) yields t_grid_clamp=None on the decision, not a
+    refusal and not a fabricated 'not clamped' -- unknown provenance must stay unknown."""
+    network_path = str(tmp_path / 'network4_2.py')
+    with open(NETWORK_PATH, 'r') as f:
+        _write(network_path, f.read())
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    save_yaml_file(path=sa_path, content=read_yaml_file(path=SA_PATH))
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+
+    selection = select_pdep_network(network=network_path, sa_path=sa_path, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001, method='MSC')
+    assert selection.t_grid_clamp is None
+
+
+def test_select_pdep_network_records_no_t_grid_clamp_for_a_direct_sa_dict_call(sa_dict):
+    """Test that select_pdep_network(sa_dict=...) -- the no-sa_path, no-sidecar-at-all path used
+    e.g. when a caller already has SA data in memory -- records t_grid_clamp=None, since there is
+    no sidecar to read the provenance from in the first place."""
+    selection = select_pdep_network(network=NETWORK_PATH, sa_dict=sa_dict, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001)
+    assert selection.t_grid_clamp is None
+
+
+def test_select_pdep_network_records_t_grid_clamp_on_the_cache_rejected_placeholder(tmp_path):
+    """Test that even the CACHE_STATUS_CACHED_REJECTED early-return placeholder -- built at a
+    separate PDepNetworkSelection construction site from the normal evaluated path -- still carries
+    whatever t_grid_clamp the sidecar records, rather than silently dropping it on this path."""
+    network_path = str(tmp_path / 'network4_2.py')
+    with open(NETWORK_PATH, 'r') as f:
+        _write(network_path, f.read())
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    save_yaml_file(path=sa_path, content=read_yaml_file(path=SA_PATH))
+    clamp_record = {'clamped': False, 'requested_t_max': 2500.0}
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', t_grid_clamp=clamp_record)
+    # Deliberately rewrite the sidecar with a mismatching hash so the cache is rejected: force the
+    # CACHE_STATUS_CACHED_REJECTED early-return construction site rather than the normal path.
+    metadata_path = sa_cache_metadata_path(sa_path)
+    metadata = read_yaml_file(path=metadata_path)
+    metadata['network_file_hash'] = 'sha256:' + '0' * 64
+    save_yaml_file(path=metadata_path, content=metadata)
+
+    rejected = select_pdep_network(network=network_path, sa_path=sa_path, network_reaction=TARGET_REACTION,
+                                   relative_threshold=0.001, method='MSC')
+    assert rejected.cache_status == CACHE_STATUS_CACHED_REJECTED
+    assert rejected.t_grid_clamp == clamp_record
 
 
 # --- 5c. FIX 3: a bad threshold raises even on the cache-rejected early-return path --------------
@@ -1247,6 +1318,9 @@ def _build_full_selection():
         evaluation_status=EVALUATION_STATUS_EVALUATED,
         selection_schema_version=SELECTION_SCHEMA_VERSION,
         selection_algorithm_version=SELECTION_ALGORITHM_VERSION,
+        t_grid_clamp={'clamped': True, 'requested_t_max': 3200.0, 'thermo_ceiling': 3000.0,
+                     'written_t_max': 3000.0, 'tlist_dropped': False, 'tlist_original_highest': None,
+                     'skipped_species': []},
     )
 
 
@@ -1855,6 +1929,73 @@ def test_load_pdep_network_selections_accepts_a_null_cache_status(tmp_path):
     loaded = load_pdep_network_selections(path=path)
 
     assert loaded[0].cache_status is None
+
+
+def test_load_pdep_network_selections_reconstructs_a_present_t_grid_clamp(tmp_path):
+    """Test that a record carrying a real t_grid_clamp mapping reconstructs it as a fresh dict equal
+    to what was written -- the ordinary, fully-provenanced case."""
+    rendered = _build_full_selection().as_dict()
+    assert rendered['t_grid_clamp'] == {
+        'clamped': True, 'requested_t_max': 3200.0, 'thermo_ceiling': 3000.0,
+        'written_t_max': 3000.0, 'tlist_dropped': False, 'tlist_original_highest': None,
+        'skipped_species': [],
+    }
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded[0].t_grid_clamp == rendered['t_grid_clamp']
+
+
+def test_load_pdep_network_selections_defaults_a_missing_t_grid_clamp_key_to_none(tmp_path):
+    """Test that a record predating this field -- the key ABSENT entirely, not merely null --
+    reconstructs t_grid_clamp as None (unknown provenance) rather than raising or defaulting to
+    some other value. This is the exact scenario of an old on-disk selection written before
+    t_grid_clamp existed; it must keep loading, not be refused."""
+    rendered = _build_full_selection().as_dict()
+    del rendered['t_grid_clamp']
+    assert 't_grid_clamp' not in rendered
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded[0].t_grid_clamp is None
+    assert loaded[0].evaluation_status == EVALUATION_STATUS_EVALUATED, (
+        'a missing t_grid_clamp key must not gate evaluation_status')
+
+
+def test_load_pdep_network_selections_accepts_an_explicit_null_t_grid_clamp(tmp_path):
+    """Test that t_grid_clamp: null (explicit, as opposed to the key being absent) also
+    reconstructs to None -- the same unknown-provenance outcome as the absent-key case, since a
+    caller writing None explicitly and a caller from before the field existed must be
+    indistinguishable to a reader."""
+    rendered = _build_full_selection().as_dict()
+    rendered['t_grid_clamp'] = None
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded[0].t_grid_clamp is None
+
+
+def test_load_pdep_network_selections_refuses_a_non_mapping_t_grid_clamp(tmp_path):
+    """Test that a t_grid_clamp value that is neither a mapping nor null is refused as a genuine
+    malformation -- TGridClampRecord.as_dict() never renders anything else, so a string/list/number
+    here means the file was hand-edited or corrupted, not merely old."""
+    rendered = _build_full_selection().as_dict()
+    rendered['t_grid_clamp'] = 'not-a-dict'
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError, match='t_grid_clamp'):
+        load_pdep_network_selections(path=path)
 
 
 def test_load_pdep_network_selections_refuses_a_non_string_network_id(tmp_path):

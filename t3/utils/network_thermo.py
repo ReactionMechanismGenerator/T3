@@ -98,6 +98,76 @@ def _literal_or_none(node):
 
 
 @dataclass(frozen=True)
+class TGridClampRecord:
+    """
+    Provenance for whether a writer clamped the T grid it wrote to a network's own thermo ceiling.
+
+    A clamp (dropping the requested Tmax, and the explicit Tlist line if one was present, down to
+    the tightest species NASA thermo ceiling in the network) is necessary for a standalone Arkane
+    solve to succeed at all -- unclamped, Arkane refuses outright with "No valid NASA polynomial at
+    temperature ... K." -- but nothing durable used to distinguish a decision resting on this
+    clamped evidence from one resting on the network's original T grid; a ``logger.warning(...)``
+    at write time does not survive past the run. This record is what survives: it rides along with
+    the written file's other provenance (the SA cache sidecar, then the persisted selection) so a
+    saved decision is self-describing.
+
+    ``clamped`` is the deliberate three-state design: ``True``/``False`` here is an EXPLICIT
+    "clamp happened" / "no clamp was needed" recorded by a writer that actually ran this logic.
+    Provenance that is UNKNOWN (an old sidecar written before this field existed, or SA data
+    produced outside T3 entirely) is represented by this whole record being absent/``None`` at the
+    call site, never by a ``TGridClampRecord`` instance -- so "no clamp" and "don't know" can never
+    be confused with one another downstream.
+
+    Attributes:
+        clamped (bool): Whether the written Tmax (and, if present, the Tlist line) were clamped
+            down from what was requested. Always explicit -- never used to mean "unknown".
+        requested_t_max (float, optional): The Tmax the caller originally asked for (Kelvin),
+            before any clamp. ``None`` when not applicable (e.g. ``clamped`` is ``False`` and no
+            comparison was ever made, or the source Tmax could not be read).
+        thermo_ceiling (float, optional): The network's own minimum NASA thermo Tmax ceiling
+            (Kelvin), as computed by ``network_thermo_t_max``, that ``requested_t_max`` was
+            compared against. ``None`` when no ceiling could be computed (e.g. no species
+            contributed one, or the network text was unparseable).
+        written_t_max (float, optional): The Tmax actually written to the output file (Kelvin).
+            Equal to ``requested_t_max`` when ``clamped`` is ``False``.
+        tlist_dropped (bool): Whether an explicit ``Tlist`` line was dropped from the output
+            because one or more of its entries exceeded ``thermo_ceiling``.
+        tlist_original_highest (float, optional): The highest entry (Kelvin) in the dropped
+            ``Tlist``, or ``None`` when ``tlist_dropped`` is ``False``.
+        skipped_species (tuple[str, ...]): The ``NetworkThermoCeiling.skipped`` entries computed
+            while determining ``thermo_ceiling`` -- species whose own thermo ceiling could not be
+            read, so ``thermo_ceiling`` may be looser than the network's true ceiling. Rendered as
+            a ``list`` (not a ``tuple``) by ``as_dict()``, since a persisted ``PDepNetworkSelection``
+            field must survive a YAML save/load round trip, and a tuple does not.
+    """
+    clamped: bool
+    requested_t_max: float | None = None
+    thermo_ceiling: float | None = None
+    written_t_max: float | None = None
+    tlist_dropped: bool = False
+    tlist_original_highest: float | None = None
+    skipped_species: tuple[str, ...] = tuple()
+
+    def as_dict(self) -> dict:
+        """
+        Render this record as plain JSON/YAML-safe types.
+
+        Returns:
+            dict: A plain dict containing no tuples, safe to embed in a YAML sidecar or a
+                persisted ``PDepNetworkSelection`` record.
+        """
+        return {
+            'clamped': self.clamped,
+            'requested_t_max': self.requested_t_max,
+            'thermo_ceiling': self.thermo_ceiling,
+            'written_t_max': self.written_t_max,
+            'tlist_dropped': self.tlist_dropped,
+            'tlist_original_highest': self.tlist_original_highest,
+            'skipped_species': list(self.skipped_species),
+        }
+
+
+@dataclass(frozen=True)
 class NetworkThermoCeiling:
     """
     The result of ``network_thermo_t_max``: the computed ceiling, plus which species (if any)

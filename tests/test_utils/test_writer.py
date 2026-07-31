@@ -13,7 +13,9 @@ from arc.common import read_yaml_file
 
 from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH
 from t3.schema import InputBase, RMG, T3
+from t3.utils.network_thermo import TGridClampRecord
 from t3.utils.writer import (
+    ArkaneNetworkWriteResult,
     rewrite_arkane_method_line,
     to_camel_case,
     write_arkane_network_input_file,
@@ -500,6 +502,109 @@ def test_write_arkane_network_input_file_clamps_sensitivity_conditions_too(tmp_p
     assert 'sensitivity_conditions' in dest_text
     assert "(3200, 'K')" not in dest_text
     assert "(3000, 'K')" in dest_text
+
+
+def test_write_arkane_network_input_file_records_the_clamp_in_the_write_result(tmp_path):
+    """A clamp changes the ON-DISK Tmax/Tlist text (already covered above), but nothing durable
+    previously distinguished a PDepNetworkSelection resting on this clamped evidence from one
+    resting on the network's original T grid -- only a logger.warning() recorded it, which does
+    not survive past the run. write_arkane_network_input_file must return a TGridClampRecord
+    (via ArkaneNetworkWriteResult.t_grid_clamp) whose fields let a caller recover the original
+    (requested) Tmax, the thermo ceiling that forced the clamp, and the Tmax actually written --
+    not just the fact that *some* clamp happened."""
+    source_path = str(tmp_path / 'source_network.py')
+    with open(source_path, 'w') as f:
+        f.write(CLAMP_FIXTURE_TEXT)
+
+    dest_path = str(tmp_path / 'input.py')
+    write_result = write_arkane_network_input_file(source_path=source_path, dest_path=dest_path, method='CSE')
+
+    assert isinstance(write_result, ArkaneNetworkWriteResult)
+    record = write_result.t_grid_clamp
+    assert isinstance(record, TGridClampRecord)
+    assert record.clamped is True
+    assert record.requested_t_max == 3200.0
+    assert record.thermo_ceiling == 3000.0
+    assert record.written_t_max == 3000.0
+    assert record.tlist_dropped is False
+    assert record.tlist_original_highest is None
+    assert record.skipped_species == tuple()
+
+
+def test_write_arkane_network_input_file_records_tlist_drop_provenance(tmp_path):
+    """When an explicit, out-of-range Tlist line is dropped (see
+    test_write_arkane_network_input_file_drops_an_out_of_range_tlist_line for why this is
+    necessary), the write result must record that the Tlist was dropped and what its original
+    highest entry was -- otherwise a caller inspecting only 'clamped' and 'written_t_max' could
+    not tell a plain Tmax-line clamp apart from one that also had to discard a stale Tlist."""
+    source_path = str(tmp_path / 'source_network.py')
+    with open(source_path, 'w') as f:
+        f.write(TLIST_FIXTURE_TEXT)
+
+    dest_path = str(tmp_path / 'input.py')
+    write_result = write_arkane_network_input_file(source_path=source_path, dest_path=dest_path, method='CSE')
+
+    record = write_result.t_grid_clamp
+    assert record.clamped is True
+    assert record.tlist_dropped is True
+    assert record.tlist_original_highest == 3200.0
+
+
+def test_write_arkane_network_input_file_records_no_clamp_explicitly_when_none_is_needed(tmp_path):
+    """When the requested Tmax is already within the network's species thermo ceiling, nothing is
+    rewritten on disk (see test_write_arkane_network_input_file_does_not_rewrite_a_tmax_already_
+    within_the_thermo_ceiling) -- but the write result must still record 'clamped=False'
+    EXPLICITLY, as a positive recorded decision, not merely leave the record absent/None. A
+    downstream reader must be able to tell 'we checked and no clamp was needed' apart from
+    'we have no idea whether a clamp happened' (e.g. an old sidecar, or SA data produced outside
+    T3) -- conflating the two would let a clamped-but-unrecorded run look identical to a run that
+    was verified never to need clamping."""
+    within_ceiling_text = CLAMP_FIXTURE_TEXT.replace("Tmax = (3200,'K'),", "Tmax = (2500,'K'),")
+    source_path = str(tmp_path / 'source_network.py')
+    with open(source_path, 'w') as f:
+        f.write(within_ceiling_text)
+
+    dest_path = str(tmp_path / 'input.py')
+    write_result = write_arkane_network_input_file(source_path=source_path, dest_path=dest_path, method='CSE')
+
+    record = write_result.t_grid_clamp
+    assert record is not None
+    assert record.clamped is False
+    assert record.requested_t_max == 2500.0
+    assert record.thermo_ceiling == 3000.0
+    assert record.written_t_max == 2500.0
+    assert record.tlist_dropped is False
+    assert record.tlist_original_highest is None
+
+
+def test_write_arkane_network_input_file_records_skipped_species_in_the_clamp(tmp_path):
+    """When some species' thermo could not be read to contribute a ceiling reading (see
+    test_write_arkane_network_input_file_does_not_clamp_when_no_species_contributes_a_thermo_
+    ceiling for the all-skipped case), any species that WAS skipped while others still
+    contributed a usable ceiling must be named in the clamp record's skipped_species, since a
+    non-empty skipped set means the recorded thermo_ceiling may be higher than the network's true
+    (unknowable) ceiling -- a caller trusting the record blindly would otherwise never learn that
+    caveat."""
+    mixed_text = CLAMP_FIXTURE_TEXT.replace(
+        "thermo = NASA(polynomials=[NASAPolynomial(coeffs=[3.0,0,0,0,0,100,5], Tmin=(100,'K'), "
+        "Tmax=(1000,'K')), NASAPolynomial(coeffs=[4.0,0,0,0,0,100,5], Tmin=(1000,'K'), "
+        "Tmax=(6000,'K'))], Tmin=(100,'K'), Tmax=(6000,'K'), E0=(1,'kJ/mol'), "
+        "Cp0=(20,'J/(mol*K)'), CpInf=(30,'J/(mol*K)'), label=\"\"\"S2\"\"\", comment=\"\"\"\"\"\"),",
+        "thermo = ThermoData(Tdata=(([300,400,500,600,800,1000,1500],'K'), "
+        "[1,1,1,1,1,1,1]), Cp0=(20,'J/(mol*K)'), CpInf=(30,'J/(mol*K)'), "
+        "label=\"\"\"S2\"\"\", comment=\"\"\"\"\"\"),",
+    )
+    source_path = str(tmp_path / 'source_network.py')
+    with open(source_path, 'w') as f:
+        f.write(mixed_text)
+
+    dest_path = str(tmp_path / 'input.py')
+    write_result = write_arkane_network_input_file(source_path=source_path, dest_path=dest_path, method='CSE')
+
+    record = write_result.t_grid_clamp
+    assert record.thermo_ceiling == 3000.0
+    assert len(record.skipped_species) == 1
+    assert 'S2' in record.skipped_species[0]
 
 
 def test_write_arkane_network_input_file_does_not_rewrite_a_tmax_already_within_the_thermo_ceiling(tmp_path):

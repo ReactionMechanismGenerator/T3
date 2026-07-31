@@ -21,6 +21,8 @@ import builtins
 import hashlib
 import os
 import shutil
+import sys
+import types
 
 import pytest
 
@@ -215,6 +217,45 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
         assert selection.cache_status == CACHE_STATUS_GENERATED
         assert selection.qualified is True
 
+    def test_a_successful_arkane_run_records_the_rmg_py_provenance_in_the_sidecar(self, tmp_path, monkeypatch):
+        """When Arkane runs successfully, the sidecar T3 writes must carry the RMG-Py commit that
+        actually produced the sensitivity analysis, read out of the arkane.log Arkane leaves in the
+        output directory -- a stale real run went undetected for a week because this field was
+        never populated by the only production caller (t3/main.py). The log is the only witness
+        available: ARC runs Arkane in a subprocess in a different conda environment, so the RMG-Py
+        that did the work is never loaded into this interpreter and cannot be introspected here."""
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_dict = _build_sa_dict(t3)
+        rmg_py_commit = 'e720866ae94eca51652978c15a0fb33c6827be67'
+
+        def _fake_run_arkane_job(input_file, output_directory, plot=True, logger=None, **kwargs):
+            sensitivity_dir = os.path.join(output_directory, 'sensitivity')
+            os.makedirs(sensitivity_dir, exist_ok=True)
+            save_yaml_file(os.path.join(sensitivity_dir, 'sa_coefficients.yml'), sa_dict)
+            # The stanza Arkane really writes: the hash is on the line after the label, and the
+            # line after that is a date.
+            with open(os.path.join(output_directory, 'arkane.log'), 'w') as f:
+                f.write(f'Arkane execution initiated at Sat Aug  1 17:28:25 2026\n\n'
+                        f'The current git HEAD for RMG-Py is:\n'
+                        f'\t{rmg_py_commit}\n'
+                        f'\tFri Jul 31 17:25:49 2026 +0300\n')
+            return True
+
+        monkeypatch.setattr(t3_main, 'run_arkane_job', _fake_run_arkane_job)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        selection = t3.pdep_network_selections[0]
+        assert selection.cache_status == CACHE_STATUS_GENERATED
+        assert selection.qualified is True
+
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        assert os.path.isfile(sa_path)
+        metadata = read_yaml_file(sa_cache_metadata_path(sa_path))
+        assert metadata['rmg_py_commit'] == rmg_py_commit, \
+            'The sidecar must record the RMG-Py commit that actually ran Arkane, not null.'
+
     def test_qualified_and_network_id_agree_with_direct_selector_call(self, tmp_path, monkeypatch):
         """The wiring's decision must agree with select_from_sa_dict() called directly."""
         t3 = _build_t3(tmp_path)
@@ -248,6 +289,72 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
 
         assert selection.network_id == direct_selection.network_id == NETWORK_NAME
         assert selection.qualified == direct_selection.qualified is True
+
+    def test_cached_valid_path_threads_t_grid_clamp_from_the_sidecar(self, tmp_path, monkeypatch):
+        """The cached-valid wiring path reads ``t_grid_clamp`` from the sidecar via
+        ``read_t_grid_clamp_record`` and threads it onto the resulting selection, so a saved
+        ``PDepNetworkSelection`` remains self-describing about T-grid clamping even when Arkane
+        is never re-invoked (pure cache reuse).
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _build_sa_dict(t3))
+        clamp_record = {'clamped': True,
+                         'requested_t_max': 3200.0,
+                         'thermo_ceiling': 3000.0,
+                         'written_t_max': 3000.0,
+                         'tlist_dropped': True,
+                         'tlist_original_highest': 3200.0,
+                         'skipped_species': ['spcA'],
+                         }
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                t_grid_clamp=clamp_record,
+                                )
+
+        def _fail_if_called(*args, **kwargs):
+            pytest.fail('run_arkane_job should not be invoked when a valid cache is present.')
+
+        monkeypatch.setattr(t3_main, 'run_arkane_job', _fail_if_called)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert len(t3.pdep_network_selections) == 1
+        selection = t3.pdep_network_selections[0]
+        assert selection.cache_status == CACHE_STATUS_CACHED_VALID
+        assert selection.t_grid_clamp == clamp_record
+
+    def test_cached_valid_path_records_no_t_grid_clamp_when_the_sidecar_has_none(self, tmp_path, monkeypatch):
+        """A sidecar written without a ``t_grid_clamp`` key (or an older sidecar predating this
+        feature) must surface as ``None`` (unknown provenance), never as some other value, and
+        must not cause the selection to be rejected or marked ``not_evaluated``.
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _build_sa_dict(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+
+        def _fail_if_called(*args, **kwargs):
+            pytest.fail('run_arkane_job should not be invoked when a valid cache is present.')
+
+        monkeypatch.setattr(t3_main, 'run_arkane_job', _fail_if_called)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        selection = t3.pdep_network_selections[0]
+        assert selection.cache_status == CACHE_STATUS_CACHED_VALID
+        assert selection.t_grid_clamp is None
+        assert selection.qualified is True
 
 
 class TestQueuePdepTransitionStates(object):

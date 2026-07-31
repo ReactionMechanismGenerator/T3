@@ -34,7 +34,7 @@ import yaml
 
 from arc.common import save_yaml_file
 
-from t3.pdep.cache import validate_sa_cache
+from t3.pdep.cache import read_t_grid_clamp_record, validate_sa_cache
 from t3.pdep.explorer.config import PDepExplorerConfig, deep_thaw
 from t3.pdep.explorer.factory import explorer_factory
 from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
@@ -165,6 +165,10 @@ def select_pdep_network(network: str | PDepNetwork,
 
     cache_status = None
     cache_warnings: list = list()
+    # Best-effort provenance read: sa_path may point at a sidecar predating this field, or at SA
+    # data produced outside T3 entirely, in which case read_t_grid_clamp_record returns None
+    # (unknown provenance) rather than raising -- this must never gate evaluation_status.
+    t_grid_clamp = read_t_grid_clamp_record(sa_path) if sa_path is not None else None
     if sa_dict is None:
         if validate_cache:
             cache_status, cache_warnings = validate_sa_cache(
@@ -178,6 +182,7 @@ def select_pdep_network(network: str | PDepNetwork,
                     method=method,
                     sa_path=sa_path,
                     cache_status=cache_status,
+                    t_grid_clamp=t_grid_clamp,
                     thresholds={'relative_threshold': relative_threshold,
                                 'min_delta_ln_k': min_delta_ln_k,
                                 'perturbation': perturbation,
@@ -200,14 +205,14 @@ def select_pdep_network(network: str | PDepNetwork,
         return select_from_sa_dict(sa_dict=sa_dict, network=parsed_network, network_reaction=network_reaction,
                                    relative_threshold=relative_threshold, min_delta_ln_k=min_delta_ln_k,
                                    perturbation=perturbation, method=method, sa_path=sa_path,
-                                   cache_status=cache_status)
+                                   cache_status=cache_status, t_grid_clamp=t_grid_clamp)
 
     reaction_keys = [key for key in sa_dict.keys() if key != STRUCTURES_KEY and isinstance(key, str)] \
         if isinstance(sa_dict, dict) else list()
     decisions = [select_from_sa_dict(sa_dict=sa_dict, network=parsed_network, network_reaction=key,
                                      relative_threshold=relative_threshold, min_delta_ln_k=min_delta_ln_k,
                                      perturbation=perturbation, method=method, sa_path=sa_path,
-                                     cache_status=cache_status)
+                                     cache_status=cache_status, t_grid_clamp=t_grid_clamp)
                  for key in reaction_keys]
     if not decisions:
         selection = PDepNetworkSelection(
@@ -216,6 +221,7 @@ def select_pdep_network(network: str | PDepNetwork,
             method=method,
             sa_path=sa_path,
             cache_status=cache_status,
+            t_grid_clamp=t_grid_clamp,
             thresholds={'relative_threshold': relative_threshold,
                         'min_delta_ln_k': min_delta_ln_k,
                         'perturbation': perturbation,
@@ -995,6 +1001,42 @@ def _require_thresholds_field(record: dict, key: str, *, path: str, context: str
            for sub_key, sub_value in value.items()}
 
 
+def _require_optional_dict_field(record: dict, key: str, *, path: str, context: str) -> dict | None:
+    """
+    Fetch ``record.get(key)`` and require it to be a mapping or ``None`` -- and, unlike every other
+    ``_require_*_field`` helper, tolerate the key being ABSENT entirely rather than refusing.
+
+    This is deliberately looser than ``_require_thresholds_field``/``_require_record_field``: it
+    backs ``PDepNetworkSelection.t_grid_clamp``, whose whole point is a three-state design (see that
+    field's docstring) where "the key was never written" (an old sidecar/selection predating this
+    field) must read as unknown provenance (``None``), the SAME as an explicit ``null`` -- never as a
+    refusal. A record that DOES carry the key but with a non-mapping, non-null value is still a
+    genuine malformation and is refused, since ``TGridClampRecord.as_dict()`` never renders anything
+    else.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If the key is present with a value that is neither a mapping nor ``None``.
+
+    Returns:
+        dict, optional: ``record[key]`` as a fresh ``dict``, or ``None`` if the key is absent or
+            explicitly ``null``.
+    """
+    if key not in record:
+        return None
+    value = record[key]
+    if value is not None and not isinstance(value, dict):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a mapping or "
+                         f"null (got {type(value).__name__}: {value!r}).")
+    return dict(value) if value is not None else None
+
+
 def _sensitive_transition_state_from_dict(record: dict, *, path: str,
                                           context: str) -> SensitiveTransitionState:
     """
@@ -1157,6 +1199,7 @@ def _selection_from_dict(record, *, path: str, context: str,
            allowed=(EVALUATION_STATUS_EVALUATED, EVALUATION_STATUS_NOT_EVALUATED)),
         selection_schema_version=record['selection_schema_version'],
         selection_algorithm_version=record['selection_algorithm_version'],
+        t_grid_clamp=_require_optional_dict_field(record, 't_grid_clamp', path=path, context=context),
     )
     _validate_selection_cross_field_invariants(selection, path=path, context=context)
     return selection

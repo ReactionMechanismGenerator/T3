@@ -24,6 +24,7 @@ from t3.pdep.hashing import hash_bytes
 # import from t3.utils.writer, so t3.utils.writer cannot import from t3.pdep in turn).
 from t3.utils.network_thermo import (NetworkTextUnparseable,  # noqa: F401
                                      NetworkThermoCeiling,  # noqa: F401
+                                     TGridClampRecord,  # noqa: F401
                                      format_skipped_species,  # noqa: F401
                                      network_thermo_t_max)  # noqa: F401
 

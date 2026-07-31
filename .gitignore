@@ -156,3 +156,7 @@ docs/t3-pdep-qm-scope.md
 docs/t3-pdep-qm-impl-plan.md
 docs/t3-pdep-qm-next-session-prompt.md
 docs/t3-pdep-qm-explorer-design.md
+
+# Vendored test fixtures are real Arkane output and must be tracked, despite the *.log rule
+# above which exists to keep run logs out of the repo.
+!tests/data/pdep_arkane_log/*.log

@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shutil
+from dataclasses import dataclass
 
 from mako.template import Template
 
@@ -14,7 +15,7 @@ from arc.species.perceive import perceive_molecule_from_xyz
 
 from t3.chem import T3Species
 from t3.utils.generator import generate_radicals
-from t3.utils.network_thermo import format_skipped_species, network_thermo_t_max
+from t3.utils.network_thermo import TGridClampRecord, format_skipped_species, network_thermo_t_max
 
 METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
               'RS': 'reservoir state',
@@ -22,6 +23,28 @@ METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
               }
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ArkaneNetworkWriteResult:
+    """
+    The result of writing an Arkane network input file: the isomer labels the writer's own
+    callers already needed, plus the T-grid clamp provenance that used to only exist as a
+    ``logger.warning(...)`` line and did not survive past the run. Bundled together (rather than
+    changing ``write_arkane_network_input_file`` to return a bare tuple of two things) so that
+    every existing caller's ``x = write_arkane_network_input_file(...)`` call site fails loudly
+    and unambiguously if it is not updated to use ``.isomer_labels``, instead of silently
+    unpacking a differently-shaped tuple.
+
+    Attributes:
+        isomer_labels (tuple): Isomer labels of the current network, as previously returned bare.
+        t_grid_clamp (TGridClampRecord): Provenance for whether the T grid written to
+            ``dest_path`` was clamped down from what was requested. See ``TGridClampRecord``'s
+            docstring for the full three-state ("clamped" / "not clamped" / caller never asked,
+            i.e. this whole result is simply absent) design rationale.
+    """
+    isomer_labels: tuple
+    t_grid_clamp: TGridClampRecord
 
 
 def format_clamped_t_max(value: float) -> str:
@@ -421,7 +444,7 @@ def write_arkane_network_input_file(source_path: str,
                                     dest_path: str,
                                     method: str,
                                     sensitivity: bool = True,
-                                    ) -> tuple:
+                                    ) -> ArkaneNetworkWriteResult:
     """
     Rewrite an RMG P-dep network file into an Arkane network input file.
 
@@ -442,7 +465,8 @@ def write_arkane_network_input_file(source_path: str,
         ValueError: If T/P ranges could not be parsed from the file.
 
     Returns:
-        tuple: Isomer labels of the current network.
+        ArkaneNetworkWriteResult: The current network's isomer labels, plus T-grid clamp
+            provenance (see ``TGridClampRecord``).
     """
     dest_dir = os.path.dirname(dest_path)
     if dest_dir and not os.path.isdir(dest_dir):
@@ -471,6 +495,11 @@ def write_arkane_network_input_file(source_path: str,
         t_min, t_max, t_count, p_min, p_max = None, None, None, None, None
         parse_tp, parse_isomers = False, (False, False)
         method_rewrite_count = 0
+        # T-grid clamp provenance (see TGridClampRecord's docstring for why "clamped" is a
+        # three-state design and why this is tracked at all): populated as the clamp decisions
+        # below are actually made, not inferred after the fact from the final t_max/t_count.
+        requested_t_max, clamped = None, False
+        tlist_dropped, tlist_original_highest = False, None
         for line in lines:
             skip_line = False
             if 'pressureDependence(' in line:
@@ -488,6 +517,7 @@ def write_arkane_network_input_file(source_path: str,
                 elif 'Tmax' in line and '(' in line:
                     #     Tmax = (2200, 'K'),
                     t_max = line.split('(')[1].split(',')[0]
+                    requested_t_max = float(t_max)
                     if thermo_t_max is not None and float(t_max) > thermo_t_max:
                         # The pdep grid asks for a temperature no species' NASA thermo is valid
                         # to; standalone Arkane refuses this outright ("No valid NASA polynomial
@@ -514,6 +544,7 @@ def write_arkane_network_input_file(source_path: str,
                         comma_index = line.index(',', paren_index)
                         line = line[:paren_index + 1] + formatted_t_max + line[comma_index:]
                         t_max = formatted_t_max
+                        clamped = True
                 elif 'Tcount' in line and '=' in line:
                     #     Tcount = 8,
                     t_count = line.split('=', 1)[1].split(',')[0].strip()
@@ -571,6 +602,8 @@ def write_arkane_network_input_file(source_path: str,
                                 f"Tmax ({t_max} K) / Tcount ({t_count}) instead of using this "
                                 f"network's original (too-high) grid.")
                             skip_line = True
+                            tlist_dropped = True
+                            tlist_original_highest = float(highest)
                 elif 'Pmin' in line and '(' in line:
                     #     Pmin = (0.01, 'bar'),
                     p_min = line.split('(')[1].split(',')[0]
@@ -608,14 +641,23 @@ def write_arkane_network_input_file(source_path: str,
     with open(dest_path, 'w') as f:
         f.writelines(new_lines)
 
-    return tuple(isomer_labels)
+    t_grid_clamp = TGridClampRecord(
+        clamped=clamped,
+        requested_t_max=requested_t_max,
+        thermo_ceiling=thermo_t_max,
+        written_t_max=float(t_max) if t_max is not None else None,
+        tlist_dropped=tlist_dropped,
+        tlist_original_highest=tlist_original_highest,
+        skipped_species=tuple(ceiling.skipped),
+    )
+    return ArkaneNetworkWriteResult(isomer_labels=tuple(isomer_labels), t_grid_clamp=t_grid_clamp)
 
 
 def write_pdep_network_file(network_name: str,
                             method: str,
                             pdep_sa_path: str,
                             rmg_pdep_path: str,
-                            ) -> tuple:
+                            ) -> ArkaneNetworkWriteResult:
     """
     Adding a P-dep SA directive to an Arkane network input file.
 
@@ -630,7 +672,8 @@ def write_pdep_network_file(network_name: str,
         ValueError: If T/P ranges could not be parsed from the file.
 
     Returns:
-        tuple: Isomer labels of the current network.
+        ArkaneNetworkWriteResult: The current network's isomer labels, plus T-grid clamp
+            provenance (see ``TGridClampRecord``).
     """
     sa_pdep_path = os.path.join(pdep_sa_path, network_name, method)
     input_file_path = os.path.join(sa_pdep_path, 'input.py')

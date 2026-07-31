@@ -956,6 +956,7 @@ def _make_full_decision(direction_key='A + B <=> C', direction_ambiguous=False, 
     decision.direction_ambiguous = direction_ambiguous
     decision.network_reactions_examined = 1
     decision.network_source_hash = network_source_hash
+    decision.t_grid_clamp = {'clamped': True}
     if evaluation_status is not None:
         decision.evaluation_status = evaluation_status
     return decision
@@ -1068,6 +1069,9 @@ _COMBINE_EXPECTED = {
     # only mean something is deeply wrong (see combine()'s own comment).
     'selection_schema_version': lambda value: value == SELECTION_SCHEMA_VERSION,
     'selection_algorithm_version': lambda value: value == SELECTION_ALGORITHM_VERSION,
+    # Identity, like sa_path/method: taken from the first decision (deep-copied, not aliased),
+    # matching how thresholds is combined -- see combine()'s own comment.
+    't_grid_clamp': lambda value: value == {'clamped': True},
 }
 
 
@@ -1210,6 +1214,52 @@ def test_select_from_sa_dict_records_the_parsed_network_source_hash(sa_dict, net
                                     relative_threshold=0.001)
     assert selection.network_source_hash == network.source_hash
     assert selection.network_source_hash.startswith('sha256:')
+
+
+def test_select_from_sa_dict_threads_t_grid_clamp_onto_the_decision(sa_dict, network):
+    """Test that ``select_from_sa_dict``'s ``t_grid_clamp`` argument reaches the returned decision.
+
+    ``select_from_sa_dict`` builds a ``PDepNetworkSelection`` at two separate construction sites --
+    the early not-evaluated-return path and the normal evaluated path. The target reaction used by
+    this fixture takes the normal evaluated path; a sibling test in test_api.py/test_cache.py covers
+    the not-evaluated path. If a future edit forgot to thread ``t_grid_clamp`` through to the
+    construction site actually reached here, the provenance would silently vanish from every
+    evaluated decision.
+    """
+    clamp_record = {'clamped': True, 'requested_t_max': 3200.0, 'thermo_ceiling': 3000.0}
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001, t_grid_clamp=clamp_record)
+    assert selection.t_grid_clamp == clamp_record
+
+
+def test_select_from_sa_dict_defaults_t_grid_clamp_to_none(sa_dict, network):
+    """Test that omitting ``t_grid_clamp`` records unknown provenance (``None``), not some other
+    default -- a caller that doesn't have a clamp record (e.g. SA evidence produced outside T3)
+    must not have that silently misrepresented as an explicit 'not clamped' or an empty dict.
+    """
+    selection = select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=TARGET_REACTION,
+                                    relative_threshold=0.001)
+    assert selection.t_grid_clamp is None
+
+
+def test_as_dict_deep_copies_t_grid_clamp_rather_than_aliasing_it():
+    """Test that ``PDepNetworkSelection.as_dict()`` hands out an independent copy of
+    ``t_grid_clamp``, not a reference to the live dict -- same defect class as thresholds/warnings/
+    selected_ts leaking their live containers, closed elsewhere in this file. Mutating the rendered
+    dict (as a YAML dumper or a caller might) must never rewrite the decision's own record.
+    """
+    live_clamp = {'clamped': True, 'requested_t_max': 3200.0, 'skipped_species': ['S2']}
+    decision = PDepNetworkSelection(network_id='net1', t_grid_clamp=live_clamp)
+    rendered = decision.as_dict()
+
+    assert rendered['t_grid_clamp'] is not live_clamp, 'as_dict() handed out the live t_grid_clamp dict.'
+    rendered['t_grid_clamp']['clamped'] = False
+    rendered['t_grid_clamp']['skipped_species'].append('injected')
+    assert decision.t_grid_clamp == {
+        'clamped': True, 'requested_t_max': 3200.0, 'skipped_species': ['S2'],
+    }, f'The live t_grid_clamp was rewritten via as_dict() output: {decision.t_grid_clamp!r}.'
+
+
 def test_as_dict_does_not_hand_out_the_conditions_nested_objects():
     """Test that mutating a nested object inside the ``condition`` rendered by
     ``SensitiveTransitionState.as_dict()`` cannot reach the live record.

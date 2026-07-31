@@ -217,6 +217,16 @@ class PDepNetworkSelection:
         selection_algorithm_version (int): The decision SEMANTICS this record was produced by; see
             ``SELECTION_ALGORITHM_VERSION``. A field for the same two reasons as
             ``selection_schema_version`` above.
+        t_grid_clamp (dict, optional): ``TGridClampRecord.as_dict()`` provenance for whether the
+            Arkane SA T grid this decision rests on was clamped down from the network's original
+            grid (see ``t3.utils.network_thermo.TGridClampRecord``). THREE states, not two:
+            ``None`` means unknown provenance -- an old sidecar written before this field existed,
+            or SA data produced outside T3 entirely -- and must never be read as "not clamped";
+            a dict with ``'clamped': False`` means clamping was considered and explicitly did not
+            apply; a dict with ``'clamped': True`` means the SA evidence backing this decision was
+            computed over a narrower T range than the network's own thermo would otherwise allow.
+            Missing/unknown provenance must never cause ``evaluation_status`` to become
+            ``'not_evaluated'`` or any other refusal -- this field is purely descriptive.
     """
     network_id: str
     network_source_hash: str | None = None
@@ -236,6 +246,7 @@ class PDepNetworkSelection:
     evaluation_status: str = EVALUATION_STATUS_EVALUATED
     selection_schema_version: int = SELECTION_SCHEMA_VERSION
     selection_algorithm_version: int = SELECTION_ALGORITHM_VERSION
+    t_grid_clamp: dict | None = None
 
     def uncertain_ts_labels(self) -> list:
         """
@@ -326,6 +337,7 @@ class PDepNetworkSelection:
             'evaluation_status': self.evaluation_status,
             'selection_schema_version': self.selection_schema_version,
             'selection_algorithm_version': self.selection_algorithm_version,
+            't_grid_clamp': copy.deepcopy(self.t_grid_clamp),
         }
 
     @classmethod
@@ -468,6 +480,7 @@ class PDepNetworkSelection:
             network_reactions_examined=len(decisions),
             selection_schema_version=first.selection_schema_version,
             selection_algorithm_version=first.selection_algorithm_version,
+            t_grid_clamp=copy.deepcopy(first.t_grid_clamp),
         )
         # ``evaluation_status`` is NOT allowed to fall back to the dataclass default here: a fresh
         # PDepNetworkSelection is 'evaluated', so combining components that were never evaluated used
@@ -633,6 +646,7 @@ def select_from_sa_dict(sa_dict: dict,
                         method: str | None = None,
                         sa_path: str | None = None,
                         cache_status: str | None = None,
+                        t_grid_clamp: dict | None = None,
                         ) -> PDepNetworkSelection:
     """
     Decide whether a PDep network qualifies for QM refinement (criterion (b)).
@@ -652,6 +666,9 @@ def select_from_sa_dict(sa_dict: dict,
         method (str, optional): The master-equation method used, recorded on the decision.
         sa_path (str, optional): The path the SA dictionary was read from, recorded on the decision.
         cache_status (str, optional): How the SA data was obtained, recorded on the decision.
+        t_grid_clamp (dict, optional): ``TGridClampRecord.as_dict()`` provenance for whether the
+            SA evidence's T grid was clamped, recorded verbatim on the decision. ``None`` means
+            unknown provenance, not "not clamped" -- see ``PDepNetworkSelection``'s docstring.
 
     Raises:
         ValueError: If ``relative_threshold``, ``min_delta_ln_k``, or ``perturbation`` is
@@ -670,6 +687,7 @@ def select_from_sa_dict(sa_dict: dict,
             method=method,
             sa_path=sa_path,
             cache_status=cache_status,
+            t_grid_clamp=t_grid_clamp,
             thresholds={'relative_threshold': relative_threshold,
                         'min_delta_ln_k': min_delta_ln_k,
                         'perturbation': perturbation,
@@ -691,6 +709,7 @@ def select_from_sa_dict(sa_dict: dict,
         method=method,
         sa_path=sa_path,
         cache_status=cache_status,
+        t_grid_clamp=t_grid_clamp,
         thresholds={'relative_threshold': relative_threshold,
                     'min_delta_ln_k': min_delta_ln_k,
                     'perturbation': perturbation,

@@ -11,10 +11,13 @@ import pytest
 
 from arc.common import read_yaml_file, save_yaml_file
 
+from t3.common import TEST_DATA_BASE_PATH
 from t3.pdep.cache import (SA_CACHE_CONTRACT_VERSION,
                           SA_CACHE_METADATA_FILE_NAME,
                           hash_file,
                           max_abs_ts_coefficient,
+                          read_arkane_log_rmg_py_commit,
+                          read_t_grid_clamp_record,
                           sa_cache_metadata_path,
                           validate_sa_cache,
                           write_sa_cache_metadata,
@@ -402,3 +405,206 @@ def test_hash_file_stable_for_identical_content_and_differs_for_changed_content(
 
     _write(path_b, 'different content\n')
     assert hash_file(path=path_a) != hash_file(path=path_b)
+
+
+# --- 23. t_grid_clamp provenance in the sidecar -------------------------------------------------
+
+def test_write_sa_cache_metadata_persists_t_grid_clamp_when_supplied(tmp_path):
+    """A clamp decision made at write time (see t3.utils.network_thermo.TGridClampRecord) must
+    survive past the run: when a caller supplies ``t_grid_clamp``, write_sa_cache_metadata must
+    persist it into the sidecar under the ``t_grid_clamp`` key so a saved PDepNetworkSelection can
+    later be traced back to whether its SA evidence rested on a clamped T grid."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    clamp_record = {'clamped': True, 'requested_t_max': 3200.0, 'thermo_ceiling': 3000.0,
+                    'written_t_max': 3000.0, 'tlist_dropped': False, 'tlist_original_highest': None,
+                    'skipped_species': []}
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', t_grid_clamp=clamp_record)
+
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert metadata['t_grid_clamp'] == clamp_record
+
+
+def test_write_sa_cache_metadata_omits_t_grid_clamp_key_entirely_when_not_supplied(tmp_path):
+    """When no ``t_grid_clamp`` is supplied (the default), the sidecar must NOT gain a
+    ``t_grid_clamp`` key at all -- not a ``None``/null value. A missing key and an explicit null
+    both currently read back as 'unknown' via read_t_grid_clamp_record, but the sidecar itself
+    must reflect 'this caller never supplied one', matching how a pre-existing (old) sidecar
+    written before this feature existed would look, so the two situations stay indistinguishable
+    from a caller who never asked for the field to begin with."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert 't_grid_clamp' not in metadata
+
+
+def test_read_t_grid_clamp_record_round_trips_a_written_record(tmp_path):
+    """The read side of the sidecar provenance must recover exactly what the write side put
+    there, for both the clamped and the explicit not-clamped cases -- otherwise a
+    PDepNetworkSelection reconstructed from this record could misreport its own T-grid
+    provenance."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    not_clamped_record = {'clamped': False, 'requested_t_max': 2500.0, 'thermo_ceiling': 3000.0,
+                          'written_t_max': 2500.0, 'tlist_dropped': False,
+                          'tlist_original_highest': None, 'skipped_species': []}
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', t_grid_clamp=not_clamped_record)
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) == not_clamped_record
+
+
+def test_read_t_grid_clamp_record_returns_none_for_a_sidecar_missing_the_key(tmp_path):
+    """An 'old' sidecar -- written before this feature existed, i.e. lacking the ``t_grid_clamp``
+    key entirely -- must read back as ``None`` (unknown provenance), NEVER as a value that could
+    be mistaken for 'no clamp happened'. Conflating 'the key is absent' with 'clamped=False' would
+    silently claim a verified-unclamped T grid for data that was never checked at all."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) is None
+
+
+def test_read_t_grid_clamp_record_returns_none_when_no_sidecar_exists(tmp_path):
+    """No sidecar at all (e.g. SA output produced entirely outside T3) must also read as
+    ``None``, exactly like the missing-key case -- read_t_grid_clamp_record never raises for this,
+    since it exists purely to disclose provenance, not to gate anything."""
+    sa_path = str(tmp_path / 'sa_coefficients.yml')  # no sidecar ever written next to this
+    assert read_t_grid_clamp_record(sa_path=sa_path) is None
+
+
+def test_read_t_grid_clamp_record_returns_none_for_unparseable_sidecar(tmp_path):
+    """A sidecar that exists but is not valid YAML must also collapse to ``None`` rather than
+    raising -- read_t_grid_clamp_record is a best-effort disclosure helper, and a caller consulting
+    provenance for a broken sidecar should see 'unknown', the same outcome as if the sidecar were
+    simply absent, not an exception it would need to specially handle."""
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write(sa_path, 'irrelevant\n')
+    metadata_path = sa_cache_metadata_path(sa_path=sa_path)
+    _write(metadata_path, '{not: [valid, yaml')
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) is None
+
+
+def test_read_t_grid_clamp_record_returns_none_when_metadata_is_not_a_dict(tmp_path):
+    """A sidecar whose top-level YAML content parses but is not a mapping (e.g. a bare list or
+    scalar -- corrupted or hand-edited) must also collapse to ``None``, not raise or attempt a
+    ``.get()`` on a non-dict."""
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write(sa_path, 'irrelevant\n')
+    metadata_path = sa_cache_metadata_path(sa_path=sa_path)
+    save_yaml_file(path=metadata_path, content=['not', 'a', 'dict'])
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) is None
+
+
+def test_read_t_grid_clamp_record_returns_none_when_t_grid_clamp_value_is_not_a_dict(tmp_path):
+    """If the ``t_grid_clamp`` key is present but its value is not itself a dict (e.g. hand-edited
+    to a string or a bare boolean), that is not usable provenance -- read_t_grid_clamp_record must
+    treat it the same as absent (``None``) rather than returning a malformed value a caller would
+    then try to index into."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+    metadata_path = sa_cache_metadata_path(sa_path=sa_path)
+    metadata = read_yaml_file(metadata_path)
+    metadata['t_grid_clamp'] = 'not-a-dict'
+    save_yaml_file(path=metadata_path, content=metadata)
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) is None
+
+
+# --- read_arkane_log_rmg_py_commit (RMG-Py provenance) --------------------------------------------
+#
+# Arkane does NOT run in T3's process: ARC's run_arkane shells out to
+# ``micromamba run -n rmg_env python -m arkane input.py``, in a different conda environment. So the
+# RMG-Py that produced an SA cannot be identified by introspecting this interpreter -- the only
+# witness is the log Arkane itself writes into the output directory T3 controls.
+
+ARKANE_LOG_PATH = os.path.join(TEST_DATA_BASE_PATH, 'pdep_arkane_log', 'arkane.log')
+REAL_RMG_PY_COMMIT = 'e720866ae94eca51652978c15a0fb33c6827be67'
+
+
+def test_read_arkane_log_rmg_py_commit_parses_a_real_arkane_log():
+    """Test that the real commit is recovered from a genuine Arkane log. The SHA is not on the
+    label line but on the line AFTER it, and the line after THAT is a date -- so a parser that
+    takes the label line, or greps a single line, or takes every following line, gets nothing or
+    garbage."""
+    assert read_arkane_log_rmg_py_commit(ARKANE_LOG_PATH) == REAL_RMG_PY_COMMIT
+
+
+def test_read_arkane_log_rmg_py_commit_does_not_return_the_rmg_database_commit():
+    """Test that the RMG-database stanza, which shares the 'current git HEAD for' prefix and
+    appears a few lines later in the same file, is not mistaken for the RMG-Py commit."""
+    result = read_arkane_log_rmg_py_commit(ARKANE_LOG_PATH)
+    assert result != '608f412ed7c109ed155dd877e13cd8959324e424'
+
+
+def test_read_arkane_log_rmg_py_commit_returns_none_when_the_log_is_missing(tmp_path):
+    """Test that a missing log yields None rather than raising: an Arkane job that died before
+    writing its log must not crash the T3 iteration that is merely recording provenance."""
+    assert read_arkane_log_rmg_py_commit(str(tmp_path / 'nonexistent' / 'arkane.log')) is None
+
+
+def test_read_arkane_log_rmg_py_commit_returns_none_when_the_value_is_not_a_sha(tmp_path):
+    """Test that a label followed by something that is not a commit hash yields None. Recording an
+    arbitrary log line as a commit would be worse than recording nothing, because it would look
+    like real provenance to whoever audits the sidecar later."""
+    log_path = str(tmp_path / 'arkane.log')
+    _write(log_path, 'The current git HEAD for RMG-Py is:\n\tnot-a-commit-hash\n')
+    assert read_arkane_log_rmg_py_commit(log_path) is None
+
+
+def test_read_arkane_log_rmg_py_commit_returns_none_when_the_label_is_absent(tmp_path):
+    """Test that a log with no RMG-Py git-HEAD stanza at all yields None."""
+    log_path = str(tmp_path / 'arkane.log')
+    _write(log_path, 'Arkane execution initiated at Sat Aug  1 17:28:25 2026\n\nSome other line\n')
+    assert read_arkane_log_rmg_py_commit(log_path) is None
+
+
+def test_write_sa_cache_metadata_records_an_explicit_rmg_py_commit_verbatim(tmp_path):
+    """Test that a commit supplied by the caller is recorded as-is. The commit now arrives from
+    Arkane's log rather than from a local checkout, so it must NOT be re-derived from a path."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', rmg_py_commit=REAL_RMG_PY_COMMIT)
+
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert metadata['rmg_py_commit'] == REAL_RMG_PY_COMMIT
+
+
+def test_write_sa_cache_metadata_still_falls_back_to_the_checkout_when_no_commit_is_given(tmp_path):
+    """Test that the pre-existing rmg_py_path route still works when no explicit commit is passed,
+    so a caller that has a real checkout on hand is not forced through the log."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', rmg_py_path=str(tmp_path / 'not-a-git-checkout'))
+
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert metadata['rmg_py_commit'] is None

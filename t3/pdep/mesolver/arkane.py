@@ -107,11 +107,12 @@ class ArkaneMESolverAdapter(MESolverAdapter):
         if not os.path.isdir(self.output_directory):
             os.makedirs(self.output_directory)
         input_file_path = os.path.join(self.output_directory, 'input.py')
-        self.isomer_labels = write_arkane_network_input_file(source_path=self.network_path,
-                                                             dest_path=input_file_path,
-                                                             method=self.method,
-                                                             sensitivity=False,
-                                                             )
+        write_result = write_arkane_network_input_file(source_path=self.network_path,
+                                                        dest_path=input_file_path,
+                                                        method=self.method,
+                                                        sensitivity=False,
+                                                        )
+        self.isomer_labels = write_result.isomer_labels
 
     def solve(self):
         """
