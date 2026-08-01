@@ -9,8 +9,11 @@ import datetime
 import json
 import math
 import os
+from pathlib import Path
 
 import pytest
+import yaml
+
 from arc.common import read_yaml_file, save_yaml_file
 
 import t3.main as t3_main
@@ -2992,3 +2995,111 @@ def test_save_pdep_budget_record_replaces_a_pre_existing_symlink_rather_than_wri
     assert not os.path.islink(str(link_path))
     loaded = load_pdep_budget_record(path=str(link_path))
     assert loaded == record
+
+
+# --- The writers refuse to write what the loaders could never read -------------------------------
+#
+# `_read_persisted_yaml_file`'s docstring states the invariant these tests pin: "Nothing T3 writes
+# here [needs tag support] ... any file containing one is not a file T3 wrote." That was an
+# assertion about the writers, made on the read side, and nothing enforced it on the write side.
+# `arc.common.save_yaml_file` dumps with a full representer, so ONE non-plain value anywhere in a
+# record -- a `pathlib.Path` handed to a `str`-annotated field is the realistic way in -- is written
+# out as a `!!python/object/apply:...` tag, the write reports success, and the file is then refused
+# by every T3 loader forever. The corruption is silent, durable, and discovered only later, by which
+# point the iteration the record described is gone.
+
+def test_save_pdep_network_selections_refuses_a_record_the_loader_could_never_read(tmp_path):
+    """Test that a non-plain field value is refused at write time rather than written as a Python
+    object tag. A `Path` in `sa_path` is the realistic case: the field is annotated `str`, nothing
+    enforces that, and `os.path.join`/`open` all accept a Path happily, so it reaches the dumper."""
+    selection = PDepNetworkSelection(network_id='network4_2', sa_path=Path(tmp_path) / 'sa.yml')
+    path = str(tmp_path / 'selections.yml')
+
+    with pytest.raises(ValueError, match='plain YAML'):
+        save_pdep_network_selections(path=path, selections=[selection])
+    assert not os.path.exists(path), 'the refused write must not leave a file behind'
+
+
+def test_a_refused_write_does_not_destroy_the_record_already_on_disk(tmp_path):
+    """Test that refusing the write leaves the PREVIOUS record intact. This is the half that makes
+    the refusal worth having: `save_pdep_network_selections` writes straight to `path`, so without
+    the check the corrupt dump replaces a good file's contents, and the run loses both the new
+    record and the one it already had."""
+    path = str(tmp_path / 'selections.yml')
+    good = PDepNetworkSelection(network_id='network4_2', sa_path=str(tmp_path / 'sa.yml'))
+    save_pdep_network_selections(path=path, selections=[good])
+
+    # Constructed OUTSIDE the `raises` block on purpose: when `PDepNetworkSelection` grows the
+    # per-field validation its sibling record types already have, the refusal moves to this line and
+    # the test fails loudly rather than passing while no longer exercising clobber resistance.
+    bad = PDepNetworkSelection(network_id='network5_1', sa_path=Path(tmp_path) / 'sa.yml')
+    with pytest.raises(ValueError, match='plain YAML'):
+        save_pdep_network_selections(path=path, selections=[bad])
+
+    assert load_pdep_network_selections(path=path) == [good]
+
+
+def test_save_pdep_exploration_results_refuses_a_record_the_loader_could_never_read(tmp_path):
+    """Test the same contract on the exploration-result writer. Each result nests a serialized
+    selection, so the offending value here is one level down -- the check has to look at the whole
+    rendered content, not just its top-level keys."""
+    result = PDepExplorationResult(
+        network_id='network4_2',
+        status=EXPLORATION_STATUS_SKIPPED,
+        reasons=('not qualified',),
+        selection=PDepNetworkSelection(network_id='network4_2', sa_path=Path(tmp_path) / 'sa.yml'),
+    )
+    path = str(tmp_path / 'results.yml')
+
+    with pytest.raises(ValueError, match='plain YAML'):
+        save_pdep_exploration_results(path=path, results=[result])
+    assert not os.path.exists(path)
+
+
+def test_the_check_draws_its_line_at_parseability_not_at_schema_validity(tmp_path):
+    """Test the BOUNDARY of the write-time check, so the next reader does not mistake it for
+    validation. A non-numeric threshold is perfectly good YAML: it is written, and refused later per
+    record with a message naming the field. A `Path` in the same dict is not YAML at all: it costs
+    the whole file, and is refused now. The two are different failures, and only the second one is
+    this check's business -- giving `PDepNetworkSelection` the per-field validation its sibling
+    record types already have is the separate, named piece of work that closes the first."""
+    path = str(tmp_path / 'selections.yml')
+    schema_invalid = PDepNetworkSelection(network_id='network4_2',
+                                          thresholds={'relative_threshold': 'not a number'})
+    save_pdep_network_selections(path=path, selections=[schema_invalid])
+    with pytest.raises(ValueError, match='relative_threshold'):
+        load_pdep_network_selections(path=path)
+
+    unparseable = PDepNetworkSelection(network_id='network4_2',
+                                       thresholds={'relative_threshold': 0.001, 'source': Path(tmp_path)})
+    with pytest.raises(ValueError, match='plain YAML'):
+        save_pdep_network_selections(path=str(tmp_path / 'other.yml'), selections=[unparseable])
+
+
+def test_the_check_runs_on_the_bytes_that_will_actually_be_written(tmp_path, monkeypatch):
+    """Test the budget writer's call site, which no record it can legitimately hold can reach:
+    `PDepBudgetNetworkOutcome.__post_init__` type-checks every `str` field, so the guard there is a
+    contract for future fields rather than a live gate. Reaching it means forcing `as_dict()` to
+    return something it never would -- which is also the only way to pin that the refusal happens
+    BEFORE `mkstemp`, and so leaves no `.pdep-budget-*` dropping behind."""
+    monkeypatch.setattr(PDepBudgetRecord, 'as_dict', lambda self: {'iteration': Path(tmp_path)})
+    path = str(tmp_path / 'budget.yml')
+
+    with pytest.raises(ValueError, match='plain YAML'):
+        save_pdep_budget_record(path=path, record=_build_full_budget_record())
+    assert os.listdir(str(tmp_path)) == [], 'no file and no staged temp file may survive'
+
+
+def test_the_check_uses_the_same_renderer_the_write_uses(tmp_path):
+    """Test that the check is not merely `yaml.safe_dump`. `arc.common.save_yaml_file` renders via
+    `to_yaml`, which installs its own `str` representer on the global dumper -- so a check performed
+    with a different dumper would be approving bytes other than the ones that reach the file, which
+    is the exact shape of the bug being prevented. Pinning it here because the two happen to agree
+    today, and a check that silently stops matching the writer is worse than no check."""
+    content = {'a': 'plain', 'b': ['multi\nline\nstring', 0.5, None, True]}
+    t3_pdep_api._refuse_content_that_would_not_parse_back(content=content, path=str(tmp_path / 'x.yml'))
+
+    path = str(tmp_path / 'x.yml')
+    save_yaml_file(path=path, content=content)
+    with open(path, 'r') as f:
+        assert yaml.safe_load(f) == content

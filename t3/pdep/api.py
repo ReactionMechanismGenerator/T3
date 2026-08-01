@@ -34,7 +34,7 @@ from pathlib import Path
 
 import yaml
 
-from arc.common import save_yaml_file
+from arc.common import save_yaml_file, to_yaml
 
 from t3.pdep.budget import (BUDGET_ALGORITHM_VERSION,
                             BUDGET_RECORD_SCHEMA_VERSION,
@@ -761,6 +761,56 @@ def _unpack_network_entry(entry) -> tuple:
     return network_path, sa_path, sa_dict, method, network_id_hint
 
 
+def _refuse_content_that_would_not_parse_back(content, path: str) -> None:
+    """
+    Refuse to write bytes that ``_read_persisted_yaml_file`` could not even parse.
+
+    That function's docstring states the invariant: "Nothing T3 writes here [needs tag support] ...
+    any file containing one is not a file T3 wrote." It is an assertion ABOUT the writers, made on
+    the read side, and nothing on the write side enforced it. ``arc.common.save_yaml_file`` renders
+    with ``yaml.dump`` and a full representer, so one non-plain value anywhere in a record -- a
+    ``pathlib.Path`` handed to a ``str``-annotated field is the realistic way in -- is written out as
+    a ``!!python/object/apply:`` tag. The write reports success, and every loader here refuses the
+    file from that moment on.
+
+    What this guarantees, and what it does not, is worth being exact about, because the name of the
+    failure it prevents is TOTAL LOSS rather than a bad record. ``yaml.safe_load`` fails before any
+    per-record check runs, so one bad nested field costs the whole file -- an entire iteration's
+    assessments -- and it does so with a parser error that names a YAML tag rather than the field
+    that caused it. It does NOT guarantee the loaders will ACCEPT the file: a ``str`` where a list
+    belongs, or a non-numeric threshold, is perfectly good YAML and is refused later, per record,
+    with a message naming the field. That second class is a real and separate gap (only
+    ``PDepNetworkSelection``, of the record types written here, does not type-check its own fields in
+    ``__post_init__`` the way ``PDepBudgetNetworkOutcome`` and ``PDepNetworkAssessment`` do), and
+    closing it is its own piece of work rather than something to smuggle in here.
+
+    The check renders through ``to_yaml`` -- the SAME function ``save_yaml_file`` writes with, custom
+    string representer included -- and parses THAT back. Checking with ``yaml.safe_dump`` instead
+    would be checking bytes other than the ones written, which is the shape of the very bug this is
+    here to prevent.
+
+    Args:
+        content: The content about to be written.
+        path (str): The destination, named in the error so the caller knows which write was refused.
+
+    Raises:
+        ValueError: If the rendered YAML could not be parsed back by ``yaml.safe_load``.
+    """
+    # `yaml.YAMLError` only, deliberately. A `RecursionError` from a self-referential record, or a
+    # `TypeError` from a broken `__repr__`, is a defect in the code that built the record rather than
+    # a fact about the data -- converting one into a refusal here would label a bug as a data problem
+    # and hide it in a provenance record. The same DATA-vs-CODE line the rest of this module draws.
+    try:
+        yaml.safe_load(to_yaml(py_content=content))
+    except yaml.YAMLError as e:
+        raise ValueError(f'Refusing to write {path!r}: the rendered YAML does not parse back as plain '
+                         f'YAML, so this module could never read the file it is about to write ({e}). '
+                         f'A T3-written PDep file contains only plain types -- a str-annotated field '
+                         f'holding something else (a pathlib.Path is the usual culprit) is rendered as '
+                         f'a Python object tag, and the WHOLE file, not just that field, is refused on '
+                         f'the way back in.') from e
+
+
 def save_pdep_network_selections(path: str, selections: list) -> str:
     """
     Save a list of PDep network selection decisions to a YAML file.
@@ -782,6 +832,7 @@ def save_pdep_network_selections(path: str, selections: list) -> str:
     content = {'selection_schema_version': SELECTION_SCHEMA_VERSION,
               'selections': [selection.as_dict() for selection in selections],
               }
+    _refuse_content_that_would_not_parse_back(content=content, path=path)
     save_yaml_file(path=path, content=content)
     return str(path)
 
@@ -812,6 +863,7 @@ def save_pdep_exploration_results(path: str, results: list) -> str:
     content = {'exploration_result_schema_version': EXPLORATION_RESULT_SCHEMA_VERSION,
               'results': [result.as_dict() for result in results],
               }
+    _refuse_content_that_would_not_parse_back(content=content, path=path)
     save_yaml_file(path=path, content=content)
     return str(path)
 
@@ -842,6 +894,10 @@ def save_pdep_budget_record(path: str, record: PDepBudgetRecord) -> str:
     Returns:
         str: ``path``, as a string, so callers can chain it.
     """
+    content = record.as_dict()
+    # Checked BEFORE staging, so a refusal cannot leave a `.pdep-budget-*` dropping in the iteration
+    # directory.
+    _refuse_content_that_would_not_parse_back(content=content, path=path)
     # Write atomically: stage the YAML in the same directory, then ``os.replace`` it onto ``path`` in
     # one filesystem operation, so a crash or full disk mid-write can never leave a truncated,
     # partial-but-still-parseable record in place that a later reader would trust as authoritative.
@@ -853,7 +909,7 @@ def save_pdep_budget_record(path: str, record: PDepBudgetRecord) -> str:
     fd, staged_path = tempfile.mkstemp(prefix='.pdep-budget-', dir=directory)
     os.close(fd)
     try:
-        save_yaml_file(path=staged_path, content=record.as_dict())
+        save_yaml_file(path=staged_path, content=content)
         os.replace(staged_path, path)
     finally:
         if os.path.isfile(staged_path):
@@ -935,6 +991,10 @@ def save_pdep_network_assessments(path: str, assessments: list, *, complete: boo
               'complete': complete,
               'assessments': [assessment.as_dict() for assessment in assessments],
               }
+    # Checked before staging, for the same reason as `save_pdep_budget_record`: a refusal must not
+    # leave a staging directory behind. It matters more here, where this file is rewritten once per
+    # network -- a per-network dropping would accumulate across the whole iteration.
+    _refuse_content_that_would_not_parse_back(content=content, path=path)
     # Stage in a private directory alongside the destination, then ``os.replace`` in one filesystem
     # operation. Staging in a fresh 0700 directory rather than beside the target (as
     # ``save_pdep_budget_record`` does) closes the gap between creating the staged file and reopening

@@ -12,6 +12,7 @@ read back as something other than what was written.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -581,6 +582,24 @@ def test_a_nested_selection_the_constructor_accepts_but_the_loader_refuses(tmp_p
     path = saved(tmp_path, [record])
     with pytest.raises(ValueError, match=field_name):
         load_pdep_network_assessments(path)
+
+
+def test_a_nested_selection_that_would_make_the_whole_file_unparseable_is_refused_at_the_write(tmp_path):
+    """Test the worse half of the gap above. Those three values are refused by the loader with a
+    message naming the field; a non-plain value is not, because the file never reaches the record
+    checks at all -- `yaml.safe_load` refuses the `!!python/object/apply:` tag first, so a single
+    bad nested field costs the whole iteration's assessments, not one record's. The assessment
+    record type type-checks its own `str` fields, so this is reachable only through the nested
+    selection, which does not."""
+    selection = negative_selection()
+    selection.sa_path = Path('/runs/t3/sa_coefficients.yml')
+    record = PDepNetworkAssessment(network_id='network4_2', status=STATUS_EVALUATED_NEGATIVE,
+                                   reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS,
+                                   selection=selection)
+
+    with pytest.raises(ValueError, match='plain YAML'):
+        saved(tmp_path, [record])
+    assert os.listdir(str(tmp_path)) == [], 'no partial file and no staging directory may survive'
 
 
 # --- A record cannot be corrupted between construction and the file ------------------------------
