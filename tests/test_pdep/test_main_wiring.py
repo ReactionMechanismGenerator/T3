@@ -356,6 +356,92 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
         assert selection.t_grid_clamp is None
         assert selection.qualified is True
 
+    def test_queueing_is_deferred_until_every_network_has_been_evaluated(self, tmp_path, monkeypatch):
+        """No network may be queued before the last one has been evaluated.
+
+        Whether a network is worth its QM cost is a question about the whole field of candidates, so
+        the answer cannot be given while candidates are still being discovered. Two entries are
+        explored here (both resolving to the same fixture network, which is all that is needed to
+        order the evaluations against the queue calls), and every call into
+        ``queue_pdep_transition_states`` must see BOTH selections already recorded. When the queue
+        call still lived inside the loop, the first one saw only the single selection its own pass
+        had just produced.
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3) * 2
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _sa_dict_with_ts1_structures(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            lambda *args, **kwargs: pytest.fail('Arkane must not run; a valid cache is present.'))
+
+        selections_when_queued = list()
+        queue_pdep_transition_states = t3.queue_pdep_transition_states
+
+        def _spy(**kwargs):
+            selections_when_queued.append(len(t3.pdep_network_selections))
+            return queue_pdep_transition_states(**kwargs)
+
+        monkeypatch.setattr(t3, 'queue_pdep_transition_states', _spy)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert len(t3.pdep_network_selections) == 2
+        assert selections_when_queued == [2, 2], \
+            'Every queueing decision must be taken with the whole field of networks already evaluated.'
+        # Deferring the decision must not drop it: the queueing itself still has to happen.
+        assert {record.network_ts_label for record in t3.pdep_ts_join_records} == {'TS1'}
+        assert NETWORK_NAME in t3.pdep_ts_join_networks
+
+    def test_a_species_justified_by_a_sensitive_well_is_reported_even_when_a_queued_ts_also_needs_it(
+            self, tmp_path, monkeypatch):
+        """A species both paths reach must still be reported as determined by the well analysis.
+
+        ``add_reaction`` cascades into ``add_species`` for a queued transition state's own species,
+        and ``add_species`` returns ``None`` for a species it already knows. So whichever path
+        reaches a shared species first is the one that gets a key back, and only the well path
+        appends to the returned ``species_keys``. ``C4rad(5)`` is exactly such a species here: it is
+        a sensitive well of this network AND the product of TS1's path reaction, which is queued.
+
+        Deferring the queueing past the loop is what makes the well analysis reach it first, so this
+        pins a deliberate consequence of that ordering rather than an incidental one: the return
+        value means "species determined to be calculated based on SA", and a species justified by a
+        sensitive well belongs in it however else it is also reachable.
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_dict = _sa_dict_with_ts1_structures(t3)
+        # A sensitive well, in the same shape the real Arkane fixture uses (a bare species label
+        # alongside the '(TS) ' entries), strong enough to clear the selection thresholds.
+        sa_dict[NETWORK_REACTION_STR][CONDITION]['C4rad(5)'] = 0.03
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, sa_dict)
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            lambda *args, **kwargs: pytest.fail('Arkane must not run; a valid cache is present.'))
+
+        species_keys = t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert species_keys, 'The sensitive well should have determined at least one species.'
+        # T3 legalizes the label for ARC's benefit ('(' -> '[', ')' -> ']'), so the stored species
+        # carries 'C4rad[5]' rather than the network's own 'C4rad(5)'.
+        reported = {t3.species[key].label for key in species_keys}
+        assert 'C4rad[5]' in reported, \
+            'A species justified by a sensitive well must be reported even when a queued transition ' \
+            'state also brings it onto the QM queue.'
+        reasons = t3.species[[key for key in species_keys if t3.species[key].label == 'C4rad[5]'][0]].reasons
+        assert any('sensitive well' in reason for reason in reasons)
+
 
 class TestQueuePdepTransitionStates(object):
     """Queueing a qualified network's uncertain transition states to ARC, and recording the join.

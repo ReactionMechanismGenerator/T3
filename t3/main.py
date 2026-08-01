@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import traceback
 from collections import deque
+from dataclasses import dataclass
 
 import cantera as ct
 
@@ -75,10 +76,11 @@ from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           ts_join_sidecar_path,
                           write_ts_join_sidecar,
                           )
-from t3.pdep.parser import parse_pdep_network_file
+from t3.pdep.parser import PDepNetwork, parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_GENERATED,
                               E0_PERTURBATION_J_PER_MOL,
+                              PDepNetworkSelection,
                               select_from_sa_dict,
                               select_sensitive_wells,
                               )
@@ -119,6 +121,31 @@ ARC_FINALIZATION_MARKER_VERSION = 2
 # version -- older or newer -- fails the check and finalization is redone rather than skipped. The
 # closing parenthesis keeps the match exact: 'v2)' can never prefix-match a hypothetical 'v20)'.
 ARC_FINALIZATION_MARKER_TEXT = f'ARC finalization completed (v{ARC_FINALIZATION_MARKER_VERSION})'
+
+
+@dataclass(frozen=True)
+class PDepQueueCandidate:
+    """
+    A qualified P-dep network held back from the QM queue until every network has been evaluated.
+
+    ``determine_species_from_pdep_network()`` evaluates one network per loop pass, but whether a
+    network is worth its QM cost is only answerable against the whole field of candidates, not one
+    at a time. So the decision is deferred to after the loop, and this carries the three loop-local
+    values the queueing step needs and that do not otherwise survive it -- the parsed network, the
+    Arkane ``structures`` block, and the file the network was parsed from.
+
+    Attributes:
+        network (PDepNetwork): The parsed network.
+        selection (PDepNetworkSelection): The qualified decision for this network.
+        structures (dict): Network species label -> RMG adjacency list, from the Arkane SA output.
+        network_name (str): The network file stem, e.g. ``'network4_2'``.
+        network_path (str): The path to the network file that was parsed and examined.
+    """
+    network: PDepNetwork
+    selection: PDepNetworkSelection
+    structures: dict
+    network_name: str
+    network_path: str
 
 
 class T3:
@@ -1828,6 +1855,11 @@ class T3:
         # the same transition state would collide with its own stale entry.
         self.pdep_ts_join_records = list()
         self.pdep_ts_join_networks = dict()
+        # Qualified networks are collected here rather than queued where they are found, because
+        # which networks are worth their QM cost is a question about the whole field of candidates
+        # and cannot be answered until the last one has been evaluated. Nothing is queued until the
+        # loop below has finished; see PDepQueueCandidate.
+        queue_candidates: list[PDepQueueCandidate] = list()
         if self.t3['sensitivity']['pdep_SA_threshold'] is None:
             return species_keys
         if not os.path.isdir(self.paths['PDep SA']):
@@ -1985,15 +2017,12 @@ class T3:
                     self.logger.info(selection.reason())
                     self.pdep_network_selections.append(selection)
                     if selection.qualified:
-                        self.queue_pdep_transition_states(network=network,
-                                                          selection=selection,
-                                                          structures=structures,
-                                                          network_name=network_name,
-                                                          )
-                        self._record_pdep_network_identity(network_name=network_name,
-                                                           network_path=network_path,
-                                                           selection=selection,
-                                                           )
+                        queue_candidates.append(PDepQueueCandidate(network=network,
+                                                                   selection=selection,
+                                                                   structures=structures,
+                                                                   network_name=network_name,
+                                                                   network_path=network_path,
+                                                                   ))
 
                 # The selector resolves the SA key more robustly than an exact string match (it also
                 # handles label legalization and a network reaction stored in the opposite direction),
@@ -2038,6 +2067,20 @@ class T3:
                                     key = self.add_species(species=species, reasons=reason)
                                     if key is not None:
                                         species_keys.append(key)
+
+        # Every network has now been evaluated, so the queueing decision can finally be taken with
+        # the whole field in view. Candidates are queued in the order they were found, which is the
+        # order they were queued in before this step was deferred.
+        for candidate in queue_candidates:
+            self.queue_pdep_transition_states(network=candidate.network,
+                                              selection=candidate.selection,
+                                              structures=candidate.structures,
+                                              network_name=candidate.network_name,
+                                              )
+            self._record_pdep_network_identity(network_name=candidate.network_name,
+                                               network_path=candidate.network_path,
+                                               selection=candidate.selection,
+                                               )
 
         self.logger.log_pdep_network_summary(selections=self.pdep_network_selections)
         if self.pdep_ts_join_records:
