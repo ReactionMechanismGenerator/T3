@@ -28,12 +28,20 @@ caller still passing them gets that redirect rather than an opaque ``TypeError``
 
 import copy
 import os
+import tempfile
 from pathlib import Path
 
 import yaml
 
 from arc.common import save_yaml_file
 
+from t3.pdep.budget import (BUDGET_ALGORITHM_VERSION,
+                            BUDGET_RECORD_SCHEMA_VERSION,
+                            PDepBudgetNetworkOutcome,
+                            PDepBudgetRecord,
+                            VALID_BUDGET_OUTCOMES,
+                            VALID_BUDGET_SKIP_REASON_CODES,
+                            )
 from t3.pdep.cache import read_t_grid_clamp_record, validate_sa_cache
 from t3.pdep.explorer.config import PDepExplorerConfig, deep_thaw
 from t3.pdep.explorer.factory import explorer_factory
@@ -792,6 +800,51 @@ def save_pdep_exploration_results(path: str, results: list) -> str:
     return str(path)
 
 
+def save_pdep_budget_record(path: str, record: PDepBudgetRecord) -> str:
+    """
+    Save one PDep QM budget record to a YAML file.
+
+    Unlike ``save_pdep_network_selections``/``save_pdep_exploration_results`` above, the content
+    written here is exactly ``record.as_dict()``, with no separate envelope wrapping it. Those two
+    savers wrap a LIST in an envelope carrying its own top-level version marker, because a list can
+    legitimately be empty -- an empty list has no record of its own to carry a version, so the
+    envelope has to. ``PDepBudgetRecord`` is different on both counts: it is saved as a single
+    object, never a list, and it already carries its own ``schema_version``/``algorithm_version``
+    fields (see ``PDepBudgetRecord.__post_init__``, which pins them to
+    ``BUDGET_RECORD_SCHEMA_VERSION``/``BUDGET_ALGORITHM_VERSION``). A version that must survive
+    nesting inside another record belongs on the dataclass; a version merely describing the outer
+    file's envelope belongs on the envelope. Here there is no outer file distinct from the record
+    itself, so adding a second, envelope-level version key would just be a redundant source of truth
+    that could disagree with the one the record already carries -- exactly the reasoning
+    ``save_pdep_exploration_results`` gives for omitting a redundant selection-version envelope key,
+    taken one step further since there is no list to wrap at all.
+
+    Args:
+        path (str): The path to write the YAML file to.
+        record (PDepBudgetRecord): The budget record to save.
+
+    Returns:
+        str: ``path``, as a string, so callers can chain it.
+    """
+    # Write atomically: stage the YAML in the same directory, then ``os.replace`` it onto ``path`` in
+    # one filesystem operation, so a crash or full disk mid-write can never leave a truncated,
+    # partial-but-still-parseable record in place that a later reader would trust as authoritative.
+    # ``os.replace`` also closes the symlink write-through vector: if ``path`` is a pre-existing
+    # symlink, it replaces the link itself rather than following it and overwriting whatever the link
+    # points to. Mirrors ``t3.pdep.capture._write_manifest``'s mkstemp+save_yaml_file+os.replace
+    # idiom, the existing precedent for atomically writing a YAML sidecar in this codebase.
+    directory = os.path.dirname(path) or '.'
+    fd, staged_path = tempfile.mkstemp(prefix='.pdep-budget-', dir=directory)
+    os.close(fd)
+    try:
+        save_yaml_file(path=staged_path, content=record.as_dict())
+        os.replace(staged_path, path)
+    finally:
+        if os.path.isfile(staged_path):
+            os.remove(staged_path)
+    return str(path)
+
+
 # --- Loaders -------------------------------------------------------------------------------------
 #
 # These are the read side of ``save_pdep_network_selections``/``save_pdep_exploration_results``
@@ -993,6 +1046,34 @@ def _require_int_field(record: dict, key: str, *, path: str, context: str) -> in
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be an int "
                          f"(got {type(value).__name__}: {value!r}).")
+    return value
+
+
+def _require_optional_int_field(record: dict, key: str, *, path: str, context: str) -> int | None:
+    """
+    Fetch ``record[key]`` and require it to be a real ``int`` or ``None``.
+
+    ``bool`` is a subclass of ``int``, so ``isinstance(value, bool)`` is checked first and refused
+    even though ``isinstance(value, int)`` would otherwise accept ``True``/``False`` as ``0``/``1``
+    -- mirroring ``_require_int_field`` above.
+
+    Args:
+        record (dict): The record to read from.
+        key (str): The field name to fetch.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file, for diagnostics
+            only (see ``_require_record_field``).
+
+    Raises:
+        ValueError: If ``key`` is missing, or its value is neither a real ``int`` nor ``None``.
+
+    Returns:
+        int, optional: ``record[key]``.
+    """
+    value = _require_record_field(record, key, path=path, context=context)
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+        raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be an int or "
+                         f"null (got {type(value).__name__}: {value!r}).")
     return value
 
 
@@ -1624,3 +1705,116 @@ def load_pdep_exploration_results(path: str) -> list:
                   else ADMISSION_POLICY_UNGATED),
         ))
     return results
+
+
+def _budget_network_outcome_from_dict(record: dict, *, path: str, context: str) -> PDepBudgetNetworkOutcome:
+    """
+    Reconstruct one ``PDepBudgetNetworkOutcome`` from its ``as_dict()`` rendering.
+
+    There is no per-outcome schema/algorithm version to check here: unlike a top-level
+    ``PDepBudgetRecord`` or a nested ``PDepNetworkSelection``, ``PDepBudgetNetworkOutcome`` carries
+    no version fields of its own -- it is only ever produced and consumed alongside the
+    ``PDepBudgetRecord`` that owns it, whose ``schema_version`` already governs the shape of every
+    outcome nested inside it.
+
+    Args:
+        record (dict): One entry of a ``network_outcomes`` list, as rendered by
+            ``PDepBudgetNetworkOutcome.as_dict()``.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file (e.g.
+            ``'network_outcomes[0]'``), for diagnostics only.
+
+    Raises:
+        ValueError: If ``record`` is not a mapping, is missing a required field, has a required field
+            of the wrong type, ``outcome`` is not one of ``VALID_BUDGET_OUTCOMES``, or ``reason_code``
+            is neither ``None`` nor one of ``VALID_BUDGET_SKIP_REASON_CODES``.
+
+    Returns:
+        PDepBudgetNetworkOutcome: The reconstructed outcome.
+    """
+    if not isinstance(record, dict):
+        raise ValueError(f"PDep budget record file {path!r} contains a network outcome that is not "
+                         f"a mapping (got {type(record).__name__}: {record!r}) at {context}.")
+    return PDepBudgetNetworkOutcome(
+        network_id=_require_optional_str_field(record, 'network_id', path=path, context=context),
+        outcome=_require_enum_field(record, 'outcome', path=path, context=context,
+                                    allowed=VALID_BUDGET_OUTCOMES),
+        cost=_require_int_field(record, 'cost', path=path, context=context),
+        network_source_hash=_require_optional_str_field(record, 'network_source_hash', path=path,
+                                                         context=context),
+        method=_require_optional_str_field(record, 'method', path=path, context=context),
+        reason_code=_require_optional_enum_field(record, 'reason_code', path=path, context=context,
+                                                 allowed=VALID_BUDGET_SKIP_REASON_CODES),
+        reason=_require_optional_str_field(record, 'reason', path=path, context=context),
+        remaining_transition_states=_require_optional_int_field(record, 'remaining_transition_states',
+                                                                path=path, context=context),
+        rank=_require_int_field(record, 'rank', path=path, context=context),
+        unnamed_offer_index=_require_optional_int_field(record, 'unnamed_offer_index', path=path,
+                                                        context=context),
+    )
+
+
+def load_pdep_budget_record(path: str) -> PDepBudgetRecord:
+    """
+    Load one PDep QM budget record from a YAML file written by ``save_pdep_budget_record``.
+
+    This is STRICT and carries no migration/fallback path for an older on-disk shape -- see the
+    module comment above ``_sensitive_transition_state_from_dict`` for why that is safe. An
+    unversioned file, a file whose version this code does not recognize, a malformed envelope, or a
+    malformed record are all refused outright rather than guessed at.
+
+    Unlike ``load_pdep_network_selections``/``load_pdep_exploration_results``, there is no separate
+    envelope to check: ``save_pdep_budget_record`` writes ``record.as_dict()`` directly, so the
+    file's top level IS the record, and ``budget_record_schema_version``/``budget_algorithm_version``
+    are read as ordinary record fields rather than envelope keys.
+
+    Args:
+        path (str): The path to read the YAML file from.
+
+    Raises:
+        ValueError: If the file's top level is not a mapping; if it carries no
+            ``budget_record_schema_version`` key (an unversioned file is not "version 1", it is of
+            unknown shape); if that version is not the one this code understands; if it carries a
+            ``budget_algorithm_version`` this code does not understand; if the ``network_outcomes``
+            key is absent or not a list; or if any entry (identified by its index in the list) is not
+            a mapping, is missing a required field, or has a required field of the wrong type.
+
+    Returns:
+        PDepBudgetRecord: The reconstructed budget record.
+    """
+    content = _read_persisted_yaml_file(path=path)
+    if not isinstance(content, dict):
+        raise ValueError(f"PDep budget record file {path!r} does not contain a mapping at its top "
+                         f"level (got {type(content).__name__}); cannot read it as a budget record.")
+    if 'budget_record_schema_version' not in content:
+        raise ValueError(f"PDep budget record file {path!r} has no 'budget_record_schema_version' "
+                         f"key: an unversioned file is not version {BUDGET_RECORD_SCHEMA_VERSION}, it "
+                         f"is of unknown shape and cannot be trusted.")
+    schema_version = content['budget_record_schema_version']
+    if isinstance(schema_version, bool) or schema_version != BUDGET_RECORD_SCHEMA_VERSION:
+        raise ValueError(f"PDep budget record file {path!r} has "
+                         f"budget_record_schema_version={schema_version!r}, but this code only "
+                         f"understands version {BUDGET_RECORD_SCHEMA_VERSION}.")
+    algorithm_version = content.get('budget_algorithm_version')
+    if isinstance(algorithm_version, bool) or algorithm_version != BUDGET_ALGORITHM_VERSION:
+        raise ValueError(f"PDep budget record file {path!r} has "
+                         f"budget_algorithm_version={algorithm_version!r}, which this code cannot "
+                         f"interpret (only {BUDGET_ALGORITHM_VERSION} is supported).")
+    outcomes = content.get('network_outcomes')
+    if not isinstance(outcomes, list):
+        raise ValueError(f"PDep budget record file {path!r} has no 'network_outcomes' list "
+                         f"(got {type(outcomes).__name__ if 'network_outcomes' in content else 'missing'}: "
+                         f"{outcomes!r}).")
+    return PDepBudgetRecord(
+        iteration=_require_int_field(content, 'iteration', path=path, context='<top level>'),
+        max_transition_states=_require_optional_int_field(content, 'max_transition_states', path=path,
+                                                          context='<top level>'),
+        max_networks=_require_optional_int_field(content, 'max_networks', path=path,
+                                                 context='<top level>'),
+        total_cost=_require_int_field(content, 'total_cost', path=path, context='<top level>'),
+        network_outcomes=tuple(
+            _budget_network_outcome_from_dict(entry, path=path, context=f'network_outcomes[{index}]')
+            for index, entry in enumerate(outcomes)),
+        schema_version=schema_version,
+        algorithm_version=algorithm_version,
+    )

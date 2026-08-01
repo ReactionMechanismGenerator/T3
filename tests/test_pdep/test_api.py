@@ -18,13 +18,23 @@ from t3.common import TEST_DATA_BASE_PATH
 from t3.logger import Logger
 import t3.pdep.api as t3_pdep_api
 from t3.pdep.api import (explore_pdep_network,
+                         load_pdep_budget_record,
                          load_pdep_exploration_results,
                          load_pdep_network_selections,
                          rank_pdep_networks,
+                         save_pdep_budget_record,
                          save_pdep_exploration_results,
                          save_pdep_network_selections,
                          select_pdep_network,
                          )
+from t3.pdep.budget import (BUDGET_ALGORITHM_VERSION,
+                            BUDGET_OUTCOME_ADMITTED,
+                            BUDGET_OUTCOME_REFUSED,
+                            BUDGET_RECORD_SCHEMA_VERSION,
+                            BUDGET_SKIP_EXCEEDS_BUDGET,
+                            PDepBudgetNetworkOutcome,
+                            PDepBudgetRecord,
+                            )
 from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import (ADMISSION_POLICY_CALLER_ADMITTED,
@@ -2653,3 +2663,322 @@ def test_the_loaders_refuse_a_python_object_tag(tmp_path):
     _write(result_path, result_payload)
     with pytest.raises(ValueError, match='plain YAML'):
         load_pdep_exploration_results(path=result_path)
+
+
+def _build_full_budget_record():
+    """A PDepBudgetRecord with every field set to a non-default value, and two network_outcomes
+    entries -- one admitted (a named network) and one refused (an unnamed offer) -- so a loader that
+    rebuilt the record field-by-field but forgot a field (on either the record or the nested outcome)
+    would be caught by round-trip equality rather than silently dropping it."""
+    admitted = PDepBudgetNetworkOutcome(
+        network_id='network1_1', outcome=BUDGET_OUTCOME_ADMITTED, cost=5, rank=0,
+        network_source_hash='sha256:full_budget_record', method='master_equation',
+        remaining_transition_states=3,
+    )
+    refused = PDepBudgetNetworkOutcome(
+        network_id=None, unnamed_offer_index=7, outcome=BUDGET_OUTCOME_REFUSED, cost=2, rank=1,
+        reason_code=BUDGET_SKIP_EXCEEDS_BUDGET, reason='exceeds the remaining transition-state budget',
+    )
+    return PDepBudgetRecord(
+        iteration=3, max_transition_states=10, max_networks=4, total_cost=5,
+        network_outcomes=(admitted, refused),
+    )
+
+
+def test_save_pdep_budget_record_round_trips_and_is_json_serializable(tmp_path):
+    """Test that save_pdep_budget_record() writes something json.dumps() can handle AND that
+    load_pdep_budget_record() (the STRICT loader real callers use, not a permissive read_yaml_file()
+    call) accepts it back as the identical record. A prior version of this test only checked
+    json.dumps(read_yaml_file(path)) -- but json.dumps((1, 2)) succeeds, so that assertion could not
+    have caught a YAML-only type (e.g. a tuple) surviving into the saved file; and reading back with
+    read_yaml_file() rather than the strict loader proved nothing about loader compatibility. Assert
+    both properties directly: no non-plain (list/dict/str/int/float/bool/None) values anywhere in the
+    saved structure, and successful round-trip through the strict loader."""
+    record = _build_full_budget_record()
+    path = str(tmp_path / 'budget.yml')
+
+    save_pdep_budget_record(path=path, record=record)
+
+    content = read_yaml_file(path=path)
+    json.dumps(content)  # must not raise
+
+    def _assert_only_plain_types(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                assert isinstance(key, str), f'non-string mapping key {key!r} in saved record'
+                _assert_only_plain_types(item)
+        elif isinstance(value, list):
+            for item in value:
+                _assert_only_plain_types(item)
+        else:
+            assert value is None or isinstance(value, (str, int, float, bool)), (
+                f'non-plain value {value!r} of type {type(value).__name__} in saved record; '
+                f'a tuple, set, or other YAML-only type here would satisfy json.dumps((1, 2)) but '
+                f'still be incompatible with what a strict JSON-based caller expects')
+
+    _assert_only_plain_types(content)
+
+    loaded = load_pdep_budget_record(path=path)
+    assert loaded == record
+
+
+def test_load_pdep_budget_record_round_trip_equality(tmp_path):
+    """Test that load(save(x)) equals x for a fully-populated PDepBudgetRecord, derived from the live
+    object rather than a hand-written expected dict -- so the test cannot silently pass by omitting a
+    field neither side checks. This is the exact defect class this branch already shipped once: a
+    field present in as_dict() but forgotten in the loader is silently dropped on round-trip, and a
+    round-trip test using only default field values would not catch it."""
+    record = _build_full_budget_record()
+    path = str(tmp_path / 'budget.yml')
+    save_pdep_budget_record(path=path, record=record)
+
+    loaded = load_pdep_budget_record(path=path)
+
+    assert loaded == record
+
+
+def test_load_pdep_budget_record_round_trip_equality_empty_record(tmp_path):
+    """Test that a budget record with zero network_outcomes (the "nothing was refused and nothing
+    was admitted" case -- e.g. the budget ran over zero candidates) round-trips correctly. Absence of
+    any outcomes must not be confused with absence of the file itself."""
+    record = PDepBudgetRecord(iteration=0, max_transition_states=None, max_networks=None,
+                              total_cost=0, network_outcomes=())
+    path = str(tmp_path / 'budget.yml')
+    save_pdep_budget_record(path=path, record=record)
+
+    loaded = load_pdep_budget_record(path=path)
+
+    assert loaded == record
+    assert loaded.network_outcomes == ()
+
+
+def test_load_pdep_budget_record_refuses_non_mapping_top_level(tmp_path):
+    """Test the top-level-not-a-mapping refusal, on its own distinctive wording."""
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=[1, 2, 3])
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'does not contain a mapping' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_missing_version_key(tmp_path):
+    """Test the absent-version-key refusal, on its own distinctive wording -- distinct from the
+    unknown-version wording checked below (an unversioned file is not "version 1", it is unknown)."""
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content={'iteration': 0, 'total_cost': 0, 'network_outcomes': []})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert "no 'budget_record_schema_version' key" in str(exc_info.value)
+    assert 'unknown shape' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_unknown_schema_version(tmp_path):
+    """Test the unknown-schema-version refusal, on its own distinctive wording."""
+    record = _build_full_budget_record()
+    rendered = record.as_dict()
+    rendered['budget_record_schema_version'] = 999
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=rendered)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'only understands version' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_unknown_algorithm_version(tmp_path):
+    """Test the unknown-algorithm-version refusal, on its own distinctive wording, distinct from the
+    schema-version refusal above."""
+    record = _build_full_budget_record()
+    rendered = record.as_dict()
+    rendered['budget_algorithm_version'] = 999
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=rendered)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'budget_algorithm_version' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_missing_network_outcomes_key(tmp_path):
+    """Test the missing/non-list 'network_outcomes' key refusal."""
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content={'budget_record_schema_version': BUDGET_RECORD_SCHEMA_VERSION,
+                                       'budget_algorithm_version': BUDGET_ALGORITHM_VERSION,
+                                       'iteration': 0, 'max_transition_states': None,
+                                       'max_networks': None, 'total_cost': 0})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert "no 'network_outcomes' list" in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_non_mapping_outcome(tmp_path):
+    """Test the per-outcome not-a-mapping refusal."""
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content={'budget_record_schema_version': BUDGET_RECORD_SCHEMA_VERSION,
+                                       'budget_algorithm_version': BUDGET_ALGORITHM_VERSION,
+                                       'iteration': 0, 'max_transition_states': None,
+                                       'max_networks': None, 'total_cost': 0,
+                                       'network_outcomes': [42]})
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'not a mapping' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_a_string_for_cost(tmp_path):
+    """Test per-field type validation on a nested network outcome: a string where an int (cost) is
+    required must be refused, not silently coerced."""
+    record = _build_full_budget_record()
+    rendered = record.as_dict()
+    rendered['network_outcomes'][0]['cost'] = 'five'
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=rendered)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'cost' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_an_unrecognized_outcome(tmp_path):
+    """Test that an 'outcome' value outside VALID_BUDGET_OUTCOMES is refused."""
+    record = _build_full_budget_record()
+    rendered = record.as_dict()
+    rendered['network_outcomes'][0]['outcome'] = 'maybe'
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=rendered)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'outcome' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_a_python_object_tag(tmp_path):
+    """Test that load_pdep_budget_record() cannot be made to construct a Python object from a YAML
+    tag -- mirroring test_the_loaders_refuse_a_python_object_tag above for the other two loaders."""
+    payload = ("budget_record_schema_version: 1\n"
+               "budget_algorithm_version: 1\n"
+               "iteration: 0\n"
+               "max_transition_states: null\n"
+               "max_networks: null\n"
+               "total_cost: 0\n"
+               "network_outcomes:\n"
+               "  - !!python/object/apply:os.system ['echo pwned']\n")
+    path = str(tmp_path / 'evil_budget.yml')
+    _write(path, payload)
+    with pytest.raises(ValueError, match='plain YAML'):
+        load_pdep_budget_record(path=path)
+
+
+def test_load_pdep_budget_record_refuses_a_bool_schema_version(tmp_path):
+    """Test that ``budget_record_schema_version: true`` is refused rather than silently accepted as
+    version 1. In Python ``bool`` is a subclass of ``int`` and ``True == 1``, so a bare ``!=`` version
+    comparison (with no ``isinstance(..., bool)`` exclusion) would let this through as if it were the
+    real integer version -- exactly the gap ``_require_int_field``/``_validate_budget`` already guard
+    against for other fields in this module."""
+    record = _build_full_budget_record()
+    rendered = record.as_dict()
+    rendered['budget_record_schema_version'] = True
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=rendered)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'only understands version' in str(exc_info.value)
+
+
+def test_load_pdep_budget_record_refuses_a_bool_algorithm_version(tmp_path):
+    """Test that ``budget_algorithm_version: true`` is refused rather than silently accepted as
+    version 1, mirroring the schema-version bool-bypass test above."""
+    record = _build_full_budget_record()
+    rendered = record.as_dict()
+    rendered['budget_algorithm_version'] = True
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=rendered)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_pdep_budget_record(path=path)
+    assert 'budget_algorithm_version' in str(exc_info.value)
+
+
+def test_pdep_budget_record_constructor_refuses_a_bool_schema_version():
+    """Test the same bool-bypass gap directly on PDepBudgetRecord.__post_init__ (t3/pdep/budget.py),
+    independent of the YAML loader in t3/pdep/api.py -- both gates must reject a bool, since a caller
+    can construct a PDepBudgetRecord directly without going through the loader at all."""
+    admitted = PDepBudgetNetworkOutcome(
+        network_id='network1_1', outcome=BUDGET_OUTCOME_ADMITTED, cost=5, rank=0,
+        network_source_hash='sha256:x', method='master_equation',
+    )
+    with pytest.raises(ValueError, match='PDepBudgetRecord.schema_version'):
+        PDepBudgetRecord(iteration=0, max_transition_states=None, max_networks=None, total_cost=5,
+                         network_outcomes=(admitted,), schema_version=True)
+
+
+def test_pdep_budget_record_constructor_refuses_a_bool_algorithm_version():
+    """Test the same bool-bypass gap directly on PDepBudgetRecord.__post_init__ for
+    algorithm_version, mirroring the schema-version test above."""
+    admitted = PDepBudgetNetworkOutcome(
+        network_id='network1_1', outcome=BUDGET_OUTCOME_ADMITTED, cost=5, rank=0,
+        network_source_hash='sha256:x', method='master_equation',
+    )
+    with pytest.raises(ValueError, match='PDepBudgetRecord.algorithm_version'):
+        PDepBudgetRecord(iteration=0, max_transition_states=None, max_networks=None, total_cost=5,
+                         network_outcomes=(admitted,), algorithm_version=True)
+
+
+def test_pdep_budget_network_outcome_refuses_a_negative_remaining_transition_states():
+    """Test that PDepBudgetNetworkOutcome.__post_init__ rejects a negative
+    remaining_transition_states, mirroring the non-negativity checks it already applies to cost and
+    rank. apply_pdep_qm_budget() itself never produces a negative remaining_transition_states, but a
+    hand-built or loaded-from-disk record could carry one, and a negative "transition states left"
+    value is nonsensical and must not load as authoritative."""
+    with pytest.raises(ValueError, match='remaining_transition_states'):
+        PDepBudgetNetworkOutcome(
+            network_id='network1_1', outcome=BUDGET_OUTCOME_ADMITTED, cost=5, rank=0,
+            network_source_hash='sha256:x', method='master_equation',
+            remaining_transition_states=-1,
+        )
+
+
+def test_load_pdep_budget_record_refuses_a_negative_remaining_transition_states(tmp_path):
+    """Test the same negative-remaining_transition_states rejection from the loader side: a record
+    file on disk with remaining_transition_states=-1 must be refused, not accepted as authoritative."""
+    record = _build_full_budget_record()
+    rendered = record.as_dict()
+    rendered['network_outcomes'][0]['remaining_transition_states'] = -1
+    path = str(tmp_path / 'budget.yml')
+    save_yaml_file(path=path, content=rendered)
+
+    with pytest.raises(ValueError, match='remaining_transition_states'):
+        load_pdep_budget_record(path=path)
+
+
+def test_save_pdep_budget_record_replaces_a_pre_existing_symlink_rather_than_writing_through_it(tmp_path):
+    """Test the symlink write-through vulnerability directly: if `path` is a symlink pointing outside
+    the destination directory, saving a budget record there must replace the symlink itself with a
+    regular file, never write through the link and mutate whatever it points to. This is the
+    concrete attack save_pdep_budget_record's atomic-write fix (mkstemp + os.replace) is meant to
+    close -- os.replace() unlinks/replaces the symlink entry rather than following it, unlike a naive
+    open(path, 'w')."""
+    outside_dir = tmp_path / 'outside'
+    outside_dir.mkdir()
+    target = outside_dir / 'victim.yml'
+    target.write_text('sentinel: do-not-touch\n')
+
+    iteration_dir = tmp_path / 'iteration_1'
+    iteration_dir.mkdir()
+    link_path = iteration_dir / 'budget.yml'
+    os.symlink(str(target), str(link_path))
+
+    record = _build_full_budget_record()
+    save_pdep_budget_record(path=str(link_path), record=record)
+
+    # The outside target must be untouched -- the write must not have gone through the symlink.
+    assert target.read_text() == 'sentinel: do-not-touch\n'
+    # The path where the record was requested must no longer be a symlink: it was replaced by a
+    # regular file carrying the saved record.
+    assert not os.path.islink(str(link_path))
+    loaded = load_pdep_budget_record(path=str(link_path))
+    assert loaded == record

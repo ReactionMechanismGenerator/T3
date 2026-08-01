@@ -28,7 +28,13 @@ import pytest
 
 import t3.main as t3_main
 from t3.chem import T3Species
-from t3.pdep.budget import BUDGET_SKIP_DOES_NOT_FIT_REMAINING, PDepBudgetDecision, PDepBudgetSkip
+from t3.pdep.budget import (BUDGET_OUTCOME_ADMITTED,
+                            BUDGET_OUTCOME_REFUSED,
+                            BUDGET_SKIP_DOES_NOT_FIT_REMAINING,
+                            PDepBudgetConsideration,
+                            PDepBudgetDecision,
+                            PDepBudgetSkip,
+                            )
 from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
@@ -43,6 +49,7 @@ from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
                           ts_join_sidecar_path,
                           write_ts_join_sidecar,
                           )
+from t3.pdep.api import load_pdep_budget_record
 from t3.pdep.parser import parse_pdep_network_file, parse_pdep_network_text
 from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_GENERATED,
@@ -507,10 +514,24 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
                                  reason_code=BUDGET_SKIP_DOES_NOT_FIT_REMAINING,
                                  reason='it needs 1 transition state(s) and only 0 remain(s) of the budget of 4',
                                  )
+        # ``considered`` must stay consistent with ``admitted_indices``/``skipped``, because
+        # ``build_pdep_budget_record`` (now wired into this code path) refuses to build a record
+        # off a decision whose own bookkeeping disagrees with itself.
+        consideration = PDepBudgetConsideration(identity=NETWORK_NAME,
+                                                network_id=NETWORK_NAME,
+                                                offer_indices=(0,),
+                                                cost=refusal.cost,
+                                                rank=0,
+                                                remaining_before=refusal.remaining_transition_states,
+                                                outcome=BUDGET_OUTCOME_REFUSED,
+                                                reason_code=refusal.reason_code,
+                                                reason=refusal.reason,
+                                                )
         monkeypatch.setattr(t3_main, 'apply_pdep_qm_budget',
                             lambda selections, **kwargs: PDepBudgetDecision(admitted_indices=tuple(),
                                                                            skipped=(refusal,),
                                                                            total_cost=0,
+                                                                           considered=(consideration,),
                                                                            ))
         warnings_logged = list()
         monkeypatch.setattr(t3.logger, 'warning', lambda message: warnings_logged.append(message))
@@ -524,6 +545,93 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
         assert len(t3.pdep_network_selections) == 1 and t3.pdep_network_selections[0].qualified is True
         assert any(NETWORK_NAME in message and refusal.reason in message for message in warnings_logged), \
             f'The refusal must be reported; logged warnings were: {warnings_logged}'
+        # The refusal must also survive as a durable record, not just a log line: a log is not
+        # queryable after the run, and this is the artifact downstream tooling would read.
+        budget_record_file = t3.paths['PDep QM budget']
+        assert os.path.isfile(budget_record_file), \
+            'The budget record must be written even though (especially because) it refused a network.'
+        record = load_pdep_budget_record(budget_record_file)
+        assert record.iteration == t3.iteration
+        assert record.total_cost == 0
+        assert len(record.network_outcomes) == 1
+        outcome = record.network_outcomes[0]
+        assert outcome.network_id == NETWORK_NAME
+        assert outcome.outcome == BUDGET_OUTCOME_REFUSED
+        assert outcome.reason_code == refusal.reason_code
+        assert outcome.reason == refusal.reason
+
+    def test_the_budget_record_is_written_even_when_nothing_is_refused(self, tmp_path, monkeypatch):
+        """Absence of the budget record file must mean "the budget never ran this iteration", not
+        "the budget ran and refused nothing" -- so the record has to be written unconditionally,
+        including on the all-admitted path where there is nothing to complain about.
+        """
+        t3 = _build_t3(tmp_path)
+        t3.t3['sensitivity']['pdep_QM_max_transition_states'] = 7
+        t3.t3['sensitivity']['pdep_QM_max_networks'] = 3
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _sa_dict_with_ts1_structures(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            lambda *args, **kwargs: pytest.fail('Arkane must not run; a valid cache is present.'))
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        # Sanity check that this really is the nothing-refused path (the budget is generous).
+        assert {record.network_ts_label for record in t3.pdep_ts_join_records} == {'TS1'}
+
+        budget_record_file = t3.paths['PDep QM budget']
+        assert os.path.isfile(budget_record_file), \
+            'The budget record must be written even when nothing was refused: its absence must ' \
+            'mean the budget never ran, not that it ran and admitted everything.'
+        record = load_pdep_budget_record(budget_record_file)
+        assert record.iteration == t3.iteration
+        assert record.max_transition_states == 7
+        assert record.max_networks == 3
+        assert all(outcome.outcome == BUDGET_OUTCOME_ADMITTED for outcome in record.network_outcomes)
+        assert {outcome.network_id for outcome in record.network_outcomes} == {NETWORK_NAME}
+
+    def test_a_stale_budget_record_is_cleared_when_a_rerun_of_the_same_iteration_turns_the_feature_off(
+            self, tmp_path, monkeypatch):
+        """Absence of the budget record file must mean "the budget never ran this iteration" -- but
+        the record is only ever written once execution reaches the bottom of this method, so a
+        re-run of the SAME iteration that this time exits early (``pdep_SA_threshold`` now ``None``)
+        would otherwise leave the PREVIOUS run's record on disk, indistinguishable from a record
+        produced by the current run. Pin that the early-return path actively clears any such
+        leftover, restoring the invariant rather than abandoning it.
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _sa_dict_with_ts1_structures(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            lambda *args, **kwargs: pytest.fail('Arkane must not run; a valid cache is present.'))
+
+        # First run: the feature is on, so a budget record is written for this iteration.
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+        budget_record_file = t3.paths['PDep QM budget']
+        assert os.path.isfile(budget_record_file), 'Precondition: the first run must have written a record.'
+
+        # Second run of the SAME iteration: the feature is now off. The stale record from the first
+        # run must not survive to be mistaken for a decision made by this run.
+        t3.t3['sensitivity']['pdep_SA_threshold'] = None
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert not os.path.isfile(budget_record_file), \
+            'A stale budget record from a superseded run of this iteration must be cleared when a ' \
+            're-run turns the feature off, so its presence cannot be mistaken for a decision made ' \
+            'by the current (feature-off) run.'
 
 
 class TestQueuePdepTransitionStates(object):

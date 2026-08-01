@@ -55,6 +55,7 @@ sat in the walk, not that it was preferred or disfavored. Being refused for that
 recorded like any other refusal, never silently dropped.
 """
 
+import os
 from dataclasses import dataclass, field
 
 from t3.pdep.selector import EVALUATION_STATUS_NOT_EVALUATED, PDepNetworkSelection, selection_rank_key
@@ -63,6 +64,7 @@ from t3.pdep.selector import EVALUATION_STATUS_NOT_EVALUATED, PDepNetworkSelecti
 __all__ = ['BUDGET_ALGORITHM_VERSION',
            'BUDGET_OUTCOME_ADMITTED',
            'BUDGET_OUTCOME_REFUSED',
+           'BUDGET_RECORD_FILE_NAME',
            'BUDGET_RECORD_SCHEMA_VERSION',
            'BUDGET_SKIP_DOES_NOT_FIT_REMAINING',
            'BUDGET_SKIP_EXCEEDS_BUDGET',
@@ -76,6 +78,7 @@ __all__ = ['BUDGET_ALGORITHM_VERSION',
            'VALID_BUDGET_OUTCOMES',
            'VALID_BUDGET_SKIP_REASON_CODES',
            'apply_pdep_qm_budget',
+           'budget_record_path',
            'build_pdep_budget_record',
            'projected_ts_cost',
            ]
@@ -122,6 +125,25 @@ BUDGET_RECORD_SCHEMA_VERSION = 1
 # would produce given the same inputs. Do NOT bump this for a change to the on-disk SHAPE of a
 # record (see BUDGET_RECORD_SCHEMA_VERSION above) -- that does not change what the decision means.
 BUDGET_ALGORITHM_VERSION = 1
+
+# The budget record is written under the ITERATION directory (not the ARC project directory, unlike
+# t3.pdep.join's TS_JOIN_SIDECAR_FILE_NAME): it describes a decision this iteration took over EVERY
+# qualified network, admitted or refused, so it belongs beside the iteration's other top-level
+# artifacts rather than nested inside the ARC run that only some admitted networks ever reach.
+BUDGET_RECORD_FILE_NAME = 't3_pdep_qm_budget.yml'
+
+
+def budget_record_path(iteration_directory: str) -> str:
+    """
+    Return the path a ``PDepBudgetRecord`` for one iteration is (or would be) written to.
+
+    Args:
+        iteration_directory (str): The T3 iteration directory (``self.paths['iteration']``).
+
+    Returns:
+        str: ``iteration_directory``, joined with ``BUDGET_RECORD_FILE_NAME``.
+    """
+    return os.path.join(iteration_directory, BUDGET_RECORD_FILE_NAME)
 
 
 @dataclass(frozen=True)
@@ -509,9 +531,10 @@ class PDepBudgetNetworkOutcome:
             raise ValueError(f'PDepBudgetNetworkOutcome.rank must be a non-negative integer, got {self.rank!r}.')
         if self.remaining_transition_states is not None and (
                 isinstance(self.remaining_transition_states, bool)
-                or not isinstance(self.remaining_transition_states, int)):
-            raise ValueError('PDepBudgetNetworkOutcome.remaining_transition_states must be an int or None, got '
-                             f'{self.remaining_transition_states!r}.')
+                or not isinstance(self.remaining_transition_states, int)
+                or self.remaining_transition_states < 0):
+            raise ValueError('PDepBudgetNetworkOutcome.remaining_transition_states must be a non-negative '
+                             f'int or None, got {self.remaining_transition_states!r}.')
         if self.unnamed_offer_index is not None and (
                 isinstance(self.unnamed_offer_index, bool) or not isinstance(self.unnamed_offer_index, int)
                 or self.unnamed_offer_index < 0):
@@ -576,10 +599,10 @@ class PDepBudgetRecord:
         if isinstance(self.total_cost, bool) or not isinstance(self.total_cost, int) or self.total_cost < 0:
             raise ValueError(f'PDepBudgetRecord.total_cost must be a non-negative integer, got '
                              f'{self.total_cost!r}.')
-        if self.schema_version != BUDGET_RECORD_SCHEMA_VERSION:
+        if isinstance(self.schema_version, bool) or self.schema_version != BUDGET_RECORD_SCHEMA_VERSION:
             raise ValueError(f'PDepBudgetRecord.schema_version must be {BUDGET_RECORD_SCHEMA_VERSION}, got '
                              f'{self.schema_version!r}.')
-        if self.algorithm_version != BUDGET_ALGORITHM_VERSION:
+        if isinstance(self.algorithm_version, bool) or self.algorithm_version != BUDGET_ALGORITHM_VERSION:
             raise ValueError(f'PDepBudgetRecord.algorithm_version must be {BUDGET_ALGORITHM_VERSION}, got '
                              f'{self.algorithm_version!r}.')
         for outcome in self.network_outcomes:

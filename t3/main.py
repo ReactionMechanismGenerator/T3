@@ -52,7 +52,8 @@ from t3.common import (DATA_BASE_PATH,
                        time_lapse,
                        )
 from t3.logger import Logger
-from t3.pdep.budget import apply_pdep_qm_budget
+from t3.pdep.api import save_pdep_budget_record
+from t3.pdep.budget import apply_pdep_qm_budget, budget_record_path, build_pdep_budget_record
 from t3.pdep.cache import (read_arkane_log_rmg_py_commit,
                            read_t_grid_clamp_record,
                            validate_sa_cache,
@@ -474,6 +475,12 @@ class T3:
             'SA solver': os.path.join(iteration_path, 'SA', 'solver'),
             'SA input': os.path.join(iteration_path, 'SA', 'input.py'),
             'PDep SA': os.path.join(iteration_path, 'PDep_SA'),
+            # The durable record of this iteration's QM budget decision (which qualified networks
+            # were admitted vs. refused, and why). A sibling FILE at the iteration level, like 'ARC
+            # finalization marker' above, not nested inside 'PDep capture' or 'PDep hybrid': it
+            # describes the budget's decision over EVERY qualified network, admitted or refused, so
+            # it must exist independently of whether any admitted network ever reaches capture/hybrid.
+            'PDep QM budget': budget_record_path(iteration_path),
             # Sibling of 'ARC' (never nested inside it): capture_ts_artifacts refuses a capture_dir
             # that resolves inside the ARC project directory, since ARC deletes/recreates its own
             # subtrees (including calcs/statmech/kinetics/) on every rate pass, and the whole point of
@@ -1466,6 +1473,24 @@ class T3:
         if os.path.isfile(marker_path):
             os.remove(marker_path)
 
+    def _clear_pdep_budget_record(self):
+        """
+        Remove the PDep QM budget record for the CURRENT iteration, if one exists.
+
+        Called when ``determine_species_from_pdep_network`` takes the "feature is off this
+        iteration" early return, mirroring ``_clear_arc_finalization_marker`` above: a record left
+        over from an earlier run of this same iteration (e.g. one where ``pdep_SA_threshold`` was
+        previously not ``None``) must not survive to be mistaken for a decision made THIS run.
+
+        Deliberately narrow: ``marker_path`` is always ``self.paths['PDep QM budget']``, the single
+        ``set_paths``-derived key for the current iteration's budget record -- never a constructed or
+        caller-supplied path -- and the file is only removed after ``os.path.isfile`` confirms it is a
+        regular file. This method cannot be made to remove anything else.
+        """
+        record_path = self.paths['PDep QM budget']
+        if os.path.isfile(record_path):
+            os.remove(record_path)
+
     def _mark_arc_finalization_complete(self):
         """
         Write the durable ARC finalization marker.
@@ -1862,6 +1887,12 @@ class T3:
         # loop below has finished; see PDepQueueCandidate.
         queue_candidates: list[PDepQueueCandidate] = list()
         if self.t3['sensitivity']['pdep_SA_threshold'] is None:
+            # The feature is off this iteration: clear any budget record a PREVIOUS run of this same
+            # iteration may have left behind, so its mere presence on disk cannot be mistaken for
+            # "the QM budget ran this iteration" when it did not. Without this, a re-run that exits
+            # here (feature off) after an earlier run that reached the write at the bottom of this
+            # method would leave a stale-but-valid record describing a superseded decision.
+            self._clear_pdep_budget_record()
             return species_keys
         if not os.path.isdir(self.paths['PDep SA']):
             os.mkdir(self.paths['PDep SA'])
@@ -2091,6 +2122,14 @@ class T3:
             self.logger.info(f'The PDep QM budget admitted {len(budget.admitted_indices)} network offer(s) '
                              f'at a projected cost of {budget.total_cost} transition state(s), and refused '
                              f'{len(budget.skipped)} network(s).')
+        # Persist the budget's decision now, BEFORE queueing: this describes what the budget decided
+        # (every qualified network's outcome, admitted or refused), not what queueing did with it, so
+        # it must survive a crash during queueing rather than depend on the loop below completing.
+        # Written unconditionally -- including when nothing was refused and nothing was admitted --
+        # because absence of this file has to mean "the budget never ran this iteration", not "the
+        # budget ran and refused nothing".
+        save_pdep_budget_record(path=self.paths['PDep QM budget'],
+                                record=build_pdep_budget_record(budget, iteration=self.iteration))
         for index in budget.admitted_indices:
             candidate = queue_candidates[index]
             self.queue_pdep_transition_states(network=candidate.network,
