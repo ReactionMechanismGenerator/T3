@@ -28,7 +28,7 @@ import pytest
 
 import t3.main as t3_main
 from t3.chem import T3Species
-from t3.pdep.budget import PDepBudgetDecision, PDepBudgetSkip
+from t3.pdep.budget import BUDGET_SKIP_DOES_NOT_FIT_REMAINING, PDepBudgetDecision, PDepBudgetSkip
 from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
@@ -504,6 +504,7 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
         refusal = PDepBudgetSkip(network_id=NETWORK_NAME,
                                  cost=1,
                                  remaining_transition_states=0,
+                                 reason_code=BUDGET_SKIP_DOES_NOT_FIT_REMAINING,
                                  reason='it needs 1 transition state(s) and only 0 remain(s) of the budget of 4',
                                  )
         monkeypatch.setattr(t3_main, 'apply_pdep_qm_budget',
