@@ -1,0 +1,211 @@
+Arkane execution initiated at Sat Aug  1 17:28:25 2026
+
+################################################################
+#                                                              #
+# Automated Reaction Kinetics and Network Exploration (Arkane) #
+#                                                              #
+#   Version: 4.0.0                                             #
+#   Authors: RMG Developers (rmg_dev@mit.edu)                  #
+#   P.I.s:   William H. Green (whgreen@mit.edu)                #
+#            Richard H. West (r.west@neu.edu)                  #
+#   Website: https://reactionmechanismgenerator.github.io/      #
+#                                                              #
+################################################################
+
+The current git HEAD for RMG-Py is:
+	e720866ae94eca51652978c15a0fb33c6827be67
+	Fri Jul 31 17:25:49 2026 +0300
+
+The current git HEAD for RMG-database is:
+	608f412ed7c109ed155dd877e13cd8959324e424
+	Thu Jul 23 03:37:42 2026 +0300
+
+Databases not found. Making databases
+Loading frequencies library from halogens_G4.py in /home/alon/Code/RMG-database/input/statmech/libraries...
+Loading frequencies group database from /home/alon/Code/RMG-database/input/statmech/groups...
+Loading transport library from NIST_Fluorine.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from PrimaryTransportLibrary.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from GRI-Mech.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from OneDMinN2.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from NOx2018.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport group database from /home/alon/Code/RMG-database/input/transport/groups...
+Loading species N2H4(357)...
+Loading species NH3NH(403)...
+Warning: Statmech node 'N_R0' and all its parents have data = None
+Warning: Statmech node 'N_R0' and all its parents have data = None
+Warning: Maximum number of iterations reached when fitting spectral data for [NH-][NH3+].
+Loading species H2(16)...
+Loading species H2NN(S)(380)...
+Loading species N2H2(362)...
+Loading species Ar...
+Loading transition state TS1...
+Loading transition state TS2...
+Loading transition state TS3...
+Loading reaction reaction1...
+Loading reaction reaction2...
+Loading reaction reaction3...
+Loading network PDepNetwork #21...
+
+
+========================================================================
+PDepNetwork #21 network information
+-----------------------------------
+Isomers:
+    N2H4(357)                                             86.2423 kJ/mol
+Reactant channels:
+Product channels:
+    NH3NH(403)                                            269.543 kJ/mol
+    H2(16) + H2NN(S)(380)                                 281.267 kJ/mol
+    H2(16) + N2H2(362)                                    180.814 kJ/mol
+Path reactions:
+    N2H4(357) <=> NH3NH(403)                              236.489 kJ/mol
+    N2H4(357) <=> H2(16) + H2NN(S)(380)                   281.676 kJ/mol
+    N2H4(357) <=> H2(16) + N2H2(362)                      187.955 kJ/mol
+Net reactions:
+========================================================================
+
+Calculating densities of states for PDepNetwork #21 network...
+Using 599 grains from 86.24 to 1114.70 kJ/mol in steps of 1.72 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 515 grains from 86.24 to 1114.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 423 grains from 86.24 to 930.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 364 grains from 86.24 to 812.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 323 grains from 86.24 to 730.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 293 grains from 86.24 to 670.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 270 grains from 86.24 to 624.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 252 grains from 86.24 to 588.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 558.82 kJ/mol in steps of 1.90 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 534.73 kJ/mol in steps of 1.80 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 514.48 kJ/mol in steps of 1.72 kJ/mol to compute the k(T,P) values at 700 K
+Saving pressure dependence results for network PDepNetwork #21...
+
+
+Running sensitivity analysis...
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well 'N2H4(357)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well 'NH3NH(403)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well 'H2(16) + H2NN(S)(380)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well 'H2(16) + N2H2(362)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing TS 'TS1' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing TS 'TS2' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing TS 'TS3' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #21 network...
+Using 592 grains from 86.24 to 1122.53 kJ/mol in steps of 1.75 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for N2H4(357) <=> H2(16) + N2H2(362)...
+Using 519 grains from 86.24 to 1122.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2500 K
+Using 427 grains from 86.24 to 938.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1944.44 K
+Using 368 grains from 86.24 to 820.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1590.91 K
+Using 327 grains from 86.24 to 738.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1346.15 K
+Using 297 grains from 86.24 to 678.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1166.67 K
+Using 275 grains from 86.24 to 634.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1029.41 K
+Using 257 grains from 86.24 to 598.24 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 921.053 K
+Using 250 grains from 86.24 to 567.19 kJ/mol in steps of 1.93 kJ/mol to compute the k(T,P) values at 833.333 K
+Using 250 grains from 86.24 to 543.09 kJ/mol in steps of 1.83 kJ/mol to compute the k(T,P) values at 760.87 K
+Using 250 grains from 86.24 to 522.85 kJ/mol in steps of 1.75 kJ/mol to compute the k(T,P) values at 700 K
+
+Arkane execution terminated at Sat Aug  1 17:32:49 2026
+Memory used: 339.91 MB

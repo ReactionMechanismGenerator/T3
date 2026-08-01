@@ -1,0 +1,19 @@
+max_abs_ts_coefficient: 9.515582575266414e-05
+method: MSC
+network_file_hash: sha256:72efb347a7fde63f1589b0ece9d5dc05e357e2c5ca057ffb40088920c87db998
+network_file_name: network799_1.py
+network_id: network799_1
+perturbation: 8368.0
+perturbation_units: J/mol
+rmg_py_commit: null
+rmg_py_path: null
+sa_cache_contract_version: 1
+sa_file_hash: sha256:5a89d252ab61cb521530b3ef4037bdbf0955c22a98d430bc724e96612ff1e81f
+t_grid_clamp:
+  clamped: false
+  requested_t_max: 3200.0
+  skipped_species: []
+  thermo_ceiling: 5000.0
+  tlist_dropped: false
+  tlist_original_highest: null
+  written_t_max: 3200.0

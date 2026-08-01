@@ -1,0 +1,19 @@
+max_abs_ts_coefficient: 0.0005007416716395361
+method: CSE
+network_file_hash: sha256:bcbca07ce19d6d37b890ac1c82c3bb211d2ab6f4fa7243354287c7d789f04ab6
+network_file_name: network21_1.py
+network_id: network21_1
+perturbation: 8368.0
+perturbation_units: J/mol
+rmg_py_commit: null
+rmg_py_path: null
+sa_cache_contract_version: 1
+sa_file_hash: sha256:2c2b7575b774022a8c875d5b71f1a9ab2b083ee7fbeb126b6b3fbb37f6111a92
+t_grid_clamp:
+  clamped: false
+  requested_t_max: 2500.0
+  skipped_species: []
+  thermo_ceiling: 3000.0
+  tlist_dropped: false
+  tlist_original_highest: null
+  written_t_max: 2500.0

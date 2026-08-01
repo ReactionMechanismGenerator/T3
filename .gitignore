@@ -160,3 +160,7 @@ docs/t3-pdep-qm-explorer-design.md
 # Vendored test fixtures are real Arkane output and must be tracked, despite the *.log rule
 # above which exists to keep run logs out of the repo.
 !tests/data/pdep_arkane_log/*.log
+# Narrowed to the exact file name, not just the depth: a `*/*.log` negation would also un-ignore
+# any other log that happened to land in a network's fixture directory (e.g. a stray debug.log
+# from a local run), which is the accidental-commit risk the *.log rule exists to prevent.
+!tests/data/pdep_real_networks/*/arkane.log
