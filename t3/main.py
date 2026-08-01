@@ -53,6 +53,7 @@ from t3.common import (DATA_BASE_PATH,
                        )
 from t3.logger import Logger
 from t3.pdep.api import save_pdep_budget_record
+from t3.pdep.assessment import assessments_record_path
 from t3.pdep.budget import apply_pdep_qm_budget, budget_record_path, build_pdep_budget_record
 from t3.pdep.cache import (read_arkane_log_rmg_py_commit,
                            read_t_grid_clamp_record,
@@ -481,6 +482,14 @@ class T3:
             # describes the budget's decision over EVERY qualified network, admitted or refused, so
             # it must exist independently of whether any admitted network ever reaches capture/hybrid.
             'PDep QM budget': budget_record_path(iteration_path),
+            # The durable record of what T3 concluded about EVERY P-dep network it considered this
+            # iteration, including the ones it could never evaluate. A sibling of 'PDep QM budget'
+            # rather than part of it, because the two answer different questions and have different
+            # populations: the budget describes the networks that QUALIFIED (which were admitted,
+            # which refused, and why), while this describes every network that was looked at at all.
+            # A network that failed before the selector ran never reaches the budget, and those are
+            # precisely the ones that used to vanish without trace.
+            'PDep network assessments': assessments_record_path(iteration_path),
             # Sibling of 'ARC' (never nested inside it): capture_ts_artifacts refuses a capture_dir
             # that resolves inside the ARC project directory, since ARC deletes/recreates its own
             # subtrees (including calcs/statmech/kinetics/) on every rate pass, and the whole point of
@@ -1491,6 +1500,25 @@ class T3:
         if os.path.isfile(record_path):
             os.remove(record_path)
 
+    def _clear_pdep_network_assessments_record(self):
+        """
+        Remove the PDep network assessment record for the CURRENT iteration, if one exists.
+
+        The same reasoning as ``_clear_pdep_budget_record`` above, and for the same reason it matters
+        more here: this record's whole purpose is to be believed about which networks were never
+        evaluated, so a file left over from an earlier run of this same iteration would not merely be
+        stale, it would answer that question with another run's networks. Stale-clearing is the only
+        thing standing between "no record" and "a confident wrong record".
+
+        Deliberately narrow, exactly as the budget's is: ``record_path`` is always
+        ``self.paths['PDep network assessments']``, the single ``set_paths``-derived key for the
+        current iteration -- never a constructed or caller-supplied path -- and the file is only
+        removed after ``os.path.isfile`` confirms it is a regular file.
+        """
+        record_path = self.paths['PDep network assessments']
+        if os.path.isfile(record_path):
+            os.remove(record_path)
+
     def _mark_arc_finalization_complete(self):
         """
         Write the durable ARC finalization marker.
@@ -1893,6 +1921,7 @@ class T3:
             # here (feature off) after an earlier run that reached the write at the bottom of this
             # method would leave a stale-but-valid record describing a superseded decision.
             self._clear_pdep_budget_record()
+            self._clear_pdep_network_assessments_record()
             return species_keys
         if not os.path.isdir(self.paths['PDep SA']):
             os.mkdir(self.paths['PDep SA'])
