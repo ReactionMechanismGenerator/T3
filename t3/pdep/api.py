@@ -28,6 +28,7 @@ caller still passing them gets that redirect rather than an opaque ``TypeError``
 
 import copy
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -42,6 +43,10 @@ from t3.pdep.budget import (BUDGET_ALGORITHM_VERSION,
                             VALID_BUDGET_OUTCOMES,
                             VALID_BUDGET_SKIP_REASON_CODES,
                             )
+from t3.pdep.assessment import (ASSESSMENT_ENVELOPE_SCHEMA_VERSION,
+                                ASSESSMENT_RECORD_SCHEMA_VERSION,
+                                PDepNetworkAssessment,
+                                )
 from t3.pdep.cache import read_t_grid_clamp_record, validate_sa_cache
 from t3.pdep.explorer.config import PDepExplorerConfig, deep_thaw
 from t3.pdep.explorer.factory import explorer_factory
@@ -56,6 +61,7 @@ from t3.pdep.explorer.result import (ADMISSION_POLICY_CALLER_ADMITTED,
                                      VALID_ADMISSION_POLICIES,
                                      )
 from t3.pdep.parser import PDepArkaneReaction, PDepNetwork, parse_pdep_network_file
+from t3.pdep.reason_codes import VALID_ASSESSMENT_REASON_CODES, VALID_ASSESSMENT_STATUSES
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_GENERATED,
@@ -845,6 +851,83 @@ def save_pdep_budget_record(path: str, record: PDepBudgetRecord) -> str:
     return str(path)
 
 
+def _fsync_path(path: str) -> None:
+    """
+    Flush one path to the storage device, so what was written to it survives a power loss.
+
+    Used for both halves of a durable replace: the staged FILE, so its bytes are on disk before
+    anything points at them, and then the destination DIRECTORY, so the rename that points at them
+    is on disk too. A directory is opened read-only and fsynced exactly like a file on POSIX; the two
+    cases differ only in what the kernel flushes.
+
+    Args:
+        path (str): The file or directory to flush.
+    """
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def save_pdep_network_assessments(path: str, assessments: list) -> str:
+    """
+    Save the PDep network assessment records for one T3 iteration to a YAML file.
+
+    Like ``save_pdep_network_selections``/``save_pdep_exploration_results`` and unlike
+    ``save_pdep_budget_record``, the list is wrapped in an envelope. The reason is the same one those
+    two give: a list can legitimately be empty, and an iteration in which T3 found no P-dep networks
+    at all is an ordinary outcome rather than an error -- an empty list has no record of its own to
+    carry a version, so the envelope has to.
+
+    The envelope's version is its OWN constant under its own key, ``assessment_envelope_schema_version``,
+    not a second copy of the per-record ``assessment_record_schema_version``. Both are 1 today, and
+    ``save_pdep_network_selections`` does reuse one number for both roles, but that shortcut makes
+    each version a hostage of the other: adding a field to a record would force the envelope to claim
+    a change it never underwent, and renaming the list key would force every record ever written to
+    be re-stamped. ``load_pdep_network_assessments`` checks the two separately, so a file cannot
+    claim one shape at the top level and hold another underneath.
+
+    The write is atomic AND durable, unlike ``save_pdep_network_selections``'s. That is not a
+    stylistic difference: T3's funnel rewrites this file once per network as an iteration progresses,
+    so a crash or a full disk part-way through a write is a real scenario rather than a theoretical
+    one, and this is precisely the file whose job is to survive the failure that interrupted it. A
+    truncated but still-parseable record would be believed by the next reader with the full authority
+    of provenance -- and would under-report exactly the networks whose absence this whole increment
+    exists to fix.
+
+    Args:
+        path (str): The path to write the YAML file to.
+        assessments (list): The ``PDepNetworkAssessment`` records to save.
+
+    Returns:
+        str: ``path``, as a string, so callers can chain it.
+    """
+    content = {'assessment_envelope_schema_version': ASSESSMENT_ENVELOPE_SCHEMA_VERSION,
+              'assessments': [assessment.as_dict() for assessment in assessments],
+              }
+    # Stage in a private directory alongside the destination, then ``os.replace`` in one filesystem
+    # operation. Staging in a fresh 0700 directory rather than beside the target (as
+    # ``save_pdep_budget_record`` does) closes the gap between creating the staged file and reopening
+    # it by path to write: nothing else can substitute a file at a path only this process can reach.
+    # ``os.replace`` onto the destination is what makes the swap atomic, and it also means a symlink
+    # sitting at ``path`` is replaced rather than written through.
+    directory = os.path.dirname(path) or '.'
+    staging_directory = tempfile.mkdtemp(prefix='.pdep-assessments-', dir=directory)
+    staged_path = os.path.join(staging_directory, 'assessments.yml')
+    try:
+        save_yaml_file(path=staged_path, content=content)
+        # Atomic is not the same as durable: ``os.replace`` orders the rename, but says nothing about
+        # whether the bytes behind it ever reached the disk. Without these, a power loss can leave
+        # the rename applied and the contents lost -- the file present, and empty or torn.
+        _fsync_path(staged_path)
+        os.replace(staged_path, path)
+        _fsync_path(directory)
+    finally:
+        shutil.rmtree(staging_directory, ignore_errors=True)
+    return str(path)
+
+
 # --- Loaders -------------------------------------------------------------------------------------
 #
 # These are the read side of ``save_pdep_network_selections``/``save_pdep_exploration_results``
@@ -1326,7 +1409,9 @@ def _selection_from_dict(record, *, path: str, context: str,
         raise ValueError(f"PDep file {path!r} contains a selection record that is not a mapping "
                          f"(got {type(record).__name__}: {record!r}) at {context}.")
     record_version = record.get('selection_schema_version')
-    if record_version != SELECTION_SCHEMA_VERSION:
+    # ``isinstance(True, int)`` and ``True == 1``, so a ``selection_schema_version: true`` file would
+    # otherwise sail through this equality check and be read as correctly versioned.
+    if isinstance(record_version, bool) or record_version != SELECTION_SCHEMA_VERSION:
         raise ValueError(f"PDep file {path!r} contains a selection record with "
                          f"selection_schema_version={record_version!r}, which this code does not "
                          f"understand (only {SELECTION_SCHEMA_VERSION} is supported), at {context}.")
@@ -1342,7 +1427,7 @@ def _selection_from_dict(record, *, path: str, context: str,
     # to be safely additive, that should be a deliberate, tested decision made at THAT time, not a
     # default assumed here.
     record_algorithm_version = record.get('selection_algorithm_version')
-    if record_algorithm_version != SELECTION_ALGORITHM_VERSION:
+    if isinstance(record_algorithm_version, bool) or record_algorithm_version != SELECTION_ALGORITHM_VERSION:
         raise ValueError(f"PDep file {path!r} contains a selection record with "
                          f"selection_algorithm_version={record_algorithm_version!r}, which this "
                          f"code cannot interpret (only {SELECTION_ALGORITHM_VERSION} is supported), "
@@ -1818,3 +1903,153 @@ def load_pdep_budget_record(path: str) -> PDepBudgetRecord:
         schema_version=schema_version,
         algorithm_version=algorithm_version,
     )
+
+
+def _assessment_from_dict(record, *, path: str, context: str) -> PDepNetworkAssessment:
+    """
+    Reconstruct one ``PDepNetworkAssessment`` from its ``as_dict()`` rendering.
+
+    Unlike ``_selection_from_dict``, this needs no companion cross-field validator: every invariant
+    that makes an assessment record trustworthy (a status agreeing with its reason code, a nested
+    selection being present exactly when the reason code implies one, a nested selection's own
+    ``qualified`` agreeing with the outer verdict) is enforced by ``PDepNetworkAssessment``'s
+    ``__post_init__``, so simply constructing one re-checks the whole record. That is the point of
+    having built the invariants into the type: a hand-edited file gets refused by the same rule that
+    refused the impossible combination at the site that would have written it.
+
+    The construction is wrapped only so those refusals name the FILE and the entry. The type's own
+    message names the network, which is enough at the write site but not at the read site: on a run
+    with a dozen iterations on disk, "network4_2 carries status qualified with reason
+    sa_all_methods_failed" is the difference between a fixable report and a hunt. The per-field
+    ``_require_*`` helpers already name both, so they are deliberately left outside the wrapper
+    rather than being given a second, redundant prefix.
+
+    Args:
+        record: One assessment record, as rendered by ``PDepNetworkAssessment.as_dict()``.
+        path (str): The file this record was read from, for diagnostics only.
+        context (str): A short description of where this record sits in the file (e.g.
+            ``'assessments[3]'``), for diagnostics only.
+
+    Raises:
+        ValueError: If ``record`` is not a mapping; if it carries an
+            ``assessment_record_schema_version`` this code does not understand; if the ``selection``
+            key is absent; if a required field is missing or of the wrong type; if a secondary reason
+            code is not recognized; or if the record violates any of the type's own invariants.
+
+    Returns:
+        PDepNetworkAssessment: The reconstructed record.
+    """
+    if not isinstance(record, dict):
+        raise ValueError(f"PDep network assessments file {path!r} has {context} that is not a "
+                         f"mapping (got {type(record).__name__}: {record!r}); an assessment record "
+                         f"cannot be reconstructed from it.")
+    record_version = record.get('assessment_record_schema_version')
+    if isinstance(record_version, bool) or record_version != ASSESSMENT_RECORD_SCHEMA_VERSION:
+        raise ValueError(f"PDep network assessments file {path!r} has {context} with "
+                         f"assessment_record_schema_version={record_version!r}, which this code does "
+                         f"not understand (only {ASSESSMENT_RECORD_SCHEMA_VERSION} is supported).")
+    if 'selection' not in record:
+        # PDepNetworkAssessment.as_dict() ALWAYS writes this key, rendering it null for the reason
+        # codes that forbid a nested selection. An absent key is therefore not the same thing as an
+        # explicit null: null means "there was no selection", absent means this record was not
+        # written by T3 -- and guessing null for it would silently convert a corrupt record into a
+        # plausible "never evaluated" one, which is the exact misreading this file exists to prevent.
+        raise ValueError(f"PDep network assessments file {path!r} has {context} missing its required "
+                         f"'selection' key (a T3-written record always carries it, as null when the "
+                         f"reason code forbids a nested selection); an absent key is not the same as "
+                         f"an explicit null and is not guessed at.")
+    secondary_reason_codes = _require_list_field(record, 'secondary_reason_codes', path=path,
+                                                 context=context)
+    for index, code in enumerate(secondary_reason_codes):
+        if code not in VALID_ASSESSMENT_REASON_CODES:
+            raise ValueError(f"PDep network assessments file {path!r} has {context} field "
+                             f"'secondary_reason_codes'[{index}] with value {code!r}, which is not "
+                             f"one of the recognized reason codes "
+                             f"{VALID_ASSESSMENT_REASON_CODES!r}.")
+    fields = dict(
+        network_id=_require_str_field(record, 'network_id', path=path, context=context),
+        iteration=_require_int_field(record, 'iteration', path=path, context=context),
+        status=_require_enum_field(record, 'status', path=path, context=context,
+                                   allowed=VALID_ASSESSMENT_STATUSES),
+        reason_code=_require_enum_field(record, 'reason_code', path=path, context=context,
+                                        allowed=VALID_ASSESSMENT_REASON_CODES),
+        secondary_reason_codes=secondary_reason_codes,
+        network_path=_require_optional_str_field(record, 'network_path', path=path, context=context),
+        network_source_hash=_require_optional_str_field(record, 'network_source_hash', path=path,
+                                                        context=context),
+        observable_label=_require_optional_str_field(record, 'observable_label', path=path,
+                                                     context=context),
+        sa_rank_index=_require_optional_int_field(record, 'sa_rank_index', path=path,
+                                                  context=context),
+        chemkin_reaction=_require_optional_str_field(record, 'chemkin_reaction', path=path,
+                                                     context=context),
+        network_reaction=_require_optional_str_field(record, 'network_reaction', path=path,
+                                                     context=context),
+        requested_me_methods=_require_list_field(record, 'requested_me_methods', path=path,
+                                                 context=context),
+        final_method=_require_optional_str_field(record, 'final_method', path=path, context=context),
+        sa_path=_require_optional_str_field(record, 'sa_path', path=path, context=context),
+        # Read as a free optional string rather than through _require_optional_enum_field, even
+        # though the selection loader enum-restricts its own cache_status. PDepNetworkAssessment
+        # accepts any string here, and a loader stricter than the constructor it feeds would make a
+        # record T3 legitimately wrote unreadable by T3 -- the one failure a durable record must
+        # never have. Strictness that is not shared with the writer is not safety, it is a bug with a
+        # delay on it.
+        cache_status=_require_optional_str_field(record, 'cache_status', path=path, context=context),
+        warnings=_require_list_field(record, 'warnings', path=path, context=context),
+        selection=_selection_from_dict(record['selection'], path=path,
+                                       context=f'{context}.selection', allow_none=True),
+        schema_version=record_version,
+    )
+    try:
+        return PDepNetworkAssessment(**fields)
+    except ValueError as e:
+        raise ValueError(f"PDep network assessments file {path!r} has {context} that is not a valid "
+                         f"assessment record: {e}") from e
+
+
+def load_pdep_network_assessments(path: str) -> list:
+    """
+    Load the PDep network assessment records for one T3 iteration from a YAML file written by
+    ``save_pdep_network_assessments``.
+
+    This is STRICT and carries no migration/fallback path for an older on-disk shape -- see the
+    module comment above ``_sensitive_transition_state_from_dict`` for why that is safe. An
+    unversioned file, a file whose version this code does not recognize, a malformed envelope, or a
+    malformed record are all refused outright rather than guessed at.
+
+    Args:
+        path (str): The path to read the YAML file from.
+
+    Raises:
+        ValueError: If the file's top level is not a mapping; if the envelope carries no
+            ``assessment_record_schema_version`` key (an unversioned file is not "version 1", it is
+            of unknown shape); if that version is not the one this code understands; if the
+            ``assessments`` key is absent or not a list; or if any entry (identified by its index in
+            the list) is malformed in any of the ways ``_assessment_from_dict`` refuses.
+
+    Returns:
+        list: The reconstructed ``PDepNetworkAssessment`` records, in file order.
+    """
+    content = _read_persisted_yaml_file(path=path)
+    if not isinstance(content, dict):
+        raise ValueError(f"PDep network assessments file {path!r} does not contain a mapping at its "
+                         f"top level (got {type(content).__name__}); cannot read it as an "
+                         f"assessments envelope.")
+    if 'assessment_envelope_schema_version' not in content:
+        raise ValueError(f"PDep network assessments file {path!r} has no "
+                         f"'assessment_envelope_schema_version' key: an unversioned file is not "
+                         f"version {ASSESSMENT_ENVELOPE_SCHEMA_VERSION}, it is of unknown shape and "
+                         f"cannot be trusted.")
+    envelope_version = content['assessment_envelope_schema_version']
+    if isinstance(envelope_version, bool) or envelope_version != ASSESSMENT_ENVELOPE_SCHEMA_VERSION:
+        raise ValueError(f"PDep network assessments file {path!r} has "
+                         f"assessment_envelope_schema_version={envelope_version!r}, but this code "
+                         f"only understands version {ASSESSMENT_ENVELOPE_SCHEMA_VERSION}.")
+    records = content.get('assessments')
+    if not isinstance(records, list):
+        raise ValueError(f"PDep network assessments file {path!r} has no 'assessments' list "
+                         f"(got {type(records).__name__ if 'assessments' in content else 'missing'}: "
+                         f"{records!r}).")
+    return [_assessment_from_dict(record, path=path, context=f'assessments[{index}]')
+           for index, record in enumerate(records)]
