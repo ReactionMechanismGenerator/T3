@@ -373,12 +373,33 @@ def validate_sa_cache(sa_path: str,
         warnings_list.append(f'The network file {network_path} is missing, so the cached sensitivity output at '
                              f'{sa_path} cannot be validated against it. Regenerating.')
         return CACHE_STATUS_CACHED_REJECTED, warnings_list
-    if metadata.get('network_file_hash') != hash_file(network_path):
+    # Both hashes are taken behind a try: the ``isfile`` guards above answer "is there a file
+    # here", not "can this process read it", and neither closes the window between the check and
+    # the open. An unreadable file, a file unlinked by a concurrent run, or an I/O error must come
+    # out of here as a rejection -- this function's whole contract is to return a status, and its
+    # rule is that anything it cannot positively vouch for is regenerated. Letting the OSError
+    # escape instead ends the campaign: the ``t3/main.py`` call site sits outside the surrounding
+    # ``(OSError, ValueError)`` handler, so it reaches the outer ``except Exception``, which
+    # records an ``internal_error`` and re-raises. An unreadable network file is a fact about this
+    # run's data, which ``t3/main.py`` already refuses to treat as fatal at its own read sites.
+    try:
+        network_file_hash = hash_file(network_path)
+    except OSError as e:
+        warnings_list.append(f'The network file {network_path} could not be read to validate the cached '
+                             f'sensitivity output at {sa_path} against it: {e}. Regenerating.')
+        return CACHE_STATUS_CACHED_REJECTED, warnings_list
+    if metadata.get('network_file_hash') != network_file_hash:
         warnings_list.append(f'The network file {network_path} changed since the sensitivity output at {sa_path} '
                              f'was generated. Regenerating.')
         return CACHE_STATUS_CACHED_REJECTED, warnings_list
 
-    if metadata.get('sa_file_hash') != hash_file(sa_path):
+    try:
+        sa_file_hash = hash_file(sa_path)
+    except OSError as e:
+        warnings_list.append(f'The cached sensitivity output at {sa_path} could not be read to check it against '
+                             f'its T3 sidecar: {e}. Regenerating.')
+        return CACHE_STATUS_CACHED_REJECTED, warnings_list
+    if metadata.get('sa_file_hash') != sa_file_hash:
         warnings_list.append(f'The sensitivity output at {sa_path} changed since its T3 sidecar was written '
                              f'(content hash mismatch). Regenerating.')
         return CACHE_STATUS_CACHED_REJECTED, warnings_list

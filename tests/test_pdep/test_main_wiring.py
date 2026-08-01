@@ -165,6 +165,78 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
         assert selection.cache_status == CACHE_STATUS_CACHED_VALID
         assert selection.qualified is True
 
+    def test_cached_valid_path_never_rewrites_the_arkane_input(self, tmp_path, monkeypatch):
+        """A cache hit must leave ``input.py`` exactly as it was, because nothing consumes it here.
+
+        No Arkane job runs on this path, so rewriting the input buys nothing and costs provenance:
+        after any change to the writer, the directory would hold a freshly rendered ``input.py``
+        that did NOT produce the ``sensitivity/sa_coefficients.yml`` sitting beside it, and neither
+        the sidecar's ``network_file_hash`` nor its ``sa_file_hash`` covers ``input.py`` to catch
+        the divergence.
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _build_sa_dict(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+        input_path = os.path.join(t3.paths['PDep SA'], NETWORK_NAME, 'CSE', 'input.py')
+        sentinel = '# the input.py that actually produced the cached SA\n'
+        with open(input_path, 'w') as f:
+            f.write(sentinel)
+
+        def _fail_if_called(*args, **kwargs):
+            pytest.fail('run_arkane_job should not be invoked when a valid cache is present.')
+
+        monkeypatch.setattr(t3_main, 'run_arkane_job', _fail_if_called)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert t3.pdep_network_selections[0].cache_status == CACHE_STATUS_CACHED_VALID
+        with open(input_path, 'r') as f:
+            assert f.read() == sentinel, 'the cache hit rewrote an input.py that nothing was going to read'
+
+    @pytest.mark.skipif(hasattr(os, 'geteuid') and os.geteuid() == 0,
+                        reason='root bypasses directory permissions, so the read-only dir would be writable')
+    def test_a_valid_cache_is_not_denied_by_an_unwritable_output_directory(self, tmp_path, monkeypatch):
+        """A cache hit must not depend on being able to write into the output directory.
+
+        The Arkane input used to be rendered before the cache was consulted, so a read-only or full
+        ``<network>/<method>/`` directory raised an OSError and ended the network -- discarding a
+        cached SA that was perfectly valid and that the run never needed to write anything to use.
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _build_sa_dict(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+
+        def _fail_if_called(*args, **kwargs):
+            pytest.fail('run_arkane_job should not be invoked when a valid cache is present.')
+
+        monkeypatch.setattr(t3_main, 'run_arkane_job', _fail_if_called)
+
+        method_dir = os.path.join(t3.paths['PDep SA'], NETWORK_NAME, 'CSE')
+        os.chmod(method_dir, 0o555)
+        try:
+            t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+        finally:
+            os.chmod(method_dir, 0o755)
+
+        assert len(t3.pdep_network_selections) == 1
+        selection = t3.pdep_network_selections[0]
+        assert selection.cache_status == CACHE_STATUS_CACHED_VALID
+        assert selection.qualified is True
+
     def test_generate_path_invokes_arkane_and_persists_sidecar(self, tmp_path, monkeypatch):
         """No cache present: Arkane must be invoked, and a sidecar must be written on success."""
         t3 = _build_t3(tmp_path)

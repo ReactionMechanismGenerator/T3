@@ -133,6 +133,82 @@ def test_network_file_missing_is_rejected(tmp_path):
               for warning in warnings), warnings
 
 
+def test_an_unreadable_network_file_is_rejected_rather_than_raising(tmp_path, monkeypatch):
+    """Test that an OSError from hashing the network file is a cache rejection, not an exception.
+
+    ``os.path.isfile`` answers "does a file exist here", not "can this process read it", so the
+    guard above it does not cover a present-but-unreadable file. Letting the ``OSError`` escape
+    would break this function's documented contract of returning a status, and at the ``t3/main.py``
+    call site it is not caught by the surrounding ``(OSError, ValueError)`` handler either -- it
+    reaches the outer ``except Exception``, which records an ``internal_error`` and re-raises,
+    ending the whole campaign over one unreadable file.
+    """
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+
+    def refuse_the_network_file(path):
+        if os.path.realpath(path) == os.path.realpath(network_path):
+            raise PermissionError(13, 'Permission denied', path)
+        return hash_file(path)
+
+    monkeypatch.setattr('t3.pdep.cache.hash_file', refuse_the_network_file)
+    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
+    assert status == CACHE_STATUS_CACHED_REJECTED
+    assert any('network file' in warning.lower() and 'could not be read' in warning.lower()
+               for warning in warnings), warnings
+
+
+def test_an_unreadable_sa_file_is_rejected_rather_than_raising(tmp_path, monkeypatch):
+    """Test that an OSError from hashing the SA YAML is a cache rejection, not an exception.
+
+    The same hole as the network file above, at the second of the two hash gates: the SA output is
+    confirmed to exist at the top of the function but is not read until much later.
+    """
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+
+    def refuse_the_sa_file(path):
+        if os.path.realpath(path) == os.path.realpath(sa_path):
+            raise PermissionError(13, 'Permission denied', path)
+        return hash_file(path)
+
+    monkeypatch.setattr('t3.pdep.cache.hash_file', refuse_the_sa_file)
+    status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
+    assert status == CACHE_STATUS_CACHED_REJECTED
+    assert any('sensitivity output' in warning.lower() and 'could not be read' in warning.lower()
+               for warning in warnings), warnings
+
+
+@pytest.mark.skipif(hasattr(os, 'geteuid') and os.geteuid() == 0,
+                    reason='root bypasses file permissions, so the unreadable file would be readable')
+def test_a_genuinely_chmodded_network_file_is_rejected_rather_than_raising(tmp_path):
+    """Test the same fail-closed behaviour against a real unreadable file, not a patched hash.
+
+    The two monkeypatched tests above pin the contract; this one exists so that contract is known
+    to hold for the filesystem condition it was written for, rather than only for a stubbed
+    ``hash_file`` that might not raise what ``open()`` actually raises.
+    """
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+    os.chmod(network_path, 0o000)
+    try:
+        assert os.path.isfile(network_path), 'the guard this test is about must still see the file'
+        status, warnings = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
+    finally:
+        os.chmod(network_path, 0o644)
+    assert status == CACHE_STATUS_CACHED_REJECTED
+    assert any('could not be read' in warning.lower() for warning in warnings), warnings
+
+
 # --- 18. Sidecar records a different sa_cache_contract_version ---------------------------------------
 
 def test_sidecar_with_mismatched_sa_cache_contract_version_is_rejected(tmp_path):

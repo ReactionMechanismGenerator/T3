@@ -184,10 +184,7 @@ def select_pdep_network(network: str | PDepNetwork,
 
     cache_status = None
     cache_warnings: list = list()
-    # Best-effort provenance read: sa_path may point at a sidecar predating this field, or at SA
-    # data produced outside T3 entirely, in which case read_t_grid_clamp_record returns None
-    # (unknown provenance) rather than raising -- this must never gate evaluation_status.
-    t_grid_clamp = read_t_grid_clamp_record(sa_path) if sa_path is not None else None
+    t_grid_clamp = None
     if sa_dict is None:
         if validate_cache:
             cache_status, cache_warnings = validate_sa_cache(
@@ -201,7 +198,12 @@ def select_pdep_network(network: str | PDepNetwork,
                     method=method,
                     sa_path=sa_path,
                     cache_status=cache_status,
-                    t_grid_clamp=t_grid_clamp,
+                    # Deliberately no t_grid_clamp: the field means "the T grid this decision rests
+                    # on", and this decision rests on nothing -- the SA was never read. The only
+                    # value available here would come from the sidecar validate_sa_cache has just
+                    # refused to trust, so reporting it would launder provenance out of a source
+                    # declared untrustworthy one line earlier.
+                    t_grid_clamp=None,
                     thresholds={'relative_threshold': relative_threshold,
                                 'min_delta_ln_k': min_delta_ln_k,
                                 'perturbation': perturbation,
@@ -218,6 +220,14 @@ def select_pdep_network(network: str | PDepNetwork,
             # provenance -- that must be recorded as 'unvalidated', not reported as though a real
             # cache-validity check ('generated'/'cached_valid') had actually taken place.
             cache_status = CACHE_STATUS_UNVALIDATED
+        # Read only now, once the cache this provenance describes has either been vouched for or
+        # been explicitly trusted by the caller via validate_cache=False. Reading it earlier meant
+        # the cache-rejected placeholder above carried a value from a sidecar that had just been
+        # declared untrustworthy. Still best-effort: sa_path may point at a sidecar predating this
+        # field, or at SA data produced outside T3 entirely, in which case read_t_grid_clamp_record
+        # returns None (unknown provenance) rather than raising -- it must never gate
+        # evaluation_status.
+        t_grid_clamp = read_t_grid_clamp_record(sa_path)
         sa_dict = read_sa_yaml_file(path=sa_path)
 
     if network_reaction is not None:
@@ -870,7 +880,7 @@ def _fsync_path(path: str) -> None:
         os.close(fd)
 
 
-def save_pdep_network_assessments(path: str, assessments: list) -> str:
+def save_pdep_network_assessments(path: str, assessments: list, *, complete: bool) -> str:
     """
     Save the PDep network assessment records for one T3 iteration to a YAML file.
 
@@ -896,14 +906,33 @@ def save_pdep_network_assessments(path: str, assessments: list) -> str:
     of provenance -- and would under-report exactly the networks whose absence this whole increment
     exists to fix.
 
+    That same rewriting is why the envelope states whether the list is FINISHED. A file holding four
+    of an iteration's twelve networks is not a smaller version of the truth, it is a different claim,
+    and one that reads as authoritative: "four networks were assessed" and "four networks had been
+    assessed when T3 died" are the same bytes without this flag. ``complete`` is required rather than
+    defaulted precisely because the safe value depends on the caller and a forgotten argument would
+    quietly assert the stronger of the two.
+
     Args:
         path (str): The path to write the YAML file to.
         assessments (list): The ``PDepNetworkAssessment`` records to save.
+        complete (bool): Whether these are ALL the assessments of the iteration. ``False`` for the
+            incremental writes T3 makes as it goes, ``True`` for the final one once every network
+            has had its turn.
+
+    Raises:
+        ValueError: If ``complete`` is not a ``bool``. A truthy stand-in would be written out as
+            itself and refused on the way back in, which is a confusing place to find out.
 
     Returns:
         str: ``path``, as a string, so callers can chain it.
     """
+    if not isinstance(complete, bool):
+        raise ValueError(f'The PDep network assessments `complete` flag must be a bool, got '
+                         f'{complete!r} ({type(complete).__name__}). This flag is the difference '
+                         f'between a finished record and a crash scene; it cannot be inferred.')
     content = {'assessment_envelope_schema_version': ASSESSMENT_ENVELOPE_SCHEMA_VERSION,
+              'complete': complete,
               'assessments': [assessment.as_dict() for assessment in assessments],
               }
     # Stage in a private directory alongside the destination, then ``os.replace`` in one filesystem
@@ -2008,7 +2037,7 @@ def _assessment_from_dict(record, *, path: str, context: str) -> PDepNetworkAsse
                          f"assessment record: {e}") from e
 
 
-def load_pdep_network_assessments(path: str) -> list:
+def load_pdep_network_assessments(path: str, *, allow_incomplete: bool = False) -> list:
     """
     Load the PDep network assessment records for one T3 iteration from a YAML file written by
     ``save_pdep_network_assessments``.
@@ -2018,15 +2047,28 @@ def load_pdep_network_assessments(path: str) -> list:
     unversioned file, a file whose version this code does not recognize, a malformed envelope, or a
     malformed record are all refused outright rather than guessed at.
 
+    An UNFINISHED file is refused too, by default. T3 rewrites this file after every network, so a
+    file left behind by a crash is well-formed, parseable, and short -- the one failure this loader
+    cannot detect by looking at the records, and the one most likely to be believed. Refusing it
+    means a caller counting "how many networks could not be evaluated" cannot silently answer with a
+    number that stopped where the crash did. Pass ``allow_incomplete=True`` to read the partial
+    record deliberately, which is exactly what an operator investigating that crash wants.
+
     Args:
         path (str): The path to read the YAML file from.
+        allow_incomplete (bool, optional): Whether to accept a file whose envelope says the
+            iteration never finished writing it. Must be an exact ``bool``, for the same reason
+            ``complete`` must be: an escape hatch that opens on truthiness is not a decision.
 
     Raises:
-        ValueError: If the file's top level is not a mapping; if the envelope carries no
+        ValueError: If ``allow_incomplete`` is not a ``bool``; if the file's top level is not a
+            mapping; if the envelope carries no
             ``assessment_record_schema_version`` key (an unversioned file is not "version 1", it is
             of unknown shape); if that version is not the one this code understands; if the
-            ``assessments`` key is absent or not a list; or if any entry (identified by its index in
-            the list) is malformed in any of the ways ``_assessment_from_dict`` refuses.
+            ``complete`` flag is absent or not a bool; if it is ``False`` and ``allow_incomplete``
+            was not asked for; if the ``assessments`` key is absent or not a list; or if any entry
+            (identified by its index in the list) is malformed in any of the ways
+            ``_assessment_from_dict`` refuses.
 
     Returns:
         list: The reconstructed ``PDepNetworkAssessment`` records, in file order.
@@ -2046,10 +2088,32 @@ def load_pdep_network_assessments(path: str) -> list:
         raise ValueError(f"PDep network assessments file {path!r} has "
                          f"assessment_envelope_schema_version={envelope_version!r}, but this code "
                          f"only understands version {ASSESSMENT_ENVELOPE_SCHEMA_VERSION}.")
+    if not isinstance(allow_incomplete, bool):
+        raise ValueError(f'The PDep network assessments `allow_incomplete` flag must be a bool, got '
+                         f'{allow_incomplete!r} ({type(allow_incomplete).__name__}). It is held to the '
+                         f'same standard as the flag it overrides: an escape hatch that opens on '
+                         f'truthiness is not a decision, it is an accident.')
+    if 'complete' not in content:
+        raise ValueError(f"PDep network assessments file {path!r} has no 'complete' key, so there is "
+                         f"no way to tell a finished iteration's record from one a crash cut short. "
+                         f"Both are well-formed and only one is the whole field.")
+    complete = content['complete']
+    if not isinstance(complete, bool):
+        raise ValueError(f"PDep network assessments file {path!r} has complete={complete!r} "
+                         f"({type(complete).__name__}); this must be a bool, since anything else "
+                         f"would be read for its truthiness and quietly promote an unfinished record.")
+    # Checked BEFORE the completeness refusal below, which reports how many records the partial file
+    # got to: counting them first would mean a hand-written `assessments: 1` raised a bare TypeError
+    # from inside the message of the error it was about to raise.
     records = content.get('assessments')
     if not isinstance(records, list):
         raise ValueError(f"PDep network assessments file {path!r} has no 'assessments' list "
                          f"(got {type(records).__name__ if 'assessments' in content else 'missing'}: "
                          f"{records!r}).")
+    if not complete and not allow_incomplete:
+        raise ValueError(f"PDep network assessments file {path!r} says complete=False: T3 was still "
+                         f"writing it when the iteration ended, so the {len(records)} record(s) in it "
+                         f"are where the run stopped, not every network it looked at. Pass "
+                         f"allow_incomplete=True to read it as the partial record it is.")
     return [_assessment_from_dict(record, path=path, context=f'assessments[{index}]')
            for index, record in enumerate(records)]

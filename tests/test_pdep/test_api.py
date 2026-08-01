@@ -311,10 +311,17 @@ def test_select_pdep_network_records_no_t_grid_clamp_for_a_direct_sa_dict_call(s
     assert selection.t_grid_clamp is None
 
 
-def test_select_pdep_network_records_t_grid_clamp_on_the_cache_rejected_placeholder(tmp_path):
-    """Test that even the CACHE_STATUS_CACHED_REJECTED early-return placeholder -- built at a
-    separate PDepNetworkSelection construction site from the normal evaluated path -- still carries
-    whatever t_grid_clamp the sidecar records, rather than silently dropping it on this path."""
+def test_select_pdep_network_drops_t_grid_clamp_on_the_cache_rejected_placeholder(tmp_path):
+    """Test that the CACHE_STATUS_CACHED_REJECTED early-return placeholder carries NO t_grid_clamp.
+
+    This test previously pinned the opposite, on the reasoning that surfacing what the sidecar
+    claimed beats silently dropping it. That was reversed deliberately: the field means "the T grid
+    this decision rests on", and a ``not_evaluated`` decision rests on nothing -- the SA was never
+    read. Worse, the value would come from the very sidecar ``validate_sa_cache`` just refused to
+    trust, so it is provenance borrowed from a source declared untrustworthy one line earlier.
+    ``None`` (unknown provenance) is already the honest, well-tested answer on the two neighbouring
+    paths above, and this path is no better informed than they are.
+    """
     network_path = str(tmp_path / 'network4_2.py')
     with open(NETWORK_PATH, 'r') as f:
         _write(network_path, f.read())
@@ -333,7 +340,10 @@ def test_select_pdep_network_records_t_grid_clamp_on_the_cache_rejected_placehol
     rejected = select_pdep_network(network=network_path, sa_path=sa_path, network_reaction=TARGET_REACTION,
                                    relative_threshold=0.001, method='MSC')
     assert rejected.cache_status == CACHE_STATUS_CACHED_REJECTED
-    assert rejected.t_grid_clamp == clamp_record
+    assert rejected.t_grid_clamp is None
+    # The sidecar really did hold a clamp record: this asserts the value was dropped on the way to
+    # the decision, not that the fixture never wrote one.
+    assert read_yaml_file(path=sa_cache_metadata_path(sa_path))['t_grid_clamp'] == clamp_record
 
 
 # --- 5c. FIX 3: a bad threshold raises even on the cache-rejected early-return path --------------

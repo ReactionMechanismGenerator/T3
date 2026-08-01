@@ -326,7 +326,19 @@ class PDepNetworkAssessment:
                              f'PDepNetworkSelection can be nested here. Anything else would pass '
                              f'construction and fail later, when the record is serialized.')
         if self.reason_code in INTERNAL_ERROR_REASON_CODES:
-            # A crash may happen before or after the selector returned, so either is coherent.
+            # A crash may happen before or after the selector returned, so either presence or absence
+            # of a selection is coherent, and the field-by-field agreement checks below are skipped:
+            # a crash part-way through populating a record can legitimately leave its two halves
+            # disagreeing, and refusing it would discard the breadcrumb over the very inconsistency
+            # the breadcrumb exists to report.
+            #
+            # The identity claim is NOT skipped. "These two halves are mid-update" is a coherent
+            # thing for a crash record to say; "this is evidence about a different network" is not,
+            # at any status.
+            if self.selection is not None and self.selection.network_id != self.network_id:
+                raise ValueError(f'PDep assessment for network {self.network_id} nests a selection '
+                                 f'that is about network {self.selection.network_id!r}. A crash does '
+                                 f'not make another network\'s evidence relevant to this one.')
             return
         if self.reason_code in PRE_SELECTOR_REASON_CODES:
             if self.selection is not None:

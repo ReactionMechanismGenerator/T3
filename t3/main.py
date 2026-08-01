@@ -25,6 +25,7 @@ from collections import deque
 from dataclasses import dataclass
 
 import cantera as ct
+import yaml
 
 from arc.common import (get_number_with_ordinal_indicator,
                         get_ordinal_indicator,
@@ -32,7 +33,7 @@ from arc.common import (get_number_with_ordinal_indicator,
                         read_yaml_file,
                         save_yaml_file,
                         )
-from arc.exceptions import ConverterError
+from arc.exceptions import ConverterError, InputError
 from arc.main import ARC
 from arc.species.species import check_label
 from arc.species.converter import check_xyz_dict
@@ -52,8 +53,8 @@ from t3.common import (DATA_BASE_PATH,
                        time_lapse,
                        )
 from t3.logger import Logger
-from t3.pdep.api import save_pdep_budget_record
-from t3.pdep.assessment import assessments_record_path
+from t3.pdep.api import save_pdep_budget_record, save_pdep_network_assessments
+from t3.pdep.assessment import PDepNetworkAssessment, assessments_record_path
 from t3.pdep.budget import apply_pdep_qm_budget, budget_record_path, build_pdep_budget_record
 from t3.pdep.cache import (read_arkane_log_rmg_py_commit,
                            read_t_grid_clamp_record,
@@ -80,11 +81,24 @@ from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           write_ts_join_sidecar,
                           )
 from t3.pdep.parser import PDepNetwork, parse_pdep_network_file
+from t3.pdep.reason_codes import (REASON_CODE_STATUS,
+                                  REASON_INTERNAL_ERROR,
+                                  REASON_NETWORK_DISCOVERY_FAILED,
+                                  REASON_NETWORK_INPUT_WRITE_FAILED,
+                                  REASON_NETWORK_PARSE_FAILED,
+                                  REASON_SA_ALL_METHODS_FAILED,
+                                  REASON_SA_OUTPUT_MALFORMED,
+                                  REASON_SA_OUTPUT_MISSING,
+                                  REASON_SA_OUTPUT_UNREADABLE,
+                                  REASON_SA_STRUCTURES_MISSING,
+                                  REASON_SPECIES_LABEL_MAPPING_FAILED,
+                                  )
 from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_GENERATED,
                               E0_PERTURBATION_J_PER_MOL,
                               PDepNetworkSelection,
-                              select_from_sa_dict,
+                              resolve_direction_key,
+                              select_from_sa_dict_with_diagnostics,
                               select_sensitive_wells,
                               )
 from t3.runners.rmg_runner import rmg_runner, run_arkane_job
@@ -151,6 +165,158 @@ class PDepQueueCandidate:
     network_path: str
 
 
+@dataclass(frozen=True)
+class PDepNetworkAssessmentOutcome:
+    """
+    Everything one pass of the QM-assessment funnel produced for a single network offer.
+
+    The funnel answers one question -- is this whole network worth refining with QM? -- but the loop
+    around it has a second, independent product: species drawn from wells the offering reaction is
+    sensitive to. The two have different prerequisites and different lifetimes, so rather than let
+    the funnel decide the second question too, it returns what the well analysis would need and the
+    caller runs it only if those prerequisites actually survived. ``direction_key`` is the gate:
+    it is non-``None`` only when the SA was readable, its ``structures`` block was valid, the species
+    labels mapped, and the offering reaction was located in the SA output.
+
+    Attributes:
+        assessment (PDepNetworkAssessment): The durable verdict for this offer. Always present --
+            every path through the funnel produces one, which is the whole point of it.
+        queue_candidate (PDepQueueCandidate, optional): Present only if the network qualified.
+        sa_dict (dict, optional): The Arkane sensitivity payload, if it was read and is a mapping.
+        labels_map (dict, optional): Network species label -> RMG Chemkin label, if it was built.
+        direction_key (str, optional): The key under which ``sa_dict`` holds the offering reaction's
+            coefficients, in whichever direction it is stored.
+    """
+    assessment: 'PDepNetworkAssessment'
+    queue_candidate: PDepQueueCandidate | None = None
+    sa_dict: dict | None = None
+    labels_map: dict | None = None
+    direction_key: str | None = None
+
+
+def _pdep_assessment(reason_code: str,
+                     provenance: dict,
+                     warnings: list,
+                     selection=None,
+                     secondary_reason_codes=(),
+                     ) -> PDepNetworkAssessment:
+    """
+    Build one assessment record, deriving the status from the reason code rather than restating it.
+
+    Every construction site in the funnel goes through here so that no site can pair a status with a
+    reason code that does not imply it. ``REASON_CODE_STATUS`` already holds that mapping once; the
+    record's own validation would catch a disagreement, but only after a caller had invented one.
+
+    Args:
+        reason_code (str): The ``t3.pdep.reason_codes`` code naming what happened.
+        provenance (dict): The identity and work fields accumulated so far for this offer.
+        warnings (list): Human-readable diagnosis gathered along the way.
+        selection (PDepNetworkSelection, optional): The selector's record, where there is one.
+        secondary_reason_codes (tuple, optional): Further codes that also applied.
+
+    Returns:
+        PDepNetworkAssessment: The validated record.
+    """
+    return PDepNetworkAssessment(status=REASON_CODE_STATUS[reason_code],
+                                 reason_code=reason_code,
+                                 secondary_reason_codes=tuple(secondary_reason_codes),
+                                 selection=selection,
+                                 warnings=tuple(warnings),
+                                 **provenance)
+
+
+def _find_network_label(labels_map: dict, spc_label: str) -> str:
+    """
+    Find the network label for a species, handling ARC label legalization.
+
+    Args:
+        labels_map (dict): Network species label -> RMG Chemkin label.
+        spc_label (str): The RMG Chemkin label to look up.
+
+    Raises:
+        ValueError: If no network label maps to this species.
+
+    Returns:
+        str: The network species label.
+    """
+    try:
+        return key_by_val(labels_map, spc_label)
+    except ValueError:
+        # ARC legalizes '(' -> '[', ')' -> ']'; try reverse lookup with original notation
+        original_label = spc_label.replace('[', '(').replace(']', ')')
+        if original_label in labels_map:
+            return original_label
+        raise
+
+
+def _read_pdep_sa_output(path: str) -> tuple:
+    """
+    Read an Arkane sensitivity YAML, turning its two documented failures into reason codes.
+
+    Both failures describe the ARTIFACT one master-equation method produced, not the network -- a
+    method that reported success and then wrote nothing usable says nothing about whether the next
+    method would. So this reports which failure occurred and leaves the decision of what to do next
+    to the caller, rather than ending the network here.
+
+    The catches are deliberately narrow. ``InputError`` is what ``arc.common.read_yaml_file`` raises
+    for a file that is not there, a YAML/decoding error is what an unparseable one raises, and an
+    ``OSError`` is what a present-but-unreadable one raises; anything else coming out of a read is
+    not a diagnosis this code has, and must not be dressed up as one.
+
+    ``OSError`` belongs in that list for the same reason ``t3.pdep.cache.validate_sa_cache`` catches
+    it: the two run back to back on this path, the cache check having just hashed this very file. A
+    file that is unreadable, or unlinked by a concurrent run between the two, is a fact about this
+    run's data, and ``sa_output_unreadable`` -- "exists but could not be read" -- is exactly the
+    diagnosis for it. Letting it escape instead reaches the outer ``except Exception``, which
+    records an ``internal_error`` and re-raises, ending the campaign over one file.
+
+    Args:
+        path (str): The sensitivity YAML to read.
+
+    Returns:
+        tuple: ``(sa_dict, reason_code, warning)`` -- the loaded payload and ``(None, None)`` on
+            success, or ``None`` plus the reason code and a human-readable warning on failure.
+    """
+    try:
+        return read_yaml_file(path), None, None
+    except InputError:
+        return None, REASON_SA_OUTPUT_MISSING, (f'The PDep sensitivity output {path} does not exist, '
+                                                f'although the master-equation job reported success.')
+    except (yaml.YAMLError, UnicodeDecodeError) as e:
+        return None, REASON_SA_OUTPUT_UNREADABLE, (f'The PDep sensitivity output {path} exists but '
+                                                   f'could not be read as YAML: {e}')
+    except OSError as e:
+        return None, REASON_SA_OUTPUT_UNREADABLE, (f'The PDep sensitivity output {path} exists but '
+                                                   f'could not be read: {e}')
+
+
+def _resolve_pdep_direction_key(selection, sa_dict: dict, network_reaction: str):
+    """
+    Find the key under which the SA output holds the offering reaction's coefficients.
+
+    The selector resolves this more robustly than an exact string match -- it also handles label
+    legalization and a network reaction stored in the opposite direction -- so its resolution is
+    re-used when there is one, and the plain lookup is only the fallback for when there is not
+    (the network file failed to parse, so the selector never ran).
+
+    Args:
+        selection (PDepNetworkSelection, optional): The selector's decision, if it reached one.
+        sa_dict (dict): The Arkane sensitivity payload.
+        network_reaction (str): The offering reaction in network species labels.
+
+    Returns:
+        str, optional: The resolved key, or ``None`` if the reaction is not in the SA output.
+    """
+    if selection is not None and selection.direction_key is not None:
+        return selection.direction_key
+    # ``resolve_direction_key`` needs only the SA payload and the reaction string, never the parsed
+    # network, so the fallback is the selector's own resolver rather than a plain `in` test. An exact
+    # match would silently skip the well analysis for an SA output keyed in the opposite direction or
+    # with legalized labels -- the very cases the resolver exists to handle.
+    direction_key, _, _ = resolve_direction_key(sa_dict=sa_dict, network_reaction=network_reaction)
+    return direction_key
+
+
 class T3:
     """
     The main T3 class.
@@ -187,6 +353,9 @@ class T3:
         executed_networks (list): PDep networks for which SA was already executed. Entries are tuples of isomer labels.
         pdep_network_selections (list): Entries are ``PDepNetworkSelection`` decisions of whether each examined
                                         PDep network qualifies for QM refinement.
+        pdep_network_assessments (list): Entries are ``PDepNetworkAssessment`` records of what happened to each
+                                         examined PDep network, including the ones no decision could be reached
+                                         about. Both lists cover one iteration only.
         rmg_species (List[T3Species]): Entries are RMG species objects in the model core for a certain T3 iteration.
         rmg_reactions (List[T3Reaction]): Entries are RMG reaction objects in the model core for a certain T3 iteration.
         sa_observables (list): Entries are RMG species labels for the SA observables.
@@ -254,6 +423,7 @@ class T3:
         self.species, self.reactions, self.paths = dict(), dict(), dict()
         self.rmg_species, self.rmg_reactions, self.executed_networks = list(), list(), list()
         self.pdep_network_selections = list()
+        self.pdep_network_assessments = list()
         # The network-TS <-> ARC-TS join records accumulated in the current iteration. Reset per
         # iteration alongside the QM queue they describe, since the ARC project directory they are
         # written to is per-iteration.
@@ -1909,6 +2079,14 @@ class T3:
         # the same transition state would collide with its own stale entry.
         self.pdep_ts_join_records = list()
         self.pdep_ts_join_networks = dict()
+        # Both verdict lists describe THIS iteration and start empty for the same reason. Carrying
+        # them over was never a decision, and nothing reads them across iterations: the summary log
+        # and the assessments artifact are both per-iteration, so an accumulating list would report
+        # a previous iteration's networks as though this pass had looked at them -- and would report
+        # a network re-examined in three iterations three times, against a model that has changed
+        # underneath each one.
+        self.pdep_network_selections = list()
+        self.pdep_network_assessments = list()
         # Qualified networks are collected here rather than queued where they are found, because
         # which networks are worth their QM cost is a question about the whole field of candidates
         # and cannot be answered until the last one has been evaluated. Nothing is queued until the
@@ -1925,6 +2103,14 @@ class T3:
             return species_keys
         if not os.path.isdir(self.paths['PDep SA']):
             os.mkdir(self.paths['PDep SA'])
+        # Stake the claim before doing any work, so that from here on the file on disk describes THIS
+        # pass and nothing else. Without it there is a window in which a `complete: true` record from
+        # an earlier run of this same iteration survives a crash that happens before the first
+        # network is recorded -- and a stale record that reads as finished is worse than no record,
+        # because it answers "which networks were never evaluated?" with another run's networks.
+        save_pdep_network_assessments(path=self.paths['PDep network assessments'],
+                                      assessments=self.pdep_network_assessments,
+                                      complete=False)
 
         for reaction_tuple in pdep_rxns_to_explore:
             reaction = reaction_tuple[0]
@@ -1947,188 +2133,105 @@ class T3:
                     self.logger.warning(f'Not exploring reaction {reaction} with PES SA '
                                         f'since it does not have a `network` attribute.')
                 continue
-            network_version = max([int(network_file_name.split('.')[0].split('_')[1])
-                                   for network_file_name in network_file_names])
+            # Only 'network<index>_<version>.py' actually NAMES a network file. Selecting the newest
+            # by prefix alone let anything sharing that prefix into the version arithmetic: a
+            # hand-made 'network4_backup.py' raised out of `int()` and ended a multi-day run, and a
+            # stray 'network4_99.txt' parsed as version 99 and then synthesized a path to a .py file
+            # that does not exist. Names that do not match are ignored rather than fatal, so one
+            # unrelated file beside the real ones cannot cost this network its assessment.
+            network_pattern = re.compile(rf'^network{reaction.network.index}_(\d+)\.py$')
+            network_versions = [int(match.group(1)) for match
+                                in (network_pattern.match(name) for name in network_file_names)
+                                if match is not None]
+            ignored_names = sorted(set(network_file_names)
+                                   - {f'network{reaction.network.index}_{version}.py'
+                                      for version in network_versions})
+            if ignored_names:
+                self.logger.debug(f'Ignoring {ignored_names} in {self.paths["RMG PDep"]}: they share '
+                                  f'the prefix of network {reaction.network.index} but are not '
+                                  f'versioned network files.')
+            if not network_versions:
+                # Files matched the prefix and none of them is a network file, so there is nothing to
+                # assess and no name to assess it under. The record matters more here than anywhere
+                # else in this method: with no network name to search the logs for, an unrecorded
+                # skip is indistinguishable from the network never having existed.
+                warning = (f'No file in {self.paths["RMG PDep"]} names a version of PDep network '
+                           f'{reaction.network.index}; the closest matches are {ignored_names}.')
+                self.logger.error(f'{warning}\nNot assessing this network for QM refinement.')
+                self._record_pdep_network_assessment(_pdep_assessment(
+                    REASON_NETWORK_DISCOVERY_FAILED,
+                    # Identified by index alone: which REVISION of the network this was about is
+                    # precisely what could not be determined, so claiming a stem would be inventing
+                    # the one fact that is missing.
+                    provenance={'network_id': f'network{reaction.network.index}',
+                                'iteration': self.iteration,
+                                'observable_label': reaction_tuple[2],
+                                'sa_rank_index': reaction_tuple[1],
+                                'requested_me_methods': tuple(self.t3['sensitivity']['ME_methods']),
+                                },
+                    warnings=[warning],
+                ))
+                continue
+            network_version = max(network_versions)
             network_name = f'network{reaction.network.index}_{network_version}'  # w/o the '.py' extension
-
-            # Try running this network using user-specified methods by order.
-            sa_coefficients_path, arkane, method_used, cache_status = None, None, None, None
             network_path = os.path.join(self.paths['RMG PDep'], f'{network_name}.py')
-            for method in self.t3['sensitivity']['ME_methods']:
-                write_result = write_pdep_network_file(
-                    network_name=network_name,
-                    method=method,
-                    pdep_sa_path=self.paths['PDep SA'],
-                    rmg_pdep_path=self.paths['RMG PDep'],
-                )
-                isomer_labels = write_result.isomer_labels
-                arkane_input = os.path.join(self.paths['PDep SA'], network_name, method, 'input.py')
-                arkane_output_dir = os.path.join(self.paths['PDep SA'], network_name, method)
-                candidate_sa_path = os.path.join(arkane_output_dir, 'sensitivity', 'sa_coefficients.yml')
-                # Re-use a previous analysis only if T3 itself vouched for it. An SA output without a
-                # valid T3 sidecar is regenerated rather than trusted: a stale one can silently report
-                # no sensitivity at all, which would drop this network from QM refinement unnoticed.
-                cache_status, cache_warnings = validate_sa_cache(
-                    sa_path=candidate_sa_path,
-                    network_path=network_path,
-                    min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
-                    method=method,
-                )
-                if cache_status == CACHE_STATUS_CACHED_VALID:
-                    self.logger.info(f'\nReusing the cached PDep SA for network {network_name} '
-                                     f'({method} method) to examine reaction {reaction} '
-                                     f'(iteration {self.iteration}).')
-                    self.executed_networks.append(isomer_labels)
-                    sa_coefficients_path, method_used = candidate_sa_path, method
-                    break
-                for warning in cache_warnings:
-                    self.logger.debug(warning)
-                self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method\n'
-                                 f'to examine reaction {reaction} (iteration {self.iteration})...')
-                success = run_arkane_job(input_file=arkane_input,
-                                         output_directory=arkane_output_dir,
-                                         plot=True,
-                                         logger=self.logger,
-                                         )
-                if success:
-                    # Network execution was successful, mark network as executed and don't run the next method.
-                    self.logger.info(f'Successfully executed a PDep SA for network {network_name} '
-                                     f'using the {method} method.\n')
-                    self.executed_networks.append(isomer_labels)
-                    sa_coefficients_path, method_used = candidate_sa_path, method
-                    cache_status = CACHE_STATUS_GENERATED
-                    if os.path.isfile(sa_coefficients_path):
-                        write_sa_cache_metadata(sa_path=sa_coefficients_path,
-                                                network_path=network_path,
-                                                network_id=network_name,
-                                                method=method,
-                                                rmg_py_commit=read_arkane_log_rmg_py_commit(
-                                                    os.path.join(arkane_output_dir, 'arkane.log')),
-                                                t_grid_clamp=write_result.t_grid_clamp.as_dict(),
-                                                )
-                    break
-            else:
-                self.logger.error(f"Could not execute a PDep SA for network {network_name} using any of "
-                                  f"{self.t3['sensitivity']['ME_methods']}. See the Arkane logs under "
-                                  f"{os.path.join(self.paths['PDep SA'], network_name)} for details.")
 
-            if sa_coefficients_path is not None:
-                sa_dict = read_yaml_file(sa_coefficients_path)
-                r_species = reaction.r_species if hasattr(reaction, 'r_species') else reaction.reactants
-                p_species = reaction.p_species if hasattr(reaction, 'p_species') else reaction.products
-                reactants_label = ' + '.join([spc.to_chemkin() for spc in r_species])
-                products_label = ' + '.join([spc.to_chemkin() for spc in p_species])
-                chemkin_reaction_str = f'{reactants_label} <=> {products_label}'
-                structures = sa_dict.get('structures') if isinstance(sa_dict, dict) else None
-                if not isinstance(structures, dict):
-                    self.logger.error(f"The SA output at {sa_coefficients_path} for network {network_name} "
-                                      f"is missing a valid 'structures' entry; cannot map network species labels. "
-                                      f"Not assessing network {network_name} for QM refinement.")
-                    continue
-                labels_map = dict()  # Keys are network species labels, values are Chemkin labels of the RMG species.
-                for network_label, adj in structures.items():
-                    labels_map[network_label] = get_species_label_by_structure(adj=adj, species_list=self.rmg_species)
+            outcome = self._assess_pdep_network_candidate(reaction=reaction,
+                                                          reaction_tuple=reaction_tuple,
+                                                          network_name=network_name,
+                                                          network_path=network_path,
+                                                          )
+            self._record_pdep_network_assessment(outcome.assessment)
+            if outcome.queue_candidate is not None:
+                queue_candidates.append(outcome.queue_candidate)
+            if outcome.direction_key is None:
+                # Either the assessment never got as far as a usable SA output, or the offering
+                # reaction is not in it. Either way there is nothing to draw wells from.
+                continue
 
-                def _find_network_label(spc_label):
-                    """Find the network label for a species, handling ARC label legalization."""
-                    try:
-                        return key_by_val(labels_map, spc_label)
-                    except ValueError:
-                        # ARC legalizes '(' → '[', ')' → ']'; try reverse lookup with original notation
-                        original_label = spc_label.replace('[', '(').replace(']', ')')
-                        if original_label in labels_map:
-                            return original_label
-                        raise
+            # identify wells in this network this reaction is sensitive to
+            arkane = None
+            sensitive_wells_dict = select_sensitive_wells(
+                entries_by_condition=outcome.sa_dict[outcome.direction_key],
+                relative_threshold=self.t3['sensitivity']['pdep_SA_threshold'],
+                min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
+            )
+            if sensitive_wells_dict:
+                # extract species from wells and add to species_to_calc if thermo is uncertain
+                for well, conditions in sensitive_wells_dict.items():
+                    species_list = list()
+                    for label in well.split(' + '):
+                        spc_label = outcome.labels_map.get(label)
+                        species = None
+                        if spc_label is not None:
+                            species = get_species_by_label(label=spc_label,
+                                                           species_list=self.rmg_species)
+                        elif arkane is not None:
+                            # this is an Edge species which is missing from the Core rmg_species list
+                            species = get_species_by_label(label=label,
+                                                           species_list=arkane.species_dict.values())
+                        if species is not None:
+                            species_list.append(species)
+                    for species in species_list:
+                        if self.species_requires_refinement(species=species):
+                            num = f'{reaction_tuple[1] + 1}{get_ordinal_indicator(reaction_tuple[1] + 1)} ' \
+                                if reaction_tuple[1] else ''
+                            reason = f'(i {self.iteration}) a sensitive well in PDep ' \
+                                f'network {network_name} from which ' \
+                                f'{outcome.assessment.chemkin_reaction} was ' \
+                                f'derived, which is the {num}most sensitive reaction for observable ' \
+                                f'{reaction_tuple[2]}, at {conditions}.'
+                            key = self.add_species(species=species, reasons=reason)
+                            if key is not None:
+                                species_keys.append(key)
 
-                reactants_label = ' + '.join([_find_network_label(spc.label) for spc in r_species])
-                products_label = ' + '.join([_find_network_label(spc.label) for spc in p_species])
-                network_reaction_str = f'{reactants_label} <=> {products_label}'
-
-                # Decide whether this whole network is worth refining with QM (criterion (b)): the
-                # observable is already known to be sensitive to this reaction (criterion (a)), so ask
-                # whether the network's own rate coefficient is in turn sensitive to a transition state
-                # whose kinetics is merely an estimate.
-                network, selection = None, None
-                try:
-                    network = parse_pdep_network_file(path=network_path)
-                except (OSError, ValueError) as e:
-                    self.logger.warning(f'Could not parse the PDep network file {network_path}: {e}\n'
-                                        f'Not assessing network {network_name} for QM refinement.')
-                if network is not None:
-                    selection = select_from_sa_dict(
-                        sa_dict=sa_dict,
-                        network=network,
-                        network_reaction=network_reaction_str,
-                        relative_threshold=self.t3['sensitivity']['pdep_SA_threshold'],
-                        min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
-                        method=method_used,
-                        sa_path=sa_coefficients_path,
-                        cache_status=cache_status,
-                        perturbation=E0_PERTURBATION_J_PER_MOL,
-                        # Read back from the sidecar rather than reusing this loop iteration's
-                        # in-memory write_result: on a CACHE_STATUS_CACHED_VALID reuse (see the
-                        # 'break' above), sa_coefficients_path is a PRE-EXISTING sidecar whose
-                        # recorded clamp provenance may not match the write_result of the most
-                        # recent (unused) write_pdep_network_file call. None (unknown provenance)
-                        # is returned, never raised, if the sidecar predates this field.
-                        t_grid_clamp=read_t_grid_clamp_record(sa_coefficients_path),
-                    )
-                    for warning in selection.warnings:
-                        self.logger.warning(warning)
-                    self.logger.info(selection.reason())
-                    self.pdep_network_selections.append(selection)
-                    if selection.qualified:
-                        queue_candidates.append(PDepQueueCandidate(network=network,
-                                                                   selection=selection,
-                                                                   structures=structures,
-                                                                   network_name=network_name,
-                                                                   network_path=network_path,
-                                                                   ))
-
-                # The selector resolves the SA key more robustly than an exact string match (it also
-                # handles label legalization and a network reaction stored in the opposite direction),
-                # so re-use its resolution for the well analysis below when it is available.
-                direction_key = selection.direction_key if selection is not None else None
-                if direction_key is None and network_reaction_str in sa_dict:
-                    direction_key = network_reaction_str
-                if direction_key is None:
-                    self.logger.error(f'Could not locate reaction {network_reaction_str} '
-                                      f'in SA output for network {network_name}.')
-                else:
-                    # identify wells in this network this reaction is sensitive to
-                    sensitive_wells_dict = select_sensitive_wells(
-                        entries_by_condition=sa_dict[direction_key],
-                        relative_threshold=self.t3['sensitivity']['pdep_SA_threshold'],
-                        min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
-                    )
-                    if sensitive_wells_dict:
-                        # extract species from wells and add to species_to_calc if thermo is uncertain
-                        for well, conditions in sensitive_wells_dict.items():
-                            species_list = list()
-                            for label in well.split(' + '):
-                                spc_label = labels_map.get(label)
-                                species = None
-                                if spc_label is not None:
-                                    species = get_species_by_label(label=spc_label,
-                                                                   species_list=self.rmg_species)
-                                elif arkane is not None:
-                                    # this is an Edge species which is missing from the Core rmg_species list
-                                    species = get_species_by_label(label=label,
-                                                                   species_list=arkane.species_dict.values())
-                                if species is not None:
-                                    species_list.append(species)
-                            for species in species_list:
-                                if self.species_requires_refinement(species=species):
-                                    num = f'{reaction_tuple[1] + 1}{get_ordinal_indicator(reaction_tuple[1] + 1)} ' \
-                                        if reaction_tuple[1] else ''
-                                    reason = f'(i {self.iteration}) a sensitive well in PDep ' \
-                                        f'network {network_name} from which {chemkin_reaction_str} was ' \
-                                        f'derived, which is the {num}most sensitive reaction for observable ' \
-                                        f'{reaction_tuple[2]}, at {conditions}.'
-                                    key = self.add_species(species=species, reasons=reason)
-                                    if key is not None:
-                                        species_keys.append(key)
-
+        # Every candidate has had its turn, so the record is now the whole field rather than a
+        # snapshot of how far this pass got. Written unconditionally -- including with nothing in
+        # it -- because absence of this file has to mean "the assessment never ran this
+        # iteration", not "it ran and found no networks".
+        save_pdep_network_assessments(path=self.paths['PDep network assessments'],
+                                      assessments=self.pdep_network_assessments,
+                                      complete=True)
         # Every network has now been evaluated, so the queueing decision can finally be taken with
         # the whole field in view: rank the qualified networks against one another and refine as
         # many as the budget allows, most deserving first. With no budget configured every qualified
@@ -2190,6 +2293,331 @@ class T3:
                                     f'{stale_sidecar_path}; removing it.')
                 os.remove(stale_sidecar_path)
         return species_keys
+
+    def _record_pdep_network_assessment(self, assessment: PDepNetworkAssessment) -> None:
+        """
+        Keep one network's assessment and persist the record as it now stands.
+
+        Rewritten after every network rather than once on the way out, because the records that
+        matter most describe a pass that did NOT reach the way out. A file written only at the end
+        would be absent in exactly the case it exists to explain. The write is atomic, so no reader
+        ever sees a torn file, and it is marked incomplete until the pass finishes, so a record a
+        crash left behind cannot be read as the whole field of candidates.
+
+        Args:
+            assessment (PDepNetworkAssessment): The verdict to record.
+        """
+        self.pdep_network_assessments.append(assessment)
+        save_pdep_network_assessments(path=self.paths['PDep network assessments'],
+                                      assessments=self.pdep_network_assessments,
+                                      complete=False)
+
+    def _assess_pdep_network_candidate(self,
+                                       reaction: T3Reaction,
+                                       reaction_tuple: tuple,
+                                       network_name: str,
+                                       network_path: str,
+                                       ) -> PDepNetworkAssessmentOutcome:
+        """
+        Decide whether one P-dep network offer is worth QM refinement, and say why either way.
+
+        Every path out of here produces a ``PDepNetworkAssessment``. That is the entire point of
+        routing the assessment through one funnel instead of letting each failure site ``continue``
+        on its own: on a real twelve-network run, seven networks -- the majority -- left no durable
+        trace at all, because the only record was appended deep inside the success path. "Assessed
+        and found not worth refining" and "never assessed at all" were the same silence afterwards.
+
+        Failures become outcomes only where the failure is DOCUMENTED as one. Both a ``ValueError``
+        and an ``OSError`` from the network writer are recorded as ``network_input_write_failed``:
+        either way this network file could not be turned into an Arkane input on this machine, and
+        which of the two it was does not change what the run can do about it. Anything with no
+        documented outcome is recorded as ``internal_error``, under its own status so it is never
+        counted among the networks that legitimately could not be evaluated, and re-raised.
+
+        Reads of ``network_path`` and of the sensitivity output are assumed not to race with a
+        concurrent writer. T3 owns the RMG output tree for the duration of an iteration, so the
+        cache is validated against one read of the network file while the parse below and the
+        sidecar use later reads of it; an external process rewriting that file mid-assessment
+        could bind a cached SA to bytes the selector never saw. Closing that window means hashing
+        the source once and threading the bytes through the writer, the parser and the sidecar,
+        which is a change to the cache contract rather than to this function.
+
+        Args:
+            reaction (T3Reaction): The observable-sensitive reaction this network was reached from.
+            reaction_tuple (tuple): ``(T3Reaction, SA rank index, observable_label)``.
+            network_name (str): The network file stem, e.g. ``'network4_2'``.
+            network_path (str): The network file this offer is about.
+
+        Raises:
+            Exception: Re-raised unchanged, after being recorded, for any failure that is not one of
+                the outcomes named in :mod:`t3.pdep.reason_codes`.
+
+        Returns:
+            PDepNetworkAssessmentOutcome: The assessment, plus what the well analysis needs.
+        """
+        # Grows as the pass learns things, so a network that failed late is recorded with everything
+        # that was already known about it rather than as anonymously as one that failed immediately.
+        # It is also all the ``internal_error`` path has to describe a crash with.
+        provenance = {'network_id': network_name,
+                      'iteration': self.iteration,
+                      'network_path': network_path,
+                      'observable_label': reaction_tuple[2],
+                      'sa_rank_index': reaction_tuple[1],
+                      'requested_me_methods': tuple(self.t3['sensitivity']['ME_methods']),
+                      }
+        warnings, selection = list(), None
+        try:
+            # Try running this network using user-specified methods by order.
+            # Distinct read failures accumulate in configured-method order rather than the last one
+            # winning: which method happened to run last is not a diagnosis, and a record naming only
+            # one of two different broken artifacts undercounts the other wherever they are tallied.
+            sa_dict, sa_failure_reasons = None, list()
+            for method in self.t3['sensitivity']['ME_methods']:
+                arkane_output_dir = os.path.join(self.paths['PDep SA'], network_name, method)
+                arkane_input = os.path.join(arkane_output_dir, 'input.py')
+                candidate_sa_path = os.path.join(arkane_output_dir, 'sensitivity', 'sa_coefficients.yml')
+                # Re-use a previous analysis only if T3 itself vouched for it. An SA output without a
+                # valid T3 sidecar is regenerated rather than trusted: a stale one can silently report
+                # no sensitivity at all, which would drop this network from QM refinement unnoticed.
+                #
+                # Asked BEFORE the Arkane input is rendered, because on a hit nothing renders it: no
+                # job runs, so that file is never read. Writing it first cost two things. A network
+                # whose output directory could not be written -- read-only, full, quota -- lost a
+                # cached SA that was perfectly valid and that using required writing nothing at all.
+                # And the rewrite left an ``input.py`` that need not be the one which produced the
+                # ``sensitivity/sa_coefficients.yml`` beside it, a divergence neither the sidecar's
+                # ``network_file_hash`` nor its ``sa_file_hash`` covers.
+                cache_status, cache_warnings = validate_sa_cache(
+                    sa_path=candidate_sa_path,
+                    network_path=network_path,
+                    min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
+                    method=method,
+                )
+                if cache_status == CACHE_STATUS_CACHED_VALID:
+                    # The isomer labels the write used to hand back, taken from the network file's
+                    # own AST rather than scraped out of a rendering nobody will consume. Both
+                    # opportunistic and deliberately NOT fatal: these labels feed only
+                    # ``executed_networks``, and the authoritative parse happens further down, where
+                    # a failure is recorded as REASON_NETWORK_PARSE_FAILED and the well analysis is
+                    # still allowed to run -- see the comment at that site for why. Returning here
+                    # instead would deny a network holding a perfectly valid cached SA the very
+                    # species that analysis would have refined, for a reason that has nothing to do
+                    # with them, and would do it to populate a list.
+                    try:
+                        self.executed_networks.append(parse_pdep_network_file(path=network_path).isomers)
+                    except (OSError, ValueError) as e:
+                        self.logger.debug(f'Could not read the isomer labels of PDep network {network_name} '
+                                          f'from {network_path}: {e}. Reported properly by the parse below '
+                                          f'if it persists.')
+                    self.logger.info(f'\nReusing the cached PDep SA for network {network_name} '
+                                     f'({method} method) to examine reaction {reaction} '
+                                     f'(iteration {self.iteration}).')
+                else:
+                    for cache_warning in cache_warnings:
+                        self.logger.debug(cache_warning)
+                    try:
+                        write_result = write_pdep_network_file(
+                            network_name=network_name,
+                            method=method,
+                            pdep_sa_path=self.paths['PDep SA'],
+                            rmg_pdep_path=self.paths['RMG PDep'],
+                        )
+                    except (OSError, ValueError) as e:
+                        # The network file cannot be turned into an Arkane input at all -- a property
+                        # of the file, not of the method, so no later method would fare any better and
+                        # this ends the network here rather than after two more identical failures.
+                        #
+                        # OSError is caught alongside ValueError deliberately, and it is the same rule
+                        # both ``parse_pdep_network_file`` sites are read under: a network file that
+                        # is missing or unreadable is a fact about this run's DATA, not a bug, and
+                        # which of the read sites happens to touch it first must not decide whether
+                        # the campaign survives. A genuinely broken machine (a full disk) does not
+                        # slip through here: writing the assessment record needs the same disk, so it
+                        # fails loudly a moment later, with a traceback that points at the disk rather
+                        # than at the chemistry.
+                        warning = f'Could not write the Arkane input for PDep network {network_name}: {e}'
+                        self.logger.error(f'{warning}\nNot assessing network {network_name} for QM refinement.')
+                        warnings.append(warning)
+                        return PDepNetworkAssessmentOutcome(assessment=_pdep_assessment(
+                            REASON_NETWORK_INPUT_WRITE_FAILED, provenance, warnings))
+                    isomer_labels = write_result.isomer_labels
+                    self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method\n'
+                                     f'to examine reaction {reaction} (iteration {self.iteration})...')
+                    if not run_arkane_job(input_file=arkane_input,
+                                          output_directory=arkane_output_dir,
+                                          plot=True,
+                                          logger=self.logger,
+                                          ):
+                        # Recorded, not merely logged: without this the record would say nothing at
+                        # all about a method that ran and failed, and the remaining codes would make
+                        # it look as though that method had never been configured.
+                        warnings.append(f'The {method} master-equation job for network '
+                                        f'{network_name} did not complete successfully.')
+                        continue
+                    # Network execution was successful; mark the network as executed. Whether the next
+                    # method gets a turn is decided below, by whether this one's output can be read.
+                    self.logger.info(f'Successfully executed a PDep SA for network {network_name} '
+                                     f'using the {method} method.\n')
+                    self.executed_networks.append(isomer_labels)
+                    cache_status = CACHE_STATUS_GENERATED
+                    if os.path.isfile(candidate_sa_path):
+                        write_sa_cache_metadata(sa_path=candidate_sa_path,
+                                                network_path=network_path,
+                                                network_id=network_name,
+                                                method=method,
+                                                rmg_py_commit=read_arkane_log_rmg_py_commit(
+                                                    os.path.join(arkane_output_dir, 'arkane.log')),
+                                                t_grid_clamp=write_result.t_grid_clamp.as_dict(),
+                                                )
+                # A method that ran is only worth anything if what it wrote can be read, so the
+                # artifact is opened HERE rather than after the loop: whether an artifact is missing
+                # or unparseable is a fact about one method's output, and letting it end the network
+                # would deny the remaining methods a turn they might well have succeeded at.
+                sa_dict, sa_read_reason, read_warning = _read_pdep_sa_output(candidate_sa_path)
+                if sa_read_reason is not None:
+                    self.logger.error(read_warning)
+                    warnings.append(read_warning)
+                    if sa_read_reason not in sa_failure_reasons:
+                        sa_failure_reasons.append(sa_read_reason)
+                    continue
+                provenance['final_method'] = method
+                provenance['sa_path'] = candidate_sa_path
+                provenance['cache_status'] = cache_status
+                break
+            # ``sa_path`` rather than ``sa_dict`` is the test for having got an SA: an EMPTY YAML file
+            # reads back as ``None``, which is a readable artifact holding nothing, and belongs on the
+            # malformed branch below rather than being reported as a master-equation failure.
+            if provenance.get('sa_path') is None:
+                if not sa_failure_reasons:
+                    self.logger.error(f"Could not execute a PDep SA for network {network_name} using any of "
+                                      f"{self.t3['sensitivity']['ME_methods']}. See the Arkane logs under "
+                                      f"{os.path.join(self.paths['PDep SA'], network_name)} for details.")
+                # A read failure is the more specific diagnosis and outranks the coarse one: "no
+                # method produced usable SA" is also true then, but it is the same fact at a coarser
+                # grain rather than an independent defect, so recording it too would double-count one
+                # failure. Where the methods broke in DIFFERENT ways, though, those are independent
+                # defects in different artifacts and every one of them is kept.
+                return PDepNetworkAssessmentOutcome(assessment=_pdep_assessment(
+                    sa_failure_reasons[0] if sa_failure_reasons else REASON_SA_ALL_METHODS_FAILED,
+                    provenance, warnings, secondary_reason_codes=tuple(sa_failure_reasons[1:])))
+
+            r_species = reaction.r_species if hasattr(reaction, 'r_species') else reaction.reactants
+            p_species = reaction.p_species if hasattr(reaction, 'p_species') else reaction.products
+            reactants_label = ' + '.join([spc.to_chemkin() for spc in r_species])
+            products_label = ' + '.join([spc.to_chemkin() for spc in p_species])
+            provenance['chemkin_reaction'] = f'{reactants_label} <=> {products_label}'
+            if not isinstance(sa_dict, dict):
+                warning = (f"The SA output at {provenance['sa_path']} for network {network_name} is not "
+                           f"a mapping (got {type(sa_dict).__name__}); nothing can be read out of it.")
+                self.logger.error(f'{warning}\nNot assessing network {network_name} for QM refinement.')
+                warnings.append(warning)
+                return PDepNetworkAssessmentOutcome(assessment=_pdep_assessment(
+                    REASON_SA_OUTPUT_MALFORMED, provenance, warnings))
+            structures = sa_dict.get('structures')
+            if not isinstance(structures, dict):
+                warning = (f"The SA output at {provenance['sa_path']} for network {network_name} is "
+                           f"missing a valid 'structures' entry; cannot map network species labels.")
+                self.logger.error(f'{warning}\nNot assessing network {network_name} for QM refinement.')
+                warnings.append(warning)
+                return PDepNetworkAssessmentOutcome(assessment=_pdep_assessment(
+                    REASON_SA_STRUCTURES_MISSING, provenance, warnings))
+            labels_map = dict()  # Keys are network species labels, values are Chemkin labels of the RMG species.
+            for network_label, adj in structures.items():
+                labels_map[network_label] = get_species_label_by_structure(adj=adj, species_list=self.rmg_species)
+            try:
+                reactants_label = ' + '.join([_find_network_label(labels_map, spc.label) for spc in r_species])
+                products_label = ' + '.join([_find_network_label(labels_map, spc.label) for spc in p_species])
+            except ValueError as e:
+                # Recorded loudly, and the well analysis is skipped along with the assessment. Without
+                # a grounded network reaction string there is nothing to look up in the SA output, and
+                # falling back to an ungrounded one would risk attributing another reaction's
+                # sensitivity to this one -- refining species for a reaction nobody asked about.
+                warning = (f"Could not map the species of {provenance['chemkin_reaction']} onto the "
+                           f"labels of network {network_name}: {e}")
+                self.logger.error(f'{warning}\nThis is an SA/RMG species label mismatch; not assessing '
+                                  f'network {network_name} for QM refinement and not looking for '
+                                  f'sensitive wells in it.')
+                warnings.append(warning)
+                return PDepNetworkAssessmentOutcome(assessment=_pdep_assessment(
+                    REASON_SPECIES_LABEL_MAPPING_FAILED, provenance, warnings))
+            provenance['network_reaction'] = f'{reactants_label} <=> {products_label}'
+
+            # Decide whether this whole network is worth refining with QM (criterion (b)): the
+            # observable is already known to be sensitive to this reaction (criterion (a)), so ask
+            # whether the network's own rate coefficient is in turn sensitive to a transition state
+            # whose kinetics is merely an estimate.
+            network, queue_candidate = None, None
+            try:
+                network = parse_pdep_network_file(path=network_path)
+            except (OSError, ValueError) as e:
+                warning = f'Could not parse the PDep network file {network_path}: {e}'
+                self.logger.warning(f'{warning}\nNot assessing network {network_name} for QM refinement.')
+                warnings.append(warning)
+            if network is None:
+                # The well analysis needs the SA output and the label map, not the parsed network, so
+                # it still runs below: refusing it over this failure would drop species this iteration
+                # would otherwise have refined, for a reason that has nothing to do with them.
+                assessment = _pdep_assessment(REASON_NETWORK_PARSE_FAILED, provenance, warnings)
+            else:
+                provenance['network_source_hash'] = network.source_hash
+                selection, reason_code, secondary_reason_codes = select_from_sa_dict_with_diagnostics(
+                    sa_dict=sa_dict,
+                    network=network,
+                    network_reaction=provenance['network_reaction'],
+                    relative_threshold=self.t3['sensitivity']['pdep_SA_threshold'],
+                    min_delta_ln_k=self.t3['sensitivity']['pdep_min_delta_ln_k'],
+                    method=provenance['final_method'],
+                    sa_path=provenance['sa_path'],
+                    cache_status=provenance['cache_status'],
+                    perturbation=E0_PERTURBATION_J_PER_MOL,
+                    # Read back from the sidecar rather than reusing this loop iteration's
+                    # in-memory write_result: on a CACHE_STATUS_CACHED_VALID reuse (see the
+                    # 'break' above), sa_path is a PRE-EXISTING sidecar whose recorded clamp
+                    # provenance may not match the write_result of the most recent (unused)
+                    # write_pdep_network_file call. None (unknown provenance) is returned, never
+                    # raised, if the sidecar predates this field.
+                    t_grid_clamp=read_t_grid_clamp_record(provenance['sa_path']),
+                )
+                for selection_warning in selection.warnings:
+                    self.logger.warning(selection_warning)
+                self.logger.info(selection.reason())
+                self.pdep_network_selections.append(selection)
+                assessment = _pdep_assessment(reason_code, provenance, warnings, selection=selection,
+                                              secondary_reason_codes=secondary_reason_codes)
+                if selection.qualified:
+                    queue_candidate = PDepQueueCandidate(network=network,
+                                                         selection=selection,
+                                                         structures=structures,
+                                                         network_name=network_name,
+                                                         network_path=network_path,
+                                                         )
+            direction_key = _resolve_pdep_direction_key(selection, sa_dict, provenance['network_reaction'])
+            if direction_key is None:
+                self.logger.error(f"Could not locate reaction {provenance['network_reaction']} "
+                                  f"in SA output for network {network_name}.")
+            return PDepNetworkAssessmentOutcome(assessment=assessment,
+                                                queue_candidate=queue_candidate,
+                                                sa_dict=sa_dict,
+                                                labels_map=labels_map,
+                                                direction_key=direction_key,
+                                                )
+        except Exception as e:
+            # Not an outcome but a bug, or a failure this code has no diagnosis for. It is recorded
+            # so the crash is explicable afterwards -- keeping whatever the selector had already
+            # established, since a crash after the evidence was obtained should not discard it -- and
+            # then re-raised unchanged. Recording is not swallowing: this still ends the run.
+            warnings.append(f'{type(e).__name__} while assessing PDep network {network_name}: {e}')
+            try:
+                self._record_pdep_network_assessment(
+                    _pdep_assessment(REASON_INTERNAL_ERROR, provenance, warnings, selection=selection))
+            except Exception as recording_error:
+                # The breadcrumb is best-effort; the bug it describes is not. Letting a failure to
+                # record become the exception that surfaces would replace the diagnosis with a
+                # complaint about writing it down -- and this handler runs precisely when something
+                # is already wrong enough that the record may be unbuildable.
+                self.logger.error(f'Could not record the internal error for PDep network '
+                                  f'{network_name}: {recording_error!r}. The original failure follows.')
+            raise
 
     def queue_pdep_transition_states(self,
                                      network,

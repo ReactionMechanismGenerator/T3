@@ -104,14 +104,17 @@ def fully_populated_assessment():
                                  )
 
 
-def saved(tmp_path, assessments, file_name='t3_pdep_network_assessments.yml'):
+def saved(tmp_path, assessments, file_name='t3_pdep_network_assessments.yml', complete=True):
     """Save ``assessments`` under ``tmp_path`` and return the path written."""
-    return save_pdep_network_assessments(os.path.join(str(tmp_path), file_name), assessments)
+    return save_pdep_network_assessments(os.path.join(str(tmp_path), file_name), assessments,
+                                         complete=complete)
 
 
-def envelope(records, version=ASSESSMENT_ENVELOPE_SCHEMA_VERSION):
+def envelope(records, version=ASSESSMENT_ENVELOPE_SCHEMA_VERSION, complete=True):
     """A hand-built on-disk envelope, for the malformed-file cases a saver would never produce."""
-    return {'assessment_envelope_schema_version': version, 'assessments': records}
+    return {'assessment_envelope_schema_version': version,
+            'complete': complete,
+            'assessments': records}
 
 
 def write_envelope(tmp_path, content, file_name='hand_written.yml'):
@@ -196,7 +199,7 @@ def test_the_loader_is_not_stricter_than_the_constructor_about_cache_status(tmp_
 
 def test_the_saver_returns_the_path_it_wrote_so_callers_can_chain_it(tmp_path):
     path = os.path.join(str(tmp_path), 'assessments.yml')
-    assert save_pdep_network_assessments(path, [unevaluable_assessment()]) == path
+    assert save_pdep_network_assessments(path, [unevaluable_assessment()], complete=True) == path
 
 
 def test_the_file_is_a_versioned_envelope_around_an_assessments_list(tmp_path):
@@ -216,8 +219,8 @@ def test_the_file_contains_only_plain_yaml_types(tmp_path):
 
 def test_saving_replaces_a_previous_record_rather_than_appending_to_it(tmp_path):
     path = os.path.join(str(tmp_path), 'assessments.yml')
-    save_pdep_network_assessments(path, [unevaluable_assessment(network_id='old')])
-    save_pdep_network_assessments(path, [unevaluable_assessment(network_id='new')])
+    save_pdep_network_assessments(path, [unevaluable_assessment(network_id='old')], complete=True)
+    save_pdep_network_assessments(path, [unevaluable_assessment(network_id='new')], complete=True)
     assert [record.network_id for record in load_pdep_network_assessments(path)] == ['new']
 
 
@@ -225,7 +228,7 @@ def test_the_write_is_atomic_and_leaves_no_staging_file_behind(tmp_path):
     # The funnel rewrites this file once per network, so a crash mid-write is a real scenario, not a
     # theoretical one: a truncated but still parseable record would be trusted as authoritative.
     save_pdep_network_assessments(os.path.join(str(tmp_path), 'assessments.yml'),
-                                  [fully_populated_assessment()])
+                                  [fully_populated_assessment()], complete=True)
     assert sorted(os.listdir(str(tmp_path))) == ['assessments.yml']
 
 
@@ -235,7 +238,7 @@ def test_a_failed_write_leaves_the_previous_record_intact_rather_than_truncated(
     # would trust. Staging elsewhere and renaming means a failure is a no-op instead.
     import t3.pdep.api as api_module
     path = os.path.join(str(tmp_path), 'assessments.yml')
-    save_pdep_network_assessments(path, [unevaluable_assessment(network_id='survivor')])
+    save_pdep_network_assessments(path, [unevaluable_assessment(network_id='survivor')], complete=True)
     real_save_yaml_file = api_module.save_yaml_file
 
     def save_then_die(path, content):
@@ -245,7 +248,8 @@ def test_a_failed_write_leaves_the_previous_record_intact_rather_than_truncated(
     api_module.save_yaml_file = save_then_die
     try:
         with pytest.raises(OSError):
-            save_pdep_network_assessments(path, [unevaluable_assessment(network_id='casualty')])
+            save_pdep_network_assessments(path, [unevaluable_assessment(network_id='casualty')],
+                                          complete=True)
     finally:
         api_module.save_yaml_file = real_save_yaml_file
     assert [record.network_id for record in load_pdep_network_assessments(path)] == ['survivor']
@@ -258,7 +262,7 @@ def test_saving_onto_a_symlink_replaces_the_link_rather_than_writing_through_it(
         f.write('do not clobber me\n')
     link = os.path.join(str(tmp_path), 'assessments.yml')
     os.symlink(outside, link)
-    save_pdep_network_assessments(link, [unevaluable_assessment()])
+    save_pdep_network_assessments(link, [unevaluable_assessment()], complete=True)
     assert not os.path.islink(link)
     with open(outside, 'r') as f:
         assert f.read() == 'do not clobber me\n'
@@ -294,7 +298,8 @@ def test_a_boolean_version_is_refused_even_though_true_equals_one(tmp_path):
 
 def test_a_missing_assessments_key_is_refused(tmp_path):
     path = write_envelope(tmp_path,
-                          {'assessment_envelope_schema_version': ASSESSMENT_ENVELOPE_SCHEMA_VERSION})
+                          {'assessment_envelope_schema_version': ASSESSMENT_ENVELOPE_SCHEMA_VERSION,
+                           'complete': True})
     with pytest.raises(ValueError, match="no 'assessments' list"):
         load_pdep_network_assessments(path)
 
@@ -500,7 +505,7 @@ def test_the_staged_file_is_flushed_before_and_the_directory_after_the_rename(tm
     api_module._fsync_path = lambda path: fsynced.append(path)
     try:
         path = save_pdep_network_assessments(os.path.join(str(tmp_path), 'assessments.yml'),
-                                             [unevaluable_assessment()])
+                                             [unevaluable_assessment()], complete=True)
     finally:
         api_module._fsync_path = real_fsync_path
     assert len(fsynced) == 2
@@ -524,7 +529,7 @@ def test_the_staging_directory_is_private_to_this_process(tmp_path):
     api_module.save_yaml_file = record_mode
     try:
         save_pdep_network_assessments(os.path.join(str(tmp_path), 'assessments.yml'),
-                                      [unevaluable_assessment()])
+                                      [unevaluable_assessment()], complete=True)
     finally:
         api_module.save_yaml_file = real_save_yaml_file
     assert observed['mode'] == 0o700
@@ -594,3 +599,90 @@ def test_a_refused_save_does_not_leave_a_partial_file_or_staging_directory(tmp_p
     with pytest.raises(ValueError):
         saved(tmp_path, [good, corrupted])
     assert os.listdir(str(tmp_path)) == []
+
+# --- Telling a finished record from a crash scene ------------------------------------------------
+#
+# T3 rewrites this file after every network, so a well-formed file holding four of an iteration's
+# twelve networks is an ordinary thing to find on disk. It is also the one corruption that cannot be
+# detected by looking at the records, since every one of them is perfectly valid.
+
+def test_the_envelope_states_whether_the_record_is_finished(tmp_path):
+    from t3.pdep.api import _read_persisted_yaml_file
+    assert _read_persisted_yaml_file(path=saved(tmp_path, [unevaluable_assessment()]))['complete'] is True
+    assert _read_persisted_yaml_file(
+        path=saved(tmp_path, [unevaluable_assessment()], complete=False))['complete'] is False
+
+
+def test_the_completeness_flag_has_no_default_so_it_cannot_be_forgotten(tmp_path):
+    # Defaulting it either way would be wrong: a forgotten argument would either promote a crash
+    # scene to a finished record, or demote every finished record to an unreadable one.
+    with pytest.raises(TypeError):
+        save_pdep_network_assessments(os.path.join(str(tmp_path), 'assessments.yml'),
+                                      [unevaluable_assessment()])
+
+
+@pytest.mark.parametrize('complete', [1, 0, 'yes', None, [], object()])
+def test_a_non_boolean_completeness_flag_is_refused_at_the_write(tmp_path, complete):
+    # A truthy stand-in would be written out as itself and refused on the way back in, which is a
+    # confusing place to discover it -- and `complete: 1` reads as a value, not as a claim.
+    with pytest.raises(ValueError, match='must be a bool'):
+        save_pdep_network_assessments(os.path.join(str(tmp_path), 'assessments.yml'),
+                                      [unevaluable_assessment()], complete=complete)
+
+
+def test_an_unfinished_record_is_refused_by_default(tmp_path):
+    path = saved(tmp_path, [unevaluable_assessment(network_id='as_far_as_it_got')], complete=False)
+    with pytest.raises(ValueError, match='complete=False'):
+        load_pdep_network_assessments(path)
+
+
+def test_an_unfinished_record_can_be_read_deliberately(tmp_path):
+    # Which is exactly what an operator investigating the crash wants: the records ARE the evidence.
+    path = saved(tmp_path, [unevaluable_assessment(network_id='as_far_as_it_got')], complete=False)
+    records = load_pdep_network_assessments(path, allow_incomplete=True)
+    assert [record.network_id for record in records] == ['as_far_as_it_got']
+
+
+def test_allow_incomplete_does_not_weaken_any_other_check(tmp_path):
+    # The escape hatch is about the flag alone; a malformed record inside a partial file is still
+    # malformed, and reading the partial file must not become a way to smuggle one past the loader.
+    path = write_envelope(tmp_path, envelope([{'network_id': 'network4_2'}], complete=False))
+    with pytest.raises(ValueError, match='assessment_record_schema_version'):
+        load_pdep_network_assessments(path, allow_incomplete=True)
+
+
+def test_a_file_with_no_completeness_flag_at_all_is_refused(tmp_path):
+    # Absence is not "complete": a file written by something that did not know about this flag makes
+    # no claim either way, and guessing the reassuring one is how a partial record gets believed.
+    path = write_envelope(tmp_path, {'assessment_envelope_schema_version': ASSESSMENT_ENVELOPE_SCHEMA_VERSION,
+                                     'assessments': []})
+    with pytest.raises(ValueError, match="no 'complete' key"):
+        load_pdep_network_assessments(path)
+
+
+@pytest.mark.parametrize('complete', [1, 0, 'true', None])
+def test_a_non_boolean_completeness_flag_is_refused_at_the_read(tmp_path, complete):
+    # `complete: 1` would pass a truthiness test and quietly promote an unfinished record.
+    path = write_envelope(tmp_path, envelope([], complete=complete))
+    with pytest.raises(ValueError, match='must be a bool'):
+        load_pdep_network_assessments(path)
+
+
+def test_a_partial_file_whose_assessments_key_is_not_a_list_is_refused_cleanly(tmp_path):
+    # The refusal message counts the records the partial file got to, so the list had to be validated
+    # BEFORE it -- otherwise a hand-written `assessments: 1` raised a bare TypeError from inside the
+    # message of the error it was about to raise.
+    path = write_envelope(tmp_path, envelope(1, complete=False))
+    with pytest.raises(ValueError, match="no 'assessments' list"):
+        load_pdep_network_assessments(path)
+    with pytest.raises(ValueError, match="no 'assessments' list"):
+        load_pdep_network_assessments(path, allow_incomplete=True)
+
+
+@pytest.mark.parametrize('allow_incomplete', [1, 'false', 'yes', None, []])
+def test_a_non_boolean_allow_incomplete_is_refused(tmp_path, allow_incomplete):
+    # Being strict about `complete` and lax about the flag that overrides it would put the whole
+    # guarantee behind a truthiness test: allow_incomplete='false' would read the partial file.
+    path = saved(tmp_path, [unevaluable_assessment()], complete=False)
+    with pytest.raises(ValueError, match='must be a bool'):
+        load_pdep_network_assessments(path, allow_incomplete=allow_incomplete)

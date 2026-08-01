@@ -164,3 +164,12 @@ docs/t3-pdep-qm-explorer-design.md
 # any other log that happened to land in a network's fixture directory (e.g. a stray debug.log
 # from a local run), which is the accidental-commit risk the *.log rule exists to prevent.
 !tests/data/pdep_real_networks/*/arkane.log
+
+# Artifacts a test run writes into the tracked fixture trees. Some tests point a real T3 at a
+# fixture iteration directory, and T3 writes its per-iteration records where it always does. Named
+# exactly, and only under the two fixture directories that are actually written to, so this cannot
+# hide a record that was meant to be a fixture.
+tests/data/minimal_data/iteration_1/t3_pdep_qm_budget.yml
+tests/data/minimal_data/iteration_1/t3_pdep_network_assessments.yml
+tests/data/pdep_network/iteration_1/t3_pdep_qm_budget.yml
+tests/data/pdep_network/iteration_1/t3_pdep_network_assessments.yml

@@ -468,3 +468,29 @@ def test_provenance_that_agrees_is_accepted():
     selection.method = 'MSC'
     assessment(status=STATUS_EVALUATED_NEGATIVE, reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS,
                selection=selection, sa_path='/runs/sa.yml', final_method='MSC')
+
+
+def test_an_internal_error_may_not_nest_another_networks_evidence():
+    # An internal error is the one category where the two halves of a record are allowed to disagree
+    # about the WORK -- a crash part-way through populating one legitimately leaves them mid-update.
+    # It is not licence to disagree about the SUBJECT: "these fields are mid-update" is a coherent
+    # thing for a crash record to say, "this is evidence about a different network" is not.
+    with pytest.raises(ValueError, match='does not make another network'):
+        PDepNetworkAssessment(network_id='network4_2',
+                              status=STATUS_INTERNAL_ERROR,
+                              reason_code=REASON_INTERNAL_ERROR,
+                              selection=PDepNetworkSelection(network_id='network9_1'))
+
+
+def test_an_internal_error_may_still_disagree_about_the_work_it_was_interrupted_during():
+    # The other side of the same line: this must NOT be refused, or the breadcrumb would be discarded
+    # over exactly the inconsistency it exists to report.
+    record = PDepNetworkAssessment(network_id='network4_2',
+                                   status=STATUS_INTERNAL_ERROR,
+                                   reason_code=REASON_INTERNAL_ERROR,
+                                   sa_path='/runs/half/written.yml',
+                                   final_method='CSE',
+                                   selection=PDepNetworkSelection(network_id='network4_2',
+                                                                  sa_path='/runs/a/different.yml',
+                                                                  method='MSC'))
+    assert record.as_dict()['sa_path'] == '/runs/half/written.yml'
