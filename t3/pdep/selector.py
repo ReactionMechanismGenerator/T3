@@ -372,7 +372,9 @@ class PDepNetworkSelection:
         ``evaluation_status`` is ``'not_evaluated'`` if ANY component was not evaluated, and a warning
         records how many. This is a statement of coverage, not of usability: whether a partially
         evaluated aggregate may still be acted on is a policy question, answered by the consumer
-        (``t3.pdep.api.explore_pdep_network`` accepts one that qualified and refuses one that did not).
+        (``t3.pdep.api.explore_pdep_network`` accepts one that qualified and, under its DEFAULT
+        admission policy, refuses one that did not -- a caller that admitted the network itself can
+        say so, and then the coverage statement here informs its ranking instead of vetoing it).
 
         ``selection_schema_version`` and ``selection_algorithm_version`` are treated as identity,
         like ``network_id``, and for a stronger reason than ``network_source_hash``: decisions
@@ -495,7 +497,7 @@ class PDepNetworkSelection:
         # USABILITY and false as a statement of coverage: it made a partially evaluated aggregate
         # report that it was fully evaluated. The usability judgement now lives where it belongs, in
         # ``t3.pdep.api.explore_pdep_network``, which accepts a not_evaluated aggregate that
-        # qualified and refuses one that did not.
+        # qualified and, under its default admission policy, refuses one that did not.
         if not_evaluated:
             warnings.append(f'{len(not_evaluated)} of {len(decisions)} combined decisions were not '
                             f'evaluated; the aggregate covers only the evaluated ones.')

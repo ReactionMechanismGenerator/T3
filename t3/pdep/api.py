@@ -37,11 +37,15 @@ from arc.common import save_yaml_file
 from t3.pdep.cache import read_t_grid_clamp_record, validate_sa_cache
 from t3.pdep.explorer.config import PDepExplorerConfig, deep_thaw
 from t3.pdep.explorer.factory import explorer_factory
-from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
+from t3.pdep.explorer.result import (ADMISSION_POLICY_CALLER_ADMITTED,
+                                     ADMISSION_POLICY_QUALIFIED_SELECTION,
+                                     ADMISSION_POLICY_UNGATED,
+                                     EXPLORATION_RESULT_SCHEMA_VERSION,
                                      EXPLORATION_STATUS_FAILED,
                                      EXPLORATION_STATUS_SKIPPED,
                                      EXPLORATION_STATUS_SUCCEEDED,
                                      PDepExplorationResult,
+                                     VALID_ADMISSION_POLICIES,
                                      )
 from t3.pdep.parser import PDepArkaneReaction, PDepNetwork, parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
@@ -235,10 +239,20 @@ def select_pdep_network(network: str | PDepNetwork,
     return PDepNetworkSelection.combine(decisions)
 
 
+# The admission policies a CALLER may request. A strict subset of
+# ``t3.pdep.explorer.result.VALID_ADMISSION_POLICIES``, which additionally contains 'ungated' --
+# that one is not a choice, it is what passing no selection means, so explore_pdep_network() derives
+# it and refuses it as an argument. Deriving rather than accepting it also makes the two facts
+# impossible to contradict: a caller cannot claim 'ungated' while passing a selection.
+REQUESTABLE_ADMISSION_POLICIES = (ADMISSION_POLICY_QUALIFIED_SELECTION, ADMISSION_POLICY_CALLER_ADMITTED)
+
+
 def explore_pdep_network(network_path: str,
                          config: PDepExplorerConfig,
                          selection: PDepNetworkSelection | None = None,
                          logger=None,
+                         *,
+                         admission_policy: str = ADMISSION_POLICY_QUALIFIED_SELECTION,
                          ) -> PDepExplorationResult:
     """
     Run a PES explorer against a PDep network, as a standalone call, optionally gated by a budget.
@@ -258,6 +272,31 @@ def explore_pdep_network(network_path: str,
     explored, even though exploring it might reveal exactly that missing channel. Passing
     ``selection=None`` is the deliberate "explore regardless of budget" path for a caller who wants
     that.
+
+    ``admission_policy`` addresses the same pressure from the other side, and the two are NOT
+    interchangeable -- passing no selection and admitting a network yourself are different claims,
+    which is why 'caller_admitted' without a selection is refused rather than treated as a synonym.
+    It
+    exists because qualification stopped being the only admission authority: a caller can rank the
+    whole field of networks and decide what to spend on itself, in which case ``selection.qualified``
+    is a TIER that informed the ranking, not a veto over its outcome. (T3's own in-run path ranks
+    like this -- ``t3.main`` hands the field to ``t3.pdep.budget.apply_pdep_qm_budget`` -- but still
+    offers only QUALIFIED selections to the budget, so it does not itself use this policy. The
+    policy is here for callers driving the public API, and for T3 if that ever changes.) Under
+    ``admission_policy='caller_admitted'`` the QUALIFICATION checks stand aside -- the unqualified
+    skip and the not-evaluated refusal both -- and nothing else does: ``method``, ``network_id`` and
+    ``network_source_hash`` are provenance, and no budget decision makes a stale selection current.
+    That is the whole difference from ``selection=None``, which drops the binding along with the
+    gate; a caller that has admitted a network still wants its run bound to the content the decision
+    was made about. The policy is recorded on the returned result, because a ``'succeeded'`` result
+    carrying an unqualified selection is otherwise indistinguishable from a bypassed gate.
+
+    A caveat for callers assembling their own admission decision: ``apply_pdep_qm_budget()`` is not
+    a drop-in oracle for this parameter. It refuses an all-``not_evaluated`` network outright, and
+    an evaluated-but-unqualified selection names no uncertain transition states -- so it costs
+    nothing, always "fits", and would be admitted for free. T3's own path never meets that case
+    because it only ever offers QUALIFIED selections to the budget; a caller piping the full output
+    of ``rank_pdep_networks()`` into it would.
 
     Filesystem state (``config.trusted_output_root``, ``config.output_directory``) is checked HERE,
     not in ``PDepExplorerConfig.__post_init__``: the config deliberately checks none of it (see its
@@ -284,14 +323,25 @@ def explore_pdep_network(network_path: str,
             ``config.trusted_output_root``, and a change to THAT file between the write and
             Arkane's own read is a different exposure this function does not address. When
             ``selection.qualified`` is
-            ``False``, the exploration is skipped -- no adapter is ever constructed -- and a
-            ``'skipped'`` result carrying ``selection.reason()`` is returned. When ``None`` (the
-            default), the exploration runs unconditionally.
+            ``False`` (and ``admission_policy`` is the default), the exploration is skipped -- no
+            adapter is ever constructed -- and a ``'skipped'`` result carrying ``selection.reason()``
+            is returned. When ``None`` (the default), the exploration runs unconditionally.
         logger (Logger, optional): The current T3 Logger instance, passed through to the explorer
             adapter.
+        admission_policy (str, optional): Keyword-only. What admits this exploration: one of
+            ``ADMISSION_POLICY_QUALIFIED_SELECTION`` (the default -- ``selection`` is the admission
+            authority, and an unqualified or unevaluated one declines the run) or
+            ``ADMISSION_POLICY_CALLER_ADMITTED`` (the caller already decided to spend on this
+            network; ``selection`` is kept for its binding to the network content, not for its
+            verdict). See the discussion above. Recorded on the returned result. Keyword-only so
+            that it cannot be passed where ``logger`` is expected: ``logger`` is the fourth
+            positional parameter and existing callers may pass it positionally.
 
     Raises:
-        ValueError: If ``network_path`` is not a ``str`` (see above); if ``selection`` is given and
+        ValueError: If ``network_path`` is not a ``str`` (see above); if ``admission_policy`` is not
+            one of the ``ADMISSION_POLICY_*`` constants, or is ``'caller_admitted'`` with no
+            ``selection`` to bind (that combination is inert, and the likeliest way to write it is
+            by forgetting the selection); if ``selection`` is given and
             its ``method`` does not equal ``config.method``, or its ``network_id`` does not equal
             the parsed network's ``network_id``; if ``selection.network_source_hash`` is ``None`` or
             differs from the content hash of ``network_path`` (a decision bound to no content, or to
@@ -305,7 +355,7 @@ def explore_pdep_network(network_path: str,
             ``adapter.explore()`` call.
 
     Returns:
-        PDepExplorationResult: The outcome -- 'skipped' (budget gate declined it), 'failed' (the
+        PDepExplorationResult: The outcome -- 'skipped' (the qualification gate declined it), 'failed' (the
             explorer ran and did not succeed), or 'succeeded'.
     """
     if not isinstance(network_path, str):
@@ -317,6 +367,36 @@ def explore_pdep_network(network_path: str,
             f"TEXT read from a file on disk (see write_arkane_explorer_input_file's source_path "
             f"parameter), and a parsed object is not that -- its .path may be None, stale, or point "
             f"at a file that has since changed. Pass the path string instead.")
+    # Checked before anything is parsed or opened: a misspelled policy that fell through to the
+    # default would silently REINSTATE the qualification gate for a caller who explicitly asked it to
+    # stand aside, so a network they ranked and chose to spend on would be skipped and reported as
+    # declined -- a wrong statement about a decision the caller actually made.
+    if admission_policy not in REQUESTABLE_ADMISSION_POLICIES:
+        raise ValueError(
+            f'explore_pdep_network() admission_policy must be one of '
+            f'{REQUESTABLE_ADMISSION_POLICIES}, got {admission_policy!r}. (The recorded field on '
+            f'PDepExplorationResult has one further value, {ADMISSION_POLICY_UNGATED!r}, but that '
+            f'is not a policy a caller chooses -- it is what passing no selection MEANS, and is '
+            f'derived here rather than requested.)')
+    if admission_policy == ADMISSION_POLICY_CALLER_ADMITTED and selection is None:
+        # Not an over-refusal: this rejects an incoherent CALL, not a run whose data supports it.
+        # 'caller_admitted' exists to keep the provenance binding while overriding the qualification
+        # verdict, and with no selection there is no binding to keep, so the argument would do
+        # nothing whatsoever. The likeliest way to write this call is by forgetting the selection --
+        # which loses exactly the binding the argument was reaching for -- so it is refused rather
+        # than honoured as a no-op.
+        raise ValueError(
+            "explore_pdep_network() was given admission_policy='caller_admitted' but no selection. "
+            "That policy only means anything alongside a selection: it says the caller made the "
+            "spend decision itself and is passing the selection to bind this run to the content the "
+            "decision was made about. With selection=None there is nothing to bind and nothing to "
+            "override, so this call would behave identically to the default. Pass the selection, or "
+            "drop the admission_policy argument.")
+    # What gets RECORDED is derived, not echoed. With no selection there is no decision behind this
+    # run at all, so recording the argument's default would have the result assert that a qualified
+    # selection admitted an exploration for which no selection ever existed -- a false provenance
+    # claim, and precisely the one an auditor of an expensive QM run would lean on.
+    recorded_admission_policy = admission_policy if selection is not None else ADMISSION_POLICY_UNGATED
 
     parsed_network = parse_pdep_network_file(path=network_path)
 
@@ -331,8 +411,8 @@ def explore_pdep_network(network_path: str,
         if selection.method != config.method:
             reasons.append(
                 f"selection.method ({selection.method!r}) does not match config.method "
-                f"({config.method!r}). Gating a decision made under one master-equation method and "
-                f"then exploring under another is silent provenance corruption: the recorded "
+                f"({config.method!r}). Binding a decision made under one master-equation method to an "
+                f"exploration run under another is silent provenance corruption: the recorded "
                 f"decision would not be about the run that actually happened.")
         # network_id is a FILE STEM, so a match only proves the decision was about a file with this
         # NAME. RMG rewrites pdep/network4_2.py on every iteration that touches the network, and a
@@ -345,7 +425,7 @@ def explore_pdep_network(network_path: str,
             reasons.append(
                 f"selection.network_id ({selection.network_id!r}) does not match the parsed "
                 f"network's network_id ({parsed_network.network_id!r}). A decision about a "
-                f"different network used as this one's budget gate fabricates confidence in a "
+                f"different network used as this one's recorded decision fabricates confidence in a "
                 f"result nothing actually justifies -- the same hazard "
                 f"PDepNetworkSelection.combine() already refuses for the same reason.")
         else:
@@ -355,8 +435,10 @@ def explore_pdep_network(network_path: str,
                     f"the content it was made about, and network_id ({selection.network_id!r}) is "
                     f"only a file stem -- it matches every revision of that file. Re-run the "
                     f"selection against the network file (select_pdep_network records the hash "
-                    f"whenever it parses one), or pass selection=None to explore without a budget "
-                    f"gate.")
+                    f"whenever it parses one), or pass selection=None to explore with no recorded "
+                    f"decision at all. Note that admission_policy='caller_admitted' does NOT "
+                    f"stand this check down -- it overrides the qualification verdict, not the "
+                    f"binding to content.")
             elif selection.network_source_hash != parsed_network.source_hash:
                 reasons.append(
                     f"selection.network_source_hash ({selection.network_source_hash!r}) does not "
@@ -383,26 +465,54 @@ def explore_pdep_network(network_path: str,
         # a positive verdict that real evidence supports: the over-refusal failure mode, not the
         # fail-open one. The asymmetry is the point -- a partial 'no' is unsupported (an unevaluated
         # component might have been the one that qualified), a partial 'yes' is not.
-        if selection.evaluation_status != EVALUATION_STATUS_EVALUATED and not selection.qualified:
+        #
+        # Both this check and the `not selection.qualified` skip below are QUALIFICATION policy, not
+        # integrity, so both stand aside under 'caller_admitted'. The reasoning above is entirely
+        # about using `qualified` AS A GATE -- and a caller that has declared it admitted this
+        # network elsewhere is not using it as one, so the raise would be answering a question nobody
+        # asked. Worse, it would force that caller back to selection=None, throwing away the method /
+        # network_id / hash binding just checked, which is the whole reason to pass a selection at
+        # all. Under the DEFAULT policy the raise stays: with no external admission there is no
+        # positive evidence and no spend decision, so a missing evaluation is still a missing
+        # verdict, and reading it as "does not qualify" is still silent corruption.
+        # Unconditional, and deliberately separate from the policy-gated verdict check below: an
+        # evaluation_status outside the known set is MALFORMED DATA, not a verdict this function may
+        # decline to consult. Under 'caller_admitted' the verdict check stands aside, so without this
+        # a hand-built selection carrying a typo'd or invented status would reach the explorer and be
+        # recorded, unexamined, as the provenance of an expensive run. (The loader already refuses
+        # such a record on the way in -- see _require_enum_field on 'evaluation_status' -- so this
+        # closes the same hole for a selection built in memory rather than read from disk.)
+        if selection.evaluation_status not in (EVALUATION_STATUS_EVALUATED,
+                                               EVALUATION_STATUS_NOT_EVALUATED):
+            reasons.append(
+                f"selection.evaluation_status ({selection.evaluation_status!r}) is not one of "
+                f"{(EVALUATION_STATUS_EVALUATED, EVALUATION_STATUS_NOT_EVALUATED)}. A decision whose "
+                f"coverage cannot be read is malformed, and no admission policy makes it readable.")
+        if admission_policy == ADMISSION_POLICY_QUALIFIED_SELECTION \
+                and selection.evaluation_status != EVALUATION_STATUS_EVALUATED \
+                and not selection.qualified:
             reasons.append(
                 f"selection.evaluation_status is {selection.evaluation_status!r}, so its "
                 f"'qualified' field ({selection.qualified!r}) carries no verdict and cannot be used "
-                f"as a budget gate -- a decision that was never evaluated is not a decision to not "
-                f"explore. Re-run the selection against usable SA data, or pass selection=None to "
-                f"explore without gating.")
+                f"as an admission gate -- a decision that was never evaluated is not a decision to not "
+                f"explore. Re-run the selection against usable SA data; or, if you made the spend "
+                f"decision yourself, pass admission_policy='caller_admitted' to keep this "
+                f"selection's binding to the network content while overriding its verdict; or pass "
+                f"selection=None to explore with no recorded decision at all.")
         if reasons:
             if len(reasons) == 1:
                 raise ValueError(reasons[0])
             raise ValueError(
-                f"This selection cannot gate an exploration, for {len(reasons)} independent reasons: "
+                f"This selection cannot bind this exploration, for {len(reasons)} independent reasons: "
                 + ' '.join(f"({i}) {reason}" for i, reason in enumerate(reasons, start=1)))
-        if not selection.qualified:
+        if admission_policy == ADMISSION_POLICY_QUALIFIED_SELECTION and not selection.qualified:
             # Nothing runs: no adapter is constructed, no filesystem state below is touched.
             return PDepExplorationResult(
                 network_id=parsed_network.network_id,
                 status=EXPLORATION_STATUS_SKIPPED,
                 reasons=(selection.reason(),),
                 selection=selection,
+                admission_policy=recorded_admission_policy,
             )
 
     # Filesystem state, checked HERE and not in PDepExplorerConfig -- see the function docstring.
@@ -495,6 +605,7 @@ def explore_pdep_network(network_path: str,
             # the provenance of a run that has already been reported.
             manifest=copy.deepcopy(adapter.manifest),
             selection=selection,
+            admission_policy=recorded_admission_policy,
         )
     # An adapter that fails without saying why is violating the contract documented on
     # PESExplorerAdapter.reasons. Say exactly that, rather than letting PDepExplorationResult's
@@ -517,6 +628,7 @@ def explore_pdep_network(network_path: str,
         output_paths=tuple(adapter.output_paths),
         manifest=copy.deepcopy(adapter.manifest),
         selection=selection,
+        admission_policy=recorded_admission_policy,
     )
 
 
@@ -1206,7 +1318,7 @@ def _validate_selection_cross_field_invariants(selection: PDepNetworkSelection, 
     cannot) validate the relationships BETWEEN fields that ``select_from_sa_dict``/``combine()``
     always maintain. A hand-edited record can satisfy every per-field check while still fabricating
     a positive verdict (``qualified=True``) with no evidence behind it, bypassing
-    ``explore_pdep_network``'s budget gate. This closes exactly that hole, no more.
+    ``explore_pdep_network``'s qualification gate. This closes exactly that hole, no more.
 
     The reachable ``(qualified, evaluation_status, uncertain_path_reactions, selected_ts)``
     combinations, read off ``select_from_sa_dict`` (single decision) and ``combine()``
@@ -1247,8 +1359,8 @@ def _validate_selection_cross_field_invariants(selection: PDepNetworkSelection, 
     - Any relationship between ``qualified``/``uncertain_path_reactions`` and
       ``evaluation_status`` -- ``combine()`` produces ``qualified=True`` with
       ``evaluation_status='not_evaluated'`` as a legitimate partial-yes (see
-      ``PDepNetworkSelection.reason()``'s docstring and ``explore_pdep_network``'s gate, which
-      accepts exactly this state).
+      ``PDepNetworkSelection.reason()``'s docstring and ``explore_pdep_network``'s qualification
+      gate, which accepts exactly this state).
 
     Args:
         selection (PDepNetworkSelection): The freshly reconstructed decision to validate.
@@ -1494,5 +1606,21 @@ def load_pdep_exploration_results(path: str) -> list:
             manifest=_require_record_field(record, 'manifest', path=path, context=context),
             selection=_selection_from_dict(record['selection'], path=path,
                                            context=f'{context}.selection', allow_none=True),
+            # Absent key -> DERIVED, not defaulted and not refused. Every record written before this
+            # field existed predates 'caller_admitted' entirely, so for those records the basis is
+            # not a guess: a record carrying a selection was necessarily admitted by the
+            # qualification gate, and one carrying none was necessarily ungated. That is the same
+            # derivation explore_pdep_network() itself performs, applied to the same evidence, so it
+            # reconstructs the true value rather than inventing a plausible one.
+            #
+            # Refusing instead would make every such file unloadable while still calling it
+            # exploration_result_schema_version 1 -- two incompatible shapes under one version
+            # number, which is precisely what that version exists to prevent. A blanket
+            # ``.get('admission_policy', ADMISSION_POLICY_QUALIFIED_SELECTION)`` would be worse than
+            # either: it would relabel selection-less records as gate-admitted, the exact false
+            # provenance claim this field was added to stop.
+            admission_policy=record['admission_policy'] if 'admission_policy' in record
+            else (ADMISSION_POLICY_QUALIFIED_SELECTION if record['selection'] is not None
+                  else ADMISSION_POLICY_UNGATED),
         ))
     return results

@@ -27,7 +27,10 @@ from t3.pdep.api import (explore_pdep_network,
                          )
 from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.explorer.config import PDepExplorerConfig
-from t3.pdep.explorer.result import (EXPLORATION_RESULT_SCHEMA_VERSION,
+from t3.pdep.explorer.result import (ADMISSION_POLICY_CALLER_ADMITTED,
+                                     ADMISSION_POLICY_QUALIFIED_SELECTION,
+                                     ADMISSION_POLICY_UNGATED,
+                                     EXPLORATION_RESULT_SCHEMA_VERSION,
                                      EXPLORATION_STATUS_FAILED,
                                      EXPLORATION_STATUS_SKIPPED,
                                      EXPLORATION_STATUS_SUCCEEDED,
@@ -1276,6 +1279,296 @@ def test_explore_pdep_network_carries_output_paths_on_failure(monkeypatch, tmp_p
     assert result.output_paths == ('/fake/output1.py',)
     assert result.network_paths == tuple()
     assert result.k_tp_as_written == tuple()
+
+
+# --- 8b. explore_pdep_network()'s admission policy -----------------------------------------------
+#
+# Qualification was originally a GATE: a selection that did not qualify meant "do not explore". It is
+# now a RANKING input, and the spend decision can legitimately be made by the caller instead (T3 makes
+# it in t3.main via t3.pdep.budget.apply_pdep_qm_budget). ``admission_policy`` is how a caller states
+# WHICH of those two happened, and the tests below pin the asymmetry it creates: the qualification
+# checks are policy and step aside under 'caller_admitted', while the method/network_id/hash checks
+# are provenance and never do.
+
+def test_explore_pdep_network_runs_an_unqualified_selection_when_the_caller_admitted_it(tmp_path, monkeypatch):
+    """Test that an EVALUATED, non-qualifying selection explores under 'caller_admitted' instead of
+    being skipped. This is the one cell of the gate's truth table the ranking reframe changes: the
+    caller has ranked this network against the whole field and decided to spend on it anyway, so
+    `qualified` is a tier here, not a veto. The selection is still passed -- and still fully checked
+    below -- because it is what binds the run to the content the decision was made about."""
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
+    selection.evaluation_status = EVALUATION_STATUS_EVALUATED
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection,
+                                  admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+
+    assert len(calls) == 1  # the adapter WAS constructed; under the default policy it would not be
+    assert result.status == EXPLORATION_STATUS_SUCCEEDED
+    # The result must say what admitted it. Without this, a succeeded result carrying an unqualified
+    # selection is unreadable after the fact: it looks exactly like the gate having been bypassed.
+    assert result.admission_policy == ADMISSION_POLICY_CALLER_ADMITTED
+
+
+def test_explore_pdep_network_runs_a_never_evaluated_selection_when_the_caller_admitted_it(tmp_path, monkeypatch):
+    """Test that 'caller_admitted' also stands down the not_evaluated refusal, not only the skip.
+
+    That refusal exists because `qualified` carries no verdict unless the decision was evaluated, and
+    reading a missing evaluation as a negative one is silent corruption. But its whole subject is
+    using `qualified` AS A GATE -- and a caller declaring it admitted the network elsewhere is not
+    using it as one. Keeping the raise here would force that caller back to selection=None, which
+    throws away the method/network_id/hash binding that is the entire reason to pass a selection.
+    That is the over-refusal failure mode, and it is the one this branch keeps rediscovering.
+    """
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
+    selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection,
+                                  admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+
+    assert len(calls) == 1
+    assert result.status == EXPLORATION_STATUS_SUCCEEDED
+
+
+def test_explore_pdep_network_still_refuses_a_stale_selection_when_the_caller_admitted_it(tmp_path, monkeypatch):
+    """Test that 'caller_admitted' stands down the QUALIFICATION checks and nothing else. A caller
+    can decide to spend on a network it ranked; it cannot decide that a decision made about
+    different bytes describes this run. Admitting a network is a budget statement, and no budget
+    statement makes a stale selection current -- so the content binding stays unconditional."""
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=True, method='CSE',
+                                     network_source_hash='sha256:' + 'e' * 64)
+
+    with pytest.raises(ValueError) as exc_info:
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection,
+                             admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+    assert 'has changed since' in str(exc_info.value)
+    assert calls == []
+
+
+def test_explore_pdep_network_refuses_an_unknown_admission_policy(tmp_path, monkeypatch):
+    """Test that a misspelled policy is refused rather than silently treated as the default. Falling
+    back to the default would silently REINSTATE the gate for a caller who explicitly asked for it to
+    stand aside, so the network they ranked and paid for would be skipped and reported as declined."""
+    _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    with pytest.raises(ValueError, match='admission_policy'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config,
+                             admission_policy='caller-admitted')
+
+
+def test_explore_pdep_network_refuses_caller_admitted_without_a_selection(tmp_path, monkeypatch):
+    """Test that 'caller_admitted' with no selection is refused rather than quietly inert.
+
+    The policy's entire job is to keep the provenance binding while overriding the qualification
+    verdict. With selection=None there is no binding to keep, so the parameter would do nothing at
+    all -- and the most likely way to write this call is by forgetting the selection you meant to
+    pass, which loses exactly the binding you were reaching for. Note the asymmetry with the
+    over-refusal the previous tests guard against: refusing here rejects an incoherent CALL, not a
+    run whose data supports it, and the message names the escape (drop the argument).
+    """
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    with pytest.raises(ValueError) as exc_info:
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=None,
+                             admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+    message = str(exc_info.value)
+    assert 'selection' in message
+    assert calls == []
+
+
+def test_explore_pdep_network_records_the_default_admission_policy_on_a_skipped_result(tmp_path, monkeypatch):
+    """Test that the default policy still skips a non-qualifying selection AND says so on the result.
+    'skipped' alone does not distinguish "the qualification gate declined this" from any other
+    not-run outcome; the recorded policy is what makes the pair readable."""
+    calls = _make_fake_factory(monkeypatch)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection)
+
+    assert result.status == EXPLORATION_STATUS_SKIPPED
+    assert result.admission_policy == ADMISSION_POLICY_QUALIFIED_SELECTION
+    assert calls == []
+
+
+def test_explore_pdep_network_records_ungated_when_no_selection_was_given(tmp_path, monkeypatch):
+    """Test that a selection-less exploration records 'ungated', not the argument's default.
+
+    admission_policy answers "what admitted this run". With selection=None nothing did -- so
+    recording 'qualified_selection' would have the result assert that a qualified selection admitted
+    an exploration for which no selection ever existed. That is a false provenance claim, and the
+    most consequential kind: it is exactly the claim someone auditing an expensive QM run would lean
+    on. The value is therefore DERIVED from whether a selection was given, never echoed from the
+    argument.
+    """
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=None)
+
+    assert len(calls) == 1
+    assert result.status == EXPLORATION_STATUS_SUCCEEDED
+    assert result.admission_policy == ADMISSION_POLICY_UNGATED
+
+
+def test_explore_pdep_network_refuses_ungated_as_a_requested_policy(tmp_path, monkeypatch):
+    """Test that 'ungated' cannot be REQUESTED, only derived. It is not a policy a caller chooses --
+    it is what passing no selection means -- so accepting it as an argument would let a caller claim
+    'ungated' while passing a selection, i.e. state two contradictory things about one run."""
+    _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+
+    with pytest.raises(ValueError, match='admission_policy'):
+        explore_pdep_network(network_path=NETWORK_PATH, config=config,
+                             admission_policy=ADMISSION_POLICY_UNGATED)
+
+
+def test_explore_pdep_network_refuses_a_provenance_mismatch_even_when_the_caller_admitted_it(tmp_path, monkeypatch):
+    """Test that method and network_id -- not only the content hash -- stay enforced under
+    'caller_admitted'. Each of the three is a different way for a decision to be about something
+    other than this run, and admitting a network says nothing about any of them."""
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='some_other_network', qualified=False, method='MSC',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
+
+    with pytest.raises(ValueError) as exc_info:
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection,
+                             admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+    message = str(exc_info.value)
+    assert 'method' in message
+    assert 'network_id' in message
+    assert calls == []
+
+
+def test_explore_pdep_network_refuses_an_unreadable_evaluation_status_under_every_policy(tmp_path, monkeypatch):
+    """Test that an evaluation_status outside the known set is refused even under 'caller_admitted'.
+
+    That is malformed DATA, not a verdict this function may decline to consult: the policy stands
+    down the qualification checks, and an unreadable coverage flag is not one. Without this check the
+    'caller_admitted' path would carry a typo'd or invented status straight through to the recorded
+    provenance of an expensive run, unexamined.
+    """
+    calls = _make_fake_factory(monkeypatch, succeed=True)
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=True, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
+    selection.evaluation_status = 'evaluted'  # a typo, not a status
+
+    with pytest.raises(ValueError) as exc_info:
+        explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection,
+                             admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+    assert 'evaluation_status' in str(exc_info.value)
+    assert calls == []
+
+
+def test_explore_pdep_network_records_the_admission_policy_on_a_failed_run(tmp_path, monkeypatch):
+    """Test that a run which was admitted and then FAILED still records what admitted it. A failure
+    is exactly when someone goes back to ask why this network was explored at all, so the failed path
+    is the one where dropping the field costs the most -- and it is a separate construction site from
+    the succeeded one, so it can rot independently."""
+    _make_fake_factory(monkeypatch, succeed=False, reasons=('Arkane exploration did not converge.',))
+    trusted_root = str(tmp_path / 'root')
+    os.makedirs(trusted_root)
+    config = _make_config(trusted_root, os.path.join(trusted_root, 'run1'), method='CSE')
+    selection = PDepNetworkSelection(network_id='network4_2', qualified=False, method='CSE',
+                                     network_source_hash=NETWORK_SOURCE_HASH)
+    selection.evaluation_status = EVALUATION_STATUS_EVALUATED
+
+    result = explore_pdep_network(network_path=NETWORK_PATH, config=config, selection=selection,
+                                  admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+
+    assert result.status == EXPLORATION_STATUS_FAILED
+    assert result.admission_policy == ADMISSION_POLICY_CALLER_ADMITTED
+
+
+def test_load_pdep_exploration_results_round_trips_the_admission_policy(tmp_path):
+    """Test that admission_policy survives save -> load.
+
+    It is recorded precisely so someone reading the results file later can tell why an unqualified
+    network was explored, and that reader is downstream of the SAVE. as_dict() writing the key while
+    the loader ignores it would leave every reloaded record claiming the default policy -- the
+    reconstruction silently rewriting the one fact the field exists to preserve. A round-trip over a
+    NON-default value is the only assertion that catches it; the existing round-trip tests all use
+    the default and pass either way.
+    """
+    result = PDepExplorationResult(
+        network_id='network4_2', status=EXPLORATION_STATUS_FAILED,
+        reasons=('Arkane exploration did not converge.',),
+        output_paths=('/fake/output1.py',),
+        manifest={}, selection=_build_full_selection(),
+        admission_policy=ADMISSION_POLICY_CALLER_ADMITTED,
+    )
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+
+    loaded = load_pdep_exploration_results(path=path)
+
+    assert loaded == [result]
+    assert loaded[0].admission_policy == ADMISSION_POLICY_CALLER_ADMITTED
+
+
+@pytest.mark.parametrize('with_selection, expected_policy', [
+    (True, ADMISSION_POLICY_QUALIFIED_SELECTION),
+    (False, ADMISSION_POLICY_UNGATED),
+])
+def test_load_pdep_exploration_results_derives_the_policy_for_a_record_written_before_the_field(
+        tmp_path, with_selection, expected_policy):
+    """Test that a record predating admission_policy is DERIVED, not defaulted and not refused.
+
+    Such a record predates 'caller_admitted' entirely, so its basis is not a guess: carrying a
+    selection means the qualification gate admitted it, carrying none means it was ungated. Refusing
+    instead would make those files unloadable while still calling them
+    exploration_result_schema_version 1 -- two incompatible shapes under one version number, which is
+    what that version exists to prevent. A blanket default would be worse still: it would relabel
+    selection-less records as gate-admitted, the exact false claim the field was added to stop.
+    """
+    result = PDepExplorationResult(
+        network_id='network4_2', status=EXPLORATION_STATUS_FAILED,
+        reasons=('Arkane exploration did not converge.',),
+        output_paths=('/fake/output1.py',),
+        selection=_build_full_selection() if with_selection else None,
+    )
+    path = str(tmp_path / 'exploration_results.yml')
+    save_pdep_exploration_results(path=path, results=[result])
+    # Strip the key back out, reproducing a file written before the field existed.
+    content = read_yaml_file(path)
+    del content['results'][0]['admission_policy']
+    save_yaml_file(path=path, content=content)
+
+    loaded = load_pdep_exploration_results(path=path)
+
+    assert loaded[0].admission_policy == expected_policy
 
 
 # --- 9. load_pdep_network_selections / load_pdep_exploration_results ----------------------------

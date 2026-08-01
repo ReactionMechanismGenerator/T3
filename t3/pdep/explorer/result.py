@@ -19,8 +19,9 @@ from t3.pdep.selector import PDepNetworkSelection
 # the never-ran-vs-failed distinction ArkaneExplorerAdapter already preserves with its
 # ``succeeded is None`` sentinel (t3/pdep/explorer/arkane.py, ~line 147):
 #
-# - 'skipped'   the exploration was never attempted, because the caller's budget gate (a
-#               non-qualifying PDepNetworkSelection) declined it. No Arkane job ran at all.
+# - 'skipped'   the exploration was never attempted, because the qualification gate (a
+#               non-qualifying PDepNetworkSelection) declined it. No Arkane job ran at all. See
+#               ``admission_policy`` below: that gate is the ONLY thing that can decline a run.
 # - 'failed'    an Arkane exploration actually ran and did not succeed.
 # - 'succeeded' it ran and succeeded.
 #
@@ -33,6 +34,39 @@ EXPLORATION_STATUS_SKIPPED = 'skipped'
 
 _VALID_EXPLORATION_STATUSES = (EXPLORATION_STATUS_SUCCEEDED, EXPLORATION_STATUS_FAILED,
                                EXPLORATION_STATUS_SKIPPED)
+
+# WHAT ADMITTED this exploration -- recorded because ``status`` alone stopped being able to say it.
+# Qualification used to be a gate: an unqualified selection meant "do not explore", so a 'succeeded'
+# result carrying a selection implied that selection had qualified. Under the ranking reframe the
+# spend decision can instead be made by the caller (T3 makes it in ``t3.main`` via
+# ``t3.pdep.budget.apply_pdep_qm_budget``, which ranks the whole field of qualified networks against
+# a budget). A succeeded result carrying an UNQUALIFIED selection is therefore now a legitimate
+# outcome -- and indistinguishable, after the fact, from the gate having been bypassed, unless the
+# basis is recorded alongside it.
+#
+# - 'qualified_selection'  the exploration ran (or was skipped) under the qualification gate: a
+#                          selection was the admission authority, and an unqualified one declined it.
+# - 'caller_admitted'      the caller admitted this network itself and passed the selection only to
+#                          bind the run to the content the decision was made about. The
+#                          qualification checks stand aside; the provenance checks do not.
+# - 'ungated'              no selection was given at all (``explore_pdep_network(selection=None)``),
+#                          so nothing gated the run and there is no recorded decision behind it.
+#
+# 'ungated' exists because the first two do not cover the selection-less call, and defaulting it to
+# 'qualified_selection' would have the record assert that a qualified selection admitted a run for
+# which no selection existed -- a false provenance claim, and the most consequential kind, since it
+# is exactly the claim someone auditing an expensive QM run would rely on.
+ADMISSION_POLICY_QUALIFIED_SELECTION = 'qualified_selection'
+ADMISSION_POLICY_CALLER_ADMITTED = 'caller_admitted'
+ADMISSION_POLICY_UNGATED = 'ungated'
+
+# Public, unlike the status tuple above: t3.pdep.api validates this same field before it ever builds
+# a result, and one shared tuple is what keeps the two checks from drifting apart. Note that only the
+# first two are REQUESTABLE as an ``explore_pdep_network()`` argument -- 'ungated' is not a policy a
+# caller chooses, it is what passing no selection MEANS, so that function derives it rather than
+# accepting it (see its own REQUESTABLE_ADMISSION_POLICIES).
+VALID_ADMISSION_POLICIES = (ADMISSION_POLICY_QUALIFIED_SELECTION, ADMISSION_POLICY_CALLER_ADMITTED,
+                            ADMISSION_POLICY_UNGATED)
 
 # The SHAPE of one PDepExplorationResult.as_dict() record: its set of keys and their types. This is
 # its ONE job. It is deliberately distinct from three other version constants that already exist
@@ -63,7 +97,7 @@ class PDepExplorationResult:
             or ``None`` if the exploration never got far enough to resolve one.
         status (str): One of ``'succeeded'``, ``'failed'``, ``'skipped'`` (see the
             ``EXPLORATION_STATUS_*`` constants). ``'skipped'`` means the exploration was never
-            attempted because the caller's budget gate declined it; ``'failed'`` means it ran and did
+            attempted because the qualification gate declined it; ``'failed'`` means it ran and did
             not succeed; ``'succeeded'`` means it ran and succeeded.
         reasons (tuple): Human-readable reasons for a ``'failed'`` or ``'skipped'`` outcome. Required
             (non-empty) for both: a negative outcome with no stated reason is unusable to a caller
@@ -86,12 +120,24 @@ class PDepExplorationResult:
             Must be empty unless ``status`` is ``'succeeded'``.
         manifest (dict): The exploration run's manifest (provenance: input hashes, tool versions,
             etc.), if any.
-        selection (PDepNetworkSelection, optional): The budget-gate decision this exploration result
-            is downstream of, if any (e.g. the non-qualifying decision that produced a ``'skipped'``
-            result).
+        selection (PDepNetworkSelection, optional): The network decision this exploration result is
+            downstream of, if any (e.g. the non-qualifying decision that produced a ``'skipped'``
+            result). Whether that decision was the thing that ADMITTED the run is a separate
+            question, answered by ``admission_policy``.
+        admission_policy (str): What admitted this exploration -- one of the ``ADMISSION_POLICY_*``
+            constants; see their definition above for the full reasoning. Under the default,
+            ``'qualified_selection'``, the selection was the admission authority, so a ``'skipped'``
+            result means it declined. Under ``'caller_admitted'`` the caller made the spend decision
+            itself, which is what makes a ``'succeeded'`` result carrying an UNQUALIFIED selection a
+            coherent record rather than evidence of a bypassed gate. ``'ungated'`` means no
+            ``selection`` was given, so nothing gated the run. A ``'skipped'`` status is cross-checked
+            against this field (see Raises): only the qualification gate can decline an exploration,
+            so it is the only basis a skipped result can name.
 
     Raises:
         ValueError: If ``status`` is not one of the ``EXPLORATION_STATUS_*`` constants; if
+            ``admission_policy`` is not one of the ``ADMISSION_POLICY_*`` constants; if ``status``
+            is ``'skipped'`` and ``admission_policy`` is not ``'qualified_selection'``; if
             ``status`` is ``'skipped'`` and any of ``network_paths``/``output_paths``/
             ``k_tp_as_written`` is non-empty (nothing ran, so there can be no artifacts); if
             ``status`` is ``'failed'`` or ``'skipped'`` and ``reasons`` is empty; if ``status`` is
@@ -107,12 +153,29 @@ class PDepExplorationResult:
     k_tp_as_written: tuple = tuple()
     manifest: dict = field(default_factory=dict)
     selection: 'PDepNetworkSelection | None' = None
+    admission_policy: str = ADMISSION_POLICY_QUALIFIED_SELECTION
 
     def __post_init__(self):
         if self.status not in _VALID_EXPLORATION_STATUSES:
             raise ValueError(
                 f'PDepExplorationResult.status must be one of {_VALID_EXPLORATION_STATUSES}, '
                 f'got {self.status!r}.')
+        if self.admission_policy not in VALID_ADMISSION_POLICIES:
+            raise ValueError(
+                f'PDepExplorationResult.admission_policy must be one of '
+                f'{VALID_ADMISSION_POLICIES}, got {self.admission_policy!r}.')
+        if self.status == EXPLORATION_STATUS_SKIPPED \
+                and self.admission_policy != ADMISSION_POLICY_QUALIFIED_SELECTION:
+            # ``admission_policy`` answers "what admitted this exploration". A skipped exploration was
+            # not admitted by anything, and only the qualification gate can decline one -- a caller
+            # that admitted a network did not skip it, and a run with no selection had nothing to
+            # decline it. So any other value here is a false statement about why nothing ran, not
+            # merely an unusual combination.
+            raise ValueError(
+                f"PDepExplorationResult with status='skipped' must carry "
+                f"admission_policy={ADMISSION_POLICY_QUALIFIED_SELECTION!r}, got "
+                f"{self.admission_policy!r}: the qualification gate is the only thing that can "
+                f"decline an exploration, so it is the only thing a skipped result can name.")
         if self.status == EXPLORATION_STATUS_SKIPPED:
             if self.network_paths or self.output_paths or self.k_tp_as_written:
                 raise ValueError(
@@ -166,4 +229,5 @@ class PDepExplorationResult:
             'k_tp_as_written': [entry.as_dict() for entry in self.k_tp_as_written],
             'manifest': to_json_safe(self.manifest),
             'selection': self.selection.as_dict() if self.selection is not None else None,
+            'admission_policy': self.admission_policy,
         }

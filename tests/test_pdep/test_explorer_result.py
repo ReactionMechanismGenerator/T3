@@ -14,6 +14,8 @@ import yaml
 import pytest
 
 from t3.pdep.explorer.result import (
+    ADMISSION_POLICY_CALLER_ADMITTED,
+    ADMISSION_POLICY_QUALIFIED_SELECTION,
     EXPLORATION_STATUS_FAILED,
     EXPLORATION_STATUS_SKIPPED,
     EXPLORATION_STATUS_SUCCEEDED,
@@ -267,3 +269,38 @@ def test_as_dict_renders_every_dataclass_field():
     assert rendered == declared, (f'as_dict() does not match the dataclass fields; missing from '
                                   f'as_dict(): {sorted(declared - rendered)}; not a field: '
                                   f'{sorted(rendered - declared)}.')
+
+
+# --- admission_policy -----------------------------------------------------------------------------
+
+
+def test_result_refuses_an_unknown_admission_policy():
+    """Test that admission_policy is validated like status, not stored free-form. The field exists so
+    a reader can tell WHY an unqualified network was explored; an unrecognized value answers that
+    question with something no consumer can interpret, which is worse than the field's absence."""
+    with pytest.raises(ValueError, match='admission_policy'):
+        PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_SUCCEEDED,
+                              network_paths=('/x/net.py',), admission_policy='whatever')
+
+
+def test_result_refuses_a_skipped_status_that_names_another_admission_basis():
+    """Test that 'skipped' may only ever name the qualification gate. The field says what ADMITTED
+    the run; a skipped run was admitted by nothing, and the gate is the only thing that can decline
+    one -- a caller that admitted a network did not skip it, and a run with no selection had nothing
+    to decline it. So any other value here is a false statement about why nothing ran, which is the
+    class of claim every other check in __post_init__ exists to refuse."""
+    with pytest.raises(ValueError, match='skipped'):
+        PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_SKIPPED,
+                              reasons=('does not qualify',),
+                              admission_policy=ADMISSION_POLICY_CALLER_ADMITTED)
+
+
+def test_result_defaults_to_the_qualified_selection_policy():
+    """Test that the default records the qualification gate having been in force. Note this is the
+    right default only for a result built WITH a selection: t3.pdep.api.explore_pdep_network derives
+    'ungated' for the selection-less call rather than relying on this default, because no selection
+    means nothing gated the run."""
+    result = PDepExplorationResult(network_id='n1', status=EXPLORATION_STATUS_SUCCEEDED,
+                                   network_paths=('/x/net.py',))
+    assert result.admission_policy == ADMISSION_POLICY_QUALIFIED_SELECTION
+    assert result.as_dict()['admission_policy'] == ADMISSION_POLICY_QUALIFIED_SELECTION
