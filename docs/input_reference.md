@@ -88,6 +88,14 @@ t3:
                                 # still counts as "sensitive", default: 0.001. Acts as an absolute
                                 # floor alongside the relative pdep_SA_threshold, so that denormal
                                 # near-zero sensitivity coefficients cannot pass on relative grounds.
+    pdep_QM_max_transition_states: 10  # optional, per-iteration budget of uncertain transition
+                                       # states admitted to QM across all selected PDep networks
+                                       # (networks are admitted most-deserving-first, and a network
+                                       # is admitted whole or not at all), default: None (unlimited).
+                                       # Must be a positive integer when given; booleans are refused.
+    pdep_QM_max_networks: 3  # optional, per-iteration cap on the number of PDep networks admitted
+                             # to QM, default: None (unlimited). Must be a positive integer when
+                             # given; booleans are refused.
     ME_methods: ['CSE', 'MSC']  # master equation methods for PES SA,
                                 # any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC']
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10

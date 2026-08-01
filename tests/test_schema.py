@@ -284,6 +284,63 @@ def test_t3_sensitivity_save_sa_yaml():
     assert T3Sensitivity(save_sa_yaml=False).save_sa_yaml is False
 
 
+def test_t3_sensitivity_pdep_qm_budget():
+    """pdep_QM_max_transition_states / pdep_QM_max_networks default to None (no limit),
+    accept a positive int, and reject zero/negative ints."""
+    s = T3Sensitivity()
+    assert s.pdep_QM_max_transition_states is None
+    assert s.pdep_QM_max_networks is None
+    # defaults of the other sensitivity settings are unaffected
+    assert s.pdep_SA_threshold == 0.001
+    assert s.pdep_min_delta_ln_k == 1e-3
+    assert s.ME_methods == ['CSE', 'MSC']
+
+    s = T3Sensitivity(pdep_QM_max_transition_states=5, pdep_QM_max_networks=2)
+    assert s.pdep_QM_max_transition_states == 5
+    assert s.pdep_QM_max_networks == 2
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_transition_states is constrained to > 0
+        T3Sensitivity(pdep_QM_max_transition_states=0)
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_transition_states rejects negative values
+        T3Sensitivity(pdep_QM_max_transition_states=-1)
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_networks is constrained to > 0
+        T3Sensitivity(pdep_QM_max_networks=0)
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_networks rejects negative values
+        T3Sensitivity(pdep_QM_max_networks=-1)
+
+
+def test_t3_sensitivity_pdep_qm_budget_rejects_bool():
+    """pdep_QM_max_transition_states / pdep_QM_max_networks must reject True/False outright.
+    ``bool`` is an ``int`` subclass, so before ``strict=True`` was added, e.g.
+    ``pdep_QM_max_networks=True`` validated silently as 1 -- a YAML ``pdep_QM_max_networks: true``
+    would have silently capped a run at one network per iteration instead of raising a clear
+    configuration error. A plain positive int must still be accepted, so the strictness added to
+    catch bools does not also catch legitimate int input."""
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_transition_states=True)
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_transition_states=False)
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_networks=True)
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_networks=False)
+
+    # a plain positive int is still accepted for both fields
+    s = T3Sensitivity(pdep_QM_max_transition_states=4, pdep_QM_max_networks=3)
+    assert s.pdep_QM_max_transition_states == 4
+    assert s.pdep_QM_max_networks == 3
+
+
 def test_t3_uncertainty_schema():
     """Test creating an instance of T3Uncertainty"""
     t3_uncertainty = T3Uncertainty(adapter=None,

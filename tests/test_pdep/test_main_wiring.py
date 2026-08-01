@@ -28,6 +28,7 @@ import pytest
 
 import t3.main as t3_main
 from t3.chem import T3Species
+from t3.pdep.budget import PDepBudgetDecision, PDepBudgetSkip
 from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
@@ -441,6 +442,87 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
             'state also brings it onto the QM queue.'
         reasons = t3.species[[key for key in species_keys if t3.species[key].label == 'C4rad[5]'][0]].reasons
         assert any('sensitive well' in reason for reason in reasons)
+
+    def test_the_configured_qm_budget_is_what_reaches_the_budget_decision(self, tmp_path, monkeypatch):
+        """The budget knobs must be read from the run's own settings, not defaulted away.
+
+        ``t3/pdep/budget.py`` is unit-tested on its own, so this pins the other half of the contract:
+        that the numbers the user configured are the numbers the budget is actually applied with. A
+        knob that is validated by the schema and then never passed on would leave every budget test
+        green while the budget did nothing.
+        """
+        t3 = _build_t3(tmp_path)
+        t3.t3['sensitivity']['pdep_QM_max_transition_states'] = 7
+        t3.t3['sensitivity']['pdep_QM_max_networks'] = 3
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _sa_dict_with_ts1_structures(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            lambda *args, **kwargs: pytest.fail('Arkane must not run; a valid cache is present.'))
+
+        observed = list()
+        apply_pdep_qm_budget = t3_main.apply_pdep_qm_budget
+
+        def _spy(selections, **kwargs):
+            observed.append(kwargs)
+            return apply_pdep_qm_budget(selections, **kwargs)
+
+        monkeypatch.setattr(t3_main, 'apply_pdep_qm_budget', _spy)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert observed == [{'max_transition_states': 7, 'max_networks': 3}]
+        # The budget is generous here, so the network is still refined: the knob must not refuse by
+        # merely being set.
+        assert {record.network_ts_label for record in t3.pdep_ts_join_records} == {'TS1'}
+
+    def test_a_network_the_budget_refuses_is_neither_queued_nor_silently_dropped(self, tmp_path, monkeypatch):
+        """A budget refusal must stop the queueing AND be reported.
+
+        The failure mode this guards against is a quiet one: if the refusal only shrank the work,
+        the run's logs would be indistinguishable from a run that had nothing left to refine, and a
+        network that qualified for QM would disappear without ever being mentioned.
+        """
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        sa_path = _candidate_sa_path(t3, method='CSE')
+        os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+        save_yaml_file(sa_path, _sa_dict_with_ts1_structures(t3))
+        write_sa_cache_metadata(sa_path=sa_path,
+                                network_path=_network_path(t3),
+                                network_id=NETWORK_NAME,
+                                method='CSE',
+                                )
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            lambda *args, **kwargs: pytest.fail('Arkane must not run; a valid cache is present.'))
+        refusal = PDepBudgetSkip(network_id=NETWORK_NAME,
+                                 cost=1,
+                                 remaining_transition_states=0,
+                                 reason='it needs 1 transition state(s) and only 0 remain(s) of the budget of 4',
+                                 )
+        monkeypatch.setattr(t3_main, 'apply_pdep_qm_budget',
+                            lambda selections, **kwargs: PDepBudgetDecision(admitted_indices=tuple(),
+                                                                           skipped=(refusal,),
+                                                                           total_cost=0,
+                                                                           ))
+        warnings_logged = list()
+        monkeypatch.setattr(t3.logger, 'warning', lambda message: warnings_logged.append(message))
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert not t3.pdep_ts_join_records, 'A refused network must not be queued.'
+        assert not t3.pdep_ts_join_networks
+        assert not os.path.isfile(ts_join_sidecar_path(t3.paths['ARC']))
+        # The network still qualified, and that verdict is not rewritten by the budget.
+        assert len(t3.pdep_network_selections) == 1 and t3.pdep_network_selections[0].qualified is True
+        assert any(NETWORK_NAME in message and refusal.reason in message for message in warnings_logged), \
+            f'The refusal must be reported; logged warnings were: {warnings_logged}'
 
 
 class TestQueuePdepTransitionStates(object):

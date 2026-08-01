@@ -508,6 +508,42 @@ class PDepNetworkSelection:
         return combined
 
 
+def selection_rank_key(selection: PDepNetworkSelection) -> tuple:
+    """
+    The sort key that orders network decisions most-deserving-of-QM first.
+
+    Three tiers, because the three possible verdicts are not two: a qualified network comes first, a
+    network that could NOT be evaluated comes next (it carries no signal, so it can neither be
+    trusted nor dismissed), and a network evaluated and found unqualified comes last -- that is a
+    real, computed negative and the only one of the three that was actually answered "no". Within
+    the qualified tier the order is by the largest ``delta_ln_k`` among the transition states that
+    justified qualification, descending: the strongest rate response first. ``network_id`` breaks
+    every remaining tie so the order is total and reproducible across runs.
+
+    This lives here, beside the decision object it reads, so that every consumer ranks identically.
+    ``t3.pdep.api.rank_pdep_networks`` and T3's own in-run queueing both call it; two independent
+    implementations of "most deserving" would be free to drift apart silently.
+
+    Args:
+        selection (PDepNetworkSelection): The decision to rank.
+
+    Returns:
+        tuple: ``(tier, -max_delta_ln_k, network_id)``, ascending.
+    """
+    if selection.qualified:
+        tier = 0
+    elif selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED:
+        tier = 1
+    else:
+        tier = 2
+    max_delta_ln_k = max((entry.delta_ln_k for entry in selection.uncertain_path_reactions), default=0.0)
+    # `network_id` is optional on the decision object, and a `not_evaluated` placeholder built for a
+    # network whose file could not even be read may carry None. Comparing None against a string
+    # raises, so the tie-break falls back to '' -- which also sorts such a placeholder first among
+    # its tier-mates, ahead of every named network.
+    return tier, -max_delta_ln_k, selection.network_id or ''
+
+
 def _union_preserving_order(iterables) -> list:
     """
     Union several iterables of hashable items, de-duplicated, in first-seen order.

@@ -57,6 +57,7 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               PDepNetworkSelection,
                               SensitiveTransitionState,
                               select_from_sa_dict,
+                              selection_rank_key,
                               validate_selection_thresholds,
                               )
 from t3.pdep.yaml_safe import read_sa_yaml_file
@@ -585,17 +586,7 @@ def rank_pdep_networks(networks,
                                       f'(network_path={network_path!r}, sa_path={sa_path!r}): {e}')
         all_selections.append(selection)
 
-    def _rank_key(selection: PDepNetworkSelection):
-        if selection.qualified:
-            tier = 0
-        elif selection.evaluation_status == EVALUATION_STATUS_NOT_EVALUATED:
-            tier = 1
-        else:
-            tier = 2
-        max_delta_ln_k = max((entry.delta_ln_k for entry in selection.uncertain_path_reactions), default=0.0)
-        return tier, -max_delta_ln_k, selection.network_id or ''
-
-    return sorted(all_selections, key=_rank_key)
+    return sorted(all_selections, key=selection_rank_key)
 
 
 def _unpack_network_entry(entry) -> tuple:

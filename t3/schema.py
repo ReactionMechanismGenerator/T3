@@ -141,6 +141,11 @@ class T3Sensitivity(BaseModel):
     pdep_SA_threshold: Annotated[float, Field(gt=0, lt=0.5)] | None = 0.001
     pdep_min_delta_ln_k: Annotated[float, Field(gt=0, lt=1)] = 1e-3
     ME_methods: list[Annotated[str, Field(min_length=2, max_length=3)]] = ['CSE', 'MSC']
+    # `strict=True` on these two is deliberate, and is about `bool` rather than about types in
+    # general: `bool` is a subclass of `int`, so without it `pdep_QM_max_networks: true` in a YAML
+    # input validates happily as 1 and silently caps the run at a single network per iteration.
+    pdep_QM_max_transition_states: Annotated[int, Field(gt=0, strict=True)] | None = None
+    pdep_QM_max_networks: Annotated[int, Field(gt=0, strict=True)] | None = None
     top_SA_species: Annotated[int, Field(ge=0)] = 10
     top_SA_reactions: Annotated[int, Field(ge=0)] = 10
     T_list: list[Annotated[float, Field(gt=0)]] | None = None

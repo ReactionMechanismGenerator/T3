@@ -52,6 +52,7 @@ from t3.common import (DATA_BASE_PATH,
                        time_lapse,
                        )
 from t3.logger import Logger
+from t3.pdep.budget import apply_pdep_qm_budget
 from t3.pdep.cache import (read_arkane_log_rmg_py_commit,
                            read_t_grid_clamp_record,
                            validate_sa_cache,
@@ -2069,9 +2070,29 @@ class T3:
                                         species_keys.append(key)
 
         # Every network has now been evaluated, so the queueing decision can finally be taken with
-        # the whole field in view. Candidates are queued in the order they were found, which is the
-        # order they were queued in before this step was deferred.
-        for candidate in queue_candidates:
+        # the whole field in view: rank the qualified networks against one another and refine as
+        # many as the budget allows, most deserving first. With no budget configured every qualified
+        # network is still refined and only the order changes.
+        budget = apply_pdep_qm_budget(
+            [candidate.selection for candidate in queue_candidates],
+            max_transition_states=self.t3['sensitivity']['pdep_QM_max_transition_states'],
+            max_networks=self.t3['sensitivity']['pdep_QM_max_networks'],
+        )
+        for skip in budget.skipped:
+            # Loud on purpose. A network that qualified and then went unrefined is a decision this
+            # run took, and a quiet one would be indistinguishable in the logs from there having
+            # been nothing left to refine.
+            self.logger.warning(f'PDep network {skip.network_id} qualifies for QM refinement but was not '
+                                f'refined in iteration {self.iteration}: {skip.reason}. It cost '
+                                f'{skip.cost} transition state(s) of the budget. It will be reconsidered '
+                                f'in the next iteration if the observable is still sensitive to it.')
+        if budget.skipped or self.t3['sensitivity']['pdep_QM_max_transition_states'] is not None \
+                or self.t3['sensitivity']['pdep_QM_max_networks'] is not None:
+            self.logger.info(f'The PDep QM budget admitted {len(budget.admitted_indices)} network offer(s) '
+                             f'at a projected cost of {budget.total_cost} transition state(s), and refused '
+                             f'{len(budget.skipped)} network(s).')
+        for index in budget.admitted_indices:
+            candidate = queue_candidates[index]
             self.queue_pdep_transition_states(network=candidate.network,
                                               selection=candidate.selection,
                                               structures=candidate.structures,
