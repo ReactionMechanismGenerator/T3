@@ -37,6 +37,18 @@ import copy
 import math
 from dataclasses import dataclass, field
 
+from t3.pdep.reason_codes import (REASON_EVALUATED_NO_UNCERTAIN_TS,
+                                  REASON_QUALIFIED_UNCERTAIN_TS,
+                                  REASON_SELECTOR_DIRECTION_ENTRY_MALFORMED,
+                                  REASON_SELECTOR_DIRECTION_UNRESOLVED,
+                                  REASON_SELECTOR_MALFORMED_CONDITIONS_NO_TS_ROWS,
+                                  REASON_SELECTOR_NEGATIVE_INCOMPLETE_DATA,
+                                  REASON_SELECTOR_NO_TS_ROWS,
+                                  REASON_SELECTOR_NO_USABLE_TS_ROWS,
+                                  REASON_SELECTOR_SA_PAYLOAD_MALFORMED,
+                                  REASON_SELECTOR_TS_PROVENANCE_UNASSESSED,
+                                  REASON_SELECTOR_TS_RESPONSE_BELOW_FLOOR,
+                                  )
 from t3.pdep.parser import PDepNetwork
 from t3.utils.uncertainty import is_this_kinetics_comment_uncertain
 
@@ -675,19 +687,24 @@ def validate_selection_thresholds(relative_threshold: float,
     coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
 
 
-def select_from_sa_dict(sa_dict: dict,
-                        network: PDepNetwork,
-                        network_reaction: str,
-                        relative_threshold: float,
-                        min_delta_ln_k: float = DEFAULT_MIN_DELTA_LN_K,
-                        perturbation: float = E0_PERTURBATION_J_PER_MOL,
-                        method: str | None = None,
-                        sa_path: str | None = None,
-                        cache_status: str | None = None,
-                        t_grid_clamp: dict | None = None,
-                        ) -> PDepNetworkSelection:
+def _select_from_sa_dict(sa_dict: dict,
+                         network: PDepNetwork,
+                         network_reaction: str,
+                         relative_threshold: float,
+                         min_delta_ln_k: float = DEFAULT_MIN_DELTA_LN_K,
+                         perturbation: float = E0_PERTURBATION_J_PER_MOL,
+                         method: str | None = None,
+                         sa_path: str | None = None,
+                         cache_status: str | None = None,
+                         t_grid_clamp: dict | None = None,
+                         ) -> tuple:
     """
-    Decide whether a PDep network qualifies for QM refinement (criterion (b)).
+    Decide whether a PDep network qualifies for QM refinement (criterion (b)), with diagnostics.
+
+    The single implementation behind both :func:`select_from_sa_dict` (which returns only the
+    decision) and :func:`select_from_sa_dict_with_diagnostics` (which also returns the machine
+    reason code). There is one implementation rather than two so the reason code can never drift
+    out of step with the decision it describes.
 
     Args:
         sa_dict (dict): A loaded Arkane PDep sensitivity dictionary. Keys are network reaction
@@ -713,10 +730,18 @@ def select_from_sa_dict(sa_dict: dict,
             non-finite or out of its allowed range (see :func:`validate_selection_thresholds`).
 
     Returns:
-        PDepNetworkSelection: The decision, including the evidence behind it.
+        tuple: ``(PDepNetworkSelection, reason_code, secondary_reason_codes)`` -- the decision
+            including the evidence behind it, the ``t3.pdep.reason_codes`` code naming the outcome
+            reached, and any further codes that also applied.
     """
     validate_selection_thresholds(relative_threshold=relative_threshold,
                                   min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
+    # Set by whichever refusal site is reached; resolved to one of the two verdict codes at the
+    # single fall-through return at the bottom if no site set it. More than one refusal can apply to
+    # a single pass -- they are independent defects in the evidence, not a cause and its symptom --
+    # so the later ones accumulate rather than being dropped.
+    reason_code = None
+    secondary_reason_codes = list()
     if not isinstance(sa_dict, dict):
         selection = PDepNetworkSelection(
             network_id=network.network_id,
@@ -737,7 +762,7 @@ def select_from_sa_dict(sa_dict: dict,
             f'The sensitivity data for network {network.network_id} is malformed (expected a dict, got '
             f'{type(sa_dict).__name__}); cannot evaluate criterion (b).')
         selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
-        return selection
+        return selection, REASON_SELECTOR_SA_PAYLOAD_MALFORMED, ()
 
     floor = coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
     selection = PDepNetworkSelection(
@@ -762,7 +787,7 @@ def select_from_sa_dict(sa_dict: dict,
     selection.warnings.extend(direction_warnings)
     if direction_key is None:
         selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
-        return selection
+        return selection, REASON_SELECTOR_DIRECTION_UNRESOLVED, ()
 
     # A direction key was resolved, so exactly one network reaction key was actually examined.
     selection.network_reactions_examined = 1
@@ -773,7 +798,7 @@ def select_from_sa_dict(sa_dict: dict,
             f'The sensitivity data for SA key {direction_key} of network {selection.network_id} is malformed '
             f'(expected a dict of conditions, got {type(resolved_entry).__name__}); cannot evaluate criterion (b).')
         selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
-        return selection
+        return selection, REASON_SELECTOR_DIRECTION_ENTRY_MALFORMED, ()
 
     by_ts = network.path_reactions_by_ts()
     non_finite, malformed, max_abs_ts_overall = 0, 0, 0.0
@@ -839,6 +864,7 @@ def select_from_sa_dict(sa_dict: dict,
             f'No transition state sensitivity rows were found for {direction_key}; criterion (b) has not '
             f'been evaluated (there is nothing to measure here, not a below-floor response).')
         selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+        reason_code = REASON_SELECTOR_NO_TS_ROWS
     elif ts_rows_seen == 0:
         # (a2) malformed > 0 and no TS-prefixed row was seen in any READABLE block: unlike case (a),
         # it is not known whether TS rows existed for this direction_key -- an unreadable block may
@@ -851,6 +877,7 @@ def select_from_sa_dict(sa_dict: dict,
             f'whether transition state sensitivity rows exist here cannot be determined, so criterion '
             f'(b) has not been evaluated.')
         selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+        reason_code = REASON_SELECTOR_MALFORMED_CONDITIONS_NO_TS_ROWS
     elif ts_rows_usable == 0:
         # (b) TS-prefixed rows were seen, but every one of them was non-finite (or otherwise
         # unusable), so none could answer the question either.
@@ -858,6 +885,7 @@ def select_from_sa_dict(sa_dict: dict,
             f'{ts_rows_seen} transition state sensitivity row(s) were found for {direction_key}, but none '
             f'were usable (all were non-finite); criterion (b) has not been evaluated.')
         selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+        reason_code = REASON_SELECTOR_NO_USABLE_TS_ROWS
     elif max_abs_ts_overall < floor:
         # (c) Usable TS rows exist and none reaches the absolute floor -- whether every one is
         # EXACTLY zero (the structural-zero signature of an Arkane that perturbs only a
@@ -896,6 +924,7 @@ def select_from_sa_dict(sa_dict: dict,
             f'(https://github.com/ReactionMechanismGenerator/RMG-Py/pull/2990) fixes -- check that the '
             f'Arkane on PYTHONPATH carries it before treating this network as uninteresting.' + well_note)
         selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+        reason_code = REASON_SELECTOR_TS_RESPONSE_BELOW_FLOOR
 
     selection.uncertain_path_reactions = [entry for entry in selection.selected_ts if entry.uncertain]
     selection.qualified = bool(selection.uncertain_path_reactions)
@@ -910,6 +939,7 @@ def select_from_sa_dict(sa_dict: dict,
         discarded = malformed + non_finite
         if discarded and selection.evaluation_status == EVALUATION_STATUS_EVALUATED:
             selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+            reason_code = REASON_SELECTOR_NEGATIVE_INCOMPLETE_DATA
             selection.warnings.append(
                 f'The negative verdict for {direction_key} rests on incomplete data: {malformed} malformed '
                 f'condition entr{"y" if malformed == 1 else "ies"} and {non_finite} non-finite transition '
@@ -924,11 +954,115 @@ def select_from_sa_dict(sa_dict: dict,
                                     if entry.uncertain is None})
         if unassessed_labels:
             selection.evaluation_status = EVALUATION_STATUS_NOT_EVALUATED
+            # An unassessed provenance and an earlier refusal (e.g. discarded rows) are INDEPENDENT
+            # defects in the evidence: a transition state can fail to join a path reaction whether
+            # or not other rows were unreadable. Reporting only the first would undercount this one
+            # wherever these are tallied, so it is recorded as a secondary code instead of dropped.
+            if reason_code is None:
+                reason_code = REASON_SELECTOR_TS_PROVENANCE_UNASSESSED
+            else:
+                secondary_reason_codes.append(REASON_SELECTOR_TS_PROVENANCE_UNASSESSED)
             selection.warnings.append(
                 f'The qualification verdict for {direction_key} rests on transition state(s) whose '
                 f"provenance could not be assessed ({', '.join(unassessed_labels)}); criterion (b) "
                 f'has not been evaluated.')
-    return selection
+    # The single fall-through exit. Nothing above diagnosed a refusal, so the code is whichever
+    # verdict was actually reached -- and ``qualified`` here is a real computed answer, since every
+    # refusal site above either returned already or left ``selected_ts`` empty.
+    if reason_code is None:
+        reason_code = (REASON_QUALIFIED_UNCERTAIN_TS if selection.qualified
+                       else REASON_EVALUATED_NO_UNCERTAIN_TS)
+    return selection, reason_code, tuple(secondary_reason_codes)
+
+
+def select_from_sa_dict(sa_dict: dict,
+                        network: PDepNetwork,
+                        network_reaction: str,
+                        relative_threshold: float,
+                        min_delta_ln_k: float = DEFAULT_MIN_DELTA_LN_K,
+                        perturbation: float = E0_PERTURBATION_J_PER_MOL,
+                        method: str | None = None,
+                        sa_path: str | None = None,
+                        cache_status: str | None = None,
+                        t_grid_clamp: dict | None = None,
+                        ) -> PDepNetworkSelection:
+    """
+    Decide whether a PDep network qualifies for QM refinement (criterion (b)).
+
+    The decision only. Callers that also need to know WHICH outcome was reached, in a form they can
+    count rather than grep, want :func:`select_from_sa_dict_with_diagnostics` instead. This
+    signature and return type are unchanged from before diagnostics existed, so nothing that
+    persists a selection had to learn about reason codes.
+
+    Args:
+        sa_dict (dict): A loaded Arkane PDep sensitivity dictionary.
+        network (PDepNetwork): The parsed network file.
+        network_reaction (str): The network reaction criterion (a) flagged.
+        relative_threshold (float): The relative gate.
+        min_delta_ln_k (float, optional): The absolute gate.
+        perturbation (float, optional): The E0 perturbation Arkane applied, in J/mol.
+        method (str, optional): The master-equation method used.
+        sa_path (str, optional): The path the SA dictionary was read from.
+        cache_status (str, optional): How the SA data was obtained.
+        t_grid_clamp (dict, optional): T-grid clamp provenance.
+
+    Raises:
+        ValueError: If a threshold is non-finite or out of range.
+
+    Returns:
+        PDepNetworkSelection: The decision, including the evidence behind it.
+    """
+    return _select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=network_reaction,
+                                relative_threshold=relative_threshold, min_delta_ln_k=min_delta_ln_k,
+                                perturbation=perturbation, method=method, sa_path=sa_path,
+                                cache_status=cache_status, t_grid_clamp=t_grid_clamp)[0]
+
+
+def select_from_sa_dict_with_diagnostics(sa_dict: dict,
+                                         network: PDepNetwork,
+                                         network_reaction: str,
+                                         relative_threshold: float,
+                                         min_delta_ln_k: float = DEFAULT_MIN_DELTA_LN_K,
+                                         perturbation: float = E0_PERTURBATION_J_PER_MOL,
+                                         method: str | None = None,
+                                         sa_path: str | None = None,
+                                         cache_status: str | None = None,
+                                         t_grid_clamp: dict | None = None,
+                                         ) -> tuple:
+    """
+    :func:`select_from_sa_dict`, plus the machine-readable reason code for the outcome.
+
+    The nine refusal sites in the selector differ only in the prose they append to
+    ``selection.warnings``. Counting how often any one of them fired -- which is the whole point of
+    the durable assessment record -- would otherwise mean pattern-matching English. The code is
+    reported alongside the decision rather than stored on it, so ``PDepNetworkSelection``'s on-disk
+    shape is unaffected and no schema version has to move.
+
+    Args:
+        sa_dict (dict): A loaded Arkane PDep sensitivity dictionary.
+        network (PDepNetwork): The parsed network file.
+        network_reaction (str): The network reaction criterion (a) flagged.
+        relative_threshold (float): The relative gate.
+        min_delta_ln_k (float, optional): The absolute gate.
+        perturbation (float, optional): The E0 perturbation Arkane applied, in J/mol.
+        method (str, optional): The master-equation method used.
+        sa_path (str, optional): The path the SA dictionary was read from.
+        cache_status (str, optional): How the SA data was obtained.
+        t_grid_clamp (dict, optional): T-grid clamp provenance.
+
+    Raises:
+        ValueError: If a threshold is non-finite or out of range.
+
+    Returns:
+        tuple: ``(PDepNetworkSelection, reason_code, secondary_reason_codes)``. The reason code is
+            one of ``t3.pdep.reason_codes.SELECTION_BEARING_REASON_CODES`` and is never ``None``.
+            ``secondary_reason_codes`` holds any further refusals that also applied in the same
+            pass, and is empty when only one did.
+    """
+    return _select_from_sa_dict(sa_dict=sa_dict, network=network, network_reaction=network_reaction,
+                                relative_threshold=relative_threshold, min_delta_ln_k=min_delta_ln_k,
+                                perturbation=perturbation, method=method, sa_path=sa_path,
+                                cache_status=cache_status, t_grid_clamp=t_grid_clamp)
 
 
 def resolve_direction_key(sa_dict: dict,

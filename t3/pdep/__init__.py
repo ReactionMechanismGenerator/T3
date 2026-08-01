@@ -72,5 +72,24 @@ from t3.pdep.selector import (
     coefficient_floor,
     resolve_direction_key,
     select_from_sa_dict,
+    select_from_sa_dict_with_diagnostics,
     select_sensitive_wells,
+)
+from t3.pdep.assessment import (
+    ASSESSMENT_RECORD_FILE_NAME,
+    ASSESSMENT_RECORD_SCHEMA_VERSION,
+    PDepNetworkAssessment,
+    assessments_record_path,
+)
+from t3.pdep.reason_codes import (
+    INTERNAL_ERROR_REASON_CODES,
+    PRE_SELECTOR_REASON_CODES,
+    REASON_CODE_STATUS,
+    SELECTION_BEARING_REASON_CODES,
+    STATUS_EVALUATED_NEGATIVE,
+    STATUS_INTERNAL_ERROR,
+    STATUS_NOT_EVALUATED,
+    STATUS_QUALIFIED,
+    VALID_ASSESSMENT_REASON_CODES,
+    VALID_ASSESSMENT_STATUSES,
 )
