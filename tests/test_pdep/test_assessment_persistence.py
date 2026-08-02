@@ -18,7 +18,10 @@ import pytest
 
 from arc.common import save_yaml_file
 
-from t3.pdep.api import load_pdep_network_assessments, save_pdep_network_assessments
+from t3.pdep.api import (load_pdep_network_assessments,
+                         save_pdep_network_assessments,
+                         save_pdep_network_selections,
+                         )
 from t3.pdep.assessment import (ASSESSMENT_ENVELOPE_SCHEMA_VERSION,
                                 ASSESSMENT_RECORD_SCHEMA_VERSION,
                                 PDepNetworkAssessment,
@@ -561,44 +564,59 @@ def test_a_nested_selection_carrying_a_boolean_algorithm_version_is_refused(tmp_
 @pytest.mark.parametrize('field_name, value', [('cache_status', 'some_future_cache_state'),
                                                ('warnings', 'a bare string'),
                                                ('network_reactions_examined', True)])
-def test_a_nested_selection_the_constructor_accepts_but_the_loader_refuses(tmp_path, field_name,
-                                                                           value):
-    # KNOWN GAP, pinned here rather than fixed. PDepNetworkSelection is mutable by design -- the
-    # selector builds it across ~20 assignments -- so it validates almost nothing, while
-    # _selection_from_dict is strict. A selection mutated into one of these states therefore saves
-    # and then cannot be loaded back.
-    #
-    # Not reachable from T3's own code paths: the selector only ever assigns the four cache-status
-    # constants, a list of warnings, and an int count. Reaching it needs a caller to mutate a public
-    # object into a state the selector never produces. Validating at construction would not help,
-    # since the mutation happens after it; the real fix is one validation contract shared by the
-    # writer and the loader, which is its own increment. This test exists so the gap is visible and
-    # cannot silently widen.
+def test_a_nested_selection_mutated_into_an_unloadable_state_is_refused_at_the_write(tmp_path,
+                                                                                     field_name,
+                                                                                     value):
+    """Test the gap this test used to merely PIN, now that it is closed.
+
+    `PDepNetworkSelection` is mutable by design -- the selector builds it across ~20 assignments --
+    so for a long time it validated nothing while `_selection_from_dict` was strict, and a selection
+    mutated into one of these states saved cleanly and could then never be loaded back. The old
+    comment here said validating at construction would not help, because the mutation happens after
+    it, and that the real fix was one contract shared by both halves. That fix is
+    `PDepNetworkSelection.validate()`, called from `__post_init__` AND from `as_dict()` -- the one
+    funnel every persisted copy passes through, whatever was done to the record in between.
+
+    The refusal now names the field, and lands even earlier than the write: `PDepNetworkAssessment`
+    renders the selection when it captures its snapshot, so a mutated selection is refused the
+    moment an assessment tries to carry it. A record that cannot be read back can no longer be
+    built, never mind saved.
+    """
     selection = negative_selection()
     setattr(selection, field_name, value)
-    record = PDepNetworkAssessment(network_id='network4_2', status=STATUS_EVALUATED_NEGATIVE,
-                                   reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS,
-                                   selection=selection)
-    path = saved(tmp_path, [record])
+
     with pytest.raises(ValueError, match=field_name):
-        load_pdep_network_assessments(path)
+        PDepNetworkAssessment(network_id='network4_2', status=STATUS_EVALUATED_NEGATIVE,
+                              reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS, selection=selection)
+
+    # And directly at the write, for a selection that is not nested inside anything.
+    with pytest.raises(ValueError, match=field_name):
+        save_pdep_network_selections(path=os.path.join(str(tmp_path), 'selections.yml'),
+                                     selections=[selection])
+    assert os.listdir(str(tmp_path)) == [], 'no partial file and no staging directory may survive'
 
 
-def test_a_nested_selection_that_would_make_the_whole_file_unparseable_is_refused_at_the_write(tmp_path):
-    """Test the worse half of the gap above. Those three values are refused by the loader with a
-    message naming the field; a non-plain value is not, because the file never reaches the record
-    checks at all -- `yaml.safe_load` refuses the `!!python/object/apply:` tag first, so a single
-    bad nested field costs the whole iteration's assessments, not one record's. The assessment
-    record type type-checks its own `str` fields, so this is reachable only through the nested
-    selection, which does not."""
+def test_a_nested_selection_holding_a_path_is_refused_by_name_not_by_yaml_tag(tmp_path):
+    """Test the value that used to be the WORST case, and no longer is.
+
+    A `Path` in a nested `sa_path` was the one class the loader could not diagnose: `yaml.safe_load`
+    refuses the `!!python/object/apply:` tag before any per-record check runs, so a single bad
+    nested field cost the whole iteration's assessments and reported a YAML tag rather than a field.
+    The selection's own contract now catches it at render time and names `sa_path`.
+
+    The write-time plain-YAML check in `t3.pdep.api` is what remains underneath, for the dict fields
+    no contract describes -- see `test_the_check_covers_exactly_what_no_field_validator_describes`.
+    """
     selection = negative_selection()
     selection.sa_path = Path('/runs/t3/sa_coefficients.yml')
-    record = PDepNetworkAssessment(network_id='network4_2', status=STATUS_EVALUATED_NEGATIVE,
-                                   reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS,
-                                   selection=selection)
 
-    with pytest.raises(ValueError, match='plain YAML'):
-        saved(tmp_path, [record])
+    with pytest.raises(ValueError, match='sa_path'):
+        PDepNetworkAssessment(network_id='network4_2', status=STATUS_EVALUATED_NEGATIVE,
+                              reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS, selection=selection)
+
+    with pytest.raises(ValueError, match='sa_path'):
+        save_pdep_network_selections(path=os.path.join(str(tmp_path), 'selections.yml'),
+                                     selections=[selection])
     assert os.listdir(str(tmp_path)) == [], 'no partial file and no staging directory may survive'
 
 

@@ -9,11 +9,13 @@ import dataclasses
 import json
 import math
 import os
+from pathlib import Path
 
 import pytest
 from arc.common import read_yaml_file
 
 from t3.common import TEST_DATA_BASE_PATH
+from t3.pdep.api import load_pdep_network_selections, save_pdep_network_selections
 from t3.pdep.parser import parse_pdep_network_file, parse_pdep_network_text
 from t3.pdep.selector import (EVALUATION_STATUS_EVALUATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
@@ -999,7 +1001,12 @@ def test_as_dict_containers_are_isolated_from_the_live_selection():
     decision = PDepNetworkSelection(
         network_id='net1',
         qualified=True,
-        thresholds={'relative_threshold': 0.001, 'nested': [1, 2, 3]},
+        thresholds={'relative_threshold': 0.001},
+        # The nested container lives in `t_grid_clamp`, which legitimately holds a structure --
+        # `thresholds` values are numeric by contract (both `_require_thresholds_field` and, since
+        # this record type gained a `__post_init__`, the constructor), so a list there is no longer
+        # a record any code path could produce.
+        t_grid_clamp={'clamped': True, 'nested': [1, 2, 3]},
         direction_keys=['A + B <=> C'],
         selected_ts=[ts_entry],
         uncertain_path_reactions=[ts_entry],
@@ -1008,7 +1015,8 @@ def test_as_dict_containers_are_isolated_from_the_live_selection():
     rendered = decision.as_dict()
 
     # Mutate every container in the rendered dict, including nested containers.
-    rendered['thresholds']['nested'].append(999)
+    rendered['t_grid_clamp']['nested'].append(999)
+    rendered['t_grid_clamp']['clamped'] = False
     rendered['thresholds']['relative_threshold'] = -1.0
     rendered['thresholds']['injected'] = True
     rendered['direction_keys'].append('injected')
@@ -1018,8 +1026,10 @@ def test_as_dict_containers_are_isolated_from_the_live_selection():
     rendered['uncertain_path_reactions'].append({'injected': True})
     rendered['uncertain_path_reactions'][0]['ts_label'] = 'tampered'
 
-    assert decision.thresholds == {'relative_threshold': 0.001, 'nested': [1, 2, 3]}, (
+    assert decision.thresholds == {'relative_threshold': 0.001}, (
         f'thresholds mutated via as_dict() output: {decision.thresholds}')
+    assert decision.t_grid_clamp == {'clamped': True, 'nested': [1, 2, 3]}, (
+        f't_grid_clamp mutated via as_dict() output: {decision.t_grid_clamp}')
     assert decision.direction_keys == ['A + B <=> C'], (
         f'direction_keys mutated via as_dict() output: {decision.direction_keys}')
     assert decision.warnings == ['a warning'], (
@@ -1283,10 +1293,19 @@ def test_as_dict_does_not_hand_out_a_malformed_condition_itself():
 
     A condition that is neither a tuple nor a list was previously returned by reference, so the
     caller received the record's own object rather than a rendering of it.
+
+    The malformed condition is now installed with ``object.__setattr__`` rather than passed to the
+    constructor, which refuses it: the record is frozen, so that is the only way this state can
+    still arise, and the fallback is still worth pinning for exactly that reason. Relaxing the
+    contract to keep the test constructible would be the wrong trade -- a dict condition does not
+    round-trip (the loader reads the labelled form and rebuilds a tuple from ``.get('T')``), which
+    is the failure the contract exists to prevent.
     """
-    entry = SensitiveTransitionState(ts_label='TS1', coefficient=1.0, condition={'T': [300.0]},
+    entry = SensitiveTransitionState(ts_label='TS1', coefficient=1.0,
+                                     condition=(300.0, 'K', 1.0, 'bar'),
                                      path_reaction_label='r1', path_reaction_str='A <=> B',
                                      kinetics_comment='', uncertain=True, delta_ln_k=1.0)
+    object.__setattr__(entry, 'condition', {'T': [300.0]})
     rendered = entry.as_dict()
     assert rendered['condition'] is not entry.condition, 'as_dict() handed out the live condition object.'
     rendered['condition']['T'].append('tampered')
@@ -1367,3 +1386,173 @@ def test_reason_on_a_qualified_record_that_names_no_evidence():
     assert 'sensitive to ,' not in reason, f'Rendered an empty evidence list as prose: {reason}'
     assert 'names no uncertain transition state' in reason, \
         f'Did not disclose that the evidence is missing: {reason}'
+
+
+# --- The constructor holds the same field contract the loader enforces ---------------------------
+#
+# `PDepNetworkSelection` was the only record type in `t3/pdep` that did not type-check its own
+# fields: `PDepBudgetNetworkOutcome` and `PDepNetworkAssessment` both do it in `__post_init__`, and
+# `_selection_from_dict` has always enforced the same contract on the way IN from disk. The gap
+# between those two was a record that could be built and written but never read back -- and because
+# a selection is nested inside both exploration results and network assessments, one bad field cost
+# whichever of those files carried it.
+
+def test_the_constructor_refuses_a_path_where_a_string_belongs():
+    """Test the case that motivated this: a `pathlib.Path` in a `str`-annotated field. It reaches
+    the YAML dumper as an object tag, and the file it lands in can never be read back."""
+    with pytest.raises(ValueError, match='sa_path'):
+        PDepNetworkSelection(network_id='network4_2', sa_path=Path('/runs/t3/sa_coefficients.yml'))
+
+
+@pytest.mark.parametrize('field_name', ['network_source_hash', 'network_reaction', 'direction_key',
+                                        'method', 'sa_path'])
+def test_the_constructor_refuses_a_non_string_optional_field(field_name):
+    """Test every optional string field, since the loader checks each of them individually."""
+    with pytest.raises(ValueError, match=field_name):
+        PDepNetworkSelection(network_id='network4_2', **{field_name: 17})
+
+
+@pytest.mark.parametrize('unnamed', [None, ''])
+def test_an_unnamed_decision_is_a_legitimate_record_and_round_trips(tmp_path, unnamed):
+    """Test the state the contract must NOT delete. `rank_pdep_networks` records a decision for an
+    entry too malformed to name a network, and `t3.pdep.budget` counts two such records as two
+    distinct networks rather than collapsing them. The loader used to require a string here, so an
+    unnamed decision was written and then refused on the way back in -- the same
+    constructible-but-unreadable gap, reached by an ordinary code path rather than a stray `Path`."""
+    selection = PDepNetworkSelection(network_id=unnamed,
+                                     evaluation_status=EVALUATION_STATUS_NOT_EVALUATED,
+                                     warnings=['Could not evaluate this entry.'])
+    path = str(tmp_path / 'selections.yml')
+    save_pdep_network_selections(path=path, selections=[selection])
+    assert load_pdep_network_selections(path=path) == [selection]
+
+
+def test_the_constructor_refuses_a_network_id_that_is_neither_a_label_nor_absent():
+    """Test that "optional" does not mean "anything": an int is not an unnamed network."""
+    with pytest.raises(ValueError, match='network_id'):
+        PDepNetworkSelection(network_id=17)
+
+
+@pytest.mark.parametrize('field_name', ['qualified', 'direction_ambiguous'])
+def test_the_constructor_refuses_a_truthy_stand_in_for_a_boolean(field_name):
+    """Test that the booleans are strict. `qualified=1` is the one that matters: it is the verdict
+    the exploration gate reads, and a truthy stand-in would be written out as `1` and refused on the
+    way back in, long after the run that made the decision is over."""
+    with pytest.raises(ValueError, match=field_name):
+        PDepNetworkSelection(network_id='network4_2', **{field_name: 1})
+
+
+@pytest.mark.parametrize('field_name', ['direction_keys', 'selected_ts', 'uncertain_path_reactions',
+                                        'warnings'])
+def test_the_constructor_refuses_a_bare_string_where_a_list_belongs(field_name):
+    """Test the shred case. A bare string satisfies `isinstance(x, Sequence)` and would be iterated
+    character by character by anything that walked it, so it is checked as its own failure rather
+    than lumped in with 'not a list'."""
+    with pytest.raises(ValueError, match=field_name):
+        PDepNetworkSelection(network_id='network4_2', **{field_name: 'one warning'})
+
+
+def test_the_constructor_refuses_a_tuple_where_the_loader_would_produce_a_list():
+    """Test the asymmetry that would otherwise survive to disk. `as_dict()` deep-copies these
+    containers rather than rebuilding them, so a tuple stays a tuple, is rendered as
+    `!!python/tuple`, and takes the whole file down with it -- even though the field's contents are
+    perfectly ordinary strings."""
+    with pytest.raises(ValueError, match='warnings'):
+        PDepNetworkSelection(network_id='network4_2', warnings=('one warning',))
+
+
+def test_the_constructor_refuses_a_boolean_where_a_count_belongs():
+    """Test that `network_reactions_examined` cannot be a bool. `isinstance(True, int)` is True and
+    `True == 1`, so nothing but an explicit check keeps `examined=True` out of a record that then
+    claims one reaction was examined."""
+    with pytest.raises(ValueError, match='network_reactions_examined'):
+        PDepNetworkSelection(network_id='network4_2', network_reactions_examined=True)
+
+
+def test_the_constructor_refuses_an_unrecognized_evaluation_status():
+    """Test the enum the whole not-evaluated/negative distinction rests on."""
+    with pytest.raises(ValueError, match='evaluation_status'):
+        PDepNetworkSelection(network_id='network4_2', evaluation_status='maybe')
+
+
+def test_the_constructor_refuses_an_unrecognized_cache_status():
+    """Test the other enum, which the loader also restricts to a fixed set."""
+    with pytest.raises(ValueError, match='cache_status'):
+        PDepNetworkSelection(network_id='network4_2', cache_status='warm')
+
+
+def test_the_constructor_refuses_a_non_numeric_threshold():
+    """Test the free-form dict's VALUES, which the loader requires to be numeric. The keys stay
+    free-form; a threshold that is not a number is not a threshold."""
+    with pytest.raises(ValueError, match='thresholds'):
+        PDepNetworkSelection(network_id='network4_2', thresholds={'relative_threshold': 'small'})
+
+
+def test_the_constructor_refuses_a_transition_state_that_is_not_one():
+    """Test that the evidence lists hold real `SensitiveTransitionState` records. A plain dict here
+    would render as itself and read back as an object the rest of the package cannot use."""
+    with pytest.raises(ValueError, match='selected_ts'):
+        PDepNetworkSelection(network_id='network4_2', selected_ts=[{'ts_label': 'TS1'}])
+
+
+def test_a_selection_the_constructor_accepts_can_always_be_read_back(tmp_path):
+    """Test the property all of the above exist to produce: anything constructible is round-trippable.
+    This is the contract the two halves now share -- it is what makes the write-time plain-YAML
+    backstop a backstop rather than the only thing standing between a record and a lost file."""
+    selection = select_from_sa_dict(sa_dict=read_yaml_file(path=SA_PATH),
+                                    network=parse_pdep_network_file(
+                                        path=os.path.join(PDEP_NETWORK_DIR, 'network4_2.py')),
+                                    network_reaction=TARGET_REACTION, relative_threshold=0.001)
+    path = str(tmp_path / 'selections.yml')
+    save_pdep_network_selections(path=path, selections=[selection])
+    assert load_pdep_network_selections(path=path) == [selection]
+
+
+# --- The evidence entries hold their own contract too --------------------------------------------
+#
+# `PDepNetworkSelection` checking `isinstance(entry, SensitiveTransitionState)` is only as strong as
+# that record type's own contract. Without one, "anything constructible is round-trippable" is false
+# one level down: a piece of evidence carrying a string where a number belongs renders as good YAML
+# and is refused only when the file is read back -- taking the whole file with it.
+
+@pytest.mark.parametrize('field_name,bad_value', [('coefficient', 'bad'), ('delta_ln_k', 'bad'),
+                                                  ('uncertain', 'yes'), ('ts_label', 17),
+                                                  ('kinetics_comment', None),
+                                                  ('path_reaction_str', 17),
+                                                  ('condition', 'K300')])
+def test_a_transition_state_field_the_loader_would_refuse_is_refused_at_construction(field_name,
+                                                                                     bad_value):
+    """Test each field `_sensitive_transition_state_from_dict` checks on the way back in."""
+    fields = dict(ts_label='TS1', coefficient=0.1, condition=(300.0, 'K', 1.0, 'bar'),
+                  path_reaction_label='R1', path_reaction_str='A <=> B', kinetics_comment='estimate',
+                  uncertain=True, delta_ln_k=8368.0)
+    fields[field_name] = bad_value
+    with pytest.raises(ValueError, match=field_name):
+        SensitiveTransitionState(**fields)
+
+
+def test_a_transition_state_may_still_report_that_its_join_failed():
+    """Test that `uncertain=None` survives. It is not a missing bool: it means the path-reaction
+    join failed and no provenance verdict was reached, which the selector reads differently from
+    "not uncertain"."""
+    entry = SensitiveTransitionState(ts_label='TS1', coefficient=0.1,
+                                     condition=(300.0, 'K', 1.0, 'bar'), path_reaction_label=None,
+                                     path_reaction_str=None, kinetics_comment='', uncertain=None,
+                                     delta_ln_k=8368.0)
+    assert entry.uncertain is None
+
+
+def test_mutating_a_selection_after_construction_is_caught_when_it_is_rendered(tmp_path):
+    """Test the hole a constructor check cannot cover on a MUTABLE record. `select_from_sa_dict`
+    builds a blank decision and fills it in afterwards, so a contract that ran only at construction
+    would inspect an empty record and pass. `as_dict()` is the one funnel every persisted copy goes
+    through, so the check runs there too -- and the write is refused rather than producing a file
+    that cannot be read."""
+    selection = PDepNetworkSelection(network_id='network4_2')
+    selection.warnings = 'a bare string'
+
+    with pytest.raises(ValueError, match='warnings'):
+        selection.as_dict()
+    with pytest.raises(ValueError, match='warnings'):
+        save_pdep_network_selections(path=str(tmp_path / 'selections.yml'), selections=[selection])
+    assert not os.path.exists(str(tmp_path / 'selections.yml'))

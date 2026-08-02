@@ -95,12 +95,106 @@ CACHE_STATUS_CACHED_REJECTED = 'cached_rejected'
 # A caller passed validate_cache=False: the file is merely trusted, not actually validated against
 # its T3 sidecar, and is not freshly generated either -- distinct provenance from both of the above.
 CACHE_STATUS_UNVALIDATED = 'unvalidated'
+# The set ``PDepNetworkSelection.__post_init__`` and ``t3.pdep.api._selection_from_dict`` both check
+# against, named once so the constructor and the loader cannot drift apart as statuses are added.
+VALID_CACHE_STATUSES = (CACHE_STATUS_GENERATED, CACHE_STATUS_CACHED_VALID, CACHE_STATUS_CACHED_REJECTED,
+                        CACHE_STATUS_UNVALIDATED)
 
 # Evaluation status values for PDepNetworkSelection.evaluation_status (FIX C): 'evaluated' means the
 # decision was actually computed from real SA data; 'not_evaluated' means it could not be (unreadable
 # / unparseable network, missing SA data, or a rejected cache), so qualified/selected_ts carry no signal.
 EVALUATION_STATUS_EVALUATED = 'evaluated'
 EVALUATION_STATUS_NOT_EVALUATED = 'not_evaluated'
+
+
+def _require_str(value, field_name: str, subject: str) -> None:
+    """
+    Refuse a non-string where ``t3.pdep.api._selection_from_dict`` requires one.
+
+    Args:
+        value: The value to check.
+        field_name (str): The field being checked, named in the error.
+        subject (str): How to name the record in the error (e.g. ``"PDep selection for network
+            'network4_2'"``), so a refusal points at one record rather than at a type.
+
+    Raises:
+        ValueError: If ``value`` is not a ``str``.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f'{subject} has {field_name}={value!r} '
+                         f'({type(value).__name__}), which must be a string.')
+
+
+def _require_optional_str(value, field_name: str, subject: str) -> None:
+    """
+    Refuse a non-string where the loader allows a string or ``None``.
+
+    Args:
+        value: The value to check.
+        field_name (str): The field being checked, named in the error.
+        subject (str): How to name the record in the error (e.g. ``"PDep selection for network
+            'network4_2'"``), so a refusal points at one record rather than at a type.
+
+    Raises:
+        ValueError: If ``value`` is neither a ``str`` nor ``None``.
+    """
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f'{subject} has {field_name}={value!r} '
+                         f'({type(value).__name__}), which must be a string or None. A pathlib.Path '
+                         f'is the usual way one of these arrives: it is written out as a Python '
+                         f'object tag, and the whole file is then refused on the way back in.')
+
+
+def _require_bool(value, field_name: str, subject: str) -> None:
+    """
+    Refuse a truthy stand-in where the loader requires an actual bool.
+
+    ``qualified`` is the field this matters most for: it is the verdict the exploration gate reads,
+    and ``qualified=1`` would be written out as ``1`` and refused only when the record is read back,
+    long after the run that made the decision has ended.
+
+    Args:
+        value: The value to check.
+        field_name (str): The field being checked, named in the error.
+        subject (str): How to name the record in the error (e.g. ``"PDep selection for network
+            'network4_2'"``), so a refusal points at one record rather than at a type.
+
+    Raises:
+        ValueError: If ``value`` is not a ``bool``.
+    """
+    if not isinstance(value, bool):
+        raise ValueError(f'{subject} has {field_name}={value!r} '
+                         f'({type(value).__name__}), which must be a bool.')
+
+
+def _require_list(value, field_name: str, subject: str) -> None:
+    """
+    Refuse anything but a list, calling out a bare string as its own failure.
+
+    A bare string is iterable, so a field that should hold ``['one warning']`` and holds
+    ``'one warning'`` is not obviously wrong until something walks it character by character.
+
+    Args:
+        value: The value to check.
+        field_name (str): The field being checked, named in the error.
+        subject (str): How to name the record in the error (e.g. ``"PDep selection for network
+            'network4_2'"``), so a refusal points at one record rather than at a type.
+
+    Raises:
+        ValueError: If ``value`` is not a ``list``.
+    """
+    if isinstance(value, str):
+        raise ValueError(f'{subject} has {field_name}={value!r}, a '
+                         f'bare string where a list belongs. It would be iterated one character at '
+                         f'a time by anything that walked it.')
+    if not isinstance(value, list):
+        raise ValueError(f'{subject} has {field_name}={value!r} '
+                         f'({type(value).__name__}), which must be a list. A tuple is refused too, '
+                         f'for one of two reasons depending on the field: `as_dict()` deep-copies '
+                         f'`direction_keys`/`warnings` rather than rebuilding them, so a tuple there '
+                         f'reaches the file as `!!python/tuple` and costs the whole file; the '
+                         f'evidence lists ARE rebuilt, so a tuple there survives the write and comes '
+                         f'back a list, leaving the reloaded record unequal to the one saved.')
 
 
 @dataclass(frozen=True)
@@ -133,6 +227,47 @@ class SensitiveTransitionState:
     kinetics_comment: str
     uncertain: bool | None
     delta_ln_k: float
+
+    def __post_init__(self):
+        """
+        Hold the contract ``t3.pdep.api._sensitive_transition_state_from_dict`` enforces on the way
+        back in.
+
+        Without this, ``PDepNetworkSelection``'s own contract is only as strong as
+        ``isinstance(entry, SensitiveTransitionState)``: a piece of evidence carrying
+        ``coefficient='bad'`` or ``uncertain='yes'`` is constructible, renders as perfectly good
+        YAML, and is refused only when the file is read -- which is the same
+        constructible-but-unreadable gap one level down, and it takes the whole file with it.
+
+        Frozen, unlike ``PDepNetworkSelection``, so construction is the only moment there is and
+        this check cannot be undone afterwards.
+
+        Raises:
+            ValueError: If any field would not survive a round trip through ``as_dict()``.
+        """
+        subject = f'Sensitive transition state {self.ts_label!r}'
+        _require_str(self.ts_label, 'ts_label', subject)
+        _require_str(self.kinetics_comment, 'kinetics_comment', subject)
+        for field_name in ('path_reaction_label', 'path_reaction_str'):
+            _require_optional_str(getattr(self, field_name), field_name, subject)
+        if self.uncertain is not None and not isinstance(self.uncertain, bool):
+            raise ValueError(f'Sensitive transition state {self.ts_label!r} has '
+                             f'uncertain={self.uncertain!r} ({type(self.uncertain).__name__}), which '
+                             f'must be a bool or None. None means the join failed and no provenance '
+                             f'verdict was reached, which is not the same as "not uncertain".')
+        for field_name in ('coefficient', 'delta_ln_k'):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f'Sensitive transition state {self.ts_label!r} has '
+                                 f'{field_name}={value!r} ({type(value).__name__}), which must be a '
+                                 f'number.')
+        # ``as_dict()`` renders a 4-element condition as a labelled mapping and anything else as a
+        # plain list, and the loader restores a tuple from either -- so the shape is checked, not the
+        # type. A string would satisfy ``len(...) == 4`` for four characters and render as itself.
+        if isinstance(self.condition, str) or not isinstance(self.condition, (tuple, list)):
+            raise ValueError(f'Sensitive transition state {self.ts_label!r} has '
+                             f'condition={self.condition!r} ({type(self.condition).__name__}), which '
+                             f'must be a sequence of (T, T_unit, P, P_unit).')
 
     def as_dict(self) -> dict:
         """
@@ -178,8 +313,14 @@ class PDepNetworkSelection:
     The decision for one PDep network, returned by both the in-run path and the public API.
 
     Args:
-        network_id (str): The network file stem, e.g. ``'network4_2'``. This is the join key
-            downstream consumers (e.g. Carmel) use to identify the network.
+        network_id (str, optional): The network file stem, e.g. ``'network4_2'``. This is the join
+            key downstream consumers (e.g. Carmel) use to identify the network. ``None`` for a
+            decision about an entry too malformed to name a network at all -- ``rank_pdep_networks``
+            records exactly that, and ``t3.pdep.budget`` counts two such decisions as two DISTINCT
+            networks rather than collapsing them into one. Distinctness there is POSITIONAL, not
+            identity-based: a consumer joining these records on ``network_id`` will collapse every
+            unnamed decision into one, so an unnamed record is a report that something could not be
+            evaluated, not a network a consumer can act on.
         network_source_hash (str, optional): The ``'sha256:<hex>'`` content hash of the network file
             this decision was computed from, as ``t3.pdep.parser.hash_bytes`` /
             ``t3.pdep.cache.hash_file`` spell it, or ``None`` when the network was not parsed from a
@@ -240,7 +381,7 @@ class PDepNetworkSelection:
             Missing/unknown provenance must never cause ``evaluation_status`` to become
             ``'not_evaluated'`` or any other refusal -- this field is purely descriptive.
     """
-    network_id: str
+    network_id: str | None
     network_source_hash: str | None = None
     qualified: bool = False
     network_reaction: str | None = None
@@ -259,6 +400,111 @@ class PDepNetworkSelection:
     selection_schema_version: int = SELECTION_SCHEMA_VERSION
     selection_algorithm_version: int = SELECTION_ALGORITHM_VERSION
     t_grid_clamp: dict | None = None
+
+    def __post_init__(self):
+        """
+        Check the field contract at construction. See ``validate`` for what it is and why.
+
+        Raises:
+            ValueError: If any field would not survive a round trip.
+        """
+        self.validate()
+
+    def validate(self) -> None:
+        """
+        Hold the same per-field contract ``_selection_from_dict`` enforces on the way in from disk.
+
+        This record type was the only one in ``t3/pdep`` without such a check --
+        ``PDepBudgetNetworkOutcome`` and ``PDepNetworkAssessment`` both have one -- and the gap
+        between a permissive constructor and a strict loader is a record that can be BUILT and
+        WRITTEN but never READ BACK. It is not a private problem: a selection is nested inside both
+        an exploration result and a network assessment, so one bad field costs whichever file
+        carried it, not just this record.
+
+        Called from ``__post_init__`` AND from ``as_dict()``, which is the reason it is a method
+        rather than a block inside the constructor. This record is MUTABLE, and the package's own
+        main producer relies on that: ``select_from_sa_dict`` builds a blank decision and then
+        assigns ``qualified``, ``warnings``, ``selected_ts`` and the rest onto it. A contract that
+        ran only at construction would therefore inspect an empty record and see nothing -- it would
+        be a guarantee in name only. ``as_dict()`` is the one funnel every persisted copy passes
+        through, whatever was done to the record in between, so checking there is what makes the
+        contract mean something. (``PDepNetworkAssessment.as_dict()`` already refuses when its live
+        selection has drifted from the snapshot it captured; a validating ``as_dict`` is the
+        established shape here, not a new idea.)
+
+        Every check below mirrors one in ``t3.pdep.api._selection_from_dict``. Where that function
+        reports the file and the position within it, this one reports the network -- the two run at
+        different moments and neither has the other's context, so the messages differ while the
+        contract does not.
+
+        The list fields are required to be LISTS, tuples included in the refusal. ``as_dict()``
+        deep-copies these containers rather than rebuilding them, so a tuple survives into the
+        rendering and is written as ``!!python/tuple``; accepting one here and normalizing it would
+        also make a loaded record compare unequal to the one that was saved.
+
+        Raises:
+            ValueError: If any field would not survive a round trip through
+                ``as_dict()``/``_selection_from_dict``.
+        """
+        # ``network_id`` is optional, NOT required, even though a network label is what identifies
+        # the record. ``rank_pdep_networks`` builds exactly this: an entry too malformed to name a
+        # network still gets a decision record saying so, and ``t3.pdep.budget`` deliberately treats
+        # two such unnamed decisions as two distinct networks rather than collapsing them. Requiring
+        # a string here would delete a state the package documents and tests.
+        subject = f'PDep selection for network {self.network_id!r}'
+        for field_name in ('network_id', 'network_source_hash', 'network_reaction', 'direction_key',
+                           'method', 'sa_path'):
+            _require_optional_str(getattr(self, field_name), field_name, subject)
+        for field_name in ('qualified', 'direction_ambiguous'):
+            _require_bool(getattr(self, field_name), field_name, subject)
+        for field_name in ('direction_keys', 'selected_ts', 'uncertain_path_reactions', 'warnings'):
+            _require_list(getattr(self, field_name), field_name, subject)
+        for field_name in ('selected_ts', 'uncertain_path_reactions'):
+            for index, entry in enumerate(getattr(self, field_name)):
+                if not isinstance(entry, SensitiveTransitionState):
+                    raise ValueError(f'PDep selection for network {self.network_id} has '
+                                     f'{field_name}[{index}] that is not a SensitiveTransitionState, '
+                                     f'got {entry!r} ({type(entry).__name__}). Only the record type '
+                                     f'renders and reloads as itself.')
+        # ``isinstance(True, int)`` is True and ``True == 1``, so a bool has to be excluded by name
+        # or `network_reactions_examined=True` becomes a record claiming one reaction was examined.
+        if (isinstance(self.network_reactions_examined, bool)
+                or not isinstance(self.network_reactions_examined, int)
+                or self.network_reactions_examined < 0):
+            raise ValueError(f'PDep selection for network {self.network_id} has '
+                             f'network_reactions_examined={self.network_reactions_examined!r}, which '
+                             f'must be a non-negative integer.')
+        for field_name, constant in (('selection_schema_version', SELECTION_SCHEMA_VERSION),
+                                     ('selection_algorithm_version', SELECTION_ALGORITHM_VERSION)):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f'PDep selection for network {self.network_id} has '
+                                 f'{field_name}={value!r}, which must be an integer. The loader '
+                                 f'compares it against {constant} and refuses anything else.')
+        if self.evaluation_status not in (EVALUATION_STATUS_EVALUATED, EVALUATION_STATUS_NOT_EVALUATED):
+            raise ValueError(f'PDep selection for network {self.network_id} has '
+                             f'evaluation_status={self.evaluation_status!r}, which must be one of '
+                             f'{(EVALUATION_STATUS_EVALUATED, EVALUATION_STATUS_NOT_EVALUATED)}. '
+                             f'This field is the difference between "no" and "no verdict".')
+        if self.cache_status is not None and self.cache_status not in VALID_CACHE_STATUSES:
+            raise ValueError(f'PDep selection for network {self.network_id} has '
+                             f'cache_status={self.cache_status!r}, which must be None or one of '
+                             f'{VALID_CACHE_STATUSES}.')
+        if not isinstance(self.thresholds, dict):
+            raise ValueError(f'PDep selection for network {self.network_id} has '
+                             f'thresholds={self.thresholds!r}, which must be a dict.')
+        # The KEYS stay free-form -- the gates recorded here have grown over time and will again.
+        # The VALUES do not: the loader requires a number, and a threshold that is not a number is
+        # not a threshold.
+        for key, value in self.thresholds.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f'PDep selection for network {self.network_id} has '
+                                 f'thresholds[{key!r}]={value!r}, which must be a number. A gate '
+                                 f'recorded as something else cannot be compared against, so the '
+                                 f'record could not be used to reproduce the decision.')
+        if self.t_grid_clamp is not None and not isinstance(self.t_grid_clamp, dict):
+            raise ValueError(f'PDep selection for network {self.network_id} has '
+                             f't_grid_clamp={self.t_grid_clamp!r}, which must be a dict or None.')
 
     def uncertain_ts_labels(self) -> list:
         """
@@ -329,7 +575,13 @@ class PDepNetworkSelection:
                 Every container field is deep-copied so that a caller mutating the returned dict
                 (including anything nested inside it) can never reach back into this object's own
                 live containers -- ``as_dict()`` is a reported, read-only snapshot.
+
+        Raises:
+            ValueError: If the record's fields would not survive a round trip -- see ``validate``.
+                Checked here, and not only at construction, because this record is mutable and is
+                routinely built blank and then filled in field by field.
         """
+        self.validate()
         return {
             'network_id': self.network_id,
             'network_source_hash': self.network_source_hash,
@@ -423,7 +675,12 @@ class PDepNetworkSelection:
         first = decisions[0]
         network_ids = {decision.network_id for decision in decisions}
         if len(network_ids) > 1:
-            raise ValueError(f'Cannot combine decisions for different networks: {sorted(network_ids)}.')
+            # Sorted by ``repr``, not by value: ``network_id`` is optional (``rank_pdep_networks``
+            # records a decision for an entry too malformed to name a network), so a set mixing
+            # ``None`` with a label is exactly the case this refusal exists for -- and plain
+            # ``sorted`` on it raises TypeError, replacing the diagnosis with a crash.
+            raise ValueError(f'Cannot combine decisions for different networks: '
+                             f'{sorted(network_ids, key=repr)}.')
 
         # ``selection_schema_version``/``selection_algorithm_version`` disagreement is refused
         # outright, like ``network_id`` -- see the docstring section above. Unlike

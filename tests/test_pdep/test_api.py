@@ -2315,7 +2315,9 @@ def test_load_pdep_network_selections_refuses_a_non_mapping_t_grid_clamp(tmp_pat
 
 
 def test_load_pdep_network_selections_refuses_a_non_string_network_id(tmp_path):
-    """Test that network_id (a required, non-optional str) given a non-string value is refused."""
+    """Test that network_id given a value that is neither a label nor null is refused. The field is
+    OPTIONAL -- `rank_pdep_networks` records an unnamed decision for an entry too malformed to name
+    a network -- but "optional" is not "anything": an int is not an unnamed network."""
     rendered = _build_full_selection().as_dict()
     rendered['network_id'] = 123
     path = str(tmp_path / 'selections.yml')
@@ -2326,7 +2328,10 @@ def test_load_pdep_network_selections_refuses_a_non_string_network_id(tmp_path):
         load_pdep_network_selections(path=path)
     message = str(exc_info.value)
     assert 'selections[0]' in message
-    assert "field 'network_id' that must be a string" in message
+    # The full phrase, not a prefix of it: "must be a string" is a substring of "must be a string or
+    # null", so the shorter assertion kept passing after the field became optional and stopped
+    # testing anything.
+    assert "field 'network_id' that must be a string or null" in message
 
 
 def test_load_pdep_network_selections_refuses_a_non_string_network_source_hash(tmp_path):
@@ -3009,10 +3014,12 @@ def test_save_pdep_budget_record_replaces_a_pre_existing_symlink_rather_than_wri
 # point the iteration the record described is gone.
 
 def test_save_pdep_network_selections_refuses_a_record_the_loader_could_never_read(tmp_path):
-    """Test that a non-plain field value is refused at write time rather than written as a Python
-    object tag. A `Path` in `sa_path` is the realistic case: the field is annotated `str`, nothing
-    enforces that, and `os.path.join`/`open` all accept a Path happily, so it reaches the dumper."""
-    selection = PDepNetworkSelection(network_id='network4_2', sa_path=Path(tmp_path) / 'sa.yml')
+    """Test that a non-plain value is refused at write time rather than written as a Python object
+    tag. The vehicle is `t_grid_clamp`, a dict field whose VALUES no validator describes -- the
+    typed fields are now checked by `PDepNetworkSelection.__post_init__`, which is where a bad
+    `sa_path` is caught, and this is what is left for the write-time check to catch."""
+    selection = PDepNetworkSelection(network_id='network4_2',
+                                     t_grid_clamp={'clamped': True, 'source': Path(tmp_path)})
     path = str(tmp_path / 'selections.yml')
 
     with pytest.raises(ValueError, match='plain YAML'):
@@ -3032,7 +3039,7 @@ def test_a_refused_write_does_not_destroy_the_record_already_on_disk(tmp_path):
     # Constructed OUTSIDE the `raises` block on purpose: when `PDepNetworkSelection` grows the
     # per-field validation its sibling record types already have, the refusal moves to this line and
     # the test fails loudly rather than passing while no longer exercising clobber resistance.
-    bad = PDepNetworkSelection(network_id='network5_1', sa_path=Path(tmp_path) / 'sa.yml')
+    bad = PDepNetworkSelection(network_id='network5_1', t_grid_clamp={'source': Path(tmp_path)})
     with pytest.raises(ValueError, match='plain YAML'):
         save_pdep_network_selections(path=path, selections=[bad])
 
@@ -3047,7 +3054,8 @@ def test_save_pdep_exploration_results_refuses_a_record_the_loader_could_never_r
         network_id='network4_2',
         status=EXPLORATION_STATUS_SKIPPED,
         reasons=('not qualified',),
-        selection=PDepNetworkSelection(network_id='network4_2', sa_path=Path(tmp_path) / 'sa.yml'),
+        selection=PDepNetworkSelection(network_id='network4_2',
+                                       t_grid_clamp={'source': Path(tmp_path)}),
     )
     path = str(tmp_path / 'results.yml')
 
@@ -3056,22 +3064,20 @@ def test_save_pdep_exploration_results_refuses_a_record_the_loader_could_never_r
     assert not os.path.exists(path)
 
 
-def test_the_check_draws_its_line_at_parseability_not_at_schema_validity(tmp_path):
-    """Test the BOUNDARY of the write-time check, so the next reader does not mistake it for
-    validation. A non-numeric threshold is perfectly good YAML: it is written, and refused later per
-    record with a message naming the field. A `Path` in the same dict is not YAML at all: it costs
-    the whole file, and is refused now. The two are different failures, and only the second one is
-    this check's business -- giving `PDepNetworkSelection` the per-field validation its sibling
-    record types already have is the separate, named piece of work that closes the first."""
+def test_the_check_covers_exactly_what_no_field_validator_describes(tmp_path):
+    """Test the BOUNDARY, so the next reader does not mistake this check for validation. Every
+    TYPED field of every record type written here is now checked by its own `__post_init__` -- a
+    non-numeric threshold or a `Path` in `sa_path` never reaches a writer. What no such validator
+    can describe is the CONTENTS of a dict field like `t_grid_clamp`, whose keys and values are
+    provenance rather than schema. That is what is left, and it is enough on its own: an
+    unparseable file costs the whole iteration, not the one record that caused it."""
     path = str(tmp_path / 'selections.yml')
-    schema_invalid = PDepNetworkSelection(network_id='network4_2',
-                                          thresholds={'relative_threshold': 'not a number'})
-    save_pdep_network_selections(path=path, selections=[schema_invalid])
-    with pytest.raises(ValueError, match='relative_threshold'):
-        load_pdep_network_selections(path=path)
+    ordinary = PDepNetworkSelection(network_id='network4_2',
+                                    t_grid_clamp={'clamped': False, 'reason': 'grid already narrow'})
+    save_pdep_network_selections(path=path, selections=[ordinary])
+    assert load_pdep_network_selections(path=path) == [ordinary]
 
-    unparseable = PDepNetworkSelection(network_id='network4_2',
-                                       thresholds={'relative_threshold': 0.001, 'source': Path(tmp_path)})
+    unparseable = PDepNetworkSelection(network_id='network4_2', t_grid_clamp={'source': Path(tmp_path)})
     with pytest.raises(ValueError, match='plain YAML'):
         save_pdep_network_selections(path=str(tmp_path / 'other.yml'), selections=[unparseable])
 

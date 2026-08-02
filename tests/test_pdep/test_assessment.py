@@ -42,7 +42,10 @@ from t3.pdep.reason_codes import (INTERNAL_ERROR_REASON_CODES,
                                   VALID_ASSESSMENT_REASON_CODES,
                                   VALID_ASSESSMENT_STATUSES,
                                   )
-from t3.pdep.selector import PDepNetworkSelection, SensitiveTransitionState
+from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
+                              PDepNetworkSelection,
+                              SensitiveTransitionState,
+                              )
 
 
 def uncertain_ts(ts_label='TS1'):
@@ -444,22 +447,26 @@ def test_provenance_the_record_and_its_selection_both_carry_may_not_disagree(rec
                    selection=selection, **{record_field: 'from_the_record'})
 
 
-@pytest.mark.parametrize('record_field, selection_field', [('network_source_hash',
-                                                            'network_source_hash'),
-                                                           ('network_reaction', 'network_reaction'),
-                                                           ('sa_path', 'sa_path'),
-                                                           ('cache_status', 'cache_status'),
-                                                           ('final_method', 'method')])
-def test_provenance_only_one_of_the_two_carries_is_accepted(record_field, selection_field):
+# The value is carried per field rather than reusing one literal: `cache_status` is an enum on the
+# selection (`PDepNetworkSelection.validate` checks it against `VALID_CACHE_STATUSES`), so a
+# placeholder string is no longer constructible there. What is under test is whether ONE side
+# carrying a value is accepted, not what the value is.
+@pytest.mark.parametrize('record_field, selection_field, value',
+                         [('network_source_hash', 'network_source_hash', 'sha256:only_here'),
+                          ('network_reaction', 'network_reaction', 'A <=> B'),
+                          ('sa_path', 'sa_path', '/runs/only_here.yml'),
+                          ('cache_status', 'cache_status', CACHE_STATUS_CACHED_VALID),
+                          ('final_method', 'method', 'MSC')])
+def test_provenance_only_one_of_the_two_carries_is_accepted(record_field, selection_field, value):
     # Absence is not disagreement. The funnel legitimately knows things the selector never recorded
     # and vice versa, so requiring both to be set would refuse ordinary records.
     selection = negative_selection()
-    setattr(selection, selection_field, 'only_here')
+    setattr(selection, selection_field, value)
     assessment(status=STATUS_EVALUATED_NEGATIVE, reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS,
                selection=selection)
     other = negative_selection()
     assessment(status=STATUS_EVALUATED_NEGATIVE, reason_code=REASON_EVALUATED_NO_UNCERTAIN_TS,
-               selection=other, **{record_field: 'only_here'})
+               selection=other, **{record_field: value})
 
 
 def test_provenance_that_agrees_is_accepted():

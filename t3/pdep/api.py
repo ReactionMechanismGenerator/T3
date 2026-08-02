@@ -72,6 +72,7 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               SELECTION_ALGORITHM_VERSION,
                               SELECTION_SCHEMA_VERSION,
                               STRUCTURES_KEY,
+                              VALID_CACHE_STATUSES,
                               PDepNetworkSelection,
                               SensitiveTransitionState,
                               select_from_sa_dict,
@@ -778,11 +779,12 @@ def _refuse_content_that_would_not_parse_back(content, path: str) -> None:
     per-record check runs, so one bad nested field costs the whole file -- an entire iteration's
     assessments -- and it does so with a parser error that names a YAML tag rather than the field
     that caused it. It does NOT guarantee the loaders will ACCEPT the file: a ``str`` where a list
-    belongs, or a non-numeric threshold, is perfectly good YAML and is refused later, per record,
-    with a message naming the field. That second class is a real and separate gap (only
-    ``PDepNetworkSelection``, of the record types written here, does not type-check its own fields in
-    ``__post_init__`` the way ``PDepBudgetNetworkOutcome`` and ``PDepNetworkAssessment`` do), and
-    closing it is its own piece of work rather than something to smuggle in here.
+    belongs is perfectly good YAML, and is refused later, per record, with a message naming the
+    field. Every record type written here now type-checks its own TYPED fields in ``__post_init__``,
+    so that second class is mostly unreachable through this package's own constructors -- what is
+    left, and what this check exists for, is the CONTENTS of the dict fields that carry provenance
+    rather than schema (``PDepNetworkSelection.t_grid_clamp`` is the live example), plus every field
+    added after this comment was written.
 
     The check renders through ``to_yaml`` -- the SAME function ``save_yaml_file`` writes with, custom
     string representer included -- and parses THAT back. Checking with ``yaml.safe_dump`` instead
@@ -1522,7 +1524,15 @@ def _selection_from_dict(record, *, path: str, context: str,
                          f"code cannot interpret (only {SELECTION_ALGORITHM_VERSION} is supported), "
                          f"at {context}.")
     selection = PDepNetworkSelection(
-        network_id=_require_str_field(record, 'network_id', path=path, context=context),
+        # Optional, deliberately, and closing a real defect rather than a loosening for its own
+        # sake: `rank_pdep_networks` records a decision for an entry too malformed to name a network
+        # (`PDepNetworkSelection(network_id=network_id_hint)` with a `None` hint), and
+        # `t3.pdep.budget` counts two such records as two DISTINCT networks rather than collapsing
+        # them. Requiring a string here meant that decision could be written by one public API
+        # function and refused by another on the way back in -- taking the whole file with it, not
+        # just the unnamed record. `PDepNetworkAssessment.network_id` stays required: an assessment
+        # is a statement ABOUT a named network, and there is no unnamed case to record.
+        network_id=_require_optional_str_field(record, 'network_id', path=path, context=context),
         network_source_hash=_require_optional_str_field(record, 'network_source_hash', path=path,
                                                         context=context),
         qualified=_require_bool_field(record, 'qualified', path=path, context=context),
@@ -1535,10 +1545,11 @@ def _selection_from_dict(record, *, path: str, context: str,
                                                 context=context),
         method=_require_optional_str_field(record, 'method', path=path, context=context),
         sa_path=_require_optional_str_field(record, 'sa_path', path=path, context=context),
-        cache_status=_require_optional_enum_field(
-           record, 'cache_status', path=path, context=context,
-           allowed=(CACHE_STATUS_GENERATED, CACHE_STATUS_CACHED_VALID, CACHE_STATUS_CACHED_REJECTED,
-                   CACHE_STATUS_UNVALIDATED)),
+        # `VALID_CACHE_STATUSES`, not a tuple respelled here: the constructor checks the same set,
+        # and two hand-written copies of it are exactly how a status added to one half goes missing
+        # from the other.
+        cache_status=_require_optional_enum_field(record, 'cache_status', path=path, context=context,
+                                                  allowed=VALID_CACHE_STATUSES),
         thresholds=_require_thresholds_field(record, 'thresholds', path=path, context=context),
         selected_ts=[_sensitive_transition_state_from_dict(entry, path=path,
                                                            context=f'{context}.selected_ts[{i}]')
