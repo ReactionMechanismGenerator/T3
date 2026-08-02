@@ -2265,6 +2265,51 @@ def test_load_pdep_network_selections_reconstructs_a_present_t_grid_clamp(tmp_pa
     assert loaded[0].t_grid_clamp == rendered['t_grid_clamp']
 
 
+@pytest.mark.parametrize('not_provenance', [
+    {'requested_t_max': 3200.0},                     # never says whether a clamp happened
+    {'clamped': 'yes'},
+    {'clamped': True, 'written_t_max': '3000'},
+    {'clamped': True, 'skipped_species': 'CH4'},
+])
+def test_load_pdep_network_selections_names_the_file_when_t_grid_clamp_is_not_provenance(tmp_path,
+                                                                                         not_provenance):
+    """Test that a hand-edited file whose t_grid_clamp is a mapping but not a TGridClampRecord
+    rendering is refused BY THE LOADER, naming the file and the record's position in it.
+
+    `PDepNetworkSelection.validate()` would refuse this anyway when the loader constructs the record,
+    so this is not about whether the refusal happens -- it is about which one a human reads. The
+    constructor knows the network and nothing else; only the loader can say which file, and where in
+    it. That is the same division of labour every other field on this record already has."""
+    rendered = _build_full_selection().as_dict()
+    rendered['t_grid_clamp'] = not_provenance
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    with pytest.raises(ValueError, match='t_grid_clamp'):
+        load_pdep_network_selections(path=path)
+    try:
+        load_pdep_network_selections(path=path)
+    except ValueError as e:
+        assert 'selections.yml' in str(e), 'the refusal must name the file a human has to go and fix'
+
+
+def test_load_pdep_network_selections_accepts_t_grid_clamp_provenance_from_a_newer_writer(tmp_path):
+    """Test the other half, and the one a strict schema would get wrong: a record written by a newer
+    T3 carrying a clamp field this version has never heard of must still load. Files outlive the
+    version that wrote them, and refusing the unknown key would turn a forward-compatible record into
+    an unreadable one -- the failure this whole arc exists to prevent, arriving from the far side."""
+    rendered = _build_full_selection().as_dict()
+    rendered['t_grid_clamp'] = dict(rendered['t_grid_clamp'], clamp_reason='a future version added me')
+    path = str(tmp_path / 'selections.yml')
+    save_yaml_file(path=path, content={'selection_schema_version': SELECTION_SCHEMA_VERSION,
+                                       'selections': [rendered]})
+
+    loaded = load_pdep_network_selections(path=path)
+
+    assert loaded[0].t_grid_clamp['clamp_reason'] == 'a future version added me'
+
+
 def test_load_pdep_network_selections_defaults_a_missing_t_grid_clamp_key_to_none(tmp_path):
     """Test that a record predating this field -- the key ABSENT entirely, not merely null --
     reconstructs t_grid_clamp as None (unknown provenance) rather than raising or defaulting to
@@ -3015,9 +3060,11 @@ def test_save_pdep_budget_record_replaces_a_pre_existing_symlink_rather_than_wri
 
 def test_save_pdep_network_selections_refuses_a_record_the_loader_could_never_read(tmp_path):
     """Test that a non-plain value is refused at write time rather than written as a Python object
-    tag. The vehicle is `t_grid_clamp`, a dict field whose VALUES no validator describes -- the
-    typed fields are now checked by `PDepNetworkSelection.__post_init__`, which is where a bad
-    `sa_path` is caught, and this is what is left for the write-time check to catch."""
+    tag. The vehicle is an unrecognized key inside `t_grid_clamp` -- every typed field, and every key
+    of that dict the record it renders actually declares, is checked by
+    `PDepNetworkSelection.validate()`, so a bad `sa_path` or a string `clamped` is caught long before
+    a writer. A key from a future version is what the shape check deliberately lets past, and so is
+    what is left for the write-time check to catch."""
     selection = PDepNetworkSelection(network_id='network4_2',
                                      t_grid_clamp={'clamped': True, 'source': Path(tmp_path)})
     path = str(tmp_path / 'selections.yml')
@@ -3036,10 +3083,13 @@ def test_a_refused_write_does_not_destroy_the_record_already_on_disk(tmp_path):
     good = PDepNetworkSelection(network_id='network4_2', sa_path=str(tmp_path / 'sa.yml'))
     save_pdep_network_selections(path=path, selections=[good])
 
-    # Constructed OUTSIDE the `raises` block on purpose: when `PDepNetworkSelection` grows the
-    # per-field validation its sibling record types already have, the refusal moves to this line and
-    # the test fails loudly rather than passing while no longer exercising clobber resistance.
-    bad = PDepNetworkSelection(network_id='network5_1', t_grid_clamp={'source': Path(tmp_path)})
+    # Constructed OUTSIDE the `raises` block on purpose: as `PDepNetworkSelection` has grown per-field
+    # validation, the refusal has twice moved up to this line and this test failed loudly rather than
+    # passing while no longer exercising clobber resistance. The vehicle must therefore be a value the
+    # constructor still accepts -- an UNRECOGNIZED key in the provenance dict, which
+    # `t_grid_clamp_shape_error` tolerates on purpose so a record written by a newer T3 stays readable.
+    bad = PDepNetworkSelection(network_id='network5_1',
+                               t_grid_clamp={'clamped': True, 'source': Path(tmp_path)})
     with pytest.raises(ValueError, match='plain YAML'):
         save_pdep_network_selections(path=path, selections=[bad])
 
@@ -3055,7 +3105,7 @@ def test_save_pdep_exploration_results_refuses_a_record_the_loader_could_never_r
         status=EXPLORATION_STATUS_SKIPPED,
         reasons=('not qualified',),
         selection=PDepNetworkSelection(network_id='network4_2',
-                                       t_grid_clamp={'source': Path(tmp_path)}),
+                                       t_grid_clamp={'clamped': True, 'source': Path(tmp_path)}),
     )
     path = str(tmp_path / 'results.yml')
 
@@ -3065,19 +3115,25 @@ def test_save_pdep_exploration_results_refuses_a_record_the_loader_could_never_r
 
 
 def test_the_check_covers_exactly_what_no_field_validator_describes(tmp_path):
-    """Test the BOUNDARY, so the next reader does not mistake this check for validation. Every
-    TYPED field of every record type written here is now checked by its own `__post_init__` -- a
-    non-numeric threshold or a `Path` in `sa_path` never reaches a writer. What no such validator
-    can describe is the CONTENTS of a dict field like `t_grid_clamp`, whose keys and values are
-    provenance rather than schema. That is what is left, and it is enough on its own: an
-    unparseable file costs the whole iteration, not the one record that caused it."""
+    """Test the BOUNDARY, so the next reader does not mistake this check for validation. Every TYPED
+    field of every record type written here is checked by its own `__post_init__` -- a non-numeric
+    threshold or a `Path` in `sa_path` never reaches a writer -- and the KNOWN keys of the one dict
+    field, `t_grid_clamp`, are now checked too, against the record whose rendering it is.
+
+    What is left is the deliberate gap in that check: an UNRECOGNIZED key. `t_grid_clamp_shape_error`
+    tolerates one so that a sidecar or selection written by a newer T3, carrying a field this version
+    has never heard of, is still readable rather than discarded as malformed. Tolerating the key
+    means saying nothing about its value, so this is where a non-plain value can still reach a
+    writer -- and it is enough on its own to keep this check earning its place: an unparseable file
+    costs the whole iteration, not the one record that caused it."""
     path = str(tmp_path / 'selections.yml')
     ordinary = PDepNetworkSelection(network_id='network4_2',
                                     t_grid_clamp={'clamped': False, 'reason': 'grid already narrow'})
     save_pdep_network_selections(path=path, selections=[ordinary])
     assert load_pdep_network_selections(path=path) == [ordinary]
 
-    unparseable = PDepNetworkSelection(network_id='network4_2', t_grid_clamp={'source': Path(tmp_path)})
+    unparseable = PDepNetworkSelection(network_id='network4_2',
+                                       t_grid_clamp={'clamped': False, 'source': Path(tmp_path)})
     with pytest.raises(ValueError, match='plain YAML'):
         save_pdep_network_selections(path=str(tmp_path / 'other.yml'), selections=[unparseable])
 

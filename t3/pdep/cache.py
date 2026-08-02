@@ -42,6 +42,7 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               TS_ENTRY_PREFIX,
                               coefficient_floor,
                               )
+from t3.utils.network_thermo import t_grid_clamp_shape_error
 
 SA_CACHE_METADATA_FILE_NAME = 't3_sa_cache.yml'
 
@@ -209,9 +210,26 @@ def write_sa_cache_metadata(sa_path: str,
             rather than recording a value that would misrepresent "unknown" as "not clamped". See
             ``TGridClampRecord``'s docstring for why those two states must never be conflated.
 
+    Raises:
+        ValueError: If ``t_grid_clamp`` is supplied but is not a ``TGridClampRecord.as_dict()``
+            rendering.
+
     Returns:
         str: The path of the sidecar that was written.
     """
+    # Refused here, at T3's own writer, rather than tolerated and dropped later. This sidecar is a
+    # file T3 owns, and its reader (``read_t_grid_clamp_record``) deliberately collapses anything it
+    # cannot trust to None -- a leniency meant for foreign and older sidecars. Letting a malformed
+    # value through here would aim that leniency at T3's own output, so provenance this process
+    # actually had would vanish between the write and the read with nothing logged either side. The
+    # asymmetry is the point: a possibly-foreign file is read leniently, and a file we write is
+    # written strictly.
+    if t_grid_clamp is not None:
+        reason = t_grid_clamp_shape_error(t_grid_clamp)
+        if reason is not None:
+            raise ValueError(f'Refusing to record T-grid clamp provenance in the SA cache sidecar for '
+                             f'{sa_path!r}: {reason}. A sidecar this module would then refuse to read '
+                             f'back is provenance lost, not provenance recorded.')
     try:
         sa_dict = read_sa_yaml_file(sa_path)
     except Exception:
@@ -283,7 +301,13 @@ def read_t_grid_clamp_record(sa_path: str) -> dict | None:
     if not isinstance(metadata, dict):
         return None
     t_grid_clamp = metadata.get('t_grid_clamp')
-    return t_grid_clamp if isinstance(t_grid_clamp, dict) else None
+    # Being a dict is not enough to be provenance. A dict that never says whether a clamp happened,
+    # or that carries a temperature as a string, is exactly as useless as a bare string here -- and
+    # more dangerous, because t3.pdep.api copies whatever this function returns into up to four live
+    # PDepNetworkSelection records that persist it as their own provenance, and nothing downstream
+    # reads a key back out of it to notice. Collapsing to None (unknown) rather than raising is this
+    # function's own contract: it discloses provenance and must never, by itself, cause a refusal.
+    return t_grid_clamp if t_grid_clamp_shape_error(t_grid_clamp) is None else None
 
 
 def validate_sa_cache(sa_path: str,

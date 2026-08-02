@@ -10,6 +10,7 @@ one-way.
 """
 
 import ast
+import math
 import warnings
 from dataclasses import dataclass
 
@@ -97,6 +98,10 @@ def _literal_or_none(node):
         return None
 
 
+T_GRID_CLAMP_BOOL_KEYS = ('clamped', 'tlist_dropped')
+T_GRID_CLAMP_TEMPERATURE_KEYS = ('requested_t_max', 'thermo_ceiling', 'written_t_max', 'tlist_original_highest')
+
+
 @dataclass(frozen=True)
 class TGridClampRecord:
     """
@@ -138,7 +143,9 @@ class TGridClampRecord:
             while determining ``thermo_ceiling`` -- species whose own thermo ceiling could not be
             read, so ``thermo_ceiling`` may be looser than the network's true ceiling. Rendered as
             a ``list`` (not a ``tuple``) by ``as_dict()``, since a persisted ``PDepNetworkSelection``
-            field must survive a YAML save/load round trip, and a tuple does not.
+            field must survive a YAML save/load round trip, and a tuple does not. A ``list`` passed
+            in is accepted and normalized to a tuple, so a caller cannot keep a live reference and
+            append to it after construction -- see ``__post_init__``.
     """
     clamped: bool
     requested_t_max: float | None = None
@@ -147,6 +154,71 @@ class TGridClampRecord:
     tlist_dropped: bool = False
     tlist_original_highest: float | None = None
     skipped_species: tuple[str, ...] = tuple()
+
+    def __post_init__(self):
+        """
+        Check that every field is the type this record's rendering is documented to carry.
+
+        This record is the SOURCE of the ``t_grid_clamp`` provenance that rides along with an SA
+        cache sidecar and then with a persisted ``PDepNetworkSelection``, and both of those describe
+        a contract on the DICT while nothing checked the record producing it. That gap is worse here
+        than it looks: nothing anywhere reads a key back out of this provenance, so a wrong value has
+        no failing consumer to reveal it -- the only symptom is a human opening a saved decision
+        record much later and believing what it says about the solve behind it.
+
+        Being frozen, a plain ``__post_init__`` is enough; there is no built-then-mutated path to
+        cover here as there is on ``PDepNetworkSelection``.
+
+        Raises:
+            ValueError: If any field is not the type ``as_dict()`` is documented to render.
+        """
+        for field_name in T_GRID_CLAMP_BOOL_KEYS:
+            value = getattr(self, field_name)
+            # An explicit bool, not merely something truthy: `clamped` carries the entire three-state
+            # design (see the class docstring), and 'unknown' lives in the ABSENCE of this record, so
+            # a 1, a 0, or a 'yes' here is a verdict no writer ever actually stated.
+            if not isinstance(value, bool):
+                raise ValueError(f'A TGridClampRecord {field_name} must be an explicit bool, got '
+                                 f'{value!r} ({type(value).__name__}). Unknown provenance is this '
+                                 f'whole record being absent, never a record that declines to answer.')
+        for field_name in T_GRID_CLAMP_TEMPERATURE_KEYS:
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            # int is accepted alongside float: a NASA `Tmax=(3000,'K')` is an int in the source file,
+            # and `network_thermo_t_max` only happens to coerce it. `isinstance(True, int)` is True,
+            # so bool is excluded by name or `clamped=True, written_t_max=True` becomes 1 K.
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f'A TGridClampRecord {field_name} must be a temperature in Kelvin '
+                                 f'(a number) or None, got {value!r} ({type(value).__name__}).')
+            # `nan` and `inf` are numbers but not temperatures, and `nan` breaks this arc's central
+            # property outright: it renders and reloads fine, but `nan != nan`, so the loaded record
+            # compares UNEQUAL to the one that was saved. A round trip that returns something that is
+            # not what went in is the failure these contracts exist to make impossible.
+            if not math.isfinite(value):
+                raise ValueError(f'A TGridClampRecord {field_name} must be a finite temperature in '
+                                 f'Kelvin, got {value!r}.')
+        # A bare string is refused as its own case: it is iterable, so `as_dict()`'s `list(...)` would
+        # silently render 'CH4' as ['C', 'H', '4'] -- three species that do not exist, in the field
+        # whose only purpose is to warn that the ceiling may be looser than the network's true one.
+        if isinstance(self.skipped_species, str):
+            raise ValueError(f'A TGridClampRecord skipped_species must be a sequence of species '
+                             f'descriptions, got the string {self.skipped_species!r}, which as_dict() '
+                             f'would render character by character.')
+        if not isinstance(self.skipped_species, (list, tuple)):
+            raise ValueError(f'A TGridClampRecord skipped_species must be a list or a tuple, got '
+                             f'{self.skipped_species!r} ({type(self.skipped_species).__name__}).')
+        for index, entry in enumerate(self.skipped_species):
+            if not isinstance(entry, str):
+                raise ValueError(f'A TGridClampRecord skipped_species[{index}] must be a string '
+                                 f'describing a skipped species, got {entry!r} '
+                                 f'({type(entry).__name__}).')
+        # A list is accepted for the caller's convenience and then NORMALIZED, because accepting one
+        # and keeping it would make "frozen" a false claim about this record: the caller keeps a
+        # reference, appends to it later, and `as_dict()` renders entries this check never saw. The
+        # record would be valid at construction and invalid at the only moment that matters.
+        if isinstance(self.skipped_species, list):
+            object.__setattr__(self, 'skipped_species', tuple(self.skipped_species))
 
     def as_dict(self) -> dict:
         """
@@ -165,6 +237,88 @@ class TGridClampRecord:
             'tlist_original_highest': self.tlist_original_highest,
             'skipped_species': list(self.skipped_species),
         }
+
+
+def t_grid_clamp_shape_error(value) -> str | None:
+    """
+    Describe why ``value`` is not a ``TGridClampRecord.as_dict()`` rendering, or ``None`` if it is.
+
+    This answers the same question ``TGridClampRecord.__post_init__`` asks, one step later: of a
+    plain dict that has already been rendered, read off disk, or handed in by a caller, rather than
+    of the record's own fields. Both are needed because the dict is what actually travels -- an SA
+    cache sidecar hands one to ``t3.pdep.api``, which copies it into up to four live
+    ``PDepNetworkSelection`` records that then persist it as their own provenance, with no
+    ``TGridClampRecord`` anywhere along that path.
+
+    It returns a REASON instead of raising because its two callers need opposite outcomes from the
+    identical question. ``t3.pdep.cache.read_t_grid_clamp_record`` must collapse a malformed dict to
+    ``None`` -- unknown provenance -- since it exists purely to disclose provenance and, by its own
+    contract, unknown provenance must never cause a refusal. ``PDepNetworkSelection.validate()`` must
+    refuse one, like every other field on that record. Encoding either policy in here would force the
+    other caller to work around it.
+
+    Only ``clamped`` is required, and unknown keys are tolerated. Sidecars and persisted selections
+    are files that outlive the version that wrote them, in both directions: an older writer's record
+    is simply missing keys added since, and a newer writer's carries keys this version has never
+    heard of. Refusing either would discard honest provenance -- the exact loss this record exists to
+    prevent -- and whether an unknown key's VALUE can be persisted at all is already answered by the
+    write-time plain-YAML check in ``t3.pdep.api``, which is a question about bytes rather than
+    about this shape.
+
+    This is a SHAPE contract and nothing more: it does not stop a record from lying. A rendering
+    saying ``clamped=False`` while ``written_t_max`` differs from ``requested_t_max``, or
+    ``tlist_dropped=True`` with no ``tlist_original_highest``, passes here. The real writers cannot
+    produce either -- both temperatures are read from the same parsed line, so they differ only when
+    a clamp actually happened -- so a cross-field rule would only ever fire on a record from another
+    version or another hand. On the sidecar path a failed check means the provenance is silently
+    dropped, which would turn a semantic disagreement with a foreign writer into exactly the
+    provenance loss this record exists to prevent. Type contracts are checkable against what
+    ``as_dict()`` renders; cross-field semantics are claims about a writer this function cannot see.
+
+    Args:
+        value: The candidate rendering to check. Any type; a non-dict is reported as such.
+
+    Returns:
+        Optional[str]: A human-readable reason naming the offending key, or ``None`` if ``value`` is
+            a well-formed rendering.
+    """
+    if not isinstance(value, dict):
+        return (f'it is {value!r} ({type(value).__name__}), not a dict; a T-grid clamp record '
+                f'renders as a mapping of field names to plain values')
+    if 'clamped' not in value:
+        return ("it has no 'clamped' key, so it never says whether a clamp happened. That is a "
+                "fourth state TGridClampRecord's three-state design does not have: 'unknown' is the "
+                "whole record being absent, not a record present but silent on the one question it "
+                "exists to answer")
+    for key in T_GRID_CLAMP_BOOL_KEYS:
+        if key in value and not isinstance(value[key], bool):
+            return (f'its {key!r} is {value[key]!r} ({type(value[key]).__name__}), which must be an '
+                    f'explicit bool -- a truthy stand-in is a verdict no writer stated')
+    for key in T_GRID_CLAMP_TEMPERATURE_KEYS:
+        if key not in value or value[key] is None:
+            continue
+        if isinstance(value[key], bool) or not isinstance(value[key], (int, float)):
+            return (f'its {key!r} is {value[key]!r} ({type(value[key]).__name__}), which must be a '
+                    f'temperature in Kelvin (a number) or null')
+        # See the record's own check: `.nan` survives a YAML round trip and then compares unequal to
+        # itself, so a record carrying one can never be shown to have loaded back correctly.
+        if not math.isfinite(value[key]):
+            return f'its {key!r} is {value[key]!r}, which must be a FINITE temperature in Kelvin'
+    if 'skipped_species' in value:
+        skipped = value['skipped_species']
+        # A tuple IS refused here, unlike on the record itself, and the difference is not an
+        # oversight: `as_dict()` rebuilds this container with `list(...)`, so a tuple reaching a dict
+        # has bypassed that normalization and would be written to YAML as `!!python/tuple`, which no
+        # T3 loader can read back. Naming the key beats letting the write-time check report a tag.
+        if not isinstance(skipped, list):
+            return (f"its 'skipped_species' is {skipped!r} ({type(skipped).__name__}), which must be "
+                    f"a list; as_dict() renders this field as a list precisely so it survives a YAML "
+                    f"round trip")
+        for index, entry in enumerate(skipped):
+            if not isinstance(entry, str):
+                return (f"its 'skipped_species'[{index}] is {entry!r} ({type(entry).__name__}), "
+                        f"which must be a string describing a skipped species")
+    return None
 
 
 @dataclass(frozen=True)

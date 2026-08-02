@@ -9,8 +9,9 @@ import sys
 
 import pytest
 
-from t3.utils.network_thermo import (NetworkTextUnparseable, NetworkThermoCeiling,
-                                     format_skipped_species, network_thermo_t_max)
+from t3.utils.network_thermo import (NetworkTextUnparseable, NetworkThermoCeiling, TGridClampRecord,
+                                     format_skipped_species, network_thermo_t_max,
+                                     t_grid_clamp_shape_error)
 
 
 # Synthetic fixtures for network_thermo_t_max: no in-repo network fixture (network1_1/network4_1/
@@ -268,3 +269,247 @@ def test_importing_writer_does_not_pull_in_t3_pdep():
         f"circular import that network_thermo_t_max's move to t3.utils.network_thermo was meant "
         f"to fix for good."
     )
+
+
+# --------------------------------------------------------------------------------------------
+# TGridClampRecord's own field contract.
+#
+# This record is the SOURCE of the t_grid_clamp provenance that rides along with an SA cache
+# sidecar and then with a persisted PDepNetworkSelection, and until now it type-checked nothing
+# at all: every downstream contract described the DICT the record renders, while the record that
+# renders it accepted anything. The same gap SensitiveTransitionState had.
+# --------------------------------------------------------------------------------------------
+
+def _valid_clamped_record() -> TGridClampRecord:
+    """A record shaped exactly like the one t3.utils.writer builds when it clamps a T grid."""
+    return TGridClampRecord(clamped=True, requested_t_max=2500.0, thermo_ceiling=2000.0,
+                            written_t_max=2000.0, tlist_dropped=True, tlist_original_highest=2400.0,
+                            skipped_species=('S3 (no thermo= keyword)',))
+
+
+def _valid_unclamped_record() -> TGridClampRecord:
+    """A record shaped exactly like the one t3.utils.writer builds when no clamp was needed."""
+    return TGridClampRecord(clamped=False, requested_t_max=2500.0, thermo_ceiling=3000.0,
+                            written_t_max=2500.0)
+
+
+@pytest.mark.parametrize('record_factory', [_valid_clamped_record, _valid_unclamped_record])
+def test_the_records_the_real_writers_build_still_construct_and_render(record_factory):
+    """The two shapes t3.utils.writer and t3.pdep.hybrid actually produce must survive the field
+    contract untouched. This is the guard against the contract being written to describe an
+    idealized record rather than the real one -- if either of these ever fails, the check is wrong,
+    not the writer."""
+    record = record_factory()
+    rendered = record.as_dict()
+
+    assert isinstance(rendered['clamped'], bool)
+    assert isinstance(rendered['skipped_species'], list)
+
+
+@pytest.mark.parametrize('bad_clamped', ['yes', 1, 0, None, 'False'])
+def test_a_clamp_record_refuses_a_clamped_that_is_not_an_explicit_bool(bad_clamped):
+    """``clamped`` carries the entire three-state design: True/False is an EXPLICIT verdict from a
+    writer that ran the clamp logic, and 'unknown' is the whole record being absent. A truthy string
+    or a 1/0 int is neither -- it is a verdict nobody stated, and since nothing downstream reads this
+    key back out of the dict, a wrong value would never surface as anything but a human reading a
+    provenance record that quietly lies to them."""
+    with pytest.raises(ValueError, match='clamped'):
+        TGridClampRecord(clamped=bad_clamped)
+
+
+@pytest.mark.parametrize('bad_tlist_dropped', ['yes', 1, None])
+def test_a_clamp_record_refuses_a_tlist_dropped_that_is_not_an_explicit_bool(bad_tlist_dropped):
+    """Same reasoning as ``clamped``: whether an explicit Tlist line was dropped from the written
+    file is a statement of fact about a solve, and a non-bool is not that statement."""
+    with pytest.raises(ValueError, match='tlist_dropped'):
+        TGridClampRecord(clamped=True, tlist_dropped=bad_tlist_dropped)
+
+
+@pytest.mark.parametrize('field_name', ['requested_t_max', 'thermo_ceiling', 'written_t_max',
+                                        'tlist_original_highest'])
+@pytest.mark.parametrize('bad_temperature', ['2500', True, [2500.0], {'K': 2500.0}])
+def test_a_clamp_record_refuses_a_temperature_that_is_not_a_number(field_name, bad_temperature):
+    """Every one of these four fields is a temperature in Kelvin. A string that looks like one is
+    the dangerous case: it renders to YAML perfectly well, so no write-time guard would ever catch
+    it, and it reads back as a temperature to a human while comparing against nothing. ``True`` is
+    excluded separately because ``isinstance(True, int)`` is True in Python."""
+    with pytest.raises(ValueError, match=field_name):
+        TGridClampRecord(clamped=True, **{field_name: bad_temperature})
+
+
+@pytest.mark.parametrize('field_name', ['requested_t_max', 'thermo_ceiling', 'written_t_max',
+                                        'tlist_original_highest'])
+def test_a_clamp_record_accepts_an_int_temperature(field_name):
+    """A Tmax written as ``(3000, 'K')`` in a network file is an int, and network_thermo_t_max only
+    happens to coerce it with ``float(...)``. Refusing an int here would be a contract describing
+    this module's current internals rather than the quantity, and would break the first caller that
+    passes a literal 3000. Over-refusal is the other way this contract can be wrong."""
+    record = TGridClampRecord(clamped=True, **{field_name: 3000})
+    assert record.as_dict()[field_name] == 3000
+
+
+@pytest.mark.parametrize('field_name', ['requested_t_max', 'thermo_ceiling', 'written_t_max',
+                                        'tlist_original_highest'])
+def test_a_clamp_record_accepts_none_for_every_optional_temperature(field_name):
+    """``None`` means 'not applicable / could not be read' on all four, and every one of them is
+    genuinely None in some real writer path (e.g. a file with no readable Tmax line at all)."""
+    assert TGridClampRecord(clamped=True, **{field_name: None}).as_dict()[field_name] is None
+
+
+def test_a_clamp_record_refuses_a_bare_string_for_skipped_species():
+    """``skipped_species='CH4'`` is the failure worth naming on its own: it is iterable, so
+    ``as_dict()``'s ``list(...)`` silently renders it as ``['C', 'H', '4']`` -- three species that
+    do not exist, in a field whose entire purpose is to warn that the computed ceiling may be looser
+    than the network's true one. A corrupted warning is worse than no warning."""
+    with pytest.raises(ValueError, match='skipped_species'):
+        TGridClampRecord(clamped=True, skipped_species='CH4')
+
+
+@pytest.mark.parametrize('bad_entry', [42, None, ['nested'], object()])
+def test_a_clamp_record_refuses_a_non_string_entry_in_skipped_species(bad_entry):
+    """Each entry is a human-readable sentence naming a species and why it was skipped. A non-string
+    entry either renders as a Python-tagged YAML object (unreadable by every T3 loader) or reads as
+    a species name that is not one."""
+    with pytest.raises(ValueError, match='skipped_species'):
+        TGridClampRecord(clamped=True, skipped_species=('S1 (no thermo= keyword)', bad_entry))
+
+
+def test_a_clamp_record_accepts_a_list_for_skipped_species():
+    """A list is accepted where the annotation says tuple, deliberately. ``as_dict()`` REBUILDS this
+    container with ``list(...)`` rather than deep-copying it, so a list and a tuple render to exactly
+    the same bytes -- refusing one would buy nothing but record-identity purity. This is the opposite
+    call from PDepNetworkSelection's list fields, which ARE refused as tuples, and for the opposite
+    reason: that record's as_dict() deep-copies, so a tuple there survives into the rendering as
+    ``!!python/tuple``."""
+    record = TGridClampRecord(clamped=True, skipped_species=['S1 (no thermo= keyword)'])
+    assert record.as_dict()['skipped_species'] == ['S1 (no thermo= keyword)']
+
+
+# --------------------------------------------------------------------------------------------
+# t_grid_clamp_shape_error: the same contract, asked of a DICT rather than a record.
+#
+# Two callers need opposite outcomes from this one question -- t3.pdep.cache.read_t_grid_clamp_record
+# must collapse a malformed sidecar dict to None (unknown provenance, never a refusal), while
+# PDepNetworkSelection.validate() must refuse one -- so the question returns a reason instead of
+# raising, and each caller decides what to do with it.
+# --------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize('record_factory', [_valid_clamped_record, _valid_unclamped_record])
+def test_the_rendering_of_a_valid_record_always_passes_the_shape_check(record_factory):
+    """The check is validated against what ``as_dict()`` ACTUALLY emits, not against a hand-written
+    dict that merely looks like it. Checking a shape you wrote yourself is how a guard ends up
+    describing bytes nobody produces -- the same mistake as validating with a different dumper than
+    the one the write uses."""
+    assert t_grid_clamp_shape_error(record_factory().as_dict()) is None
+
+
+@pytest.mark.parametrize('not_a_dict', ['not-a-dict', 42, True, ['clamped'], None])
+def test_the_shape_check_refuses_anything_that_is_not_a_dict(not_a_dict):
+    """Including ``None``: absence is the caller's business to distinguish (it means unknown
+    provenance), and this function answers only 'is this a rendering of the record'."""
+    assert t_grid_clamp_shape_error(not_a_dict) is not None
+
+
+def test_the_shape_check_refuses_a_dict_that_never_says_whether_a_clamp_happened():
+    """A dict with no ``clamped`` key is a FOURTH state the three-state design says must not exist:
+    not 'clamped', not 'not clamped', and not the absent-record 'unknown' either -- a provenance
+    record that declines to answer the one question it exists to answer."""
+    reason = t_grid_clamp_shape_error({'requested_t_max': 2500.0, 'written_t_max': 2000.0})
+    assert reason is not None
+    assert 'clamped' in reason
+
+
+@pytest.mark.parametrize('key, bad_value', [('clamped', 'yes'),
+                                            ('clamped', 1),
+                                            ('tlist_dropped', 'no'),
+                                            ('requested_t_max', '2500'),
+                                            ('thermo_ceiling', True),
+                                            ('written_t_max', ['2000']),
+                                            ('tlist_original_highest', 'high'),
+                                            ('skipped_species', 'CH4'),
+                                            ('skipped_species', [42]),
+                                            ('skipped_species', ('a tuple',)),
+                                            ])
+def test_the_shape_check_names_the_key_that_is_wrong(key, bad_value):
+    """A reason that does not name the offending key sends whoever reads it back to the file to
+    diff seven fields by eye. ``skipped_species`` as a tuple is refused here (unlike on the record,
+    where as_dict() normalizes it) because a tuple reaching a dict has already skipped that
+    normalization and would be written as ``!!python/tuple``, which no T3 loader can read back."""
+    rendered = _valid_clamped_record().as_dict()
+    rendered[key] = bad_value
+
+    reason = t_grid_clamp_shape_error(rendered)
+    assert reason is not None
+    assert key in reason
+
+
+def test_the_shape_check_tolerates_a_key_an_older_writer_never_wrote():
+    """Only ``clamped`` is required. Every other key is optional, because a sidecar written by an
+    older T3 -- before a field was added to the record -- is missing that key and is still perfectly
+    honest provenance about the clamp it does describe."""
+    assert t_grid_clamp_shape_error({'clamped': False}) is None
+
+
+def test_the_shape_check_tolerates_a_key_a_newer_writer_added():
+    """The mirror case, and the more dangerous one to get wrong: sidecars are files that outlive the
+    version that wrote them, so a NEWER T3 adding an eighth field must not make every older T3
+    silently discard the provenance in that sidecar. Unknown keys are carried, not refused --
+    whether they can be persisted at all is already the write-time guard's question, not this
+    one's."""
+    rendered = _valid_clamped_record().as_dict()
+    rendered['clamp_reason'] = 'a field a future version added'
+
+    assert t_grid_clamp_shape_error(rendered) is None
+
+
+# --- Round 61: three ways a "well-typed" record was still not one -------------------------------
+
+@pytest.mark.parametrize('field_name', ['requested_t_max', 'thermo_ceiling', 'written_t_max',
+                                        'tlist_original_highest'])
+@pytest.mark.parametrize('not_finite', [float('nan'), float('inf'), float('-inf')])
+def test_a_clamp_record_refuses_a_temperature_that_is_not_finite(field_name, not_finite):
+    """A nan or an inf is a number and not a temperature. nan is the one that breaks this arc's
+    central property outright rather than merely misinforming: it renders to YAML, reloads from YAML,
+    and then compares UNEQUAL to itself -- so a record carrying one can never be shown to have
+    round-tripped, and every equality assertion about it silently reports failure for a reason that
+    has nothing to do with what was saved."""
+    with pytest.raises(ValueError, match=field_name):
+        TGridClampRecord(clamped=True, **{field_name: not_finite})
+
+
+@pytest.mark.parametrize('not_finite', [float('nan'), float('inf')])
+def test_the_shape_check_refuses_a_temperature_that_is_not_finite(not_finite):
+    """The dict half of the same contract. A sidecar can carry `.nan` as plain YAML, so this is not
+    only reachable by direct construction."""
+    rendered = _valid_clamped_record().as_dict()
+    rendered['written_t_max'] = not_finite
+
+    assert t_grid_clamp_shape_error(rendered) is not None
+
+
+def test_a_list_passed_for_skipped_species_is_normalized_to_a_tuple():
+    """A frozen record that keeps a caller's list is not frozen in the way that matters. Without
+    normalization the caller retains a live reference, appends to it after construction, and
+    `as_dict()` renders entries the contract never saw -- valid at construction, invalid at the only
+    moment anybody cares about. Accepting the convenient input and normalizing it keeps both."""
+    entries = ['S1 (no thermo= keyword)']
+    record = TGridClampRecord(clamped=True, skipped_species=entries)
+
+    entries.append(42)
+
+    assert isinstance(record.skipped_species, tuple)
+    assert record.as_dict()['skipped_species'] == ['S1 (no thermo= keyword)']
+    assert t_grid_clamp_shape_error(record.as_dict()) is None
+
+
+def test_the_shape_contract_does_not_claim_to_stop_a_record_from_lying():
+    """Pin the BOUNDARY that the docstring states, so nobody later reads this contract as a semantic
+    guarantee. `clamped=False` alongside a written Tmax that differs from the requested one is
+    incoherent provenance, and it passes: the real writers read both temperatures from the same
+    parsed line and so cannot produce it, which means a cross-field rule could only ever fire on a
+    record from another version -- and on the sidecar path a failed check silently DROPS provenance,
+    turning a disagreement with a foreign writer into the exact loss this record exists to prevent."""
+    incoherent = {'clamped': False, 'requested_t_max': 2500.0, 'written_t_max': 2000.0,
+                  'tlist_dropped': True, 'tlist_original_highest': None}
+
+    assert t_grid_clamp_shape_error(incoherent) is None

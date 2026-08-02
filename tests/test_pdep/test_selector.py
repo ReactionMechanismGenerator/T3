@@ -28,6 +28,7 @@ from t3.pdep.selector import (EVALUATION_STATUS_EVALUATED,
                               select_from_sa_dict,
                               select_sensitive_wells,
                               )
+from t3.utils.network_thermo import TGridClampRecord
 
 PDEP_NETWORK_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1', 'RMG', 'pdep')
 # Deliberately kept OUTSIDE pdep_network/: test_main.py::test_determine_species_from_pdep_network
@@ -1556,3 +1557,140 @@ def test_mutating_a_selection_after_construction_is_caught_when_it_is_rendered(t
     with pytest.raises(ValueError, match='warnings'):
         save_pdep_network_selections(path=str(tmp_path / 'selections.yml'), selections=[selection])
     assert not os.path.exists(str(tmp_path / 'selections.yml'))
+
+
+# --- The last dict field nothing described ------------------------------------------------------
+#
+# `thresholds` gained a value contract; `t_grid_clamp` had only "a dict or None". It is documented as
+# a `TGridClampRecord.as_dict()` rendering, so it HAS a shape -- and it is the one field whose value
+# is read off disk (from an SA cache sidecar, via t3.pdep.cache.read_t_grid_clamp_record) and copied
+# into a live selection, so "some dict" is not a hypothetical here.
+
+def test_the_constructor_accepts_the_rendering_of_a_real_clamp_record():
+    """Test against what TGridClampRecord.as_dict() actually emits, not a hand-written lookalike.
+    A contract on a rendering has to be checked against the renderer, or it ends up describing bytes
+    nobody produces."""
+    record = TGridClampRecord(clamped=True, requested_t_max=2500.0, thermo_ceiling=2000.0,
+                              written_t_max=2000.0, tlist_dropped=True,
+                              tlist_original_highest=2400.0,
+                              skipped_species=('S3 (no thermo= keyword)',))
+    selection = PDepNetworkSelection(network_id='network4_2', t_grid_clamp=record.as_dict())
+
+    assert selection.as_dict()['t_grid_clamp'] == record.as_dict()
+
+
+@pytest.mark.parametrize('not_provenance', [
+    {'requested_t_max': 2500.0},              # never says whether a clamp happened
+    {'clamped': 'yes'},
+    {'clamped': 1},
+    {'clamped': True, 'tlist_dropped': 'no'},
+    {'clamped': True, 'written_t_max': '2000'},
+    {'clamped': True, 'skipped_species': 'CH4'},
+    {'clamped': True, 'skipped_species': ('a tuple',)},
+])
+def test_the_constructor_refuses_a_t_grid_clamp_that_is_not_clamp_provenance(not_provenance):
+    """Test that the refusal names ``t_grid_clamp``. Every one of these dicts is valid YAML, so the
+    write-time plain-YAML backstop would pass them all and the record would persist -- and since
+    nothing downstream reads a key back out of this dict, the only symptom would be a human reading a
+    saved decision's provenance and believing it. The tuple case is the exception that WOULD reach the
+    backstop, as ``!!python/tuple``; catching it here reports the field instead of a YAML tag."""
+    with pytest.raises(ValueError, match='t_grid_clamp'):
+        PDepNetworkSelection(network_id='network4_2', t_grid_clamp=not_provenance)
+
+
+def test_the_constructor_accepts_clamp_provenance_from_a_newer_writer():
+    """Test that an unrecognized key is carried, not refused. A selection can be reconstructed from a
+    file written by a different T3 version, and refusing an eighth field a future version added would
+    turn every such record into an unreadable one -- the failure this whole arc exists to prevent,
+    arriving from the other direction."""
+    selection = PDepNetworkSelection(
+        network_id='network4_2',
+        t_grid_clamp={'clamped': False, 'clamp_reason': 'a field a future version added'})
+
+    assert selection.as_dict()['t_grid_clamp']['clamp_reason'] == 'a field a future version added'
+
+
+def test_mutating_t_grid_clamp_after_construction_is_caught_when_it_is_rendered(tmp_path):
+    """Test the mutable-record hole for this field specifically. `select_from_sa_dict` builds a blank
+    selection and assigns onto it, so a check that ran only in `__post_init__` would be a guarantee in
+    name only; validate() runs from as_dict() precisely so a field assigned afterwards is still
+    covered. Construction is deliberately OUTSIDE the raises block: if the contract ever moves back to
+    construction-time only, this test must fail rather than quietly keep passing while testing
+    nothing."""
+    selection = PDepNetworkSelection(network_id='network4_2')
+    selection.t_grid_clamp = {'clamped': 'definitely'}
+
+    with pytest.raises(ValueError, match='t_grid_clamp'):
+        save_pdep_network_selections(path=str(tmp_path / 'selections.yml'), selections=[selection])
+
+
+def test_a_t_grid_clamp_the_constructor_accepts_can_always_be_read_back(tmp_path):
+    """Test the property the whole contract exists for, for this field: anything constructible is
+    round-trippable. Asserting equality of the loaded record catches a contract that admits a value
+    the loader then refuses, and one that admits a value which comes back as something else."""
+    record = TGridClampRecord(clamped=True, requested_t_max=3000, thermo_ceiling=2000.0,
+                              written_t_max=2000.0, skipped_species=['S3 (no thermo= keyword)'])
+    selection = PDepNetworkSelection(network_id='network4_2', t_grid_clamp=record.as_dict())
+    path = str(tmp_path / 'selections.yml')
+
+    save_pdep_network_selections(path=path, selections=[selection])
+
+    assert load_pdep_network_selections(path=path) == [selection]
+
+
+def test_combine_records_unknown_provenance_when_components_disagree_on_t_grid_clamp():
+    """Test that an aggregate does not silently adopt the first component's T-grid provenance.
+    `method` and `cache_status` above already refuse to do this, and `t_grid_clamp` was the one
+    carried field still doing it -- `copy.deepcopy(first.t_grid_clamp)`, with no comparison. The
+    divergence is not reachable through select_pdep_network today (every per-reaction decision it
+    builds shares one clamp record read from one sidecar), which is exactly the reason to pin it: an
+    unreachable path is where a wrong default survives unnoticed until the day it is reachable."""
+    clamped = {'clamped': True, 'requested_t_max': 2500.0, 'thermo_ceiling': 2000.0,
+               'written_t_max': 2000.0, 'tlist_dropped': False, 'tlist_original_highest': None,
+               'skipped_species': []}
+    first = _make_decision(direction_key='A + B <=> C')
+    first.t_grid_clamp = clamped
+    second = _make_decision(direction_key='C <=> D')
+    second.t_grid_clamp = None
+
+    combined = PDepNetworkSelection.combine([first, second])
+
+    assert combined.t_grid_clamp is None, (
+        'an aggregate resting on more than one T grid has unknown provenance, not the first '
+        'component\'s')
+    assert any('t_grid_clamp' in warning for warning in combined.warnings), combined.warnings
+
+
+def test_combine_keeps_the_t_grid_clamp_every_component_agrees_on():
+    """Test the ordinary case -- the one every real call takes. Components that all rest on the same
+    T grid must keep saying so; downgrading agreement to 'unknown' would discard true provenance,
+    which is the failure mode this whole field exists to prevent."""
+    clamped = {'clamped': False, 'requested_t_max': 2500.0, 'thermo_ceiling': 3000.0,
+               'written_t_max': 2500.0, 'tlist_dropped': False, 'tlist_original_highest': None,
+               'skipped_species': []}
+    decisions = [_make_decision(direction_key='A + B <=> C'), _make_decision(direction_key='C <=> D')]
+    for decision in decisions:
+        decision.t_grid_clamp = dict(clamped)
+
+    combined = PDepNetworkSelection.combine(decisions)
+
+    assert combined.t_grid_clamp == clamped
+    assert not any('t_grid_clamp' in warning for warning in combined.warnings), combined.warnings
+
+
+def test_combine_does_not_hand_the_aggregate_a_live_reference_to_a_component(tmp_path):
+    """Test that the carried provenance is a COPY. The aggregate outlives the call and is persisted
+    separately; sharing a dict with a component means a later mutation of either silently rewrites
+    the other's recorded provenance, and `validate()` on the aggregate would then be checking a
+    value that has since changed."""
+    clamped = {'clamped': True, 'requested_t_max': 2500.0, 'thermo_ceiling': 2000.0,
+               'written_t_max': 2000.0, 'tlist_dropped': False, 'tlist_original_highest': None,
+               'skipped_species': []}
+    decisions = [_make_decision(direction_key='A + B <=> C'), _make_decision(direction_key='C <=> D')]
+    for decision in decisions:
+        decision.t_grid_clamp = dict(clamped)
+
+    combined = PDepNetworkSelection.combine(decisions)
+    decisions[0].t_grid_clamp['clamped'] = False
+
+    assert combined.t_grid_clamp['clamped'] is True

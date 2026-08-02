@@ -50,6 +50,7 @@ from t3.pdep.reason_codes import (REASON_EVALUATED_NO_UNCERTAIN_TS,
                                   REASON_SELECTOR_TS_RESPONSE_BELOW_FLOOR,
                                   )
 from t3.pdep.parser import PDepNetwork
+from t3.utils.network_thermo import t_grid_clamp_shape_error
 from t3.utils.uncertainty import is_this_kinetics_comment_uncertain
 
 # The Arkane sensitivity YAML marks transition-state rows with this prefix (``'(TS) ' + label``),
@@ -380,6 +381,12 @@ class PDepNetworkSelection:
             computed over a narrower T range than the network's own thermo would otherwise allow.
             Missing/unknown provenance must never cause ``evaluation_status`` to become
             ``'not_evaluated'`` or any other refusal -- this field is purely descriptive.
+            When present, the dict must be a rendering of that record (``clamped`` required, every
+            declared key well-typed, unrecognized keys carried for forward compatibility), checked by
+            ``t3.utils.network_thermo.t_grid_clamp_shape_error``. Descriptive is not the same as
+            unconstrained: precisely because nothing reads a key back out of this dict, a malformed
+            one has no failing consumer to reveal it, and the only symptom would be a human reading a
+            saved decision's provenance and believing it.
     """
     network_id: str | None
     network_source_hash: str | None = None
@@ -502,9 +509,17 @@ class PDepNetworkSelection:
                                  f'thresholds[{key!r}]={value!r}, which must be a number. A gate '
                                  f'recorded as something else cannot be compared against, so the '
                                  f'record could not be used to reproduce the decision.')
-        if self.t_grid_clamp is not None and not isinstance(self.t_grid_clamp, dict):
-            raise ValueError(f'PDep selection for network {self.network_id} has '
-                             f't_grid_clamp={self.t_grid_clamp!r}, which must be a dict or None.')
+        # The one field whose value arrives from a FILE this package did not necessarily write: an SA
+        # cache sidecar, via t3.pdep.cache.read_t_grid_clamp_record. "A dict or None" left the shape
+        # of that dict undescribed even though it is documented as a TGridClampRecord rendering, and
+        # every malformation of it is valid YAML -- so it would persist, and nothing reads a key back
+        # out of it to ever notice.
+        if self.t_grid_clamp is not None:
+            reason = t_grid_clamp_shape_error(self.t_grid_clamp)
+            if reason is not None:
+                raise ValueError(f'PDep selection for network {self.network_id} has a t_grid_clamp '
+                                 f'that is not T-grid clamp provenance: {reason}. This field is a '
+                                 f'TGridClampRecord.as_dict() rendering, or None for unknown.')
 
     def uncertain_ts_labels(self) -> list:
         """
@@ -727,6 +742,17 @@ class PDepNetworkSelection:
             warnings.append(f'Combined decisions disagree on cache_status '
                             f'({sorted(str(s) for s in cache_statuses)}); recording None rather than '
                             f'silently adopting one.')
+        # Compared rather than de-duplicated through a set, since a dict is unhashable. Divergence is
+        # not reachable through `select_pdep_network` today -- every per-reaction decision it builds
+        # shares the one t_grid_clamp read from the one sidecar -- but `method` and `cache_status`
+        # above are unreachable in the same way and are still handled, because an aggregate that
+        # silently adopts the first component's provenance is exactly what they refuse to do.
+        t_grid_clamp = copy.deepcopy(first.t_grid_clamp)
+        if any(decision.t_grid_clamp != first.t_grid_clamp for decision in decisions):
+            t_grid_clamp = None
+            warnings.append('Combined decisions disagree on t_grid_clamp; recording None (unknown '
+                            'provenance) rather than silently adopting one component\'s. Unknown is '
+                            'the honest state here -- the aggregate rests on more than one T grid.')
 
         # Only EVALUATED components get a vote on qualification. ``PDepNetworkSelection`` is a mutable
         # dataclass with no invariant enforcement, so `qualified=True, evaluation_status='not_evaluated'`
@@ -751,7 +777,7 @@ class PDepNetworkSelection:
             network_reactions_examined=len(decisions),
             selection_schema_version=first.selection_schema_version,
             selection_algorithm_version=first.selection_algorithm_version,
-            t_grid_clamp=copy.deepcopy(first.t_grid_clamp),
+            t_grid_clamp=t_grid_clamp,
         )
         # ``evaluation_status`` is NOT allowed to fall back to the dataclass default here: a fresh
         # PDepNetworkSelection is 'evaluated', so combining components that were never evaluated used

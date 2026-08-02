@@ -608,6 +608,104 @@ def test_read_t_grid_clamp_record_returns_none_when_t_grid_clamp_value_is_not_a_
     assert read_t_grid_clamp_record(sa_path=sa_path) is None
 
 
+@pytest.mark.parametrize('not_provenance', [
+    {'requested_t_max': 2500.0, 'written_t_max': 2000.0},  # never says whether a clamp happened
+    {'clamped': 'yes'},                                    # a verdict nobody actually stated
+    {'clamped': 1},                                        # ditto: a truthy int is not an explicit bool
+    {'clamped': True, 'thermo_ceiling': '2000'},           # a temperature that compares against nothing
+    {'clamped': True, 'skipped_species': 'CH4'},           # would read back as three species, C, H and 4
+    {'clamped': True, 'skipped_species': [42]},
+])
+def test_read_t_grid_clamp_record_returns_none_when_the_dict_is_not_clamp_provenance(tmp_path,
+                                                                                     not_provenance):
+    """A sidecar whose ``t_grid_clamp`` IS a dict but is not a TGridClampRecord rendering is exactly
+    as useless as one whose value is a bare string, and must collapse the same way: to ``None``,
+    unknown provenance. This is the last hole in this function's contract -- until now any dict at
+    all was handed straight back, and t3.pdep.api copies whatever it returns into up to four live
+    PDepNetworkSelection records, which then persist it as their own provenance. A malformed dict
+    reaching that far is not caught anywhere downstream either, because nothing reads a key back out
+    of it; it would simply sit in a saved decision record, misinforming the next human to open it.
+
+    Collapsing rather than raising is this function's own documented contract: it exists purely to
+    disclose provenance, so unknown provenance must never, by itself, cause a refusal."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+    metadata_path = sa_cache_metadata_path(sa_path=sa_path)
+    metadata = read_yaml_file(metadata_path)
+    metadata['t_grid_clamp'] = not_provenance
+    save_yaml_file(path=metadata_path, content=metadata)
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) is None
+
+
+def test_read_t_grid_clamp_record_still_discloses_a_sidecar_a_newer_t3_wrote(tmp_path):
+    """The mirror of the test above, and the one that keeps the new check from becoming a version
+    tripwire. Sidecars outlive the version that wrote them: if a future T3 adds an eighth field to
+    TGridClampRecord, every older T3 reading that sidecar must still disclose the provenance it CAN
+    read, not silently discard the whole record as malformed. Losing provenance is the failure this
+    function was written to prevent, so the check must not become a new way to cause it."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    from_a_newer_t3 = {'clamped': True, 'requested_t_max': 2500.0, 'thermo_ceiling': 2000.0,
+                       'written_t_max': 2000.0, 'tlist_dropped': False,
+                       'tlist_original_highest': None, 'skipped_species': [],
+                       'clamp_reason': 'a field a future version added'}
+
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', t_grid_clamp=from_a_newer_t3)
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) == from_a_newer_t3
+
+
+@pytest.mark.parametrize('not_provenance', [
+    {'requested_t_max': 2500.0},
+    {'clamped': 'yes'},
+    {'clamped': True, 'thermo_ceiling': '2000'},
+    {'clamped': True, 'skipped_species': 'CH4'},
+])
+def test_write_sa_cache_metadata_refuses_provenance_its_own_reader_would_discard(tmp_path,
+                                                                                 not_provenance):
+    """The write side of the leniency, and the half that makes it safe. read_t_grid_clamp_record
+    collapses anything it cannot trust to None, which is right for a sidecar that may be foreign or
+    predate a field -- but aimed at T3's OWN writer it would mean provenance this process actually
+    had disappearing between the write and the read, with nothing logged on either side. So the
+    asymmetry is deliberate and enforced from both ends: a possibly-foreign file is read leniently, a
+    file T3 writes is written strictly."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+
+    with pytest.raises(ValueError, match='provenance'):
+        write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                                method='MSC', t_grid_clamp=not_provenance)
+
+
+def test_write_sa_cache_metadata_leaves_no_sidecar_behind_when_it_refuses(tmp_path):
+    """A refused write must not have replaced a sidecar that was already there. The refusal happens
+    before anything is read or written, so the previously recorded provenance survives intact rather
+    than being traded for a malformed one."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    good = {'clamped': False, 'requested_t_max': 2500.0, 'thermo_ceiling': 3000.0,
+            'written_t_max': 2500.0, 'tlist_dropped': False, 'tlist_original_highest': None,
+            'skipped_species': []}
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                            method='MSC', t_grid_clamp=good)
+
+    with pytest.raises(ValueError, match='provenance'):
+        write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                                method='MSC', t_grid_clamp={'clamped': 'yes'})
+
+    assert read_t_grid_clamp_record(sa_path=sa_path) == good
+
 # --- read_arkane_log_rmg_py_commit (RMG-Py provenance) --------------------------------------------
 #
 # Arkane does NOT run in T3's process: ARC's run_arkane shells out to

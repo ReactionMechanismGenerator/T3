@@ -81,6 +81,7 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               )
 from t3.pdep.yaml_safe import read_sa_yaml_file
 from t3.schema import T3Sensitivity
+from t3.utils.network_thermo import t_grid_clamp_shape_error
 
 # Derived from the schema's own field defaults (rather than copied literals) so this module's
 # defaults cannot silently diverge from the defaults T3 itself uses for a live run.
@@ -1359,7 +1360,8 @@ def _require_thresholds_field(record: dict, key: str, *, path: str, context: str
            for sub_key, sub_value in value.items()}
 
 
-def _require_optional_dict_field(record: dict, key: str, *, path: str, context: str) -> dict | None:
+def _require_optional_dict_field(record: dict, key: str, *, path: str, context: str,
+                                 shape_error=None) -> dict | None:
     """
     Fetch ``record.get(key)`` and require it to be a mapping or ``None`` -- and, unlike every other
     ``_require_*_field`` helper, tolerate the key being ABSENT entirely rather than refusing.
@@ -1372,15 +1374,26 @@ def _require_optional_dict_field(record: dict, key: str, *, path: str, context: 
     genuine malformation and is refused, since ``TGridClampRecord.as_dict()`` never renders anything
     else.
 
+    That last argument reaches further than "is it a mapping", which is why ``shape_error`` exists:
+    ``as_dict()`` does not render a mapping that fails to say whether a clamp happened either. The
+    caller supplies the shape rather than this helper knowing it, so the helper stays a helper. The
+    record's own ``validate()`` refuses the same thing a moment later when it is constructed, so
+    checking here is about diagnostics, not about whether the refusal happens: the constructor knows
+    only the network, while a human fixing a hand-edited file needs the file and the position in it.
+
     Args:
         record (dict): The record to read from.
         key (str): The field name to fetch.
         path (str): The file this record was read from, for diagnostics only.
         context (str): A short description of where this record sits in the file, for diagnostics
             only (see ``_require_record_field``).
+        shape_error (callable, optional): A function taking the mapping and returning a reason string
+            when it is not the shape this field is documented to hold, or ``None`` when it is.
+            Omitted for a field whose contents genuinely are free-form.
 
     Raises:
-        ValueError: If the key is present with a value that is neither a mapping nor ``None``.
+        ValueError: If the key is present with a value that is neither a mapping nor ``None``, or
+            with a mapping ``shape_error`` rejects.
 
     Returns:
         dict, optional: ``record[key]`` as a fresh ``dict``, or ``None`` if the key is absent or
@@ -1392,6 +1405,11 @@ def _require_optional_dict_field(record: dict, key: str, *, path: str, context: 
     if value is not None and not isinstance(value, dict):
         raise ValueError(f"PDep file {path!r} has {context} field {key!r} that must be a mapping or "
                          f"null (got {type(value).__name__}: {value!r}).")
+    if value is not None and shape_error is not None:
+        reason = shape_error(value)
+        if reason is not None:
+            raise ValueError(f"PDep file {path!r} has {context} field {key!r} that is a mapping but "
+                             f"not the one this field is documented to hold: {reason}.")
     return dict(value) if value is not None else None
 
 
@@ -1568,7 +1586,8 @@ def _selection_from_dict(record, *, path: str, context: str,
            allowed=(EVALUATION_STATUS_EVALUATED, EVALUATION_STATUS_NOT_EVALUATED)),
         selection_schema_version=record['selection_schema_version'],
         selection_algorithm_version=record['selection_algorithm_version'],
-        t_grid_clamp=_require_optional_dict_field(record, 't_grid_clamp', path=path, context=context),
+        t_grid_clamp=_require_optional_dict_field(record, 't_grid_clamp', path=path, context=context,
+                                                  shape_error=t_grid_clamp_shape_error),
     )
     _validate_selection_cross_field_invariants(selection, path=path, context=context)
     return selection
