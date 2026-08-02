@@ -14,13 +14,11 @@ from mako.template import Template
 from arc.species.perceive import perceive_molecule_from_xyz
 
 from t3.chem import T3Species
+# Re-exported: ``METHOD_MAP`` is defined in ``t3.common`` so ``t3.schema`` can validate against it
+# without importing this module, and is imported from here by everything that renders a method.
+from t3.common import METHOD_MAP
 from t3.utils.generator import generate_radicals
 from t3.utils.network_thermo import TGridClampRecord, format_skipped_species, network_thermo_t_max
-
-METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
-              'RS': 'reservoir state',
-              'MSC': 'modified strong collision',
-              }
 
 logger = logging.getLogger(__name__)
 
@@ -462,12 +460,24 @@ def write_arkane_network_input_file(source_path: str,
                                       spanning the network's T/P extrema. Default: ``True``.
 
     Raises:
-        ValueError: If T/P ranges could not be parsed from the file.
+        ValueError: If ``method`` is not a key of ``METHOD_MAP``, or if T/P ranges could not be
+                    parsed from the file.
 
     Returns:
         ArkaneNetworkWriteResult: The current network's isomer labels, plus T-grid clamp
             provenance (see ``TGridClampRecord``).
     """
+    # Checked before anything is created on disk. ``rewrite_arkane_method_line`` below would fail
+    # on an unknown method anyway, but only as a bare KeyError, and only after the destination
+    # directory has been made and the source copied into it -- leaving a plausible-looking
+    # ``<network>/<bad-method>/input.py`` that still carries the SOURCE file's method, i.e. a
+    # different solve from the one its own directory name claims. The set is small and closed, so
+    # it is knowable up front; this matches the four other sites that render a method.
+    if method not in METHOD_MAP:
+        raise ValueError(f"The master-equation 'method' must be one of {sorted(METHOD_MAP)}, got "
+                         f"{method!r}. Arkane's own name for it is what gets written into the "
+                         f"network file's 'method = ...' line, so an unrecognized method cannot "
+                         f"be rendered at all.")
     dest_dir = os.path.dirname(dest_path)
     if dest_dir and not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
@@ -669,7 +679,8 @@ def write_pdep_network_file(network_name: str,
         rmg_pdep_path (str): The path to the RMG/pdep iteration folder.
 
     Raises:
-        ValueError: If T/P ranges could not be parsed from the file.
+        ValueError: If ``method`` is not a key of ``METHOD_MAP``, or if T/P ranges could not be
+                    parsed from the file.
 
     Returns:
         ArkaneNetworkWriteResult: The current network's isomer labels, plus T-grid clamp

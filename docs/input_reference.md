@@ -97,7 +97,9 @@ t3:
                              # to QM, default: None (unlimited). Must be a positive integer when
                              # given; booleans are refused.
     ME_methods: ['CSE', 'MSC']  # master equation methods for PES SA,
-                                # any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC']
+                                # any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC'].
+                                # Case-insensitive; entries are normalized to upper case, which is
+                                # the spelling used for the per-method output sub-directory.
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
     top_SA_reactions: 10  # optional, used per observable to determine rates to calculate as well as
                           # thermo of species participating in these reactions, default: 10

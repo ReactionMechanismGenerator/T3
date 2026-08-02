@@ -22,6 +22,17 @@ IPYTHON_SIMULATOR_EXAMPLES_PATH = os.path.join(t3_path, 'ipython', 'simulator_ad
 PROJECTS_BASE_PATH = os.path.join(t3_path, 'Projects')
 VALID_CHARS = "-_=.,%s%s" % (string.ascii_letters, string.digits)
 
+# The master-equation methods T3 knows how to ask Arkane for, mapping the shorthand a user writes
+# in ``T3.sensitivity.ME_methods`` to Arkane's own name for it. It lives here rather than beside
+# its main consumer in ``t3.utils.writer`` because ``t3.schema`` validates against it, and schema
+# validation must not drag in the writer's dependency stack (Mako, ARC species perception, the
+# thermo reader). ``t3.utils.writer`` re-exports it, so the many existing
+# ``from t3.utils.writer import METHOD_MAP`` call sites keep working.
+METHOD_MAP = {'CSE': 'chemically-significant eigenvalues',
+              'RS': 'reservoir state',
+              'MSC': 'modified strong collision',
+              }
+
 
 def get_species_by_label(label: str,
                          species_list: list[ARCSpecies],

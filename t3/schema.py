@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_v
 
 from arc.common import read_yaml_file
 
-from t3.common import DATA_BASE_PATH, VALID_CHARS
+from t3.common import DATA_BASE_PATH, METHOD_MAP, VALID_CHARS
 from t3.simulate.factory import _registered_simulate_adapters
 
 
@@ -194,16 +194,32 @@ class T3Sensitivity(BaseModel):
     @field_validator('ME_methods')
     @classmethod
     def check_me_methods(cls, value):
-        """T3Sensitivity.ME_methods validator"""
+        """T3Sensitivity.ME_methods validator.
+
+        Accepts any casing and returns the canonical ``t3.common.METHOD_MAP`` key. The
+        case-insensitive acceptance is deliberate and matches ``global_observables`` above, whose
+        consumers do read case-insensitively; ``ME_methods``' consumers do not. The string is
+        looked up in the uppercase-keyed ``METHOD_MAP`` when the Arkane input's ``method = ...``
+        line is rewritten, and ``t3/main.py`` also uses it verbatim as a directory name, as the
+        ``method`` recorded in the SA cache sidecar, and as ``requested_me_methods`` provenance.
+        Accepting a spelling here without canonicalizing it therefore did not configure anything
+        -- it raised a bare ``KeyError: 'cse'`` from inside the writer, which the
+        ``(OSError, ValueError)`` handler around that call does not catch.
+        """
         if value is None or not value:
             raise ValueError('The ME methods argument cannot be None or empty.')
-        for i, entry in enumerate(value):
-            if entry.lower() not in ['cse', 'rs', 'msc']:
-                raise ValueError(f'The ME methods list must contain a combination of "CSE", "RS", and "MSC", '
-                                 f'Got {entry} in {value}')
-            if entry.lower() in [value[j].lower() for j in range(i)]:
+        canonical_methods = {method.lower(): method for method in METHOD_MAP}
+        normalized = list()
+        for entry in value:
+            method = canonical_methods.get(entry.lower())
+            if method is None:
+                raise ValueError(f'The ME methods list must contain a combination of '
+                                 f'{sorted(METHOD_MAP)}, got {entry} in {value}')
+            # Compared after canonicalization: ['CSE', 'cse'] is one method spelled two ways.
+            if method in normalized:
                 raise ValueError(f'The ME methods list must not contain repetitions, got {value}')
-        return value
+            normalized.append(method)
+        return normalized
 
 
 class T3Uncertainty(BaseModel):

@@ -11,7 +11,7 @@ import pytest
 
 from arc.common import read_yaml_file
 
-from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH
+from t3.common import METHOD_MAP, TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH
 from t3.schema import InputBase, RMG, T3
 from t3.utils.network_thermo import TGridClampRecord
 from t3.utils.writer import (
@@ -418,6 +418,40 @@ def test_write_arkane_network_input_file_raises_if_no_method_line(tmp_path):
     dest_path = str(tmp_path / 'input.py')
     with pytest.raises(ValueError, match='method'):
         write_arkane_network_input_file(source_path=source_path, dest_path=dest_path, method='CSE')
+
+
+def test_write_arkane_network_input_file_refuses_an_unknown_method_before_touching_the_disk(tmp_path):
+    """An unrenderable method must be refused BEFORE the destination is created.
+
+    ``METHOD_MAP[method]`` inside ``rewrite_arkane_method_line`` already fails on an unknown
+    method, but it fails late: by then ``write_arkane_network_input_file`` has created the
+    destination directory and copied the source into it, so a caller that got the method wrong
+    leaves a plausible-looking ``<network>/<bad-method>/input.py`` behind -- a half-written
+    artifact still carrying the SOURCE file's method, which is a different solve from the one the
+    directory name claims. It also failed as a bare ``KeyError`` naming neither the argument nor
+    the valid set. The four other sites that render a method
+    (``t3/pdep/mesolver/arkane.py``, ``t3/pdep/explorer/input_file.py``,
+    ``t3/pdep/explorer/config.py``, ``t3/pdep/join.py``) all check up front; this one now does too.
+    """
+    dest_path = str(tmp_path / 'CSE_typo' / 'input.py')
+    for bad_method in ('cse', 'XYZ', ''):
+        with pytest.raises(ValueError, match='method'):
+            write_arkane_network_input_file(source_path=NETWORK_FIXTURE,
+                                            dest_path=dest_path,
+                                            method=bad_method)
+        assert not os.path.exists(dest_path), f'{bad_method!r} left a destination file behind'
+        assert not os.path.isdir(os.path.dirname(dest_path)), \
+            f'{bad_method!r} left a destination directory behind'
+
+    # Over-refusal guard, read off METHOD_MAP rather than hardcoded here: every method the map
+    # knows must still be written, to the very path the refusals above declined to create.
+    for method in METHOD_MAP:
+        result = write_arkane_network_input_file(source_path=NETWORK_FIXTURE,
+                                                 dest_path=dest_path,
+                                                 method=method)
+        assert isinstance(result, ArkaneNetworkWriteResult)
+        with open(dest_path, 'r') as f:
+            assert f"method = '{METHOD_MAP[method]}'" in f.read()
 
 
 CLAMP_FIXTURE_TEXT = """species(
