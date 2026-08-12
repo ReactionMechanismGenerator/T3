@@ -66,10 +66,6 @@ import yaml
 
 from t3.pdep.hybrid import QMEnergySettings
 
-# The two Arkane DSL call forms a modelChemistry directive may legitimately use in place of a
-# plain string label; kept in sync with t3.pdep.hybrid._MODEL_CHEMISTRY_CALL_NAMES.
-_MODEL_CHEMISTRY_CALL_NAMES = ('LevelOfTheory', 'CompositeLevelOfTheory')
-
 # Fields read directly (as ast.literal_eval-able literals) from calcs/statmech/<subdir>/input.py,
 # mapped to the Python type each MUST have. The type is enforced, not merely documented: a
 # directive that parses to the wrong type is the single most dangerous shape a frozen setting can

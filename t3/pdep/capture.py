@@ -1303,6 +1303,10 @@ def _release_capture_lock(lock_path: str) -> None:
     try:
         os.remove(lock_path)
     except FileNotFoundError:
+        # Already gone -- a stale-lock reclaim by another process removed it, or this is a second
+        # release on the same path. The post-condition this function promises ("the lock is not
+        # held") is satisfied either way, and raising here would mask whatever real exception is
+        # already unwinding through the caller's finally.
         pass
 
 

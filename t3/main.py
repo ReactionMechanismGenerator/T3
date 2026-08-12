@@ -3095,12 +3095,18 @@ class T3:
                         if label == t3_reaction.get_reaction_smiles_label():
                             return key
                     except (AttributeError, ValueError):
+                        # A reaction that cannot render a SMILES label simply is not the one being
+                        # looked up. This is a search over every known reaction, so a candidate that
+                        # cannot answer the question is skipped and the scan continues; a caller that
+                        # finds nothing gets None, which is already this method's "no match" answer.
                         pass
                 elif label_type == 'Chemkin':
                     try:
                         if label == t3_reaction.to_chemkin():
                             return key
                     except (AttributeError, ValueError):
+                        # Skipped for the same reason as the SMILES branch above: a reaction that
+                        # cannot render a Chemkin label cannot be the requested one either.
                         pass
         return None
 
