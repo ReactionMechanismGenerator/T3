@@ -2190,7 +2190,6 @@ class T3:
                 continue
 
             # identify wells in this network this reaction is sensitive to
-            arkane = None
             sensitive_wells_dict = select_sensitive_wells(
                 entries_by_condition=outcome.sa_dict[outcome.direction_key],
                 relative_threshold=self.t3['sensitivity']['pdep_SA_threshold'],
@@ -2206,10 +2205,13 @@ class T3:
                         if spc_label is not None:
                             species = get_species_by_label(label=spc_label,
                                                            species_list=self.rmg_species)
-                        elif arkane is not None:
-                            # this is an Edge species which is missing from the Core rmg_species list
-                            species = get_species_by_label(label=label,
-                                                           species_list=arkane.species_dict.values())
+                        # A well whose label is absent from labels_map is dropped here. It used to
+                        # fall through to an Edge-species lookup against Arkane's species_dict, but
+                        # that branch has never run: the name it tested was bound to None directly
+                        # above it and never reassigned, on this branch and on main alike. T3 no
+                        # longer imports arkane at all, so the lookup cannot be restored in place --
+                        # reaching those species again means threading something T3 parses itself
+                        # into this loop, which is design work, not a deletion.
                         if species is not None:
                             species_list.append(species)
                     for species in species_list:
