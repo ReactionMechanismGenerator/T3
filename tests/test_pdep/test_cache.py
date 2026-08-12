@@ -12,8 +12,7 @@ import pytest
 from arc.common import read_yaml_file, save_yaml_file
 
 from t3.common import TEST_DATA_BASE_PATH
-from t3.pdep.cache import (SA_CACHE_CONTRACT_VERSION,
-                          SA_CACHE_METADATA_FILE_NAME,
+from t3.pdep.cache import (SA_CACHE_METADATA_FILE_NAME,
                           hash_file,
                           max_abs_ts_coefficient,
                           read_arkane_log_rmg_py_commit,

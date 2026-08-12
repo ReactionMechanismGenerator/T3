@@ -317,7 +317,7 @@ def write_arkane_explorer_input_file(source_path: str,
                 unevaluable = ast.get_source_segment(text, kwargs['label']) if 'label' in kwargs else None
                 raise ValueError(f"The source at '{source_path}' declares a reaction() block with no explicit "
                                  f"'kinetics=' keyword, and its 'label' keyword {'could not be evaluated '
-                                 f'literally: ' + repr(unevaluable) if unevaluable is not None else 'is missing'}. "
+                                 'literally: ' + repr(unevaluable) if unevaluable is not None else 'is missing'}. "
                                  f"Refusing to write an explorer input that would end up with neither an explicit "
                                  f"kinetics entry nor a 'kinetics(...)' job directive for this reaction.")
             _validate_kinetics_label(label=label, source_path=source_path)

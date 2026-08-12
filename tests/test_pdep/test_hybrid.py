@@ -1440,7 +1440,7 @@ def test_vendors_logs_that_share_a_basename_without_collapsing_them(tmp_path):
     read from the sp job's output -- Arkane would parse that happily and return wrong kinetics.
     Each referenced log must therefore land in its own vendored file."""
     dest_path = str(tmp_path / 'input.py')
-    result = write_hybrid_network_input_file(
+    write_hybrid_network_input_file(
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='MSC',

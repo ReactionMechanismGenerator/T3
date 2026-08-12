@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-from t3.utils.network_thermo import (NetworkTextUnparseable, NetworkThermoCeiling, TGridClampRecord,
+from t3.utils.network_thermo import (NetworkTextUnparseable, TGridClampRecord,
                                      format_skipped_species, network_thermo_t_max,
                                      t_grid_clamp_shape_error)
 

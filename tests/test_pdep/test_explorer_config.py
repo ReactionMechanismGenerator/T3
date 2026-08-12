@@ -10,7 +10,6 @@ dedicated refusal test, plus tests for the coercions (``tuple``, integral-float,
 this config performs and for a fully valid round trip.
 """
 
-import copy
 
 import pytest
 

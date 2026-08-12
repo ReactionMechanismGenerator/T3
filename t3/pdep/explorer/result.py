@@ -12,7 +12,7 @@ import copy
 
 from dataclasses import dataclass, field
 
-from t3.pdep.parser import PDepArkaneReaction, to_json_safe
+from t3.pdep.parser import to_json_safe
 from t3.pdep.selector import PDepNetworkSelection
 
 # Exploration status values for PDepExplorationResult.status. THREE statuses, not a bool, mirroring

@@ -729,8 +729,8 @@ class PDepNetworkSelection:
         network_source_hash = first.network_source_hash
         if len(source_hashes) > 1:
             network_source_hash = None
-            warnings.append(f'Only some combined decisions recorded a network_source_hash; recording None '
-                            f'rather than binding the aggregate to bytes part of it was not computed from.')
+            warnings.append('Only some combined decisions recorded a network_source_hash; recording None '
+                            'rather than binding the aggregate to bytes part of it was not computed from.')
         method = first.method
         if len(methods) > 1:
             method = None

@@ -355,7 +355,6 @@ def apply_pdep_qm_budget(selections,
         network_id = offers[0].network_id
         cost = len({ts_label for selection in offers for ts_label in selection.uncertain_ts_labels()})
         remaining_before = remaining
-        unnamed_offer_index = indices[0] if not network_id else None
 
         # network_source_hash/method mirror PDepNetworkSelection.combine()'s identity/weaker-signal
         # rules exactly, since these several offers of one network are precisely what combine()

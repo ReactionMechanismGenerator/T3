@@ -21,8 +21,6 @@ import builtins
 import hashlib
 import os
 import shutil
-import sys
-import types
 
 import pytest
 
@@ -36,7 +34,7 @@ from t3.pdep.budget import (BUDGET_OUTCOME_ADMITTED,
                             PDepBudgetSkip,
                             )
 from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
-from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
+from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, verify_capture
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
                           JOIN_STATUS_NOT_QUEUED,
@@ -1688,7 +1686,6 @@ class TestProcessArcRunFinalizationWiring(object):
         record, and neither is evidence of lost QM work, so neither may trip the refusal."""
         t3 = _build_t3(tmp_path)
         _write_arc_info(t3)
-        arc_dir = t3.paths['ARC']
         already_present_record = TSJoinRecord(network_id='network4_2',
                                               network_ts_label='TS1',
                                               status=JOIN_STATUS_ALREADY_PRESENT,

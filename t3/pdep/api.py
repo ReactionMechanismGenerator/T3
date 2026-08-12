@@ -58,13 +58,10 @@ from t3.pdep.explorer.result import (ADMISSION_POLICY_CALLER_ADMITTED,
                                      EXPLORATION_STATUS_SKIPPED,
                                      EXPLORATION_STATUS_SUCCEEDED,
                                      PDepExplorationResult,
-                                     VALID_ADMISSION_POLICIES,
                                      )
 from t3.pdep.parser import PDepArkaneReaction, PDepNetwork, parse_pdep_network_file
 from t3.pdep.reason_codes import VALID_ASSESSMENT_REASON_CODES, VALID_ASSESSMENT_STATUSES
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
-                              CACHE_STATUS_CACHED_VALID,
-                              CACHE_STATUS_GENERATED,
                               CACHE_STATUS_UNVALIDATED,
                               E0_PERTURBATION_J_PER_MOL,
                               EVALUATION_STATUS_EVALUATED,

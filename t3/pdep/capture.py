@@ -614,9 +614,9 @@ def _capture_ts_artifacts_locked(join_records: list,
         provenance_entries = _capture_provenance_files(arc_project_directory=arc_project_directory,
                                                        capture_dir=staging_dir)
 
-        manifest_path = _write_manifest(capture_dir=staging_dir, arc_project_directory=arc_project_directory,
-                                        manifest_entries=manifest_entries, provenance_entries=provenance_entries,
-                                        energy_settings=energy_settings, networks=manifest_networks)
+        _write_manifest(capture_dir=staging_dir, arc_project_directory=arc_project_directory,
+                        manifest_entries=manifest_entries, provenance_entries=provenance_entries,
+                        energy_settings=energy_settings, networks=manifest_networks)
 
         # Self-check the fully staged capture with the same verifier a downstream consumer would
         # use, BEFORE it is ever swapped into capture_dir's place. This is the natural post-write
@@ -756,7 +756,7 @@ def _vendor_network_sources(networks: dict, capture_dir: str) -> dict:
                 f"subdirectory '{resolved_networks_dir}'. A network id must be a plain file name "
                 f"component; refusing rather than writing outside the capture directory."
             )
-        fd, staged_path = tempfile.mkstemp(prefix=f'.network-', dir=networks_dir)
+        fd, staged_path = tempfile.mkstemp(prefix='.network-', dir=networks_dir)
         os.close(fd)
         try:
             shutil.copyfile(entry['source_path'], staged_path)

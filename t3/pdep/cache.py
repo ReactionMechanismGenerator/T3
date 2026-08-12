@@ -351,9 +351,10 @@ def validate_sa_cache(sa_path: str,
     # Validate the thresholds before any early return: a bad perturbation/min_delta_ln_k is a
     # caller bug and should surface as a ValueError immediately, not be masked by whichever
     # early-return branch (missing file, missing sidecar, ...) a particular call happens to hit
-    # first -- the floor derived below is only actually used once we reach the final gate, but its
-    # inputs must be valid regardless of how far this call gets.
-    floor = coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
+    # first. The derived floor itself is deliberately discarded -- this function answers "is the
+    # cache valid", not "is the data useful", and the two are different questions (see the module
+    # docstring and the note at the final gate). Only the raising is wanted here.
+    coefficient_floor(min_delta_ln_k=min_delta_ln_k, perturbation=perturbation)
 
     warnings_list = list()
     if not os.path.isfile(sa_path):
@@ -435,6 +436,7 @@ def validate_sa_cache(sa_path: str,
         return CACHE_STATUS_CACHED_REJECTED, warnings_list
 
     # No max_abs_ts_coefficient-vs-floor check here: cache validity and data usefulness are
-    # different questions (see module docstring). ``floor`` above exists purely to validate
-    # ``min_delta_ln_k``/``perturbation`` eagerly; it is not otherwise consulted in this function.
+    # different questions (see module docstring). The ``coefficient_floor`` call at the top of this
+    # function exists purely to validate ``min_delta_ln_k``/``perturbation`` eagerly; its result is
+    # discarded rather than consulted anywhere below.
     return CACHE_STATUS_CACHED_VALID, warnings_list

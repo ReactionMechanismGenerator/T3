@@ -622,7 +622,7 @@ class TestCaptureTsArtifacts:
         capture_dir = str(tmp_path / 'capture')
 
         good_record = _usable_record(tmp_path=tmp_path.__class__(arc_dir), network_ts_label='TS_good')
-        first_result = _capture([good_record], arc_dir, capture_dir)
+        _capture([good_record], arc_dir, capture_dir)
         previous_files = sorted(
             os.path.relpath(os.path.join(root, name), capture_dir)
             for root, _dirs, names in os.walk(capture_dir) for name in names
@@ -825,7 +825,7 @@ class TestCaptureTsArtifacts:
             capture_module._release_capture_lock(lock_path)
 
         # Once the lock is released, an otherwise-identical call succeeds normally.
-        result = _capture([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
         assert os.path.isdir(capture_dir)
 
     def test_a_lock_held_by_a_dead_process_is_reclaimed_rather_than_blocking_forever(self, tmp_path):
@@ -849,7 +849,7 @@ class TestCaptureTsArtifacts:
         with open(lock_path, 'w') as f:
             f.write(f'{child_pid}\n')
 
-        result = _capture([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
         assert os.path.isdir(capture_dir)
 
     def test_multiple_ambiguous_old_capture_siblings_refuses_to_guess_which_is_real(self, tmp_path):
@@ -1537,7 +1537,7 @@ class TestCaptureTsArtifacts:
         )
         capture_dir = str(tmp_path / 'capture')
 
-        result = _capture([record], arc_dir, capture_dir)
+        _capture([record], arc_dir, capture_dir)
 
         manifest_path = os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME)
         with open(manifest_path) as f:

@@ -21,7 +21,6 @@ hand-written but data-faithful (output.yml) from real ARC-generated output:
   project-level field is not evidence of a contradiction either).
 """
 
-import copy
 import os
 
 import pytest

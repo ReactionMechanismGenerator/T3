@@ -52,7 +52,6 @@ from t3.pdep.explorer.result import (ADMISSION_POLICY_CALLER_ADMITTED,
 from t3.pdep.parser import PDepArkaneReaction, parse_pdep_network_file
 from t3.pdep.selector import (CACHE_STATUS_CACHED_REJECTED,
                               CACHE_STATUS_CACHED_VALID,
-                              CACHE_STATUS_GENERATED,
                               CACHE_STATUS_UNVALIDATED,
                               EVALUATION_STATUS_EVALUATED,
                               EVALUATION_STATUS_NOT_EVALUATED,
