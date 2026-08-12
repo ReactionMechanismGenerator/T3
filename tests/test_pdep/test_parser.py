@@ -16,8 +16,6 @@ from t3.pdep.hashing import hash_bytes, hash_file
 from t3.pdep.parser import (
     _call_keywords,
     PDepArkaneReaction,
-    PDepNetwork,
-    PDepPathReaction,
     parse_arkane_pdep_output_file,
     parse_arkane_pdep_output_text,
     parse_pdep_network_file,
@@ -424,6 +422,66 @@ def test_rate_payload_numeric_values_exclude_bounds_and_metadata():
     assert 300 in reaction.numeric_values
     assert 300 not in reaction.rate_payload_numeric_values
     assert reaction.missing_kinetics_keys == tuple()
+
+
+def test_a_nested_kinetics_call_contributes_its_payload_instead_of_crashing():
+    """Test that a kinetics call whose payload holds NESTED kinetics calls is parsed, with the
+    inner rate coefficients surfacing in ``rate_payload_numeric_values`` and the inner bounds
+    excluded exactly as they are at the top level.
+
+    Regression this guards: ``_extract_payload_numeric_leaves`` read an undefined
+    ``NESTED_KINETICS_CALL_NAMES``, so every nested call raised ``NameError`` -- out of a parser
+    whose callers handle ``OSError``/``ValueError``, which made it an ``internal_error`` that ends
+    the campaign. No fixture in ``tests/data/pdep_me/`` nests a kinetics call (they are all flat
+    ``Arrhenius``/``Chebyshev``), so the whole suite ran over a guaranteed crash. ``PDepArrhenius``
+    is what Arkane emits for ``interpolationModel = ('pdeparrhenius',)``, so this is the ordinary
+    case, not an exotic one.
+    """
+    text = ("pdepreaction(\n"
+            "    reactants=['A'], products=['B'],\n"
+            "    kinetics=PDepArrhenius(\n"
+            "        pressures=([0.1, 100], 'bar'),\n"
+            "        arrhenius=[\n"
+            "            Arrhenius(A=(1.5e13,'s^-1'), n=0.25, Ea=(30.5,'kcal/mol'), T0=(1,'K')),\n"
+            "            Arrhenius(A=(2.5e13,'s^-1'), n=0.75, Ea=(31.5,'kcal/mol'), T0=(1,'K')),\n"
+            "        ],\n"
+            "        Tmin=(300,'K'), Tmax=(2100,'K'),\n"
+            "        Pmin=(0.1,'bar'), Pmax=(100,'bar')),\n"
+            ")\n")
+    reactions = parse_arkane_pdep_output_text(text=text)
+    assert len(reactions) == 1
+    reaction = reactions[0]
+    payload = reaction.rate_payload_numeric_values
+    # Every inner rate coefficient reaches the payload...
+    for expected in (1.5e13, 0.25, 30.5, 2.5e13, 0.75, 31.5):
+        assert expected in payload, f'{expected} missing from the nested payload {payload}'
+    # ...and the ME-success gate sees real signal rather than an empty or all-None payload.
+    assert any(value is not None for value in payload)
+    # The nested Arrhenius' T0 reference temperature is bounds/metadata at any depth, so the only
+    # 1 in the payload would be a leaked T0. The outer T/P bounds stay out for the same reason.
+    assert 1 not in payload
+    for bound in (300, 2100, 2400):
+        assert bound not in payload
+
+
+def test_an_unrecognized_nested_call_still_surfaces_as_non_finite():
+    """Test that a call this module does not recognize as kinetics is reported as a ``None`` leaf
+    rather than being walked for numbers it cannot vouch for.
+
+    This is the fail-closed half of the nested-call handling: widening the recursion must not turn
+    ``array(...)``/``float('nan')``-style payloads into "finite" by harvesting their arguments.
+    """
+    text = ("pdepreaction(\n"
+            "    reactants=['A'], products=['B'],\n"
+            "    kinetics=Chebyshev(coeffs=array([[1.0, 2.0]]), kunits='s^-1',\n"
+            "                       Tmin=(300,'K'), Tmax=(2100,'K')),\n"
+            ")\n")
+    reactions = parse_arkane_pdep_output_text(text=text)
+    assert len(reactions) == 1
+    payload = reactions[0].rate_payload_numeric_values
+    assert None in payload, 'an unrecognized call must surface as a non-finite leaf'
+    assert 1.0 not in payload and 2.0 not in payload, \
+        'the arguments of an unrecognized call must not be harvested as if they were rate data'
 
 
 def test_missing_kinetics_keys_records_unparseable_coeffs():

@@ -46,7 +46,19 @@ ARKANE_PDEP_OUTPUT_TOP_LEVEL_CALL = 'pdepreaction'
 KINETICS_BOUNDS_AND_METADATA_KEYS = ('Tmin', 'Tmax', 'Pmin', 'Pmax', 'Tref', 'Pref', 'T0',
                                      'kunits', 'comment', 'efficiencies')
 
-RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
+# Kinetics constructors that may appear NESTED inside another kinetics call's rate payload, and
+# whose own keywords are therefore rate data to be walked rather than an opaque expression. The
+# common case is ``PDepArrhenius(pressures=..., arrhenius=[Arrhenius(...), ...])``, which is what
+# Arkane emits for ``interpolationModel = ('pdeparrhenius',)``; ``Troe``/``Lindemann``/``ThirdBody``
+# nest their high- and low-pressure limits the same way.
+#
+# Membership is a whitelist on purpose. A call NOT listed here is left to the fail-closed ``else``
+# branch, which surfaces it as a ``None`` leaf: recursing into an arbitrary call would let
+# ``array([[1.0, 2.0]])`` or ``float('nan')`` donate their arguments to the ME-success gate as if
+# those were fitted rate coefficients. Being wrong in the "unrecognized" direction costs a
+# needless regeneration; being wrong the other way passes a network whose rates are not real.
+NESTED_KINETICS_CALL_NAMES = ('Arrhenius', 'PDepArrhenius', 'MultiArrhenius', 'MultiPDepArrhenius',
+                              'Chebyshev', 'Troe', 'Lindemann', 'ThirdBody')
 
 
 @dataclass(frozen=True)
