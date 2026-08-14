@@ -301,7 +301,7 @@ def set_pfr(gas: ct.Solution,
         n_cells (int): Number of discrete CSTRs to simulate the PFR.
         composition (Dict[str, float]): Inlet composition.
         T (float): Inlet temperature in K.
-        P (float): Inlet pressure in Pa.
+        P (float): Inlet pressure in bar.
         flow_rate (float): Mass flow rate in kg/s.
         surfaces (List[ct.Interface]): List of surface names to consider.
                                        Pass an empty list if there are no surfaces.
@@ -313,7 +313,7 @@ def set_pfr(gas: ct.Solution,
             - The reactor network
             - List of reactors representing the PFR
     """
-    gas.TPX = T, P, composition
+    gas.TPX = T, P * 1e5, composition
     inlet = ct.Reservoir(gas)
     outlet = ct.Reservoir(gas)
     total_volume = length * area
@@ -333,7 +333,7 @@ def set_pfr(gas: ct.Solution,
         upstream = reactor
 
     # Last reactor connects to outlet reservoir
-    ct.PressureController(upstream=reactors[-1], downstream=outlet, master=mfc)
+    ct.PressureController(upstream=reactors[-1], downstream=outlet, primary=mfc)
     network = ct.ReactorNet(reactors)
     network.atol = a_tol
     network.rtol = r_tol
@@ -463,7 +463,7 @@ def run_pfr(model_path: str,
         times (List[float]): List of residence times to run (s).
         composition (Dict[str, float]): Inlet composition.
         T (float): Temperature in K.
-        P (float): Pressure in Pa.
+        P (float): Pressure in bar.
         length (float): Reactor length in meters.
         area (float): Reactor cross-sectional area in m^2.
         n_cells (int): Number of CSTRs to discretize the PFR.
@@ -482,7 +482,7 @@ def run_pfr(model_path: str,
     stoichiometry = get_rxn_stoichiometry(gas)
     for tau in times:
         V_total = length * area
-        gas.TPX = T, P, composition
+        gas.TPX = T, P * 1e5, composition
         rho = gas.density
         total_mass = rho * V_total
         flow_rate = total_mass / tau  # kg/s
