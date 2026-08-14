@@ -125,6 +125,52 @@ def test_jsr_physics_and_profiles(hocho_simulation_data):
     assert len(profiles[keys[1]]['ROPs']['H(3)']) == 842
 
 
+def test_pfr_physics_and_profiles():
+    """
+    Test getting ROPs from a PFR reactor
+    Validates that profiles are generated and physics are correct.
+    """
+    model_path = os.path.join(TEST_DATA_BASE_PATH, 'models', 'HOCHO.yaml')
+    profiles = flux.get_profiles_from_simulation(model_path=model_path,
+                                                 reactor_type='PFR',
+                                                 times=[0.001, 0.5],
+                                                 composition={'HOCHO(1)': 1.0},
+                                                 T=1000,
+                                                 P=1,
+                                                 V=100,
+                                                 n_cells=5,
+                                                 )
+    keys = list(profiles.keys())
+    assert keys == [0.001, 0.5]
+    for key in keys:
+        # P is given in bar and reported in Pa, as in the JSR and BatchP paths.
+        assert almost_equal(profiles[key]['P'], 1.0e5, places=2)
+        assert profiles[key]['T'] == 1000.0
+        assert isinstance(profiles[key]['X'], dict)
+        assert len(profiles[key]['X']) == 152
+        assert len(profiles[key]['ROPs']) == 152
+        assert almost_equal(sum(profiles[key]['X'].values()), 1.0)
+        assert all(np.isfinite(x) for x in profiles[key]['X'].values())
+        assert all(np.isfinite(rop) for rop in profiles[key]['ROPs']['H(3)'].values())
+    assert profiles[0.5]['X']['HOCHO(1)'] < profiles[0.001]['X']['HOCHO(1)']
+
+
+def test_pfr_requires_volume_and_positive_n_cells():
+    """Test that the PFR path rejects a missing volume or a non-positive cell count"""
+    model_path = os.path.join(TEST_DATA_BASE_PATH, 'models', 'HOCHO.yaml')
+    kwargs = {'model_path': model_path,
+              'reactor_type': 'PFR',
+              'times': [0.001],
+              'composition': {'HOCHO(1)': 1.0},
+              'T': 1000,
+              'P': 1,
+              }
+    with pytest.raises(ValueError):
+        flux.get_profiles_from_simulation(V=None, **kwargs)
+    with pytest.raises(ValueError):
+        flux.get_profiles_from_simulation(V=100, n_cells=0, **kwargs)
+
+
 def test_get_top_rops():
     """Test getting the top ROPs for the observables"""
     obervables = ['spc1', 'spc3']
@@ -208,6 +254,7 @@ def test_create_digraph_HOCHO_pyrolysis(hocho_simulation_data):
                             min_rop=min_rop,
                             max_rop=max_rop,
                             folder_path=folder_path,
+                            reactor_type='JSR',
                             )
         assert os.path.isfile(os.path.join(folder_path, f'flux_diagram_{times[i]}_s.dot'))
         assert os.path.isfile(os.path.join(folder_path, f'flux_diagram_{times[i]}_s.png'))
@@ -234,6 +281,7 @@ def test_create_digraph_NH3():
                         min_rop=min_rop,
                         max_rop=max_rop,
                         folder_path=folder_path,
+                        reactor_type='JSR',
                         display_concentrations=False,
                         report_flux_ratio=False,
                         display_r_n_p=True,
@@ -262,6 +310,7 @@ def test_create_digraph_N2H4():
                         min_rop=min_rop,
                         max_rop=max_rop,
                         folder_path=folder_path,
+                        reactor_type='JSR',
                         display_concentrations=True,
                         report_flux_ratio=True,
                         display_r_n_p=True,

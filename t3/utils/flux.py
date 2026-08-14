@@ -39,6 +39,8 @@ def generate_flux(model_path: str,
                   fix_cantera_model: bool = True,
                   allowed_nodes: list[str] | None = None,
                   max_chemical_generations: int | None = None,
+                  surface_names: list[str] | None = None,
+                  n_cells: int = 100,
                   draw_molecule_images: bool = True,
                   species_dictionary_path: str | None = None,
                   logger=None,
@@ -58,6 +60,8 @@ def generate_flux(model_path: str,
         T (float): The temperature of the mixture, in Kelvin.
         P (float): The pressure of the mixture, in bar.
         V (Optional[float], optional): The reactor volume in cm^3, if relevant.
+                                       Required for 'JSR' and 'PFR'; for a 'PFR' the reactor
+                                       length is computed as V / A.
         reactor_type (str, optional): The reactor type. Supported reactor types are:
                                       'JSR': Jet stirred reactor, which is a CSTR with constant T/P/V
                                       'BatchP': An ideal gas constant pressure and constant volume batch reactor
@@ -78,6 +82,8 @@ def generate_flux(model_path: str,
         allowed_nodes (Optional[List[str]], optional): A list of nodes to consider.
                                                        any node outside this list will not appear in the flux diagram.
         max_chemical_generations (Optional[int], optional): The maximal number of chemical generations to consider.
+        surface_names (Optional[List[str]], optional): List of surface names to consider.
+        n_cells (int, optional): The number of discrete CSTRs to simulate the PFR. Default: 100.
         draw_molecule_images (bool, optional): Whether to render species as molecule images instead of text labels.
         species_dictionary_path (Optional[str], optional): Path to an RMG species_dictionary.txt used to render images.
         logger: Optional logger with ``.warning``; falls back to ``print``.
@@ -101,6 +107,8 @@ def generate_flux(model_path: str,
                                             T=T,
                                             P=P,
                                             V=V,
+                                            surface_names=surface_names,
+                                            n_cells=n_cells,
                                             a_tol=a_tol,
                                             r_tol=r_tol,
                                             energy=energy,
@@ -122,6 +130,7 @@ def generate_flux(model_path: str,
             generate_flux_diagrams(profiles=profiles,
                                    observables=[observable],
                                    folder_path=folder_path_observable,
+                                   reactor_type=reactor_type,
                                    explore_tol=explore_tol,
                                    dead_end_tol=dead_end_tol,
                                    display_concentrations=display_concentrations,
@@ -138,6 +147,7 @@ def generate_flux(model_path: str,
         generate_flux_diagrams(profiles=profiles,
                                observables=observables,
                                folder_path=folder_path,
+                               reactor_type=reactor_type,
                                explore_tol=explore_tol,
                                dead_end_tol=dead_end_tol,
                                display_concentrations=display_concentrations,
@@ -159,6 +169,8 @@ def get_profiles_from_simulation(model_path: str,
                                  T: float,
                                  P: float,
                                  V: float | None = 100,
+                                 surface_names: list[str] | None = None,
+                                 n_cells: int = 100,
                                  a_tol: float = 1e-16,
                                  r_tol: float = 1e-10,
                                  energy: bool = False,
@@ -175,9 +187,13 @@ def get_profiles_from_simulation(model_path: str,
         T (float): The temperature of the mixture, in Kelvin.
         P (float): The pressure of the mixture, in bar.
         V (Optional[float], optional): The reactor volume in cm^3, if relevant.
+        surface_names (Optional[List[str]], optional): List of surface names to consider.
+                                                       Pass an empty list if there are no surfaces.
+        n_cells (int, optional): The number of discrete CSTRs to simulate the PFR.
         reactor_type (str, optional): The reactor type. Supported reactor types are:
                                       'JSR': Jet stirred reactor, which is a CSTR with constant T/P/V
                                       'BatchP': An ideal gas constant pressure and constant volume batch reactor
+                                      'PFR': Plug flow reactor, which is a series of CSTRs with constant T/P/V
         a_tol (float, optional): The absolute tolerance for the simulation.
         r_tol (float, optional): The relative tolerance for the simulation.
         energy (bool, optional): Whether to turn energy equations on (False means adiabatic conditions).
@@ -205,6 +221,23 @@ def get_profiles_from_simulation(model_path: str,
                            T=T,
                            P=P,
                            V=V,
+                           a_tol=a_tol,
+                           r_tol=r_tol,
+                           )
+    elif reactor_type == 'PFR':
+        if V is None:
+            raise ValueError("A 'PFR' requires a reactor volume, got V=None")
+        if not isinstance(n_cells, int) or n_cells < 1:
+            raise ValueError(f"A 'PFR' requires a positive integer number of cells, got {n_cells}")
+        profiles = run_pfr(model_path=model_path,
+                           times=times,
+                           composition=composition,
+                           T=T,
+                           P=P,
+                           length=V * 1e-6 / 1.0,
+                           area=1.0,  # m^2
+                           n_cells=n_cells,
+                           surface_names=surface_names,
                            a_tol=a_tol,
                            r_tol=r_tol,
                            )
@@ -242,6 +275,69 @@ def mark_rxn_duplicity_correctly(gas: ct.Solution):
     for rxn in gas.reactions():
         if rxn_equations.count(rxn.equation) > 1:
             rxn.duplicate = True
+
+
+def set_pfr(gas: ct.Solution,
+            model_path: str,
+            length: float,
+            area: float,
+            n_cells: int,
+            composition: dict[str, float],
+            T: float,
+            P: float,
+            flow_rate: float,
+            surfaces: list[ct.Interface],
+            a_tol: float = 1e-16,
+            r_tol: float = 1e-10,
+            ) -> tuple[ct.ReactorNet, list[ct.IdealGasReactor]]:
+    """
+    Set up a plug flow reactor (PFR) using a series of CSTRs.
+
+    Args:
+        gas (ct.Solution): The Cantera Solution object.
+        model_path (str): The path to the cantera YAML model file.
+        length (float): Length of the reactor in meters.
+        area (float): Cross-sectional area in m^2.
+        n_cells (int): Number of discrete CSTRs to simulate the PFR.
+        composition (Dict[str, float]): Inlet composition.
+        T (float): Inlet temperature in K.
+        P (float): Inlet pressure in bar.
+        flow_rate (float): Mass flow rate in kg/s.
+        surfaces (List[ct.Interface]): List of surface names to consider.
+                                       Pass an empty list if there are no surfaces.
+        a_tol (float): Absolute tolerance.
+        r_tol (float): Relative tolerance.
+
+    Returns:
+        Tuple[ct.ReactorNet, List[ct.IdealGasReactor]]:
+            - The reactor network
+            - List of reactors representing the PFR
+    """
+    gas.TPX = T, P * 1e5, composition
+    inlet = ct.Reservoir(gas)
+    outlet = ct.Reservoir(gas)
+    total_volume = length * area
+    cell_volume = total_volume / n_cells
+    reactors = list()
+    upstream = inlet
+
+    for _ in range(n_cells):
+        gas_cell = ct.Solution(model_path)
+        gas_cell.TPX = gas.TPX
+        reactor = ct.IdealGasReactor(gas_cell, energy="off", volume=cell_volume)
+        mfc = ct.MassFlowController(upstream, reactor, mdot=flow_rate)
+        for surface in surfaces:
+            surface_instance = ct.Interface(model_path, name=surface.name, phases=[gas_cell])
+            ct.ReactorSurface(surface_instance, reactor)
+        reactors.append(reactor)
+        upstream = reactor
+
+    # Last reactor connects to outlet reservoir
+    ct.PressureController(upstream=reactors[-1], downstream=outlet, primary=mfc)
+    network = ct.ReactorNet(reactors)
+    network.atol = a_tol
+    network.rtol = r_tol
+    return network, reactors
 
 
 def set_jsr(gas: ct.Solution,
@@ -345,6 +441,99 @@ def closest_bigger_number(array: list[float],
         return num, i
     else:
         return None, None
+
+
+def run_pfr(model_path: str,
+            times: list[float],
+            composition: dict[str, float],
+            T: float,
+            P: float,
+            length: float,
+            area: float,
+            n_cells: int = 100,
+            surface_names: list[str] | None = None,
+            a_tol: float = 1e-16,
+            r_tol: float = 1e-10,
+            ) -> dict[float, dict]:
+    """
+    Run a PFR simulation using a series of CSTRs with constant T, P.
+
+    Args:
+        model_path (str): The path to the cantera YAML model file.
+        times (List[float]): List of residence times to run (s).
+        composition (Dict[str, float]): Inlet composition.
+        T (float): Temperature in K.
+        P (float): Pressure in bar.
+        length (float): Reactor length in meters.
+        area (float): Reactor cross-sectional area in m^2.
+        n_cells (int): Number of CSTRs to discretize the PFR.
+        surface_names (Optional[List[str]]): List of surface names to consider.
+        a_tol (float): Absolute tolerance.
+        r_tol (float): Relative tolerance.
+
+    Returns:
+        dict: Outlet profiles (T, P, X, ROPs) for each residence time.
+    """
+    gas = ct.Solution(model_path, name='gas')
+    surfaces = list()
+    if surface_names:
+        surfaces = [ct.Interface(model_path, name=surface_name, phases=[gas]) for surface_name in surface_names]
+    profiles = dict()
+    stoichiometry = get_rxn_stoichiometry(gas)
+    for tau in times:
+        V_total = length * area
+        gas.TPX = T, P * 1e5, composition
+        rho = gas.density
+        total_mass = rho * V_total
+        flow_rate = total_mass / tau  # kg/s
+        network, reactors = set_pfr(
+            gas=gas,
+            model_path=model_path,
+            length=length,
+            area=area,
+            n_cells=n_cells,
+            composition=composition,
+            T=T,
+            P=P,
+            flow_rate=flow_rate,
+            surfaces=surfaces,
+            a_tol=a_tol,
+            r_tol=r_tol,
+        )
+
+        network.advance(tau)
+        outlet_reactor = reactors[-1]
+        gas_out = outlet_reactor.thermo
+        rops = {spc.name: dict() for spc in gas.species()}
+        cantera_reaction_rops = gas_out.net_rates_of_progress
+        for spc in gas.species():
+            for i, rxn in enumerate(gas.reactions()):
+                if stoichiometry[spc.name][i]:
+                    if rxn.equation not in rops[spc.name]:
+                        rops[spc.name][rxn.equation] = 0
+                    rops[spc.name][rxn.equation] += cantera_reaction_rops[i] * stoichiometry[spc.name][i]
+        if surface_names:
+            for surface in surfaces:
+                surface_reactions = surface.reactions()
+                surface_phase = surface(surface_names.index(surface.name)).thermo
+                surface_rops = surface_phase.net_rates_of_progress
+                for i, rxn in enumerate(surface_reactions):
+                    eqn = rxn.equation
+                    for spc in gas.species():
+                        coeff = rxn.products.get(spc.name, 0) - rxn.reactants.get(spc.name, 0)
+                        if coeff != 0:
+                            if spc.name not in rops:
+                                rops[spc.name] = {}
+                            if eqn not in rops[spc.name]:
+                                rops[spc.name][eqn] = 0
+                            rops[spc.name][eqn] += surface_rops[i] * coeff
+        profile = {'T': gas_out.T,
+                   'P': gas_out.P,
+                   'X': {s.name: x for s, x in zip(gas_out.species(), gas_out.X)},
+                   'ROPs': rops,
+                   }
+        profiles[tau] = profile
+    return profiles
 
 
 def run_jsr(gas: ct.Solution,
@@ -540,6 +729,7 @@ def generate_top_rop_bar_figs(profiles: dict,
 def generate_flux_diagrams(profiles: dict,
                            observables: list[str],
                            folder_path: str,
+                           reactor_type: str,
                            explore_tol: float = 0.95,
                            dead_end_tol: float = 0.10,
                            display_concentrations: bool = True,
@@ -559,6 +749,7 @@ def generate_flux_diagrams(profiles: dict,
         profiles (dict): The T, P, X, and ROP profiles (values) at a specific time.
         observables (List[str]): The species to start the flux diagram with.
         folder_path (str): The path to the folder in which to save the flux diagrams and accompanied data.
+        reactor_type (str): The reactor type.
         explore_tol (float, optional): The minimal flux to capture of each species consumption pathway.
         dead_end_tol (float, optional): A flux exploration termination criterion.
                                         Don't explore further consumption is lower than this tolerance
@@ -595,6 +786,7 @@ def generate_flux_diagrams(profiles: dict,
                        min_rop=min_rop,
                        max_rop=max_rop,
                        folder_path=folder_path,
+                       reactor_type=reactor_type,
                        display_concentrations=display_concentrations,
                        report_flux_ratio=report_flux_ratio,
                        report_actual_flux=report_actual_flux,
@@ -614,6 +806,7 @@ def create_digraph(flux_graph: dict,
                    min_rop: float,
                    max_rop: float,
                    folder_path: str,
+                   reactor_type: str,
                    display_concentrations: bool = True,
                    report_flux_ratio: bool = True,
                    report_actual_flux: bool = False,
@@ -635,6 +828,7 @@ def create_digraph(flux_graph: dict,
         min_rop (float): The absolute minimal ROP value.
         max_rop (float): The absolute maximal ROP value.
         folder_path (str): The path to the folder in which to save the flux diagrams and accompanied data.
+        reactor_type (str): The reactor type.
         display_concentrations (bool, optional): Whether to display the concentrations.
         report_flux_ratio (bool, optional): Whether to display the flux ratio.
         report_actual_flux (bool, optional): Whether to report the actual flux values rather than the relative flux.
@@ -709,8 +903,8 @@ def create_digraph(flux_graph: dict,
                       display_r_n_p=display_r_n_p,
                       allowed_nodes=allowed_nodes,
                       )
-    graph.set(name='label', value=f'Flux diagram at {time} s, ROP range: [{min_rop:.2e}, {max_rop:.2e}] ' +
-                                  'mol/cm\N{SUPERSCRIPT THREE}/s)')
+    graph.set(name='label', value=f'{reactor_type} Flux diagram at {time} s, ROP range: [{min_rop:.2e}, {max_rop:.2e}] ' +
+                                  '(mol/cm\N{SUPERSCRIPT THREE}/s)')
     if scaling is not None:
         graph.set('size', f'{scaling},{scaling}')
     if allowed_nodes is not None:
