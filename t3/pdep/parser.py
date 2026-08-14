@@ -23,10 +23,36 @@ from t3.pdep.hashing import hash_bytes
 # (t3.pdep -> t3.utils.writer is the existing dependency direction; several t3.pdep submodules
 # import from t3.utils.writer, so t3.utils.writer cannot import from t3.pdep in turn).
 from t3.utils.network_thermo import (NetworkTextUnparseable,  # noqa: F401
-                                     NetworkThermoCeiling,  # noqa: F401
                                      TGridClampRecord,  # noqa: F401
                                      format_skipped_species,  # noqa: F401
                                      network_thermo_t_max)  # noqa: F401
+
+# Declared because four of the names above are re-exports: used by importers of THIS module rather
+# than by anything in it. The per-line suppressions state that to ruff, but only to ruff -- CodeQL's
+# py/unused-import asks solely whether a name is used within its own file, follows no cross-module
+# re-export, and reads no linter pragma, so it reported all of them (alert 150). ``__all__`` is the
+# language's own way to say "this is the public surface", and the query honours it.
+#
+# The list is not hand-guessed: it is every name any other module imports from ``t3.pdep.parser``,
+# taken by parsing the repo's import statements. That sweep also found the alert was not purely a
+# false positive as first reported -- ``NetworkThermoCeiling`` was re-exported here and imported
+# from here by nobody, so it is gone rather than declared. Importers take it from
+# ``t3.utils.network_thermo``, which is where it lives.
+__all__ = [
+    'NetworkTextUnparseable',
+    'PDepArkaneReaction',
+    'PDepNetwork',
+    'PDepPathReaction',
+    'TGridClampRecord',
+    'canonical_channel_pair',
+    'format_skipped_species',
+    'network_thermo_t_max',
+    'parse_arkane_pdep_output_file',
+    'parse_arkane_pdep_output_text',
+    'parse_pdep_network_file',
+    'parse_pdep_network_text',
+    'to_json_safe',
+]
 
 RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
 

@@ -1262,7 +1262,11 @@ def _acquire_capture_lock(capture_dir: str) -> str:
 
     for attempt in range(2):
         try:
-            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            # 0o600, not 0o644: this file is written by _acquire_capture_lock and read only by
+            # _read_capture_lock_holder, both inside one user's own capture directory, to recover
+            # the PID of a possibly-dead holder. There is no cross-user reader to serve, so the
+            # narrower mode is simply the right one (CodeQL alert 112, py/overly-permissive-file).
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
             if attempt == 0 and _is_stale_capture_lock(lock_path):
                 try:
