@@ -4,6 +4,7 @@
 schema test module
 """
 
+import copy
 import os
 
 import pytest
@@ -17,6 +18,7 @@ from t3.schema import (IDTCriterionEnum,
                        T3Options,
                        T3Sensitivity,
                        T3Uncertainty,
+                       RMG,
                        RMGDatabase,
                        RMGSpecies,
                        RMGReactor,
@@ -1009,6 +1011,38 @@ def test_rmg_pdep_schema():
     with pytest.raises(ValidationError):
         # check that max_atoms is constrained to > 0
         RMGPDep(max_atoms=0)
+
+
+def test_rmg_pdep_requires_an_unreactive_species():
+    """
+    An RMG input with a pdep block and no unreactive species dies deep inside RMG's network
+    generation on ``assert len(bath_gas) > 0`` (rmgpy/rmg/pdep.py:857: the bath gas is every core
+    species with ``not spec.reactive``) -- hours into a run, with an AssertionError that names
+    nothing the user typed. The schema refuses it at input time instead, naming the fix.
+    Originally proposed in PR #60.
+    """
+    input_dict = read_yaml_file(path=os.path.join(EXAMPLES_BASE_PATH, 'pressure_dependence', 'input.yml'))
+    rmg_dict = input_dict['rmg']
+    assert any(spec.get('reactive') is False for spec in rmg_dict['species']), \
+        "fixture precondition: the pressure_dependence example must declare an inert (reactive: " \
+        "false) species -- it enables pdep, so without one it would itself crash RMG's network " \
+        "generation"
+
+    # The example as shipped (with its inert species) validates.
+    RMG(**rmg_dict)
+
+    # The same input with every species reactive is refused, and the message says why and what to do.
+    all_reactive = copy.deepcopy(rmg_dict)
+    for spec in all_reactive['species']:
+        spec.pop('reactive', None)
+    with pytest.raises(ValidationError, match='reactive'):
+        RMG(**all_reactive)
+
+    # Without a pdep block, all-reactive species are fine: the rule is about pdep's bath gas
+    # requirement, not a general demand for inerts.
+    no_pdep = copy.deepcopy(all_reactive)
+    del no_pdep['pdep']
+    RMG(**no_pdep)
 
 
 def test_rmg_species_constraints_schema():

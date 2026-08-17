@@ -794,6 +794,29 @@ class RMG(BaseModel):
         return value
 
     @model_validator(mode='after')
+    def check_pdep_has_an_unreactive_species(self) -> RMG:
+        """
+        A pdep run requires at least one unreactive (inert) species to serve as the bath gas.
+
+        RMG identifies the bath gas as every unreactive core species -- ``rmgpy/rmg/pdep.py:856-858``
+        builds ``[spec for spec in core.species if not spec.reactive]`` and then asserts
+        ``len(bath_gas) > 0`` ('No unreactive species to identify as bath gas') inside every
+        pressure-dependent network update. An input with a pdep block and no ``reactive: false``
+        species therefore cannot fail at input parsing: it dies deep inside network generation,
+        potentially hours into the run, with an AssertionError that names nothing the user typed.
+        Refusing it here converts that into an immediate, actionable input error.
+        (Originally proposed in PR #60.)
+        """
+        if self.pdep is not None and self.species and not any(not spec.reactive for spec in self.species):
+            raise ValueError(
+                "A pdep section requires at least one unreactive species to serve as the bath gas: "
+                "RMG identifies the bath gas as every core species declared with 'reactive: false' "
+                "(rmgpy/rmg/pdep.py:856-858, which asserts that at least one exists inside every "
+                "network update -- deep into the run, long after the input was accepted). Mark an "
+                "inert species (e.g. N2, Ar, He) with 'reactive: false', or remove the pdep section.")
+        return self
+
+    @model_validator(mode='after')
     def check_species_and_reactors(self) -> RMG:
         if self.reactors and self.species:
             reactor_types = {reactor.type for reactor in self.reactors}
