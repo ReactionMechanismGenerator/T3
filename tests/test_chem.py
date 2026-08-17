@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from arc.species.species import ARCSpecies
+from arc.species.species import ARCSpecies, ThermoData
 
 from t3.chem import (
     T3Status,
@@ -259,6 +259,30 @@ class TestT3Species:
         assert 'T3Species' in repr_str
         assert 'H2' in repr_str
         assert 'pending' in repr_str
+
+    def test_thermo_defaults_to_arcspecies_container(self):
+        """A T3Species built without ``thermo`` keeps the ThermoData container ARCSpecies sets up.
+
+        ARC writes straight through this attribute -- ``parse_arkane_thermo_output`` does
+        ``spc.thermo.H298 = ...`` with no None check -- on the very objects T3 hands it. Clobbering
+        the inherited default with None crashed ARC at the reporting stage, after its QM had
+        already converged.
+        """
+        spc = T3Species(label='CH2O2', smiles='OC=O')
+
+        assert spc.thermo is not None
+        assert isinstance(spc.thermo, ThermoData)
+
+        # The contract ARC actually relies on: the attribute is writable through.
+        spc.thermo.H298 = -378.6
+        assert spc.thermo.H298 == -378.6
+
+    def test_thermo_is_honoured_when_supplied(self):
+        """An explicitly supplied thermo still wins over the inherited default."""
+        spc = T3Species(label='CH2O2', smiles='OC=O', thermo=ThermoData(comment='supplied'))
+
+        assert spc.thermo.comment == 'supplied'
+
 
 class TestT3Reaction:
     """Tests for T3Reaction class."""
