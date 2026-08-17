@@ -12,6 +12,7 @@ import os
 import pytest
 
 from t3.common import TEST_DATA_BASE_PATH
+from t3.pdep.diagram import compute_pes_diagram_data
 from t3.pdep.hashing import hash_bytes, hash_file
 from t3.pdep.parser import (
     _call_keywords,
@@ -1233,3 +1234,72 @@ species(label='g', E0=(1000.0, 'K'))
                  "transitionState(label='TS1', E0=(2.0, 'kJ/mol'))")
         assert set(e0.species) == {'a'}
         assert set(e0.transition_states) == {'TS1'}
+
+
+class TestConstantExpressionE0:
+    """
+    RMG writes a transition state's ``E0`` as a constant arithmetic expression -- not a plain
+    literal -- whenever an energy correction was applied, e.g.
+    ``E0 = (264.497 - 411.735, "kJ/mol"), # removing the applied energy_correction``
+    (a real line from ``iteration_1/RMG/pdep/network1_1.py`` of a live campaign run). This class
+    covers the AST-folding that reads such expressions without ever executing the file.
+    """
+
+    def test_a_subtraction_expression_folds_to_the_expected_value(self):
+        e0 = parse_pdep_network_e0_text(
+            text="transitionState(label='TS1', E0=(264.497 - 411.735, \"kJ/mol\"))")
+        assert e0.transition_states['TS1'] == pytest.approx(264.497 - 411.735)
+
+    def test_plain_literals_still_parse_unchanged(self):
+        e0 = parse_pdep_network_e0_text(
+            text="species(label='a', E0=(1.5, 'kJ/mol'))\n"
+                 "species(label='b', E0=(-2.5, 'kJ/mol'))")
+        assert e0.species['a'] == pytest.approx(1.5)
+        assert e0.species['b'] == pytest.approx(-2.5)
+
+    def test_nested_and_mixed_operator_expressions_fold_correctly(self):
+        e0 = parse_pdep_network_e0_text(
+            text="species(label='a', E0=((1.0 + 2.0) * -(3.0 - 1.0) / 2.0, 'kJ/mol'))")
+        assert e0.species['a'] == pytest.approx((1.0 + 2.0) * -(3.0 - 1.0) / 2.0)
+
+    def test_a_name_in_the_numeric_half_is_refused(self):
+        with pytest.raises(ValueError, match='name'):
+            parse_pdep_network_e0_text(text="species(label='a', E0=(x - 1, 'kJ/mol'))")
+
+    def test_a_call_in_the_numeric_half_is_refused(self):
+        with pytest.raises(ValueError, match='call'):
+            parse_pdep_network_e0_text(text="species(label='a', E0=(f(1.0), 'kJ/mol'))")
+
+    def test_an_attribute_access_in_the_numeric_half_is_refused(self):
+        with pytest.raises(ValueError, match='attribute'):
+            parse_pdep_network_e0_text(text="species(label='a', E0=(obj.value, 'kJ/mol'))")
+
+    def test_division_by_a_folded_zero_is_refused(self):
+        with pytest.raises(ValueError, match='zero'):
+            parse_pdep_network_e0_text(text="species(label='a', E0=(1.0 / (2.0 - 2.0), 'kJ/mol'))")
+
+    def test_end_to_end_a_real_energy_corrected_ts_yields_a_relative_e0(self):
+        """The exact bug this fix closes: an energy-corrected TS from a real campaign network,
+        which used to leave every transition state's ``relative_e0`` as ``None`` (no E0 could
+        ever be read), now yields a real number all the way through
+        ``compute_pes_diagram_data``."""
+        # Shape lifted from the real 'network1_1.py' produced by a live T3 campaign run
+        # (iteration_1/RMG/pdep/network1_1.py); the comment RMG itself appends is kept verbatim.
+        text = """species(label='I', E0=(0.0, 'kJ/mol'))
+species(label='P', E0=(-5.0, 'kJ/mol'))
+transitionState(
+    label = 'TS1',
+    E0 = (264.497 - 411.735, "kJ/mol"), # removing the applied energy_correction
+    spinMultiplicity = 1,
+    opticalIsomers = 1,
+)
+reaction(label='r1', reactants=['I'], products=['P'], transitionState='TS1')
+network(label='N', isomers=['I'], reactants=[])
+"""
+        network = parse_pdep_network_text(text=text, network_id='synthetic')
+        e0 = parse_pdep_network_e0_text(text=text)
+        data = compute_pes_diagram_data(network=network, e0=e0)
+        (ts,) = data.transition_states
+        assert ts.label == 'TS1'
+        assert ts.relative_e0 is not None
+        assert ts.relative_e0 == pytest.approx((264.497 - 411.735) - 0.0)
