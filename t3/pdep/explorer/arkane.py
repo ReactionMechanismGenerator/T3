@@ -46,6 +46,15 @@ _OUTPUT_FILENAME_RE = re.compile(r'^output(\d*)\.py$')
 # is the FULL (always written) or REDUCED (only written when a reduction filter ran) variant.
 _FINAL_NETWORK_FILENAME_RE = re.compile(r'^network(\d+)_(full|reduced)\.py$')
 
+# Matches Arkane's own PES drawing in the run directory, under BOTH spellings it can end up with.
+# ``PressureDependenceJob.draw`` (arkane/pdep.py:625-652) writes 'network.pdf' into the run
+# directory whenever cairo is importable, and ``ExplorerJob.execute`` (arkane/explorer.py:358-359)
+# then renames it to 'network<p>.pdf' -- but via a bare RELATIVE 'network.pdf', i.e. in whatever
+# CWD the Arkane process happens to run in, so the rename only lands when that CWD is the run
+# directory. Digits-only for the index, exactly as Arkane writes it: this is a provenance record,
+# and a stray look-alike PDF this run never produced must not be recorded as if it had.
+_ARKANE_NETWORK_PDF_RE = re.compile(r'^network(\d*)\.pdf$')
+
 
 def _get_rmgpy_revision() -> str | None:
     """
@@ -737,6 +746,14 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
         artifact_paths = [input_file_path, *self.output_paths, *self.final_network_paths]
         if os.path.isfile(arkane_log_path):
             artifact_paths.append(arkane_log_path)
+        # Arkane's own PES drawing, when its drawer actually ran (it silently skips without cairo).
+        # Never required -- its absence is normal -- but when present it is an artifact of this run
+        # like any other and gets the same path/size/sha256 record. See _ARKANE_NETWORK_PDF_RE for
+        # why both 'network.pdf' and 'network<p>.pdf' are Arkane's spellings of the same drawing.
+        artifact_paths.extend(sorted(
+            os.path.join(self.output_directory, name)
+            for name in os.listdir(self.output_directory)
+            if _ARKANE_NETWORK_PDF_RE.match(name)))
         artifacts = [
             {'path': path, 'size': os.path.getsize(path), 'sha256': hash_file(path)}
             for path in artifact_paths
