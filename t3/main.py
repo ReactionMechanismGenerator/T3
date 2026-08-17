@@ -2399,6 +2399,24 @@ class T3:
                       }
         warnings, selection = list(), None
         try:
+            # Parsed here, before the master-equation SA below is even attempted, and reused by the
+            # selection logic further down rather than re-read: the network file is drawable the
+            # moment it exists on disk, and a real campaign showed a network whose SA later failed
+            # (``sa_all_methods_failed``) getting no diagram at all, because the draw used to hang
+            # off the SA's success. The picture is of the network file, not of the SA's outcome, so
+            # it must not depend on one. ``network_parse_error`` is kept, not just discarded, so the
+            # warning further down (once it is known this candidate got far enough to need it) can
+            # still name what went wrong. Left inside this ``try`` (rather than ahead of it) so an
+            # unexpected failure here is still caught, recorded as ``internal_error`` and re-raised
+            # by the handler below, same as everywhere else in this method.
+            network, network_parse_error = None, None
+            try:
+                network = parse_pdep_network_file(path=network_path)
+            except (OSError, ValueError) as parse_error:
+                network_parse_error = parse_error
+            else:
+                self._draw_pdep_pes_diagram(network=network, network_name=network_name,
+                                            network_path=network_path)
             # Try running this network using user-specified methods by order.
             # Distinct read failures accumulate in configured-method order rather than the last one
             # winning: which method happened to run last is not a diagnosis, and a record naming only
@@ -2578,22 +2596,20 @@ class T3:
             # observable is already known to be sensitive to this reaction (criterion (a)), so ask
             # whether the network's own rate coefficient is in turn sensitive to a transition state
             # whose kinetics is merely an estimate.
-            network, queue_candidate = None, None
-            try:
-                network = parse_pdep_network_file(path=network_path)
-            except (OSError, ValueError) as e:
-                warning = f'Could not parse the PDep network file {network_path}: {e}'
+            # ``network`` was already parsed (and, if it parsed cleanly, already drawn) up top,
+            # before the master-equation SA was attempted, so there is nothing left to do here but
+            # reason about the outcome of that earlier parse.
+            queue_candidate = None
+            if network is None:
+                warning = f'Could not parse the PDep network file {network_path}: {network_parse_error}'
                 self.logger.warning(f'{warning}\nNot assessing network {network_name} for QM refinement.')
                 warnings.append(warning)
-            if network is None:
                 # The well analysis needs the SA output and the label map, not the parsed network, so
                 # it still runs below: refusing it over this failure would drop species this iteration
                 # would otherwise have refined, for a reason that has nothing to do with them.
                 assessment = _pdep_assessment(REASON_NETWORK_PARSE_FAILED, provenance, warnings)
             else:
                 provenance['network_source_hash'] = network.source_hash
-                self._draw_pdep_pes_diagram(network=network, network_name=network_name,
-                                            network_path=network_path)
                 selection, reason_code, secondary_reason_codes = select_from_sa_dict_with_diagnostics(
                     sa_dict=sa_dict,
                     network=network,

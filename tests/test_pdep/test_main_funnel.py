@@ -676,3 +676,50 @@ class TestPESDiagram(object):
         record = _sole_record(t3)
         assert record.status == STATUS_QUALIFIED
         assert record.reason_code == REASON_QUALIFIED_UNCERTAIN_TS
+
+    def test_a_network_whose_sa_fails_still_gets_a_diagram(self, tmp_path, monkeypatch):
+        # The regression from a real campaign: network1_1's master-equation SA failed for every
+        # configured method (REASON_SA_ALL_METHODS_FAILED), and the assessment returned before ever
+        # reaching the success branch the diagram draw used to hang off. The network file itself was
+        # present and perfectly drawable throughout -- the diagram must not depend on the SA outcome.
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        run_arkane_job, calls = _arkane_writing(t3, {})  # every method reports failure
+        monkeypatch.setattr(t3_main, 'run_arkane_job', run_arkane_job)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert calls == list(t3.t3['sensitivity']['ME_methods']), 'every configured method should get a turn'
+        record = _sole_record(t3)
+        assert record.status == STATUS_NOT_EVALUATED
+        assert record.reason_code == REASON_SA_ALL_METHODS_FAILED
+        diagram_path = self._diagram_path(t3)
+        assert os.path.isfile(diagram_path), \
+            'the network file was resolvable and drawable regardless of what happened to the SA'
+        assert os.path.getsize(diagram_path) > 0
+        with open(diagram_path, 'rb') as f:
+            assert f.read(8) == b'\x89PNG\r\n\x1a\n'
+
+    def test_a_successful_assessment_draws_the_pes_diagram_exactly_once(self, tmp_path, monkeypatch):
+        # The diagram is now drawn ahead of the master-equation SA rather than after it. A network
+        # whose SA subsequently succeeds must still get exactly one diagram, not a second draw once
+        # the success branch is reached.
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        run_arkane_job, _ = _arkane_writing(t3, {'CSE': _build_sa_dict(t3)})
+        monkeypatch.setattr(t3_main, 'run_arkane_job', run_arkane_job)
+
+        draw_calls = []
+        original_render = t3_main.render_pes_diagram
+
+        def _counting_render(*args, **kwargs):
+            draw_calls.append(1)
+            return original_render(*args, **kwargs)
+
+        monkeypatch.setattr(t3_main, 'render_pes_diagram', _counting_render)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert len(draw_calls) == 1
+        record = _sole_record(t3)
+        assert record.status == STATUS_QUALIFIED
