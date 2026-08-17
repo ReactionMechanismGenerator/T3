@@ -741,23 +741,23 @@ It is an exercise in setting up T3 for a system for which
 (this is not needed when using an input file):</p>
 <div class="codehilite"><pre><span></span><code><span class="hll"><span class="kn">from</span><span class="w"> </span><span class="nn">t3</span><span class="w"> </span><span class="kn">import</span> <span class="n">T3</span>
 </span>
-<span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
-                                              <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
-                         <span class="s1">&#39;kinetics_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;BurkeH2O2inN2&#39;</span><span class="p">]},</span>
-            <span class="s1">&#39;species&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;H2&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;smiles&#39;</span><span class="p">:</span> <span class="s1">&#39;[H][H]&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;concentration&#39;</span><span class="p">:</span> <span class="mf">0.67</span><span class="p">},</span>
-                        <span class="p">{</span><span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;O2&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;smiles&#39;</span><span class="p">:</span> <span class="s1">&#39;[O][O]&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;concentration&#39;</span><span class="p">:</span> <span class="mf">0.33</span><span class="p">}],</span>
-            <span class="s1">&#39;reactors&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;gas batch constant T P&#39;</span><span class="p">,</span>
-                          <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
-                          <span class="s1">&#39;P&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                          <span class="s1">&#39;termination_conversion&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;H2&#39;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
-                          <span class="s1">&#39;termination_time&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;s&#39;</span><span class="p">]}],</span>
-            <span class="s1">&#39;model&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;core_tolerance&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]}}</span>
+<span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'database'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'thermo_libraries'</span><span class="p">:</span> <span class="p">[</span><span class="s1">'primaryThermoLibrary'</span><span class="p">,</span>
+                                              <span class="s1">'BurkeH2O2'</span><span class="p">],</span>
+                         <span class="s1">'kinetics_libraries'</span><span class="p">:</span> <span class="p">[</span><span class="s1">'BurkeH2O2inN2'</span><span class="p">]},</span>
+            <span class="s1">'species'</span><span class="p">:</span> <span class="p">[{</span><span class="s1">'label'</span><span class="p">:</span> <span class="s1">'H2'</span><span class="p">,</span>
+                         <span class="s1">'smiles'</span><span class="p">:</span> <span class="s1">'[H][H]'</span><span class="p">,</span>
+                         <span class="s1">'concentration'</span><span class="p">:</span> <span class="mf">0.67</span><span class="p">},</span>
+                        <span class="p">{</span><span class="s1">'label'</span><span class="p">:</span> <span class="s1">'O2'</span><span class="p">,</span>
+                         <span class="s1">'smiles'</span><span class="p">:</span> <span class="s1">'[O][O]'</span><span class="p">,</span>
+                         <span class="s1">'concentration'</span><span class="p">:</span> <span class="mf">0.33</span><span class="p">}],</span>
+            <span class="s1">'reactors'</span><span class="p">:</span> <span class="p">[{</span><span class="s1">'type'</span><span class="p">:</span> <span class="s1">'gas batch constant T P'</span><span class="p">,</span>
+                          <span class="s1">'T'</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
+                          <span class="s1">'P'</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                          <span class="s1">'termination_conversion'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'H2'</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
+                          <span class="s1">'termination_time'</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="s1">'s'</span><span class="p">]}],</span>
+            <span class="s1">'model'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'core_tolerance'</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]}}</span>
 
-<span class="n">t3_object</span> <span class="o">=</span> <span class="n">T3</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s1">&#39;T3_tutorial_1&#39;</span><span class="p">,</span>
+<span class="n">t3_object</span> <span class="o">=</span> <span class="n">T3</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s1">'T3_tutorial_1'</span><span class="p">,</span>
                <span class="n">rmg</span><span class="o">=</span><span class="n">rmg_args</span><span class="p">)</span>
 
 <span class="n">t3_object</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
@@ -817,15 +817,15 @@ Finally, we call the <code>execute()</code> method of <code>T3</code>.</p>
 <span class="w">      </span><span class="nt">H2</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.9</span>
 <span class="w">    </span><span class="nt">termination_time</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;s&#39;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'s'</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gas batch constant T P</span>
 <span class="w">  </span><span class="nt">species</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">concentration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.67</span>
 <span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">H2</span>
-<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;[H][H]&#39;</span>
+<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">'[H][H]'</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">concentration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.33</span>
 <span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">O2</span>
-<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;[O][O]&#39;</span>
+<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">'[O][O]'</span>
 </code></pre></div>
 
 <h2 id="expected-output">Expected output<a class="headerlink" href="#expected-output" title="Permanent link">&para;</a></h2>

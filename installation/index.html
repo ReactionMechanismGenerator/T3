@@ -1095,7 +1095,7 @@ xcode-select --install</code></p>
 <h3 id="2-install-a-conda-package-manager">2. Install a conda package manager<a class="headerlink" href="#2-install-a-conda-package-manager" title="Permanent link">&para;</a></h3>
 <p>We recommend <a href="https://github.com/conda-forge/miniforge">Miniforge</a>
 (which includes <code>mamba</code> for faster environment solving):</p>
-<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-L<span class="w"> </span>-O<span class="w"> </span><span class="s2">&quot;https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-</span><span class="k">$(</span>uname<span class="k">)</span><span class="s2">-</span><span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span><span class="s2">.sh&quot;</span>
+<div class="codehilite"><pre><span></span><code>curl<span class="w"> </span>-L<span class="w"> </span>-O<span class="w"> </span><span class="s2">"https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-</span><span class="k">$(</span>uname<span class="k">)</span><span class="s2">-</span><span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span><span class="s2">.sh"</span>
 bash<span class="w"> </span>Miniforge3-<span class="k">$(</span>uname<span class="k">)</span>-<span class="k">$(</span>uname<span class="w"> </span>-m<span class="k">)</span>.sh
 </code></pre></div>
 
@@ -1209,10 +1209,10 @@ pytest<span class="w"> </span>tests/<span class="w"> </span>-x<span class="w"> <
 <code>PYTHONPATH</code> and <code>RMG_DB_PATH</code> are set correctly.</p>
 <h2 id="optional-convenient-aliases">Optional: convenient aliases<a class="headerlink" href="#optional-convenient-aliases" title="Permanent link">&para;</a></h2>
 <p>Add these to your <code>~/.bashrc</code> (adjust paths accordingly):</p>
-<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">t3_path</span><span class="o">=</span><span class="nv">$HOME</span><span class="s1">&#39;/Code/T3&#39;</span>
-<span class="nb">alias</span><span class="w"> </span><span class="nv">t3e</span><span class="o">=</span><span class="s1">&#39;conda activate t3_env&#39;</span>
-<span class="nb">alias</span><span class="w"> </span><span class="nv">t3</span><span class="o">=</span><span class="s1">&#39;python $t3_path/T3.py input.yml&#39;</span>
-<span class="nb">alias</span><span class="w"> </span><span class="nv">t3code</span><span class="o">=</span><span class="s1">&#39;cd $t3_path&#39;</span>
+<div class="codehilite"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">t3_path</span><span class="o">=</span><span class="nv">$HOME</span><span class="s1">'/Code/T3'</span>
+<span class="nb">alias</span><span class="w"> </span><span class="nv">t3e</span><span class="o">=</span><span class="s1">'conda activate t3_env'</span>
+<span class="nb">alias</span><span class="w"> </span><span class="nv">t3</span><span class="o">=</span><span class="s1">'python $t3_path/T3.py input.yml'</span>
+<span class="nb">alias</span><span class="w"> </span><span class="nv">t3code</span><span class="o">=</span><span class="s1">'cd $t3_path'</span>
 </code></pre></div>
 
 <p>After sourcing <code>~/.bashrc</code> or restarting the terminal:</p>

@@ -875,13 +875,13 @@ per condition. It can be loaded in Python:</p>
 <div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">t3.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">sa_dict_from_yaml</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">arc.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_yaml_file</span>
 
-<span class="n">raw</span> <span class="o">=</span> <span class="n">read_yaml_file</span><span class="p">(</span><span class="s1">&#39;iteration_0/SA/sa_coefficients.yml&#39;</span><span class="p">)</span>
+<span class="n">raw</span> <span class="o">=</span> <span class="n">read_yaml_file</span><span class="p">(</span><span class="s1">'iteration_0/SA/sa_coefficients.yml'</span><span class="p">)</span>
 <span class="n">sa_dict</span> <span class="o">=</span> <span class="n">sa_dict_from_yaml</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
 
 <span class="c1"># Access kinetics SA for the first condition</span>
-<span class="n">kinetics</span> <span class="o">=</span> <span class="n">sa_dict</span><span class="p">[</span><span class="s1">&#39;kinetics&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">kinetics</span> <span class="o">=</span> <span class="n">sa_dict</span><span class="p">[</span><span class="s1">'kinetics'</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
 <span class="k">for</span> <span class="n">observable</span><span class="p">,</span> <span class="n">reactions</span> <span class="ow">in</span> <span class="n">kinetics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">observable</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">reactions</span><span class="p">)</span><span class="si">}</span><span class="s1"> sensitive reactions&#39;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">observable</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">reactions</span><span class="p">)</span><span class="si">}</span><span class="s1"> sensitive reactions'</span><span class="p">)</span>
 </code></pre></div>
 
 <h3 id="t3-libraries">T3 libraries<a class="headerlink" href="#t3-libraries" title="Permanent link">&para;</a></h3>

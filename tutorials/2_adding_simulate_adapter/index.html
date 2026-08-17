@@ -897,10 +897,10 @@ A new adapter only needs to:</p>
 </ol>
 <h2 id="step-1-create-the-adapter-file">Step 1: Create the adapter file<a class="headerlink" href="#step-1-create-the-adapter-file" title="Permanent link">&para;</a></h2>
 <p>Create a new file at <code>T3/t3/simulate/cantera_constant_tv.py</code>:</p>
-<div class="codehilite"><pre><span></span><code><span class="sd">&quot;&quot;&quot;</span>
+<div class="codehilite"><pre><span></span><code><span class="sd">"""</span>
 <span class="sd">Cantera Simulator Adapter module</span>
 <span class="sd">Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor at constant T-V</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">cantera</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ct</span>
 
@@ -916,26 +916,26 @@ A new adapter only needs to:</p>
 </ul>
 <h2 id="step-2-define-the-adapter-class">Step 2: Define the adapter class<a class="headerlink" href="#step-2-define-the-adapter-class" title="Permanent link">&para;</a></h2>
 <div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CanteraConstantTV</span><span class="p">(</span><span class="n">CanteraBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Simulates ideal gases in a batch reactor at constant temperature and volume.</span>
-<span class="sd">    Uses ``ct.IdealGasReactor`` with ``energy=&#39;off&#39;`` to maintain constant T,</span>
+<span class="sd">    Uses ``ct.IdealGasReactor`` with ``energy='off'`` to maintain constant T,</span>
 <span class="sd">    and the default constant-volume behavior of ``IdealGasReactor``.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
-    <span class="n">cantera_reactor_type</span> <span class="o">=</span> <span class="s1">&#39;IdealGasReactor&#39;</span>
+    <span class="n">cantera_reactor_type</span> <span class="o">=</span> <span class="s1">'IdealGasReactor'</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">create_reactor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a constant-volume reactor with the energy equation disabled (isothermal).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">ct</span><span class="o">.</span><span class="n">IdealGasReactor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+<span class="w">        </span><span class="sd">"""Create a constant-volume reactor with the energy equation disabled (isothermal)."""</span>
+        <span class="k">return</span> <span class="n">ct</span><span class="o">.</span><span class="n">IdealGasReactor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="s1">'off'</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Since this adapter simulates at constant T, there is no ignition.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            idt_dict (dict): Dictionary whose values are empty lists.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;idt&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(),</span> <span class="s1">&#39;idt_index&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">()}</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">'idt'</span><span class="p">:</span> <span class="nb">list</span><span class="p">(),</span> <span class="s1">'idt_index'</span><span class="p">:</span> <span class="nb">list</span><span class="p">()}</span>
 </code></pre></div>
 
 <p>Key points:</p>
@@ -951,16 +951,16 @@ A new adapter only needs to:</p>
 </ul>
 <h2 id="step-3-register-the-adapter">Step 3: Register the adapter<a class="headerlink" href="#step-3-register-the-adapter" title="Permanent link">&para;</a></h2>
 <p>At the bottom of the file, register the adapter with the factory:</p>
-<div class="codehilite"><pre><span></span><code><span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;CanteraConstantTV&quot;</span><span class="p">,</span> <span class="n">CanteraConstantTV</span><span class="p">)</span>
+<div class="codehilite"><pre><span></span><code><span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">"CanteraConstantTV"</span><span class="p">,</span> <span class="n">CanteraConstantTV</span><span class="p">)</span>
 </code></pre></div>
 
 <p>The first argument is the string name that users will use in their input files.</p>
 <h2 id="complete-file">Complete file<a class="headerlink" href="#complete-file" title="Permanent link">&para;</a></h2>
 <p>Here is the complete <code>cantera_constant_tv.py</code>:</p>
-<div class="codehilite"><pre><span></span><code><span class="sd">&quot;&quot;&quot;</span>
+<div class="codehilite"><pre><span></span><code><span class="sd">"""</span>
 <span class="sd">Cantera Simulator Adapter module</span>
 <span class="sd">Used to run mechanism analysis with Cantera as an ideal gas in a batch reactor at constant T-V</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">cantera</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ct</span>
 
@@ -969,29 +969,29 @@ A new adapter only needs to:</p>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">CanteraConstantTV</span><span class="p">(</span><span class="n">CanteraBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Simulates ideal gases in a batch reactor at constant temperature and volume.</span>
-<span class="sd">    Uses ``ct.IdealGasReactor`` with ``energy=&#39;off&#39;`` to maintain constant T,</span>
+<span class="sd">    Uses ``ct.IdealGasReactor`` with ``energy='off'`` to maintain constant T,</span>
 <span class="sd">    and the default constant-volume behavior of ``IdealGasReactor``.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
-    <span class="n">cantera_reactor_type</span> <span class="o">=</span> <span class="s1">&#39;IdealGasReactor&#39;</span>
+    <span class="n">cantera_reactor_type</span> <span class="o">=</span> <span class="s1">'IdealGasReactor'</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">create_reactor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a constant-volume reactor with the energy equation disabled (isothermal).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">ct</span><span class="o">.</span><span class="n">IdealGasReactor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+<span class="w">        </span><span class="sd">"""Create a constant-volume reactor with the energy equation disabled (isothermal)."""</span>
+        <span class="k">return</span> <span class="n">ct</span><span class="o">.</span><span class="n">IdealGasReactor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="s1">'off'</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_idt_by_T</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Since this adapter simulates at constant T, there is no ignition.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            idt_dict (dict): Dictionary whose values are empty lists.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;idt&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(),</span> <span class="s1">&#39;idt_index&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">()}</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">'idt'</span><span class="p">:</span> <span class="nb">list</span><span class="p">(),</span> <span class="s1">'idt_index'</span><span class="p">:</span> <span class="nb">list</span><span class="p">()}</span>
 
 
-<span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">&quot;CanteraConstantTV&quot;</span><span class="p">,</span> <span class="n">CanteraConstantTV</span><span class="p">)</span>
+<span class="n">register_simulate_adapter</span><span class="p">(</span><span class="s2">"CanteraConstantTV"</span><span class="p">,</span> <span class="n">CanteraConstantTV</span><span class="p">)</span>
 </code></pre></div>
 
 <h2 id="step-4-register-the-import">Step 4: Register the import<a class="headerlink" href="#step-4-register-the-import" title="Permanent link">&para;</a></h2>

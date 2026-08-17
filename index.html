@@ -900,16 +900,16 @@ can be determined by the user.</p>
 one of the <a href="examples/">examples</a>:</p>
 <div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>activate<span class="w"> </span>t3_env
 <span class="nb">cd</span><span class="w"> </span>~/Code/T3/examples/minimal
-python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
 <span class="s2">from t3 import T3</span>
 <span class="s2">import yaml</span>
 
-<span class="s2">with open(&#39;input.yml&#39;) as f:</span>
+<span class="s2">with open('input.yml') as f:</span>
 <span class="s2">    args = yaml.safe_load(f)</span>
 
 <span class="s2">t3_object = T3(**args)</span>
 <span class="s2">t3_object.execute()</span>
-<span class="s2">&quot;</span>
+<span class="s2">"</span>
 </code></pre></div>
 
 <p>Or use the YAML input file directly:</p>

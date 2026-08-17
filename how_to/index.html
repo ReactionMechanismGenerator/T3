@@ -1237,7 +1237,7 @@ thermodynamic properties and rate coefficients should be refined with QM.</p>
 <div class="codehilite"><pre><span></span><code><span class="nt">rmg</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">species</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OH</span>
-<span class="w">      </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;[OH]&#39;</span>
+<span class="w">      </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">'[OH]'</span>
 <span class="w">      </span><span class="nt">SA_observable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">    </span><span class="c1"># SA will track sensitivity of OH</span>
 </code></pre></div>
 
@@ -1246,7 +1246,7 @@ thermodynamic properties and rate coefficients should be refined with QM.</p>
 <div class="codehilite"><pre><span></span><code><span class="nt">t3</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">sensitivity</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CanteraConstantTP</span>
-<span class="w">    </span><span class="nt">global_observables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;IDT&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># ignition delay time</span>
+<span class="w">    </span><span class="nt">global_observables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'IDT'</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># ignition delay time</span>
 </code></pre></div>
 
 <p>Available global observables:</p>
@@ -1280,16 +1280,16 @@ a grid of conditions and runs SA at each point:</p>
 <h3 id="the-sa_dict-format">The sa_dict format<a class="headerlink" href="#the-sa_dict-format" title="Permanent link">&para;</a></h3>
 <p>SA results are stored in a dictionary with this structure:</p>
 <div class="codehilite"><pre><span></span><code><span class="n">sa_dict</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">...</span><span class="p">)],</span>        <span class="c1"># list of time arrays, one per condition</span>
-    <span class="s1">&#39;kinetics&#39;</span><span class="p">:</span> <span class="p">[{</span>                   <span class="c1"># list of dicts, one per condition</span>
-        <span class="s1">&#39;OH&#39;</span><span class="p">:</span> <span class="p">{</span>                      <span class="c1"># observable label</span>
+    <span class="s1">'time'</span><span class="p">:</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">...</span><span class="p">)],</span>        <span class="c1"># list of time arrays, one per condition</span>
+    <span class="s1">'kinetics'</span><span class="p">:</span> <span class="p">[{</span>                   <span class="c1"># list of dicts, one per condition</span>
+        <span class="s1">'OH'</span><span class="p">:</span> <span class="p">{</span>                      <span class="c1"># observable label</span>
             <span class="mi">1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>        <span class="c1"># reaction index -&gt; SA coefficients over time</span>
             <span class="mi">5</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
         <span class="p">},</span>
     <span class="p">}],</span>
-    <span class="s1">&#39;thermo&#39;</span><span class="p">:</span> <span class="p">[{</span>                     <span class="c1"># list of dicts, one per condition</span>
-        <span class="s1">&#39;OH&#39;</span><span class="p">:</span> <span class="p">{</span>                      <span class="c1"># observable label</span>
-            <span class="s1">&#39;H2O&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>    <span class="c1"># species label -&gt; SA coefficients over time</span>
+    <span class="s1">'thermo'</span><span class="p">:</span> <span class="p">[{</span>                     <span class="c1"># list of dicts, one per condition</span>
+        <span class="s1">'OH'</span><span class="p">:</span> <span class="p">{</span>                      <span class="c1"># observable label</span>
+            <span class="s1">'H2O'</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>    <span class="c1"># species label -&gt; SA coefficients over time</span>
         <span class="p">},</span>
     <span class="p">}],</span>
 <span class="p">}</span>
@@ -1319,23 +1319,23 @@ However, instead of executing it, call <code>write_t3_input_file</code>.
 Here's an example:</p>
 <div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">t3</span><span class="w"> </span><span class="kn">import</span> <span class="n">T3</span>
 
-<span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;database&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;thermo_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;primaryThermoLibrary&#39;</span><span class="p">,</span>
-                                              <span class="s1">&#39;BurkeH2O2&#39;</span><span class="p">],</span>
-                         <span class="s1">&#39;kinetics_libraries&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;BurkeH2O2inN2&#39;</span><span class="p">]},</span>
-            <span class="s1">&#39;species&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;H2&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;smiles&#39;</span><span class="p">:</span> <span class="s1">&#39;[H][H]&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;concentration&#39;</span><span class="p">:</span> <span class="mf">0.67</span><span class="p">},</span>
-                        <span class="p">{</span><span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;O2&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;smiles&#39;</span><span class="p">:</span> <span class="s1">&#39;[O][O]&#39;</span><span class="p">,</span>
-                         <span class="s1">&#39;concentration&#39;</span><span class="p">:</span> <span class="mf">0.33</span><span class="p">}],</span>
-            <span class="s1">&#39;reactors&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;gas batch constant T P&#39;</span><span class="p">,</span>
-                          <span class="s1">&#39;T&#39;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
-                          <span class="s1">&#39;P&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                          <span class="s1">&#39;termination_conversion&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;H2&#39;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
-                          <span class="s1">&#39;termination_time&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;s&#39;</span><span class="p">]}],</span>
-            <span class="s1">&#39;model&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;core_tolerance&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]}}</span>
+<span class="n">rmg_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'database'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'thermo_libraries'</span><span class="p">:</span> <span class="p">[</span><span class="s1">'primaryThermoLibrary'</span><span class="p">,</span>
+                                              <span class="s1">'BurkeH2O2'</span><span class="p">],</span>
+                         <span class="s1">'kinetics_libraries'</span><span class="p">:</span> <span class="p">[</span><span class="s1">'BurkeH2O2inN2'</span><span class="p">]},</span>
+            <span class="s1">'species'</span><span class="p">:</span> <span class="p">[{</span><span class="s1">'label'</span><span class="p">:</span> <span class="s1">'H2'</span><span class="p">,</span>
+                         <span class="s1">'smiles'</span><span class="p">:</span> <span class="s1">'[H][H]'</span><span class="p">,</span>
+                         <span class="s1">'concentration'</span><span class="p">:</span> <span class="mf">0.67</span><span class="p">},</span>
+                        <span class="p">{</span><span class="s1">'label'</span><span class="p">:</span> <span class="s1">'O2'</span><span class="p">,</span>
+                         <span class="s1">'smiles'</span><span class="p">:</span> <span class="s1">'[O][O]'</span><span class="p">,</span>
+                         <span class="s1">'concentration'</span><span class="p">:</span> <span class="mf">0.33</span><span class="p">}],</span>
+            <span class="s1">'reactors'</span><span class="p">:</span> <span class="p">[{</span><span class="s1">'type'</span><span class="p">:</span> <span class="s1">'gas batch constant T P'</span><span class="p">,</span>
+                          <span class="s1">'T'</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
+                          <span class="s1">'P'</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                          <span class="s1">'termination_conversion'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'H2'</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">},</span>
+                          <span class="s1">'termination_time'</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="s1">'s'</span><span class="p">]}],</span>
+            <span class="s1">'model'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'core_tolerance'</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]}}</span>
 
-<span class="n">t3_object</span> <span class="o">=</span> <span class="n">T3</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s1">&#39;T3_tutorial_1&#39;</span><span class="p">,</span>
+<span class="n">t3_object</span> <span class="o">=</span> <span class="n">T3</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s1">'T3_tutorial_1'</span><span class="p">,</span>
                <span class="n">rmg</span><span class="o">=</span><span class="n">rmg_args</span><span class="p">)</span>
 
 <span class="n">t3_object</span><span class="o">.</span><span class="n">write_t3_input_file</span><span class="p">()</span>
@@ -1362,15 +1362,15 @@ would be:</p>
 <span class="w">      </span><span class="nt">H2</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.9</span>
 <span class="w">    </span><span class="nt">termination_time</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;s&#39;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'s'</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gas batch constant T P</span>
 <span class="w">  </span><span class="nt">species</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">concentration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.67</span>
 <span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">H2</span>
-<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;[H][H]&#39;</span>
+<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">'[H][H]'</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">concentration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.33</span>
 <span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">O2</span>
-<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;[O][O]&#39;</span>
+<span class="w">    </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">'[O][O]'</span>
 </code></pre></div>
 
 <p>The <code>write_t3_input_file</code> method accepts two arguments:</p>

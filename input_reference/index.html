@@ -674,8 +674,8 @@ together for reference purposes.</p>
 
 <span class="w">  </span><span class="c1"># options (optional block, all arguments have defaults)</span>
 <span class="w">  </span><span class="nt">options</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">flux_adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RMG</span><span class="w">  </span><span class="c1"># optional, can use any implemented simulation adapter, default: &#39;RMG&#39;</span>
-<span class="w">    </span><span class="nt">profiles_adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RMG</span><span class="w">  </span><span class="c1"># optional, can use any implemented simulation adapter, default: &#39;RMG&#39;</span>
+<span class="w">    </span><span class="nt">flux_adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RMG</span><span class="w">  </span><span class="c1"># optional, can use any implemented simulation adapter, default: 'RMG'</span>
+<span class="w">    </span><span class="nt">profiles_adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RMG</span><span class="w">  </span><span class="c1"># optional, can use any implemented simulation adapter, default: 'RMG'</span>
 <span class="w">    </span><span class="nt">generate_flux_diagrams</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, whether the main T3 workflow generates flux diagrams</span>
 <span class="w">                                  </span><span class="c1"># after the sensitivity-analysis step of each iteration,</span>
 <span class="w">                                  </span><span class="c1"># default: True</span>
@@ -684,13 +684,13 @@ together for reference purposes.</p>
 <span class="w">                                     </span><span class="c1"># label (False), default: True</span>
 <span class="w">    </span><span class="nt">flux_diagram_reactors</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># optional, which reactor(s) to draw a flux diagram for:</span>
 <span class="w">                                 </span><span class="c1"># None -&gt; the first reactor only; a 1-based reactor number or a</span>
-<span class="w">                                 </span><span class="c1"># list of numbers -&gt; those reactors; &#39;all&#39; -&gt; every reactor,</span>
+<span class="w">                                 </span><span class="c1"># list of numbers -&gt; those reactors; 'all' -&gt; every reactor,</span>
 <span class="w">                                 </span><span class="c1"># default: None</span>
 <span class="w">    </span><span class="nt">collision_violators_thermo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, whether to calculate thermo of species participating</span>
 <span class="w">                                      </span><span class="c1"># in collision violating reactions, default: False</span>
 <span class="w">    </span><span class="nt">collision_violators_rates</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, whether to calculate rates of core collision violating</span>
 <span class="w">                                     </span><span class="c1"># reactions, default: False. If True, will force</span>
-<span class="w">                                     </span><span class="c1"># collision_violators_thermo to be True if it&#39;s not</span>
+<span class="w">                                     </span><span class="c1"># collision_violators_thermo to be True if it's not</span>
 <span class="w">    </span><span class="nt">all_core_species</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, whether to calculate thermo for all core species, default: False</span>
 <span class="w">    </span><span class="nt">all_core_reactions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, whether to calculate rates for all core species, default: False</span>
 <span class="w">    </span><span class="nt">fit_missing_GAV</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, whether to capture wrong thermo groups of species estimated by</span>
@@ -698,13 +698,13 @@ together for reference purposes.</p>
 <span class="w">    </span><span class="nt">max_T3_iterations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, maximum T3 iterations, default: 10</span>
 <span class="w">    </span><span class="nt">max_RMG_exceptions_allowed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, maximum number of times RMG is allowed to crash,</span>
 <span class="w">                                    </span><span class="c1"># default: 10</span>
-<span class="w">    </span><span class="nt">max_RMG_walltime</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;00:02:00:00&#39;</span><span class="w">  </span><span class="c1"># optional, format is &#39;DD:HH:MM:SS&#39;, default: &#39;00:00:00:00&#39;</span>
-<span class="w">    </span><span class="nt">max_T3_walltime</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;01:00:00:00&#39;</span><span class="w">  </span><span class="c1"># optional, format is &#39;DD:HH:MM:SS&#39;, default: None</span>
+<span class="w">    </span><span class="nt">max_RMG_walltime</span><span class="p">:</span><span class="w"> </span><span class="s">'00:02:00:00'</span><span class="w">  </span><span class="c1"># optional, format is 'DD:HH:MM:SS', default: '00:00:00:00'</span>
+<span class="w">    </span><span class="nt">max_T3_walltime</span><span class="p">:</span><span class="w"> </span><span class="s">'01:00:00:00'</span><span class="w">  </span><span class="c1"># optional, format is 'DD:HH:MM:SS', default: None</span>
 <span class="w">    </span><span class="nt">max_rmg_processes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># optional, maximum number of processes for RMG multiprocessing,</span>
 <span class="w">                             </span><span class="c1"># default: None</span>
 <span class="w">    </span><span class="nt">max_rmg_iterations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># optional, maximum number of internal RMG iterations, default: None</span>
 <span class="w">    </span><span class="nt">library_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">T3lib</span><span class="w">  </span><span class="c1"># optional, name of the RMG libraries T3 creates and saves as output,</span>
-<span class="w">                         </span><span class="c1"># default: &#39;T3lib&#39;</span>
+<span class="w">                         </span><span class="c1"># default: 'T3lib'</span>
 <span class="w">    </span><span class="nt">shared_library_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">T3_shared</span><span class="w">  </span><span class="c1"># optional, name of RMG libraries (kinetics and thermo) created</span>
 <span class="w">                                    </span><span class="c1"># inside the respective RMG database paths that several T3</span>
 <span class="w">                                    </span><span class="c1"># concurrent projects may share, default: None</span>
@@ -727,12 +727,12 @@ together for reference purposes.</p>
 <span class="w">  </span><span class="c1"># sensitivity analysis (optional block, T3 can run w/o SA)</span>
 <span class="w">  </span><span class="nt">sensitivity</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CanteraConstantTP</span><span class="w">  </span><span class="c1"># *required* (this is how SA is requested)</span>
-<span class="w">                                </span><span class="c1"># Available adapters: &#39;CanteraConstantTP&#39;, &#39;CanteraConstantHP&#39;,</span>
-<span class="w">                                </span><span class="c1"># &#39;CanteraConstantUV&#39;, &#39;CanteraPFR&#39;, &#39;CanteraPFRTProfile&#39;,</span>
-<span class="w">                                </span><span class="c1"># &#39;CanteraJSR&#39;, &#39;CanteraIDT&#39;, &#39;CanteraRCM&#39;, &#39;RMGConstantTP&#39;</span>
+<span class="w">                                </span><span class="c1"># Available adapters: 'CanteraConstantTP', 'CanteraConstantHP',</span>
+<span class="w">                                </span><span class="c1"># 'CanteraConstantUV', 'CanteraPFR', 'CanteraPFRTProfile',</span>
+<span class="w">                                </span><span class="c1"># 'CanteraJSR', 'CanteraIDT', 'CanteraRCM', 'RMGConstantTP'</span>
 <span class="w">    </span><span class="nt">atol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-6</span><span class="w">  </span><span class="c1"># optional, default: 1e-6</span>
 <span class="w">    </span><span class="nt">rtol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-4</span><span class="w">  </span><span class="c1"># optional, default: 1e-4</span>
-<span class="w">    </span><span class="nt">global_observables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;IDT&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;ESR&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;SL&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, only implemented in Cantera adapters,</span>
+<span class="w">    </span><span class="nt">global_observables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'IDT'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'ESR'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'SL'</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, only implemented in Cantera adapters,</span>
 <span class="w">                                               </span><span class="c1"># default: None</span>
 <span class="w">                                               </span><span class="c1"># IDT = ignition delay time</span>
 <span class="w">                                               </span><span class="c1"># ESR = extinction strain rate</span>
@@ -741,8 +741,22 @@ together for reference purposes.</p>
 <span class="w">    </span><span class="nt">pdep_SA_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.001</span><span class="w">  </span><span class="c1"># optional, used to determine wells and reactions to calculate thermo</span>
 <span class="w">                              </span><span class="c1"># and rates for from a PES of a sensitive reaction, default: 0.001</span>
 <span class="w">                              </span><span class="c1"># Pass None to skip PES SA.</span>
-<span class="w">    </span><span class="nt">ME_methods</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;CSE&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;MSC&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># master equation methods for PES SA,</span>
-<span class="w">                                </span><span class="c1"># any combination of &#39;CSE&#39;, &#39;RS&#39;, &#39;MSC&#39;, default: [&#39;CSE&#39;, &#39;MSC&#39;]</span>
+<span class="w">    </span><span class="nt">pdep_min_delta_ln_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.001</span><span class="w">  </span><span class="c1"># optional, the smallest ln(k) response to a PES SA perturbation that</span>
+<span class="w">                                </span><span class="c1"># still counts as "sensitive", default: 0.001. Acts as an absolute</span>
+<span class="w">                                </span><span class="c1"># floor alongside the relative pdep_SA_threshold, so that denormal</span>
+<span class="w">                                </span><span class="c1"># near-zero sensitivity coefficients cannot pass on relative grounds.</span>
+<span class="w">    </span><span class="nt">pdep_QM_max_transition_states</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, per-iteration budget of uncertain transition</span>
+<span class="w">                                       </span><span class="c1"># states admitted to QM across all selected PDep networks</span>
+<span class="w">                                       </span><span class="c1"># (networks are admitted most-deserving-first, and a network</span>
+<span class="w">                                       </span><span class="c1"># is admitted whole or not at all), default: None (unlimited).</span>
+<span class="w">                                       </span><span class="c1"># Must be a positive integer when given; booleans are refused.</span>
+<span class="w">    </span><span class="nt">pdep_QM_max_networks</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">  </span><span class="c1"># optional, per-iteration cap on the number of PDep networks admitted</span>
+<span class="w">                             </span><span class="c1"># to QM, default: None (unlimited). Must be a positive integer when</span>
+<span class="w">                             </span><span class="c1"># given; booleans are refused.</span>
+<span class="w">    </span><span class="nt">ME_methods</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'CSE'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'MSC'</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># master equation methods for PES SA,</span>
+<span class="w">                                </span><span class="c1"># any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC'].</span>
+<span class="w">                                </span><span class="c1"># Case-insensitive; entries are normalized to upper case, which is</span>
+<span class="w">                                </span><span class="c1"># the spelling used for the per-method output sub-directory.</span>
 <span class="w">    </span><span class="nt">top_SA_species</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, used per observable to determine thermo to calculate, default: 10</span>
 <span class="w">    </span><span class="nt">top_SA_reactions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, used per observable to determine rates to calculate as well as</span>
 <span class="w">                          </span><span class="c1"># thermo of species participating in these reactions, default: 10</span>
@@ -755,13 +769,13 @@ together for reference purposes.</p>
 
 <span class="w">    </span><span class="c1"># IDT-specific SA options (only apply when adapter is CanteraIDT or CanteraRCM):</span>
 <span class="w">    </span><span class="nt">idt_criterion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">max_dOHdt</span><span class="w">  </span><span class="c1"># optional, how to define the ignition delay time.</span>
-<span class="w">                              </span><span class="c1"># &#39;max_dOHdt&#39; (default): time of max d[OH]/dt (falls back to d[H]/dt</span>
+<span class="w">                              </span><span class="c1"># 'max_dOHdt' (default): time of max d[OH]/dt (falls back to d[H]/dt</span>
 <span class="w">                              </span><span class="c1">#   if OH is absent from the mechanism)</span>
-<span class="w">                              </span><span class="c1"># &#39;max_dTdt&#39;: time of max dT/dt</span>
-<span class="w">                              </span><span class="c1"># &#39;max_radical_dt&#39;: auto-detect highest-conc radical, use max d[radical]/dt</span>
+<span class="w">                              </span><span class="c1"># 'max_dTdt': time of max dT/dt</span>
+<span class="w">                              </span><span class="c1"># 'max_radical_dt': auto-detect highest-conc radical, use max d[radical]/dt</span>
 <span class="w">    </span><span class="nt">idt_sa_method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">brute_force</span><span class="w">  </span><span class="c1"># optional, SA method for IDT.</span>
-<span class="w">                                </span><span class="c1"># &#39;brute_force&#39; (default): perturb each parameter, re-simulate</span>
-<span class="w">                                </span><span class="c1"># &#39;adjoint&#39;: Cantera built-in adjoint SA (faster, single sim per condition)</span>
+<span class="w">                                </span><span class="c1"># 'brute_force' (default): perturb each parameter, re-simulate</span>
+<span class="w">                                </span><span class="c1"># 'adjoint': Cantera built-in adjoint SA (faster, single sim per condition)</span>
 <span class="w">    </span><span class="nt">delta_h</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span><span class="w">  </span><span class="c1"># optional, enthalpy perturbation for brute-force thermo SA, Units: kJ/mol, default: 0.1</span>
 <span class="w">    </span><span class="nt">delta_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.05</span><span class="w">  </span><span class="c1"># optional, fractional rate perturbation for brute-force kinetics SA, default: 0.05</span>
 <span class="w">    </span><span class="nt">adaptive_perturbation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, enable adaptive perturbation sizing. When true,</span>
@@ -784,7 +798,7 @@ together for reference purposes.</p>
 <span class="w">    </span><span class="nt">local_number</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># optional, number of reported parameters in local UA, default: 10</span>
 <span class="w">    </span><span class="nt">global_number</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">  </span><span class="c1"># optional, number of sensitive input parameters to vary in global UA per</span>
 <span class="w">                      </span><span class="c1"># observable, applies independently to species and reactions, default: 5</span>
-<span class="w">    </span><span class="nt">termination_time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># only necessary for global UA if a termination time wasn&#39;t specified in</span>
+<span class="w">    </span><span class="nt">termination_time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># only necessary for global UA if a termination time wasn't specified in</span>
 <span class="w">                            </span><span class="c1"># the RMG reactor</span>
 <span class="w">    </span><span class="nt">PCE_run_time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1800</span><span class="w">  </span><span class="c1"># optional, time limit for adapting PCE to output, default: 1800, Units: s</span>
 <span class="w">    </span><span class="nt">PCE_error_tolerance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">  </span><span class="c1"># optional, target L2 error for PCE, default: None</span>
@@ -796,44 +810,44 @@ together for reference purposes.</p>
 <span class="nt">rmg</span><span class="p">:</span>
 
 <span class="w">  </span><span class="c1"># general</span>
-<span class="w">  </span><span class="nt">rmg_execution_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">incore</span><span class="w">  </span><span class="c1"># optional, &#39;incore&#39; or &#39;local&#39;, default: None (set from settings.py)</span>
+<span class="w">  </span><span class="nt">rmg_execution_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">incore</span><span class="w">  </span><span class="c1"># optional, 'incore' or 'local', default: None (set from settings.py)</span>
 <span class="w">  </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span><span class="w">  </span><span class="c1"># optional, RMG memory in GB (for server execution), default: None</span>
 <span class="w">  </span><span class="nt">cpus</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span><span class="w">  </span><span class="c1"># optional, number of processes for RMG, default: None</span>
 
 <span class="w">  </span><span class="c1"># database (a required block)</span>
 <span class="w">  </span><span class="nt">database</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">thermo_libraries</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;BurkeH2O2&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;DFT_QCI_thermo&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;primaryThermoLibrary&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;CBS_QB3_1dHR&#39;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">thermo_libraries</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'BurkeH2O2'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'DFT_QCI_thermo'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'primaryThermoLibrary'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'CBS_QB3_1dHR'</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="c1"># Can be None for auto-completion via chemistry_sets</span>
-<span class="w">    </span><span class="nt">kinetics_libraries</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;BurkeH2O2inN2&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;NOx2018&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;Klippenstein_Glarborg2016&#39;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">kinetics_libraries</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'BurkeH2O2inN2'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'NOx2018'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'Klippenstein_Glarborg2016'</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="c1"># Can be None for auto-completion via chemistry_sets</span>
-<span class="w">    </span><span class="nt">chemistry_sets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;primary&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;nitrogen&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;combustion&#39;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">chemistry_sets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'primary'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'nitrogen'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'combustion'</span><span class="p p-Indicator">]</span>
 <span class="w">        </span><span class="c1"># Chemistry systems for which libraries will be auto-loaded. Can be None.</span>
 <span class="w">    </span><span class="nt">use_low_credence_libraries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># Whether to use low credence libraries during</span>
 <span class="w">                                       </span><span class="c1"># auto-completion, default: False</span>
-<span class="w">    </span><span class="nt">transport_libraries</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;OneDMinN2&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;PrimaryTransportLibrary&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;NOx2018&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;GRI-Mech&#39;</span><span class="p p-Indicator">]</span>
-<span class="w">        </span><span class="c1"># optional, default: [&#39;OneDMinN2&#39;, &#39;PrimaryTransportLibrary&#39;, &#39;NOx2018&#39;, &#39;GRI-Mech&#39;]</span>
+<span class="w">    </span><span class="nt">transport_libraries</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'OneDMinN2'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'PrimaryTransportLibrary'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'NOx2018'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'GRI-Mech'</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="c1"># optional, default: ['OneDMinN2', 'PrimaryTransportLibrary', 'NOx2018', 'GRI-Mech']</span>
 <span class="w">    </span><span class="nt">seed_mechanisms</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">  </span><span class="c1"># optional, default: []</span>
-<span class="w">    </span><span class="nt">kinetics_depositories</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w">  </span><span class="c1"># optional, default: &#39;default&#39;</span>
-<span class="w">    </span><span class="nt">kinetics_families</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w">  </span><span class="c1"># optional, default: &#39;default&#39;</span>
-<span class="w">    </span><span class="nt">kinetics_estimator</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rate rules</span><span class="w">  </span><span class="c1"># optional, default: &#39;rate rules&#39;</span>
+<span class="w">    </span><span class="nt">kinetics_depositories</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w">  </span><span class="c1"># optional, default: 'default'</span>
+<span class="w">    </span><span class="nt">kinetics_families</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w">  </span><span class="c1"># optional, default: 'default'</span>
+<span class="w">    </span><span class="nt">kinetics_estimator</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rate rules</span><span class="w">  </span><span class="c1"># optional, default: 'rate rules'</span>
 
 <span class="w">  </span><span class="c1"># species (initial mixture) (a required block)</span>
 <span class="w">  </span><span class="c1"># concentration units are mole fraction for gas phase and mol/cm3 for liquid phase</span>
-<span class="w">  </span><span class="c1"># must specify either &#39;smiles&#39;, &#39;inchi&#39;, or &#39;adjlist&#39;</span>
-<span class="w">  </span><span class="c1"># not specifying &#39;concentration&#39; is allowed and will result in a 0 initial concentration</span>
+<span class="w">  </span><span class="c1"># must specify either 'smiles', 'inchi', or 'adjlist'</span>
+<span class="w">  </span><span class="c1"># not specifying 'concentration' is allowed and will result in a 0 initial concentration</span>
 <span class="w">  </span><span class="nt">species</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ethane</span>
 <span class="w">      </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CC</span>
 <span class="w">      </span><span class="nt">concentration</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1.75</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># a concentration range can be defined (a length-2 list)</span>
 <span class="w">      </span><span class="nt">reactive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, default: True</span>
 <span class="w">      </span><span class="nt">xyz</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ethane.log</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># each entry could be a string/dict XYZ format or a file path</span>
-<span class="w">      </span><span class="nt">seed_all_rads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;radical&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;alkoxyl&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;peroxyl&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># radical derivatives for the RMG input</span>
+<span class="w">      </span><span class="nt">seed_all_rads</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'radical'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'alkoxyl'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'peroxyl'</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># radical derivatives for the RMG input</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OH</span>
-<span class="w">      </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;[OH]&#39;</span>
+<span class="w">      </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">'[OH]'</span>
 <span class="w">      </span><span class="nt">observable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, will be used as SA observable, default: False</span>
 <span class="w">      </span><span class="nt">SA_observable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, will be used as an SA observable, default: False</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">O2</span>
-<span class="w">      </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;[O][O]&#39;</span>
+<span class="w">      </span><span class="nt">smiles</span><span class="p">:</span><span class="w"> </span><span class="s">'[O][O]'</span>
 <span class="w">      </span><span class="nt">concentration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.5</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">N2</span>
 <span class="w">      </span><span class="nt">adjlist</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
@@ -841,33 +855,33 @@ together for reference purposes.</p>
 <span class="w">        </span><span class="no">2 N u0 p1 c0 {1,T}</span>
 <span class="w">      </span><span class="nt">concentration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">13.16</span><span class="w">  </span><span class="c1"># mole fraction (e.g., 3.5 * 3.76 for air)</span>
 <span class="w">      </span><span class="nt">balance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, only for gas phase simulations, default: False</span>
-<span class="w">      </span><span class="c1"># note: &#39;constant&#39; is only allowed in liquid phase simulations</span>
-<span class="w">      </span><span class="c1"># note: &#39;solvent&#39; is only allowed in liquid phase simulations</span>
+<span class="w">      </span><span class="c1"># note: 'constant' is only allowed in liquid phase simulations</span>
+<span class="w">      </span><span class="c1"># note: 'solvent' is only allowed in liquid phase simulations</span>
 
 <span class="w">  </span><span class="c1"># fuel / oxidizer / diluent roles (used by the IDT adapter and the equivalence-ratio sweep)</span>
-<span class="w">  </span><span class="c1"># When &#39;role&#39; is set, the species concentrations are recomputed per phi from the fuel</span>
-<span class="w">  </span><span class="c1"># concentration, the oxidizer&#39;s stoichiometric demand, and the diluent_to_oxidizer_ratio.</span>
-<span class="w">  </span><span class="c1"># Exactly one species must carry role=&#39;fuel&#39;. Multiple oxidizers / diluents are allowed;</span>
+<span class="w">  </span><span class="c1"># When 'role' is set, the species concentrations are recomputed per phi from the fuel</span>
+<span class="w">  </span><span class="c1"># concentration, the oxidizer's stoichiometric demand, and the diluent_to_oxidizer_ratio.</span>
+<span class="w">  </span><span class="c1"># Exactly one species must carry role='fuel'. Multiple oxidizers / diluents are allowed;</span>
 <span class="w">  </span><span class="c1"># oxidizer_fraction must sum to 1 across oxidizers when more than one oxidizer is given.</span>
 <span class="w">  </span><span class="c1">#</span>
 <span class="w">  </span><span class="c1"># Role-specific field restrictions (setting a field on the wrong role raises a validation error):</span>
-<span class="w">  </span><span class="c1">#   equivalence_ratios       — only on role=&#39;fuel&#39;    (required for fuel)</span>
-<span class="w">  </span><span class="c1">#   oxidizer_fraction        — only on role=&#39;oxidizer&#39;</span>
-<span class="w">  </span><span class="c1">#   diluent_to_oxidizer_ratio — only on role=&#39;diluent&#39;</span>
+<span class="w">  </span><span class="c1">#   equivalence_ratios       — only on role='fuel'    (required for fuel)</span>
+<span class="w">  </span><span class="c1">#   oxidizer_fraction        — only on role='oxidizer'</span>
+<span class="w">  </span><span class="c1">#   diluent_to_oxidizer_ratio — only on role='diluent'</span>
 <span class="w">  </span><span class="c1"># Example below: an NH3 fuel in an O2/N2O oxidizer diluted with N2:</span>
 <span class="w">  </span><span class="c1">#</span>
 <span class="w">  </span><span class="c1"># species:</span>
 <span class="w">  </span><span class="c1">#   - label: NH3</span>
-<span class="w">  </span><span class="c1">#     smiles: &#39;N&#39;</span>
+<span class="w">  </span><span class="c1">#     smiles: 'N'</span>
 <span class="w">  </span><span class="c1">#     concentration: 1.0</span>
 <span class="w">  </span><span class="c1">#     role: fuel</span>
 <span class="w">  </span><span class="c1">#     equivalence_ratios: [0.5, 1.0, 1.5]  # required on the fuel, drives the phi sweep</span>
 <span class="w">  </span><span class="c1">#   - label: O2</span>
-<span class="w">  </span><span class="c1">#     smiles: &#39;[O][O]&#39;</span>
+<span class="w">  </span><span class="c1">#     smiles: '[O][O]'</span>
 <span class="w">  </span><span class="c1">#     role: oxidizer</span>
 <span class="w">  </span><span class="c1">#     oxidizer_fraction: 0.8  # fraction of total oxidizer demand carried by this oxidizer</span>
 <span class="w">  </span><span class="c1">#   - label: N2O</span>
-<span class="w">  </span><span class="c1">#     smiles: &#39;N#[N+][O-]&#39;</span>
+<span class="w">  </span><span class="c1">#     smiles: 'N#[N+][O-]'</span>
 <span class="w">  </span><span class="c1">#     role: oxidizer</span>
 <span class="w">  </span><span class="c1">#     oxidizer_fraction: 0.2</span>
 <span class="w">  </span><span class="c1">#   - label: N2</span>
@@ -878,7 +892,7 @@ together for reference purposes.</p>
 <span class="w">  </span><span class="c1">#     diluent_to_oxidizer_ratio: 3.76  # default 3.76 (air-like); set to 0 for an undiluted mixture</span>
 
 <span class="w">  </span><span class="c1"># reactors (List[dict]) (a required block)</span>
-<span class="w">  </span><span class="c1"># reactor type: &#39;gas batch constant T P&#39; or &#39;liquid batch constant T V&#39;</span>
+<span class="w">  </span><span class="c1"># reactor type: 'gas batch constant T P' or 'liquid batch constant T V'</span>
 <span class="w">  </span><span class="c1"># at least one termination criterion must be given per reactor</span>
 <span class="w">  </span><span class="c1"># having a termination_time is recommended (also used for SA simulations)</span>
 <span class="w">  </span><span class="c1"># users may specify multiple reactors, but all must be the same phase</span>
@@ -888,12 +902,12 @@ together for reference purposes.</p>
 <span class="w">      </span><span class="nt">P</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e0</span><span class="w">  </span><span class="c1"># float (single P) or list (P range), Units: bar</span>
 <span class="w">      </span><span class="nt">termination_conversion</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">ethane</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
-<span class="w">      </span><span class="nt">termination_time</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">5</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;s&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># allowed units: &#39;micro-s&#39;, &#39;ms&#39;, &#39;s&#39;, &#39;hours&#39;, &#39;days&#39;</span>
+<span class="w">      </span><span class="nt">termination_time</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">5</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'s'</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># allowed units: 'micro-s', 'ms', 's', 'hours', 'days'</span>
 <span class="w">      </span><span class="nt">termination_rate_ratio</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
 <span class="w">      </span><span class="nt">conditions_per_iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span><span class="w">  </span><span class="c1"># optional, default: 12 (nSims in RMG)</span>
-<span class="w">      </span><span class="nt">idt_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">matrix</span><span class="w">  </span><span class="c1"># optional, only used by the Cantera IDT adapter, default: &#39;matrix&#39;</span>
-<span class="w">                        </span><span class="c1"># &#39;matrix&#39; = full T_list x P_list x phi_list cartesian product</span>
-<span class="w">                        </span><span class="c1"># &#39;row&#39;    = zip(T_list, P_list, phi_list) (lists must be same length)</span>
+<span class="w">      </span><span class="nt">idt_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">matrix</span><span class="w">  </span><span class="c1"># optional, only used by the Cantera IDT adapter, default: 'matrix'</span>
+<span class="w">                        </span><span class="c1"># 'matrix' = full T_list x P_list x phi_list cartesian product</span>
+<span class="w">                        </span><span class="c1"># 'row'    = zip(T_list, P_list, phi_list) (lists must be same length)</span>
 
 <span class="w">  </span><span class="c1"># model (a required block)</span>
 <span class="w">  </span><span class="nt">model</span><span class="p">:</span>
@@ -916,7 +930,7 @@ together for reference purposes.</p>
 <span class="w">    </span><span class="c1"># dynamics:</span>
 <span class="w">    </span><span class="nt">tolerance_move_edge_reaction_to_core</span><span class="p">:</span><span class="w">  </span><span class="c1"># optional, dynamics criterion</span>
 <span class="w">    </span><span class="nt">tolerance_move_edge_reaction_to_core_interrupt</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span><span class="w">  </span><span class="c1"># optional, dynamics criterion</span>
-<span class="w">    </span><span class="nt">dynamics_time_scale</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;sec&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, dynamics criterion</span>
+<span class="w">    </span><span class="nt">dynamics_time_scale</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'sec'</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, dynamics criterion</span>
 <span class="w">    </span><span class="c1"># multiple objects:</span>
 <span class="w">    </span><span class="nt">max_num_objs_per_iter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">  </span><span class="c1"># optional, multiple objects</span>
 <span class="w">    </span><span class="nt">terminate_at_max_objects</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, multiple objects</span>
@@ -933,24 +947,24 @@ together for reference purposes.</p>
 
 <span class="w">  </span><span class="c1"># pressure dependence (optional block, gas phase only)</span>
 <span class="w">  </span><span class="nt">pdep</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MSC</span><span class="w">  </span><span class="c1"># *required*, options: &#39;CSE&#39;, &#39;RS&#39;, &#39;MSC&#39;</span>
+<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MSC</span><span class="w">  </span><span class="c1"># *required*, options: 'CSE', 'RS', 'MSC'</span>
 <span class="w">    </span><span class="nt">max_grain_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">  </span><span class="c1"># optional, kJ/mol, default: 2</span>
 <span class="w">    </span><span class="nt">max_number_of_grains</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">250</span><span class="w">  </span><span class="c1"># optional, default: 250</span>
 <span class="w">    </span><span class="nt">T</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">300</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2500</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, [T_min, T_max, n_points], K, default: [300, 2500, 10]</span>
 <span class="w">    </span><span class="nt">P</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.01</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">100</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">10</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional, [P_min, P_max, n_points], bar, default: [0.01, 100, 10]</span>
-<span class="w">    </span><span class="nt">interpolation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Chebyshev</span><span class="w">  </span><span class="c1"># optional, &#39;PDepArrhenius&#39; or &#39;Chebyshev&#39;, default: &#39;Chebyshev&#39;</span>
+<span class="w">    </span><span class="nt">interpolation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Chebyshev</span><span class="w">  </span><span class="c1"># optional, 'PDepArrhenius' or 'Chebyshev', default: 'Chebyshev'</span>
 <span class="w">    </span><span class="nt">T_basis_set</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6</span><span class="w">  </span><span class="c1"># optional, Chebyshev only, default: 6</span>
 <span class="w">    </span><span class="nt">P_basis_set</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span><span class="w">  </span><span class="c1"># optional, Chebyshev only, default: 4</span>
 <span class="w">    </span><span class="nt">max_atoms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span><span class="w">  </span><span class="c1"># optional, default: 16</span>
 
 <span class="w">  </span><span class="c1"># options (optional block)</span>
 <span class="w">  </span><span class="nt">options</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">seed_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Seed</span><span class="w">  </span><span class="c1"># optional, default: &#39;Seed&#39;</span>
+<span class="w">    </span><span class="nt">seed_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Seed</span><span class="w">  </span><span class="c1"># optional, default: 'Seed'</span>
 <span class="w">    </span><span class="nt">save_edge</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, default: False (saveEdgeSpecies)</span>
 <span class="w">    </span><span class="nt">save_html</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, default: False</span>
 <span class="w">    </span><span class="nt">generate_seed_each_iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">  </span><span class="c1"># optional, default: True</span>
 <span class="w">    </span><span class="nt">save_seed_to_database</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, default: False</span>
-<span class="w">    </span><span class="nt">units</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">si</span><span class="w">  </span><span class="c1"># optional, currently only &#39;si&#39; is supported</span>
+<span class="w">    </span><span class="nt">units</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">si</span><span class="w">  </span><span class="c1"># optional, currently only 'si' is supported</span>
 <span class="w">    </span><span class="nt">generate_plots</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, RMG statistics plots, default: False</span>
 <span class="w">    </span><span class="nt">save_simulation_profiles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, save RMG .csv profiles, default: False</span>
 <span class="w">    </span><span class="nt">verbose_comments</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">  </span><span class="c1"># optional, verbose chemkin comments, default: False</span>
@@ -960,7 +974,7 @@ together for reference purposes.</p>
 
 <span class="w">  </span><span class="c1"># species constraints (optional block)</span>
 <span class="w">  </span><span class="nt">species_constraints</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">allowed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;input</span><span class="nv"> </span><span class="s">species&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;seed</span><span class="nv"> </span><span class="s">mechanisms&#39;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&#39;reaction</span><span class="nv"> </span><span class="s">libraries&#39;</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional</span>
+<span class="w">    </span><span class="nt">allowed</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">'input</span><span class="nv"> </span><span class="s">species'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'seed</span><span class="nv"> </span><span class="s">mechanisms'</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">'reaction</span><span class="nv"> </span><span class="s">libraries'</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># optional</span>
 <span class="w">    </span><span class="nt">max_C_atoms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># required</span>
 <span class="w">    </span><span class="nt">max_O_atoms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># required</span>
 <span class="w">    </span><span class="nt">max_N_atoms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">  </span><span class="c1"># required</span>
@@ -976,7 +990,7 @@ together for reference purposes.</p>
 <span class="nt">qm</span><span class="p">:</span>
 <span class="w">  </span><span class="c1"># currently only ARC is supported</span>
 <span class="w">  </span><span class="c1"># All legal ARC arguments are allowed here</span>
-<span class="w">  </span><span class="c1"># If &#39;species&#39; or &#39;reactions&#39; are specified, ARC will be spawned prior to RMG (iteration 0)</span>
+<span class="w">  </span><span class="c1"># If 'species' or 'reactions' are specified, ARC will be spawned prior to RMG (iteration 0)</span>
 <span class="w">  </span><span class="nt">adapter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ARC</span>
 <span class="w">  </span><span class="c1"># any legal ARC argument can come here, for example:</span>
 <span class="w">  </span><span class="nt">adaptive_levels</span><span class="p">:</span>
@@ -994,7 +1008,7 @@ together for reference purposes.</p>
 <span class="w">        </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dlpno-ccsd(T)</span>
 <span class="w">        </span><span class="nt">basis</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">def2-tzvp</span>
 <span class="w">        </span><span class="nt">auxiliary_basis</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">def2-tzvp/c</span>
-<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">(31, &#39;inf&#39;)</span><span class="p p-Indicator">:</span>
+<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">(31, 'inf')</span><span class="p p-Indicator">:</span>
 <span class="w">      </span><span class="nt">opt_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wb97xd/wb97xd/def2tzvp</span>
 <span class="w">  </span><span class="nt">species</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vinoxy</span>
