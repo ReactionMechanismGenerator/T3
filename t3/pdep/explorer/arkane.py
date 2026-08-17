@@ -21,6 +21,7 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 from t3.pdep.cache import hash_file
+from t3.pdep.diagram import T3_PES_DIAGRAM_FILENAME, draw_pes_diagram
 from t3.pdep.explorer.adapter import PESExplorerAdapter
 from t3.pdep.explorer.factory import register_explorer_adapter
 from t3.pdep.explorer.input_file import write_arkane_explorer_input_file
@@ -492,10 +493,40 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
             self.final_network_paths = final_network_paths
             self.output_paths = output_paths
             self._me_success_results = tuple(me_success_results)
+            # T3's own normalized PES diagram of the explored surface, drawn BEFORE the manifest
+            # so that, when it lands, it is hashed like every other artifact of this run.
+            self._draw_pes_diagram(final_network_path=final_network_paths[0])
             # Rule 6: record a run manifest. Explorer output is a function of RMG database
             # contents, so a run recorded with no provenance at all is not replayable.
             self.manifest = self._build_manifest(input_file_path=input_file_path,
                                                  arkane_log_path=arkane_log_path)
+
+    def _draw_pes_diagram(self, final_network_path: str) -> str | None:
+        """
+        Draw T3's normalized PES diagram for a successful exploration -- strictly best-effort.
+
+        Drawn from the FINAL network artifact, not from ``self.network_path``: the final network
+        carries every species the exploration discovered, while the source network is the surface
+        as it looked before the run. Any failure is logged and swallowed, never re-raised: the
+        diagram describes the result, it is not part of it, and no drawing problem (a matplotlib
+        quirk, a species without an E0) may flip an exploration that genuinely succeeded into a
+        recorded failure.
+
+        Args:
+            final_network_path (str): The resolved final network artifact to draw from.
+
+        Returns:
+            Optional[str]: The diagram path, or ``None`` if drawing failed.
+        """
+        diagram_path = os.path.join(self.output_directory, T3_PES_DIAGRAM_FILENAME)
+        try:
+            draw_pes_diagram(network_path=final_network_path, output_path=diagram_path)
+        except Exception as e:
+            if self.logger is not None:
+                self.logger.warning(f'Could not draw the T3 PES diagram for '
+                                    f'{final_network_path} ({type(e).__name__}): {e}')
+            return None
+        return diagram_path
 
 
     def _check_final_network_payload(self, final_network_path: str, me_success_results: tuple) -> tuple:
@@ -754,6 +785,11 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
             os.path.join(self.output_directory, name)
             for name in os.listdir(self.output_directory)
             if _ARKANE_NETWORK_PDF_RE.match(name)))
+        # T3's own PES diagram (see _draw_pes_diagram). Present-when-drawn, like the PDF above:
+        # its drawing is best-effort, so its absence must not fail the manifest.
+        pes_diagram_path = os.path.join(self.output_directory, T3_PES_DIAGRAM_FILENAME)
+        if os.path.isfile(pes_diagram_path):
+            artifact_paths.append(pes_diagram_path)
         artifacts = [
             {'path': path, 'size': os.path.getsize(path), 'sha256': hash_file(path)}
             for path in artifact_paths
