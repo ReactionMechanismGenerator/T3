@@ -5,11 +5,15 @@ Should be executed locally on the head node using the t3 environment.
 
 import datetime
 import logging
+import math
 import os
 import shlex
 import shutil
+import signal
 import subprocess
+import sys
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from arc.job.local import (_determine_job_id,
@@ -472,14 +476,130 @@ def fix_cantera_model_files(rmg_path: str) -> None:
     fix_cantera(model_path=os.path.join(rmg_path, 'cantera_from_ck', 'chem.yaml'))
 
 
+@dataclass(frozen=True)
+class ArkaneJobResult:
+    """
+    The outcome of ``run_arkane_job``.
+
+    Truth-y exactly when the job succeeded (``__bool__`` below), so every caller that treated the
+    old plain-``bool`` return as a truth value keeps working unchanged; what the object adds is the
+    DIAGNOSIS a bool could not carry -- most importantly whether a failure was a deadline overrun
+    (``timed_out``), which a caller must be able to distinguish from "Arkane ran and failed"
+    without parsing a reason string.
+
+    Args:
+        succeeded (bool): Whether the job succeeded (produced its required artifact, with no
+                          run/timeout failure).
+        timed_out (bool): Whether the job overran its ``timeout`` deadline and was killed.
+        reason (str, optional): A human-readable diagnosis when ``succeeded`` is False.
+    """
+    succeeded: bool
+    timed_out: bool = False
+    reason: str | None = None
+
+    def __bool__(self) -> bool:
+        """
+        Returns:
+            bool: Whether the job succeeded.
+        """
+        return self.succeeded
+
+
+# The interpreter script the ``timeout`` path of ``run_arkane_job`` runs in its own process:
+# exactly the same ARC entry point (``arc.statmech.arkane.run_arkane``) the in-process path calls,
+# so the two paths cannot drift on HOW Arkane is invoked -- only on WHERE (a killable session vs.
+# this process).
+_ARKANE_SUBPROCESS_SCRIPT = (
+    'import sys\n'
+    'from arc.statmech.arkane import run_arkane\n'
+    'run_arkane(statmech_dir=sys.argv[1])\n'
+)
+
+# How long a timed-out Arkane process group is given to exit on SIGTERM before it is SIGKILLed.
+_ARKANE_KILL_GRACE_SECONDS = 10
+
+
+def _spawn_arkane_subprocess(output_directory: str) -> subprocess.Popen:
+    """
+    Spawn ``arc.statmech.arkane.run_arkane`` in its own interpreter and its own process SESSION.
+
+    ``start_new_session=True`` is the load-bearing part: ARC's ``run_arkane`` shells out through
+    ``bash -lc`` and ``conda run`` (arc/statmech/arkane.py), so the actual Arkane interpreter is a
+    grandchild -- killing only the direct child would orphan it, still writing into the run
+    directory. A fresh session makes the child a process-group leader whose pgid covers every
+    descendant, so ``_kill_process_group`` can take the whole tree down at once.
+
+    Kept as a module-level helper (rather than inlined) so tests can substitute a controllable
+    process without re-implementing the wait/kill/reap logic under test.
+
+    Args:
+        output_directory (str): The directory containing ``input.py``, passed to ``run_arkane``.
+
+    Returns:
+        subprocess.Popen: The spawned process (its pid == its pgid, per the new session).
+    """
+    return subprocess.Popen(
+        [sys.executable, '-c', _ARKANE_SUBPROCESS_SCRIPT, output_directory],
+        start_new_session=True,
+    )
+
+
+def _kill_process_group(process: subprocess.Popen) -> None:
+    """
+    Terminate a spawned process's entire process group and reap the direct child.
+
+    SIGTERM first (Arkane/Python get a chance to flush logs), SIGKILL after
+    ``_ARKANE_KILL_GRACE_SECONDS``. Every ``ProcessLookupError`` window (the group exiting between
+    our decision and our signal) is tolerated: the goal state "nothing from this run is still
+    running" is then already true. The final ``wait()`` reaps the zombie so the caller can observe
+    ``process.poll() is not None``.
+
+    Args:
+        process (subprocess.Popen): The process to kill (spawned with ``start_new_session=True``).
+    """
+    try:
+        pgid = os.getpgid(process.pid)
+    except ProcessLookupError:
+        process.wait()
+        return
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        process.wait()
+        return
+    try:
+        process.wait(timeout=_ARKANE_KILL_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+
 def run_arkane_job(input_file: str,
                    output_directory: str,
                    plot: bool = False,
                    logger: Logger | None = None,
                    required_artifact: str = os.path.join('sensitivity', 'sa_coefficients.yml'),
-                   ) -> bool:
+                   timeout: float | None = None,
+                   ) -> ArkaneJobResult:
     """
     Run an Arkane job.
+
+    With ``timeout=None`` (the default), ARC's ``run_arkane`` is called in-process, exactly as
+    before. With a ``timeout``, the SAME ARC entry point runs in its own interpreter in its own
+    process session instead, because an in-process call cannot be killed at all: ARC reaches
+    ``subprocess.run`` (arc/job/local.py) with no ``timeout=`` and no Popen/PID exposed to any
+    caller, and a Python thread cannot be killed either -- an earlier in-adapter attempt to wrap
+    the call in a ThreadPoolExecutor could only relabel the outcome while Arkane kept running and
+    kept writing into a run directory already declared failed. Spawning the process ourselves is
+    what makes a deadline enforceable: on overrun the whole process group (the ``conda run`` bash
+    wrapper AND the Arkane interpreter under it) is SIGTERMed, then SIGKILLed, then reaped.
+
+    A deadline overrun is reported as a falsy result with ``timed_out=True`` -- never raised --
+    so a caller assembling a run record gets a recordable failure, not an exception that destroys
+    the record.
 
     Args:
         input_file (str): The path to the Arkane input file.
@@ -492,17 +612,34 @@ def run_arkane_job(input_file: str,
                                            present) and required to exist afterward. Defaults to
                                            the SA job's ``sensitivity/sa_coefficients.yml``, so
                                            this is a no-op for all existing callers.
+        timeout (float, optional): The wall-clock deadline, in seconds, for the Arkane process.
+                                   ``None`` (the default) preserves the historical in-process,
+                                   unbounded call.
 
     Raises:
         ValueError: If ``required_artifact`` is an absolute path, or resolves (after ``..`` and
                     symlink resolution) to a location outside ``output_directory``. The joined
                     path is deleted before the run, so an unconfined value would delete an
-                    arbitrary file elsewhere on the filesystem.
+                    arbitrary file elsewhere on the filesystem. Also if ``timeout`` is given and
+                    is not a positive finite number of seconds -- an unenforceable deadline
+                    (zero, negative, inf, nan, or a non-number) silently meaning "no deadline"
+                    would be worse than refusing it.
 
     Returns:
-        bool: Whether the job was successful.
+        ArkaneJobResult: The outcome; truthy exactly when the job succeeded, so callers treating
+                        it as the historical plain bool keep working.
     """
     from arc.statmech.arkane import run_arkane
+
+    # Checked before ANY side effect (the artifact deletion below), like the required_artifact
+    # confinement checks: an invalid deadline is an argument error about this call, not a run
+    # outcome. bool is excluded explicitly because it is an int subclass, so timeout=True would
+    # otherwise be accepted as a 1-second deadline nobody asked for.
+    if timeout is not None:
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) \
+                or not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError(f"The 'timeout' argument must be a positive finite number of seconds, or None "
+                             f"for no deadline, got {timeout!r} of type {type(timeout).__name__}.")
 
     # Confine the artifact path to output_directory BEFORE any side effect: the joined path is
     # deleted below, so a traversal value ('../important.yml') or an absolute value (which makes
@@ -539,18 +676,41 @@ def run_arkane_job(input_file: str,
     if os.path.isfile(artifact_path):
         os.remove(artifact_path)
 
-    try:
-        run_arkane(statmech_dir=output_directory)
-    except Exception as e:
-        if logger:
-            logger.error(f'Arkane run failed with error: {e}')
-        return False
+    if timeout is None:
+        try:
+            run_arkane(statmech_dir=output_directory)
+        except Exception as e:
+            reason = f'Arkane run failed with error: {e}'
+            if logger:
+                logger.error(reason)
+            return ArkaneJobResult(succeeded=False, reason=reason)
+    else:
+        process = _spawn_arkane_subprocess(output_directory=output_directory)
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_process_group(process=process)
+            reason = (f'Arkane run in {output_directory} timed out after {timeout} s; its process '
+                      f'group was killed (SIGTERM, then SIGKILL after {_ARKANE_KILL_GRACE_SECONDS} s) '
+                      f'so nothing keeps writing into the run directory after this verdict.')
+            if logger:
+                logger.error(reason)
+            return ArkaneJobResult(succeeded=False, timed_out=True, reason=reason)
+        if process.returncode != 0:
+            # Mirrors the in-process path's except-clause: a run that died is a failure regardless
+            # of what artifacts it may have left behind. NOT labelled a timeout -- the deadline was
+            # met, the process failed on its own.
+            reason = f'Arkane run failed (exit status {process.returncode}).'
+            if logger:
+                logger.error(reason)
+            return ArkaneJobResult(succeeded=False, reason=reason)
 
     if not os.path.isfile(artifact_path):
+        reason = f'The Arkane job in {output_directory} did not produce {artifact_path}.'
         if logger:
-            logger.error(f'The Arkane job in {output_directory} did not produce {artifact_path}.')
-        return False
-    return True
+            logger.error(reason)
+        return ArkaneJobResult(succeeded=False, reason=reason)
+    return ArkaneJobResult(succeeded=True)
 
 
 def run_rmg_sa_incore(rmg_input_file_path: str,

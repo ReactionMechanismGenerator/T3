@@ -10,6 +10,7 @@ it is split that way rather than centralized here.
 """
 
 import copy
+import math
 import os
 import types
 from collections.abc import Mapping
@@ -198,14 +199,25 @@ class PDepExplorerConfig:
         database_kwargs (Mapping, optional): Keyword arguments describing the RMG database settings
                                              to use for the exploration. Stored deeply frozen (list
                                              values become tuples); see the class docstring.
+        timeout (float, optional): The wall-clock deadline, in seconds, for the explorer's
+                                   underlying Arkane process. ``None`` (the default) means no
+                                   deadline. Enforced at the runner layer
+                                   (``t3.runners.rmg_runner.run_arkane_job`` spawns Arkane in its
+                                   own process session and kills the whole group on overrun); a
+                                   timed-out run surfaces as a 'failed' exploration result with a
+                                   distinguishable reason, never as an exception. Validated here
+                                   with the same rule the runner itself enforces (a positive,
+                                   finite number), so an unenforceable deadline is refused at
+                                   construction rather than after a run directory was claimed.
 
     Raises:
         ValueError: If ``explorer`` or ``method`` is not a non-empty str, or ``method`` is not one of
                    ``t3.utils.writer.METHOD_MAP``; if ``trusted_output_root`` or ``output_directory``
                    is not a non-empty, absolute str path, or ``output_directory`` does not resolve
                    strictly inside ``trusted_output_root``; if ``bath_gas`` is ``None``, empty, or
-                   not a ``Mapping``; if ``database_kwargs`` is given and is not a ``Mapping``; or
-                   if any numeric field fails its contract in
+                   not a ``Mapping``; if ``database_kwargs`` is given and is not a ``Mapping``; if
+                   ``timeout`` is given and is not a positive finite number of seconds; or if any
+                   numeric field fails its contract in
                    ``t3.pdep.explorer.input_file._EXPLORER_NUMBER_CONTRACTS``.
     """
     explorer: str
@@ -220,6 +232,7 @@ class PDepExplorerConfig:
     maximum_radical_electrons: int | None = None
     transition_state_seeds: tuple = field(default_factory=tuple)
     database_kwargs: Mapping | None = None
+    timeout: float | None = None
 
     def __post_init__(self):
         """
@@ -286,6 +299,17 @@ class PDepExplorerConfig:
             value = getattr(self, field_name)
             refuse_bare_string_seed(field_name=field_name, value=value)
             object.__setattr__(self, field_name, tuple(value or tuple()))
+
+        # The SAME rule t3.runners.rmg_runner.run_arkane_job enforces (bool excluded explicitly
+        # because it is an int subclass: timeout=True would otherwise mean a 1-second deadline
+        # nobody asked for). Checked here as well so an unenforceable deadline is refused before a
+        # run directory is ever claimed for it, not by the runner mid-run -- the same layering
+        # argument as bath_gas below.
+        if self.timeout is not None:
+            if isinstance(self.timeout, bool) or not isinstance(self.timeout, (int, float)) \
+                    or not math.isfinite(self.timeout) or self.timeout <= 0:
+                raise ValueError(f"'timeout' must be a positive finite number of seconds, or None for no "
+                                 f"deadline, got {self.timeout!r} of type {type(self.timeout).__name__}.")
 
         # Refused HERE, not left to write time. bath_gas=None (or an empty Mapping) used to pass
         # construction and only raise inside write_arkane_explorer_input_file's empty-bath-gas

@@ -149,7 +149,8 @@ class ArkaneMESolverAdapter(MESolverAdapter):
             with open(stderr_path, 'r') as f:
                 stderr_text = f.read()
 
-        # ``run_arkane_job`` reports a bool rather than a raw exit status, so it is folded in as a
+        # ``run_arkane_job`` reports a truthy/falsy ArkaneJobResult rather than a raw exit status,
+        # so it is folded in as a
         # 0/1 exit code. It is weaker evidence than the payload check below (Arkane exits 0 on the
         # silent-CSE failure), but it is not redundant either: it catches an ARC-level failure that
         # still happens to leave a plausible-looking output.py behind.
