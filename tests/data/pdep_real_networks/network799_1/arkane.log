@@ -1,0 +1,209 @@
+Arkane execution initiated at Sat Aug  1 17:32:53 2026
+
+################################################################
+#                                                              #
+# Automated Reaction Kinetics and Network Exploration (Arkane) #
+#                                                              #
+#   Version: 4.0.0                                             #
+#   Authors: RMG Developers (rmg_dev@mit.edu)                  #
+#   P.I.s:   William H. Green (whgreen@mit.edu)                #
+#            Richard H. West (r.west@neu.edu)                  #
+#   Website: https://reactionmechanismgenerator.github.io/      #
+#                                                              #
+################################################################
+
+The current git HEAD for RMG-Py is:
+	e720866ae94eca51652978c15a0fb33c6827be67
+	Fri Jul 31 17:25:49 2026 +0300
+
+The current git HEAD for RMG-database is:
+	608f412ed7c109ed155dd877e13cd8959324e424
+	Thu Jul 23 03:37:42 2026 +0300
+
+Databases not found. Making databases
+Loading frequencies library from halogens_G4.py in /home/alon/Code/RMG-database/input/statmech/libraries...
+Loading frequencies group database from /home/alon/Code/RMG-database/input/statmech/groups...
+Loading transport library from NIST_Fluorine.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from PrimaryTransportLibrary.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from GRI-Mech.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from OneDMinN2.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport library from NOx2018.py in /home/alon/Code/RMG-database/input/transport/libraries...
+Loading transport group database from /home/alon/Code/RMG-database/input/transport/groups...
+Loading species O=C1OO1(21648)...
+Loading species O-2(13598)...
+Loading species CO2(11)...
+Loading species [O]C([O])=O(8160)...
+Loading species [O]O[C]=O(8100)...
+Loading species Ar...
+Loading species Ne...
+Loading transition state TS1...
+Loading transition state TS2...
+Loading transition state TS3...
+Loading reaction reaction1...
+Loading reaction reaction2...
+Loading reaction reaction3...
+Loading network PDepNetwork #799...
+
+
+========================================================================
+PDepNetwork #799 network information
+------------------------------------
+Isomers:
+    O=C1OO1(21648)                                       -170.357 kJ/mol
+Reactant channels:
+Product channels:
+    O-2(13598) + CO2(11)                                   29.821 kJ/mol
+    [O]C([O])=O(8160)                                    -60.3782 kJ/mol
+    [O]O[C]=O(8100)                                       106.943 kJ/mol
+Path reactions:
+    O-2(13598) + CO2(11) <=> O=C1OO1(21648)               31.8584 kJ/mol
+    [O]C([O])=O(8160) <=> O=C1OO1(21648)                 -58.4241 kJ/mol
+    [O]O[C]=O(8100) <=> O=C1OO1(21648)                    108.897 kJ/mol
+Net reactions:
+========================================================================
+
+Calculating densities of states for PDepNetwork #799 network...
+Using 673 grains from -170.36 to 1173.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 673 grains from -170.36 to 1173.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 522 grains from -170.36 to 871.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 438 grains from -170.36 to 703.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 384 grains from -170.36 to 595.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 347 grains from -170.36 to 521.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 319 grains from -170.36 to 465.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 299 grains from -170.36 to 425.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 282 grains from -170.36 to 391.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 269 grains from -170.36 to 365.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 258 grains from -170.36 to 343.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+Saving pressure dependence results for network PDepNetwork #799...
+
+
+Running sensitivity analysis...
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well 'O=C1OO1(21648)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well 'O-2(13598) + CO2(11)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well '[O]C([O])=O(8160)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing well '[O]O[C]=O(8100)' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing TS 'TS1' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing TS 'TS2' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+
+Perturbing TS 'TS3' by 2 kcal/mol:
+Calculating densities of states for PDepNetwork #799 network...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute densities of states
+Calculating phenomenological rate coefficients for [O]O[C]=O(8100) <=> O=C1OO1(21648)...
+Using 677 grains from -170.36 to 1181.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 3200 K
+Using 526 grains from -170.36 to 879.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 2290.91 K
+Using 442 grains from -170.36 to 711.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1784.07 K
+Using 388 grains from -170.36 to 603.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1460.87 K
+Using 351 grains from -170.36 to 529.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1236.81 K
+Using 324 grains from -170.36 to 475.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 1072.34 K
+Using 303 grains from -170.36 to 433.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 946.479 K
+Using 286 grains from -170.36 to 399.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 847.059 K
+Using 273 grains from -170.36 to 373.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 766.54 K
+Using 262 grains from -170.36 to 351.64 kJ/mol in steps of 2.00 kJ/mol to compute the k(T,P) values at 700 K
+
+Arkane execution terminated at Sat Aug  1 17:32:58 2026
+Memory used: 344.30 MB

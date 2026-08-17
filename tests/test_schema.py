@@ -4,9 +4,14 @@
 schema test module
 """
 
+import os
+
 import pytest
 from pydantic import ValidationError
 
+from arc.common import read_yaml_file
+
+from t3.common import EXAMPLES_BASE_PATH, METHOD_MAP, TEST_DATA_BASE_PATH
 from t3.schema import (IDTCriterionEnum,
                        IDTSAMethodEnum,
                        T3Options,
@@ -20,6 +25,7 @@ from t3.schema import (IDTCriterionEnum,
                        RMGPDep,
                        RMGSpeciesConstraints,
                        QM,
+                       InputBase,
                        )
 
 # define a long quote of length 444 characters to test constraints on string length
@@ -138,6 +144,7 @@ def test_t3_sensitivity_schema():
                                    global_observables=None,
                                    SA_threshold=0.01,
                                    pdep_SA_threshold=0.001,
+                                   pdep_min_delta_ln_k=1e-3,
                                    ME_methods=['CSE', 'MSC'],
                                    top_SA_species=10,
                                    top_SA_reactions=10
@@ -148,6 +155,7 @@ def test_t3_sensitivity_schema():
     assert t3_sensitivity.global_observables is None
     assert t3_sensitivity.SA_threshold == 0.01
     assert t3_sensitivity.pdep_SA_threshold == 0.001
+    assert t3_sensitivity.pdep_min_delta_ln_k == 1e-3
     assert t3_sensitivity.ME_methods == ['CSE', 'MSC']
     assert t3_sensitivity.top_SA_species == 10
     assert t3_sensitivity.top_SA_reactions == 10
@@ -280,6 +288,162 @@ def test_t3_sensitivity_save_sa_yaml():
     """save_sa_yaml is an accepted field, defaults to True, and can be disabled."""
     assert T3Sensitivity().save_sa_yaml is True
     assert T3Sensitivity(save_sa_yaml=False).save_sa_yaml is False
+
+
+def test_t3_sensitivity_pdep_qm_budget():
+    """pdep_QM_max_transition_states / pdep_QM_max_networks default to None (no limit),
+    accept a positive int, and reject zero/negative ints."""
+    s = T3Sensitivity()
+    assert s.pdep_QM_max_transition_states is None
+    assert s.pdep_QM_max_networks is None
+    # defaults of the other sensitivity settings are unaffected
+    assert s.pdep_SA_threshold == 0.001
+    assert s.pdep_min_delta_ln_k == 1e-3
+    assert s.ME_methods == ['CSE', 'MSC']
+
+    s = T3Sensitivity(pdep_QM_max_transition_states=5, pdep_QM_max_networks=2)
+    assert s.pdep_QM_max_transition_states == 5
+    assert s.pdep_QM_max_networks == 2
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_transition_states is constrained to > 0
+        T3Sensitivity(pdep_QM_max_transition_states=0)
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_transition_states rejects negative values
+        T3Sensitivity(pdep_QM_max_transition_states=-1)
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_networks is constrained to > 0
+        T3Sensitivity(pdep_QM_max_networks=0)
+
+    with pytest.raises(ValidationError):
+        # check that pdep_QM_max_networks rejects negative values
+        T3Sensitivity(pdep_QM_max_networks=-1)
+
+
+def test_t3_sensitivity_pdep_qm_budget_rejects_bool():
+    """pdep_QM_max_transition_states / pdep_QM_max_networks must reject True/False outright.
+    ``bool`` is an ``int`` subclass, so before ``strict=True`` was added, e.g.
+    ``pdep_QM_max_networks=True`` validated silently as 1 -- a YAML ``pdep_QM_max_networks: true``
+    would have silently capped a run at one network per iteration instead of raising a clear
+    configuration error. A plain positive int must still be accepted, so the strictness added to
+    catch bools does not also catch legitimate int input."""
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_transition_states=True)
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_transition_states=False)
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_networks=True)
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(pdep_QM_max_networks=False)
+
+    # a plain positive int is still accepted for both fields
+    s = T3Sensitivity(pdep_QM_max_transition_states=4, pdep_QM_max_networks=3)
+    assert s.pdep_QM_max_transition_states == 4
+    assert s.pdep_QM_max_networks == 3
+def test_me_methods_are_normalized_to_the_canonical_method_map_keys():
+    """A case-insensitively ACCEPTED ME method must come back out as a ``METHOD_MAP`` key.
+
+    The validator has always compared ``entry.lower()`` against the three method names, so
+    ``ME_methods: ['cse']`` in a user's YAML validates -- deliberately, and consistently with
+    ``global_observables`` beside it, which its consumers do read case-insensitively
+    (``t3/main.py``: ``go.lower() == 'idt'``). Nothing downstream of ``ME_methods`` is:
+    ``t3.utils.writer.rewrite_arkane_method_line`` looks the method up in the uppercase-keyed
+    ``METHOD_MAP``, and ``t3/main.py`` also uses the string verbatim as a directory name, as the
+    ``method`` recorded in the SA cache sidecar, and as ``requested_me_methods`` provenance.
+
+    Accepting a spelling and then handing it on unchanged is what turned a lowercase entry into a
+    bare ``KeyError: 'cse'`` from inside the writer -- which the ``(OSError, ValueError)`` handler
+    around the write call does not catch, so it ended the whole T3 run with a traceback naming
+    neither the input file nor the field that was wrong.
+    """
+    for entry, canonical in (('cse', 'CSE'), ('Cse', 'CSE'), ('CSE', 'CSE'), ('msc', 'MSC'),
+                             ('mSc', 'MSC'), ('MSC', 'MSC'), ('rs', 'RS'), ('Rs', 'RS')):
+        assert T3Sensitivity(ME_methods=[entry]).ME_methods == [canonical]
+
+    # Order is preserved: it is the order the methods are tried in, and the first one whose
+    # output can be read wins, so reordering the list would silently change which solve is used.
+    assert T3Sensitivity(ME_methods=['msc', 'cse']).ME_methods == ['MSC', 'CSE']
+
+
+def test_every_accepted_me_method_is_a_key_the_writer_can_look_up():
+    """Over-refusal guard and drift guard in one, read off ``METHOD_MAP`` rather than hardcoded.
+
+    Every method the writer knows must validate, and whatever the validator returns must be a key
+    the writer can look up. If a fourth master-equation method is ever added to ``METHOD_MAP``,
+    this fails until the schema accepts it too -- which is the direction that matters, since the
+    schema is the thing a user reads to learn what they are allowed to ask for.
+    """
+    for key in METHOD_MAP:
+        for spelling in (key, key.lower(), key.capitalize()):
+            validated = T3Sensitivity(ME_methods=[spelling]).ME_methods
+            assert validated == [key]
+            assert validated[0] in METHOD_MAP
+
+
+def test_the_normalized_me_methods_are_what_a_model_dump_hands_to_main():
+    """Normalizing only reaches the writer if it survives the dump the way ``main`` does it.
+
+    ``T3.main`` never touches ``T3Sensitivity`` directly. It builds the whole
+    ``InputBase(project=..., t3=..., rmg=..., qm=...)`` from a parsed YAML input file, dumps it,
+    and then reads ``self.t3['sensitivity']['ME_methods']`` out of the resulting nested dict
+    (``t3/main.py:373``, ``:391``). Pinning ``T3Sensitivity(...).model_dump()`` alone would not
+    show that the sub-model's validator runs when the field arrives as a plain dict nested two
+    levels down inside a parent model, which is the only way it ever actually arrives.
+    """
+    input_dict = read_yaml_file(path=os.path.join(EXAMPLES_BASE_PATH, 'pressure_dependence', 'input.yml'))
+    assert input_dict['t3']['sensitivity']['ME_methods'] == ['CSE', 'MSC'], \
+        'fixture precondition: the example is written in upper case'
+    input_dict['t3']['sensitivity']['ME_methods'] = ['cse', 'msc']
+
+    schema = InputBase(project=input_dict['project'],
+                       project_directory=TEST_DATA_BASE_PATH,
+                       t3=input_dict['t3'],
+                       rmg=input_dict['rmg'],
+                       verbose=20,
+                       ).model_dump()
+    assert schema['t3']['sensitivity']['ME_methods'] == ['CSE', 'MSC']
+
+    # ``model_dump(exclude_unset=True)`` is built alongside it in main and is written back out as
+    # the run's own input file, so it must not re-emit the un-normalized spelling either.
+    excluded = InputBase(project=input_dict['project'],
+                         project_directory=TEST_DATA_BASE_PATH,
+                         t3=input_dict['t3'],
+                         rmg=input_dict['rmg'],
+                         verbose=20,
+                         ).model_dump(exclude_unset=True)
+    assert excluded['t3']['sensitivity']['ME_methods'] == ['CSE', 'MSC']
+
+
+def test_me_methods_repetition_is_caught_regardless_of_case():
+    """``['CSE', 'cse']`` is one method spelled two ways, not two methods.
+
+    Worth pinning across the normalization change: with the entries canonicalized, a repetition
+    check written against the raw strings would stop seeing these two as the same method.
+    """
+    with pytest.raises(ValidationError):
+        T3Sensitivity(ME_methods=['CSE', 'cse'])
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(ME_methods=['CSE', 'CSE'])
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(ME_methods=['MSC', 'CSE', 'Msc'])
+
+
+def test_me_methods_still_refuses_a_method_that_is_not_a_method():
+    """Normalizing the case must not quietly turn the check into no check at all."""
+    for bad in ('XYZ', 'ab', 'C S', 'cs'):
+        with pytest.raises(ValidationError):
+            T3Sensitivity(ME_methods=[bad])
+
+    with pytest.raises(ValidationError):
+        T3Sensitivity(ME_methods=[])
+
 
 
 def test_t3_uncertainty_schema():

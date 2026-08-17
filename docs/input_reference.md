@@ -84,8 +84,22 @@ t3:
     pdep_SA_threshold: 0.001  # optional, used to determine wells and reactions to calculate thermo
                               # and rates for from a PES of a sensitive reaction, default: 0.001
                               # Pass None to skip PES SA.
+    pdep_min_delta_ln_k: 0.001  # optional, the smallest ln(k) response to a PES SA perturbation that
+                                # still counts as "sensitive", default: 0.001. Acts as an absolute
+                                # floor alongside the relative pdep_SA_threshold, so that denormal
+                                # near-zero sensitivity coefficients cannot pass on relative grounds.
+    pdep_QM_max_transition_states: 10  # optional, per-iteration budget of uncertain transition
+                                       # states admitted to QM across all selected PDep networks
+                                       # (networks are admitted most-deserving-first, and a network
+                                       # is admitted whole or not at all), default: None (unlimited).
+                                       # Must be a positive integer when given; booleans are refused.
+    pdep_QM_max_networks: 3  # optional, per-iteration cap on the number of PDep networks admitted
+                             # to QM, default: None (unlimited). Must be a positive integer when
+                             # given; booleans are refused.
     ME_methods: ['CSE', 'MSC']  # master equation methods for PES SA,
-                                # any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC']
+                                # any combination of 'CSE', 'RS', 'MSC', default: ['CSE', 'MSC'].
+                                # Case-insensitive; entries are normalized to upper case, which is
+                                # the spelling used for the per-method output sub-directory.
     top_SA_species: 10  # optional, used per observable to determine thermo to calculate, default: 10
     top_SA_reactions: 10  # optional, used per observable to determine rates to calculate as well as
                           # thermo of species participating in these reactions, default: 10

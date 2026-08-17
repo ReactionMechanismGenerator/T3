@@ -67,6 +67,9 @@ t3_minimal = {'options': {'all_core_reactions': False,
                               'idt_sa_method': 'brute_force',
                               'max_sa_workers': 24,
                               'pdep_SA_threshold': 0.001,
+                              'pdep_min_delta_ln_k': 0.001,
+                              'pdep_QM_max_transition_states': None,
+                              'pdep_QM_max_networks': None,
                               'rtol': 0.0001,
                               'save_sa_yaml': True,
                               'P_list': None,
@@ -307,42 +310,55 @@ def test_write_t3_input_file():
 def test_set_paths():
     """Test updating self.paths"""
     t3 = run_minimal(iteration=1, set_paths=True)
-    paths = {'ARC': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC',
-             'ARC info': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3_minimal_example_info.yml',
-             'ARC input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/input.yml',
-             'ARC kinetics lib': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
+    paths = {'ARC': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC',
+             'ARC info': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3_minimal_example_info.yml',
+             'ARC input': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/input.yml',
+             'ARC kinetics lib': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
                                  'libraries/kinetics',
-             'ARC log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/arc.log',
-             'ARC restart': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/restart.yml',
-             'ARC thermo lib': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
+             'ARC log': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/arc.log',
+             'ARC restart': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/restart.yml',
+             'ARC thermo lib': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
                                'libraries/thermo/T3_minimal_example.py',
-             'PDep SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/PDep_SA',
-             'RMG': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG',
-             'RMG PDep': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/pdep',
-             'RMG coll vio': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/collision_rate_violators.log',
-             'RMG input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/input.py',
-             'RMG log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
-             'RMG job log': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/job.log',
-             'RMS': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
-             'figs': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/Figures',
-             'SA': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA',
-             'SA input': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
-             'SA coefficients': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_coefficients.yml',
-             'SA dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
-             'SA IDT dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
-             'SA IDT dict top X': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
-             'SA solver': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
-             'cantera annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera_from_ck/chem_annotated.yaml',
-             'chem annotated': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
-             'flux diagrams': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/flux',
-             'iteration': 'T3/Projects/test_minimal_delete_after_usage/iteration_1',
-             'species dict': 'T3/Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
+             'PDep SA': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_SA',
+             'PDep capture': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_capture',
+             'PDep hybrid': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_hybrid',
+            'PDep QM budget': 'Projects/test_minimal_delete_after_usage/iteration_1/'
+                             't3_pdep_qm_budget.yml',
+            'PDep network assessments': 'Projects/test_minimal_delete_after_usage/iteration_1/'
+                                        't3_pdep_network_assessments.yml',
+             'ARC finalization marker': 'Projects/test_minimal_delete_after_usage/iteration_1/arc_finalization_complete.marker',
+             'RMG': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG',
+             'RMG PDep': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/pdep',
+             'RMG coll vio': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/collision_rate_violators.log',
+             'RMG input': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/input.py',
+             'RMG log': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
+             'RMG job log': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/job.log',
+             'RMS': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
+             'figs': 'Projects/test_minimal_delete_after_usage/iteration_1/Figures',
+             'SA': 'Projects/test_minimal_delete_after_usage/iteration_1/SA',
+             'SA input': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
+             'SA coefficients': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_coefficients.yml',
+             'SA dict': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
+             'SA IDT dict': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
+             'SA IDT dict top X': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
+             'SA solver': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
+             'cantera annotated': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera_from_ck/chem_annotated.yaml',
+             'chem annotated': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
+             'flux diagrams': 'Projects/test_minimal_delete_after_usage/iteration_1/flux',
+             'iteration': 'Projects/test_minimal_delete_after_usage/iteration_1',
+             'species dict': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
                              'species_dictionary.txt',
              'T3 thermo lib': 'test_minimal_delete_after_usage/Libraries/T3lib.py',
              'T3 kinetics lib': 'test_minimal_delete_after_usage/Libraries/T3',
              'shared T3 thermo lib': None,
              'shared T3 kinetics lib': None,
              }
+    # Iterate the LIVE paths, so a key added to set_paths() without being added here is a failure
+    # rather than a silent omission -- assert the key set first so that shows up as a readable
+    # message instead of a bare KeyError from the lookup below.
+    assert set(t3.paths) == set(paths), (f'set_paths() keys drifted from this test: '
+                                         f'only in set_paths: {sorted(set(t3.paths) - set(paths))}, '
+                                         f'only in this test: {sorted(set(paths) - set(t3.paths))}')
     for key, path in t3.paths.items():
         if path is None:
             assert paths[key] is None
@@ -423,6 +439,9 @@ def test_restart():
     # a converged ARC run, and an ARC 'restart.yml' file (left over from a previous interrupted run).
     # Because arc.log already contains the termination line, the state machine sees ARC as
     # terminated and returns (6, False, False); restart_arc is NOT triggered.
+    # The ARC-finalization branch does not fire either: this iteration left no P-dep join sidecar,
+    # so there are no transition state artifacts for finalization to rescue and the pre-existing
+    # behavior is preserved (see T3.has_pending_ts_join).
     t3 = T3(project='test_restart',
             project_directory=os.path.join(restart_base_path, 'r6'),
             t3=t3_minimal,
@@ -444,6 +463,8 @@ def test_restart():
         lines = f.readlines()
         assert 'Starting project T3_ARC_restart_test\n' in lines
         assert 'All jobs terminated. Summary for project T3_ARC_restart_test:\n' in lines
+    r6_marker_path = os.path.join(restart_base_path, 'r6', 'iteration_6', 'arc_finalization_complete.marker')
+    assert os.path.isfile(r6_marker_path)
 
     # 'iteration_7' folder with an 'RMG.log' indicating a converged job and an 'arc.log' indicating a converged job
     # results in iteration=7+1=8, run_rmg=True
@@ -462,6 +483,11 @@ Starting project T3_ARC_restart_test\n
 All jobs terminated. Summary for project T3_ARC_restart_test:\n
 Total execution time: 00:00:00\n
 ARC execution terminated on Sun Dec  4 11:50:29 2022""")
+
+    # the explicit process_arc_run() call above writes the durable ARC finalization marker as its
+    # last step; remove it so the tracked fixture tree stays pristine across runs
+    if os.path.isfile(r6_marker_path):
+        os.remove(r6_marker_path)
 
 
 def test_should_run_rmg():
@@ -592,6 +618,10 @@ def test_process_arc_run():
     finally:
         if os.path.isfile(t3.paths['T3 thermo lib']):
             os.remove(t3.paths['T3 thermo lib'])
+        # process_arc_run() also writes the durable ARC finalization marker as its last step;
+        # remove it so the tracked fixture tree stays pristine across test runs.
+        if os.path.isfile(t3.paths['ARC finalization marker']):
+            os.remove(t3.paths['ARC finalization marker'])
 
 
 def test_get_current_rmg_tol():
@@ -739,6 +769,61 @@ Flux pairs: fuel(1), S(838); H(2), H2(4);"""
     assert reactions[146].kinetics_comment.strip() == """Reaction index: Chemkin #163; RMG #4413
 Library reaction: JetSurF2.0
 Flux pairs: C5H11(428), C5H10(431); H(2), H2(4);"""
+
+
+def test_reaction_requires_refinement_characterization():
+    """
+    Characterize the behavior of ``T3.reaction_requires_refinement``, which delegates to the shared
+    ``is_this_reaction_uncertain`` / ``is_this_kinetics_comment_uncertain`` predicate (on top of its
+    own dedup gate via ``get_reaction_key``). A reaction is not uncertain if its kinetics method is
+    one of Library/Training Set (``CERTAIN_KINETICS_METHODS``; QM/User are deliberately NOT
+    method-level short circuits and fall through to comment analysis, like every other method --
+    see ``t3.utils.uncertainty``'s module docstring), or if its comment carries a certain
+    provenance marker (an exact rate-rule match, a matched training reaction, or a library
+    statement) that is not itself wrapped in an "Estimated using ..." qualifier; otherwise it is
+    uncertain.
+    """
+    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+                     iteration=1,
+                     set_paths=True,
+                     )
+    reactions = t3.load_species_and_reactions_from_yaml_file()[1]
+
+    # A None reaction returns None.
+    assert t3.reaction_requires_refinement(None) is None
+
+    # A library reaction is never uncertain.
+    assert reactions[24].kinetics_method.value == 'Library'
+    assert t3.reaction_requires_refinement(reactions[24]) is False
+
+    # An exact-match rate-rule reaction is not uncertain.
+    assert 'Exact match found for rate rule' in reactions[8].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[8]) is False
+
+    # A "Estimated using template ... for rate rule" comment is uncertain.
+    assert 'Estimated using template' in reactions[5].kinetics_comment \
+        and 'for rate rule' in reactions[5].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[5]) is True
+
+    # A "Estimated using an average for rate rule" comment is uncertain.
+    assert 'Estimated using an average for rate rule' in reactions[82].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[82]) is True
+
+    # A "Matched reaction ... /training" reaction (this reaction IS the matched training reaction)
+    # is not uncertain, even though its kinetics method is Rate Rules (not Library/Training Set).
+    assert 'Matched reaction' in reactions[44].kinetics_comment \
+        and '/training' in reactions[44].kinetics_comment
+    assert t3.reaction_requires_refinement(reactions[44]) is False
+
+    # An unseen reaction with an empty kinetics comment is uncertain (permissive default).
+    reactions[5].kinetics_comment = ''
+    assert t3.reaction_requires_refinement(reactions[5]) is True
+
+    # An already-queued reaction (a non-None reaction key) is not flagged for refinement,
+    # regardless of its comment content, since the dedup gate short-circuits it.
+    t3.reactions = {0: reactions[82]}
+    assert t3.get_reaction_key(reaction=reactions[82]) == 0
+    assert t3.reaction_requires_refinement(reactions[82]) is False
 
 
 def test_determine_species_based_on_sa():
