@@ -95,7 +95,10 @@ class PDepExplorerConfig:
 
     - Construction time (HERE, ``__post_init__``): types; that ``trusted_output_root`` and
       ``output_directory`` are absolute and that ``output_directory`` is strictly contained in
-      ``trusted_output_root``; the numeric ``explorer(...)`` field contracts (via
+      ``trusted_output_root``; that ``bath_gas`` is a non-empty Mapping (a config without one is a
+      GUARANTEED write-time failure, and the old None-passes-construction behavior only surfaced it
+      after the adapter's rule-0 claim had already burned a run directory -- issue #183); the
+      numeric ``explorer(...)`` field contracts (via
       ``t3.pdep.explorer.input_file.validate_explorer_field_values``). None of this can go stale
       between construction and use, and none of it needs anything this object does not already carry.
     - Factory/adapter time (``t3.pdep.explorer.factory.explorer_factory`` /
@@ -112,9 +115,12 @@ class PDepExplorerConfig:
       validating a fact that can already be stale by the time it matters (TOCTOU): nothing stops the
       filesystem changing between this object's construction and its actual use.
     - Write time (``t3.pdep.explorer.input_file.write_arkane_explorer_input_file``): bath-gas species
-      existence against the network file, reactive=False marking, renderability of every value as an
-      Arkane-loadable literal. None of that is knowable from a config in isolation -- it depends on
-      the actual network source file being explored, which this config also does not carry.
+      existence against the network file, the reactive-keyword rules (injection of
+      ``reactive = False`` for a declared bath-gas species that carries none, refusal of an explicit
+      ``reactive=True`` contradiction), renderability of every value as an Arkane-loadable literal.
+      None of that is knowable from a config in isolation -- it depends on the actual network source
+      file being explored, which this config also does not carry. (That the bath gas is non-empty at
+      all IS knowable here, and is checked here; see the construction-time bullet.)
 
     'explorer' is checked only for being a non-empty str, NOT against the explorer registry
     (``t3.pdep.explorer.factory._registered_explorer_adapters``): the registry is the single source
@@ -174,8 +180,10 @@ class PDepExplorerConfig:
                               Not otherwise validated here; see the class docstring.
         method (str): The master-equation method, one of ``t3.utils.writer.METHOD_MAP``
                      (e.g. 'CSE', 'MSC', 'RS').
-        bath_gas (Mapping, optional): The bath gas composition, mapping species labels to mole
-                                      fractions. Stored deeply frozen; see the class docstring.
+        bath_gas (Mapping): The bath gas composition, mapping species labels to mole fractions.
+                            REQUIRED and non-empty (the ``None`` default exists only so the refusal
+                            can explain itself rather than surface as a bare TypeError); see the
+                            class docstring's construction-time bullet. Stored deeply frozen.
         explore_tol (float, optional): The energy tolerance for exploring new isomers/reactions.
         energy_tol (float, optional): The energy tolerance for including a well/transition state in
                                       the output network.
@@ -195,8 +203,9 @@ class PDepExplorerConfig:
         ValueError: If ``explorer`` or ``method`` is not a non-empty str, or ``method`` is not one of
                    ``t3.utils.writer.METHOD_MAP``; if ``trusted_output_root`` or ``output_directory``
                    is not a non-empty, absolute str path, or ``output_directory`` does not resolve
-                   strictly inside ``trusted_output_root``; if ``bath_gas`` or ``database_kwargs`` is
-                   given and is not a ``Mapping``; or if any numeric field fails its contract in
+                   strictly inside ``trusted_output_root``; if ``bath_gas`` is ``None``, empty, or
+                   not a ``Mapping``; if ``database_kwargs`` is given and is not a ``Mapping``; or
+                   if any numeric field fails its contract in
                    ``t3.pdep.explorer.input_file._EXPLORER_NUMBER_CONTRACTS``.
     """
     explorer: str
@@ -277,6 +286,23 @@ class PDepExplorerConfig:
             value = getattr(self, field_name)
             refuse_bare_string_seed(field_name=field_name, value=value)
             object.__setattr__(self, field_name, tuple(value or tuple()))
+
+        # Refused HERE, not left to write time. bath_gas=None (or an empty Mapping) used to pass
+        # construction and only raise inside write_arkane_explorer_input_file's empty-bath-gas
+        # guard -- which runs AFTER the adapter's rule-0 claim has already created the run
+        # directory, so a config that could never be written also burned a directory name the
+        # adapter then refuses forever (rule 0 has no stale-claim recovery, by design). That the
+        # bath gas must be non-empty is knowable from this object's own arguments -- the writer's
+        # OTHER bath-gas rules (label membership, reactive-keyword handling) genuinely need the
+        # source file and stay at write time, per the class docstring's split.
+        if self.bath_gas is None or (isinstance(self.bath_gas, Mapping) and not self.bath_gas):
+            raise ValueError(
+                f"'bath_gas' is required and must be a non-empty Mapping of species labels to mole "
+                f"fractions (e.g. {{'N2': 1.0}}), got {self.bath_gas!r}. An Arkane explorer input "
+                f"cannot be written without one (the writer removes the source's network(...) "
+                f"block, Arkane's only other source of a bath gas), so a config without one is a "
+                f"guaranteed write-time failure -- refused here, before a run directory is ever "
+                f"claimed for it.")
 
         for field_name in ('bath_gas', 'database_kwargs'):
             value = getattr(self, field_name)
