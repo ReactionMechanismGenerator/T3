@@ -6,6 +6,7 @@ t3 tests test_rmg_runner module
 """
 
 import os
+import subprocess
 import time
 
 import pytest
@@ -179,7 +180,9 @@ class TestRunArkaneJob(object):
                 f.write('some: data\n')
 
         monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane)
-        assert run_arkane_job(input_file=input_file, output_directory=output_directory) is True
+        result = run_arkane_job(input_file=input_file, output_directory=output_directory)
+        assert bool(result) is True
+        assert result.timed_out is False
 
     def test_no_sa_coefficients_file_returns_false(self, tmp_path, monkeypatch):
         """Arkane runs without error but never writes sa_coefficients.yml -> False."""
@@ -190,7 +193,10 @@ class TestRunArkaneJob(object):
             pass  # writes nothing
 
         monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane)
-        assert run_arkane_job(input_file=input_file, output_directory=output_directory) is False
+        result = run_arkane_job(input_file=input_file, output_directory=output_directory)
+        assert bool(result) is False
+        assert result.timed_out is False
+        assert 'did not produce' in result.reason
 
     def test_stale_pre_existing_sa_coefficients_file_returns_false(self, tmp_path, monkeypatch):
         """A pre-existing sa_coefficients.yml from a previous run, not rewritten -> deleted, False.
@@ -213,7 +219,7 @@ class TestRunArkaneJob(object):
             pass  # does not rewrite sa_coefficients.yml
 
         monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane)
-        assert run_arkane_job(input_file=input_file, output_directory=output_directory) is False
+        assert bool(run_arkane_job(input_file=input_file, output_directory=output_directory)) is False
         assert not os.path.isfile(stale_path), \
             'The stale sa_coefficients.yml should have been deleted before Arkane was invoked.'
 
@@ -285,9 +291,9 @@ class TestRunArkaneJob(object):
                 f.write('# fresh artifact\n')
 
         monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane_rewriting)
-        assert run_arkane_job(input_file=input_file,
-                              output_directory=output_directory,
-                              required_artifact='output.py') is True
+        assert bool(run_arkane_job(input_file=input_file,
+                                   output_directory=output_directory,
+                                   required_artifact='output.py')) is True
 
         with open(artifact_path, 'w') as f:
             f.write('# stale artifact from a previous run\n')
@@ -296,9 +302,9 @@ class TestRunArkaneJob(object):
             pass
 
         monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane_writing_nothing)
-        assert run_arkane_job(input_file=input_file,
-                              output_directory=output_directory,
-                              required_artifact='output.py') is False
+        assert bool(run_arkane_job(input_file=input_file,
+                                   output_directory=output_directory,
+                                   required_artifact='output.py')) is False
         assert not os.path.isfile(artifact_path), \
             'The stale artifact should have been deleted before Arkane was invoked.'
 
@@ -314,7 +320,89 @@ class TestRunArkaneJob(object):
                 f.write('some: other data\n')
 
         monkeypatch.setattr('arc.statmech.arkane.run_arkane', fake_run_arkane)
-        assert run_arkane_job(input_file=input_file, output_directory=output_directory) is False
+        assert bool(run_arkane_job(input_file=input_file, output_directory=output_directory)) is False
+
+
+class TestRunArkaneJobTimeout(object):
+    """
+    Test run_arkane_job()'s ``timeout`` path: with a deadline, Arkane runs in a separate process
+    session that can actually be KILLED (in-process ARC calls cannot be; the subprocess ARC spawns
+    exposes no timeout and no PID -- see the design note in run_arkane_job's docstring), and a
+    deadline overrun surfaces as a falsy, ``timed_out`` result with a reason -- never as an
+    exception, which would destroy the run record the caller is building.
+    """
+
+    @staticmethod
+    def _write_input_file(tmp_path):
+        input_file = tmp_path / 'input.py'
+        input_file.write_text("# minimal Arkane input\n")
+        return str(input_file)
+
+    def test_overrunning_the_deadline_reports_timed_out_and_kills_the_process(self, tmp_path, monkeypatch):
+        """A run overrunning ``timeout`` is killed (whole process group), reaped, and reported as a
+        falsy result with ``timed_out`` set and the deadline named in the reason."""
+        input_file = self._write_input_file(tmp_path)
+        output_directory = str(tmp_path / 'output')
+        spawned = {}
+
+        def fake_spawn(output_directory):
+            proc = subprocess.Popen(['bash', '-c', 'sleep 60'], start_new_session=True)
+            spawned['proc'] = proc
+            return proc
+
+        monkeypatch.setattr('t3.runners.rmg_runner._spawn_arkane_subprocess', fake_spawn)
+        result = run_arkane_job(input_file=input_file, output_directory=output_directory, timeout=0.2)
+
+        assert bool(result) is False
+        assert result.timed_out is True
+        assert '0.2' in result.reason and 'timed out' in result.reason
+        assert spawned['proc'].poll() is not None, \
+            'The overrunning process must be dead and reaped, not abandoned to keep writing into ' \
+            'a run directory already declared failed.'
+
+    def test_finishing_within_the_deadline_succeeds(self, tmp_path, monkeypatch):
+        """A run that writes the required artifact and exits before ``timeout`` reports success --
+        the timeout guards the run, it must not fail a run that met it."""
+        input_file = self._write_input_file(tmp_path)
+        output_directory = str(tmp_path / 'output')
+
+        def fake_spawn(output_directory):
+            artifact_dir = os.path.join(output_directory, 'sensitivity')
+            return subprocess.Popen(
+                ['bash', '-c', f'mkdir -p "{artifact_dir}" && echo "some: data" > '
+                               f'"{os.path.join(artifact_dir, "sa_coefficients.yml")}"'],
+                start_new_session=True)
+
+        monkeypatch.setattr('t3.runners.rmg_runner._spawn_arkane_subprocess', fake_spawn)
+        result = run_arkane_job(input_file=input_file, output_directory=output_directory, timeout=30)
+
+        assert bool(result) is True
+        assert result.timed_out is False
+
+    def test_nonzero_exit_within_the_deadline_reports_failure(self, tmp_path, monkeypatch):
+        """A subprocess that dies (nonzero exit) before the deadline is a plain failure, mirroring
+        the in-process path's exception handling -- and is NOT labelled a timeout."""
+        input_file = self._write_input_file(tmp_path)
+        output_directory = str(tmp_path / 'output')
+
+        def fake_spawn(output_directory):
+            return subprocess.Popen(['bash', '-c', 'exit 3'], start_new_session=True)
+
+        monkeypatch.setattr('t3.runners.rmg_runner._spawn_arkane_subprocess', fake_spawn)
+        result = run_arkane_job(input_file=input_file, output_directory=output_directory, timeout=30)
+
+        assert bool(result) is False
+        assert result.timed_out is False
+        assert '3' in result.reason
+
+    @pytest.mark.parametrize('bad_timeout', [0, -5, float('inf'), float('nan'), True, '60'])
+    def test_invalid_timeout_is_refused(self, tmp_path, bad_timeout):
+        """A timeout that is not a positive finite number is an argument error, refused before any
+        side effect (no artifact deletion, no spawn)."""
+        input_file = self._write_input_file(tmp_path)
+        output_directory = str(tmp_path / 'output')
+        with pytest.raises(ValueError, match='timeout'):
+            run_arkane_job(input_file=input_file, output_directory=output_directory, timeout=bad_timeout)
 
 
 def teardown_module():

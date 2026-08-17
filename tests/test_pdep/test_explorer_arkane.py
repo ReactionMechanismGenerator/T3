@@ -349,7 +349,8 @@ def _make_fake_run_arkane_job(*, success=True, output_files=None, final_files=No
     output_files = output_files or {}
     final_files = final_files or {}
 
-    def _fake(input_file, output_directory, plot=False, logger=None, required_artifact='output.py'):
+    def _fake(input_file, output_directory, plot=False, logger=None, required_artifact='output.py',
+              timeout=None):
         for name, content in output_files.items():
             _write(os.path.join(output_directory, name), content)
         for name, content in final_files.items():
@@ -391,6 +392,61 @@ class TestArkaneExplorerAdapterRegistration:
     def test_registered_under_arkane(self):
         from t3.pdep.explorer.arkane import ArkaneExplorerAdapter
         assert _registered_explorer_adapters.get('Arkane') is ArkaneExplorerAdapter
+
+
+class TestArkaneExplorerAdapterTimeout:
+    """
+    The adapter's ``timeout`` is a passthrough to ``run_arkane_job``, and a deadline overrun is a
+    RECORDED, distinguishable failure (issue #183: a hung Arkane used to hang the whole campaign,
+    with no kill path anywhere between the adapter and ARC's un-timeboxed subprocess call).
+    """
+
+    def test_timeout_is_forwarded_to_run_arkane_job(self, tmp_path, monkeypatch):
+        """The configured deadline must reach the runner that enforces it, verbatim."""
+        captured = {}
+        inner = _make_fake_run_arkane_job(success=True)
+
+        def _fake(**kwargs):
+            captured.update(kwargs)
+            return inner(**{key: value for key, value in kwargs.items() if key != 'timeout'})
+
+        monkeypatch.setattr('t3.pdep.explorer.arkane.run_arkane_job', _fake)
+        adapter = _build_adapter(tmp_path, monkeypatch, timeout=42.5)
+        adapter.explore()
+        assert captured['timeout'] == 42.5
+
+    def test_timeout_defaults_to_none(self, tmp_path, monkeypatch):
+        """With no timeout configured, the runner must receive None (the historical, unbounded
+        in-process call), not some invented default deadline."""
+        captured = {}
+        inner = _make_fake_run_arkane_job(success=True)
+
+        def _fake(**kwargs):
+            captured.update(kwargs)
+            return inner(**{key: value for key, value in kwargs.items() if key != 'timeout'})
+
+        monkeypatch.setattr('t3.pdep.explorer.arkane.run_arkane_job', _fake)
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        adapter.explore()
+        assert captured['timeout'] is None
+
+    def test_timed_out_run_is_a_recorded_distinguishable_failure(self, tmp_path, monkeypatch):
+        """A deadline overrun surfaces as succeeded=False with a reason naming the timeout --
+        never as an exception (which would destroy the run record), and never folded into the
+        generic 'Arkane reported job failure' diagnosis."""
+        from t3.runners.rmg_runner import ArkaneJobResult
+
+        timeout_reason = 'Arkane run in /x timed out after 7 s; its process group was killed.'
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            lambda **kwargs: ArkaneJobResult(succeeded=False, timed_out=True, reason=timeout_reason))
+        adapter = _build_adapter(tmp_path, monkeypatch, timeout=7)
+
+        assert adapter.explore() is False
+        assert adapter.succeeded is False
+        assert any('timed out' in reason for reason in adapter.reasons), adapter.reasons
+        assert not any('Arkane reported job failure' in reason for reason in adapter.reasons), \
+            'A timeout must be its own diagnosis, not the generic job-failure one.'
 
 
 class TestArkaneExplorerAdapterExclusivity:

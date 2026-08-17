@@ -97,6 +97,7 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
                  transition_state_seeds: tuple = None,
                  database_kwargs: dict = None,
                  expected_source_hash: str = None,
+                 timeout: float = None,
                  ):
         """
         Args:
@@ -132,6 +133,12 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
                                                   function's docstring for why this must be the
                                                   hash checked against the same read that consumes
                                                   the bytes, not an earlier, separate one.
+            timeout (float, optional): The wall-clock deadline, in seconds, for the Arkane process,
+                                       forwarded verbatim to ``run_arkane_job`` (which validates
+                                       and enforces it -- see its docstring for the process-group
+                                       kill mechanics). ``None`` (the default) means no deadline.
+                                       An overrun is recorded as a failed exploration with a
+                                       distinguishable reason, never raised.
         """
         super().__init__(seed_species=seed_species, transition_state_seeds=transition_state_seeds)
         self.output_directory = output_directory
@@ -145,6 +152,7 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
         self.logger = logger
         self.database_kwargs = database_kwargs
         self.expected_source_hash = expected_source_hash
+        self.timeout = timeout
 
         # Set True only by ``_claim_run_directory()`` on its success path (rule 0). ``set_up()``
         # refuses to run while this is False, so it cannot be used to bypass the claim.
@@ -382,30 +390,35 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
         # stdout.log/stderr.log/arkane.log cannot exist. A deletion here would be dead code that
         # reads as a defense, and would quietly mask any future weakening of rule 0.
 
-        # Called synchronously, exactly as ``ArkaneMESolverAdapter.solve()`` calls it. There is
-        # deliberately NO timeout here, because T3 cannot honour one and a timeout that cannot be
-        # honoured is worse than none. The earlier attempt wrapped this call in a
-        # ThreadPoolExecutor and gave up on the future, which failed twice over:
-        #   1. It did not even return early -- `finally: executor.shutdown(wait=True)` ran before
-        #      the `return False` propagated and blocked until Arkane finished anyway, so the
-        #      "timeout" bought nothing but a relabelled outcome.
-        #   2. It could not have worked at any wait= setting, because nothing cancellable escapes:
-        #      run_arkane_job (t3/runners/rmg_runner.py:543) calls ARC's run_arkane in-process,
-        #      which reaches subprocess.run at ARC/arc/job/local.py:59-61 with no timeout= and no
-        #      Popen/PID exposed to any caller. Python threads cannot be killed either.
-        # Abandoning the future without killing the process is not a lesser version of a timeout,
-        # it is a corruption hazard: Arkane would keep writing into a run directory T3 had already
-        # declared failed, and rule 0 would then refuse that directory forever after. A real
-        # timeout has to be built where the process is spawned -- either a `timeout=` on ARC's
-        # execute_command, or a runner that spawns Arkane in its own process group and kills the
-        # group -- and belongs in the runner layer, not smuggled in here.
-        job_ran = run_arkane_job(input_file=input_file_path,
-                                 output_directory=self.output_directory,
-                                 logger=self.logger,
-                                 required_artifact='output.py')
+        # Called synchronously, exactly as ``ArkaneMESolverAdapter.solve()`` calls it. The
+        # ``timeout`` is NOT enforced here but in the runner, because that is the only layer that
+        # can honour one: an earlier in-adapter attempt wrapped this call in a ThreadPoolExecutor
+        # and gave up on the future, which could never work -- run_arkane_job used to call ARC's
+        # run_arkane in-process, which reaches subprocess.run at ARC/arc/job/local.py:59-61 with no
+        # timeout= and no Popen/PID exposed to any caller, and Python threads cannot be killed.
+        # Abandoning a future without killing the process is a corruption hazard, not a lesser
+        # timeout: Arkane would keep writing into a run directory T3 had already declared failed,
+        # and rule 0 would then refuse that directory forever after. run_arkane_job therefore
+        # spawns Arkane in its own process SESSION when a timeout is given and kills the whole
+        # process group on overrun (see its docstring); this adapter only forwards the deadline
+        # and records the distinguishable verdict.
+        job_result = run_arkane_job(input_file=input_file_path,
+                                    output_directory=self.output_directory,
+                                    logger=self.logger,
+                                    required_artifact='output.py',
+                                    timeout=self.timeout)
 
-        # Failure signal 1 of 4: nonzero exit (surfaced here as run_arkane_job's own bool).
-        if not job_ran:
+        # Failure signal 1 of 4: the runner's own verdict. A deadline overrun gets its OWN
+        # diagnosis rather than the generic job-failure one -- "Arkane failed" invites reading the
+        # logs, "Arkane was killed at the deadline" invites raising the budget, and a caller must
+        # be able to tell them apart from the recorded reasons alone. ``getattr`` (not attribute
+        # access) keeps this signal readable from any truthy/falsy stand-in a test may substitute
+        # for the real ArkaneJobResult.
+        if getattr(job_result, 'timed_out', False):
+            reasons.append(f'The Arkane exploration timed out (deadline: {self.timeout} s) and its '
+                           f'process group was killed: '
+                           f'{getattr(job_result, "reason", None) or "no further detail recorded."}')
+        elif not job_result:
             reasons.append('Arkane reported job failure (a non-zero exit status, or the required '
                            "'output.py' artifact was never created).")
 

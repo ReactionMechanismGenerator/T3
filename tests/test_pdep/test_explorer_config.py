@@ -134,6 +134,22 @@ def test_refuses_empty_bath_gas_at_construction_time():
         PDepExplorerConfig(**_valid_kwargs(bath_gas={}))
 
 
+@pytest.mark.parametrize('bad_timeout', [0, -5, float('inf'), float('nan'), True, '60'])
+def test_refuses_a_timeout_that_is_not_a_positive_finite_number(bad_timeout):
+    """An unenforceable deadline (zero, negative, non-finite, bool, or a string) silently meaning
+    'no deadline' would be worse than refusing it; the same rule run_arkane_job enforces, applied
+    at construction time so it never burns a claimed run directory."""
+    with pytest.raises(ValueError, match="'timeout'"):
+        PDepExplorerConfig(**_valid_kwargs(timeout=bad_timeout))
+
+
+def test_accepts_a_positive_timeout_and_defaults_to_none():
+    """A positive number of seconds is stored verbatim; omitting it means no deadline (None)."""
+    assert PDepExplorerConfig(**_valid_kwargs(timeout=3600)).timeout == 3600
+    assert PDepExplorerConfig(**_valid_kwargs(timeout=0.5)).timeout == 0.5
+    assert PDepExplorerConfig(**_valid_kwargs()).timeout is None
+
+
 def test_refuses_non_mapping_database_kwargs():
     """A non-Mapping database_kwargs (e.g. a list) would fail later with a confusing AttributeError."""
     with pytest.raises(ValueError, match="'database_kwargs' must be a Mapping"):
