@@ -43,6 +43,8 @@ rmg:
       smiles: N#N
       concentration: 0.75
       balance: true
+      reactive: false   # pdep requires an inert: RMG identifies the bath gas as every
+                        # unreactive core species (rmgpy/rmg/pdep.py:856-858) and asserts one exists
     - label: OH
       smiles: '[OH]'
       SA_observable: true
