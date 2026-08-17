@@ -46,6 +46,7 @@ from t3.pdep.reason_codes import (REASON_INTERNAL_ERROR,
                                   STATUS_NOT_EVALUATED,
                                   STATUS_QUALIFIED,
                                   )
+from t3.pdep.diagram import T3_PES_DIAGRAM_FILENAME
 from t3.pdep.selector import CACHE_STATUS_GENERATED
 
 from tests.test_pdep._wiring_helpers import (NETWORK_NAME,
@@ -624,3 +625,54 @@ class TestTheRecordOnDisk(object):
             'the stale finished record must not have survived into this pass'
         records = load_pdep_network_assessments(_record_path(t3), allow_incomplete=True)
         assert [record.reason_code for record in records] == [REASON_INTERNAL_ERROR]
+
+
+class TestPESDiagram(object):
+    """The normalized-E0 PES diagram is drawn for every successfully-parsed network, but a
+    failure to draw it must never take the assessment down with it (see t3.main.py's
+    ``_draw_pdep_pes_diagram``).
+    """
+
+    def _diagram_path(self, t3):
+        return os.path.join(t3.paths['PDep SA'], NETWORK_NAME, T3_PES_DIAGRAM_FILENAME)
+
+    def test_a_successful_assessment_draws_the_pes_diagram(self, tmp_path, monkeypatch):
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        run_arkane_job, _ = _arkane_writing(t3, {'CSE': _build_sa_dict(t3)})
+        monkeypatch.setattr(t3_main, 'run_arkane_job', run_arkane_job)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        diagram_path = self._diagram_path(t3)
+        assert os.path.isfile(diagram_path)
+        assert os.path.getsize(diagram_path) > 0
+        with open(diagram_path, 'rb') as f:
+            assert f.read(8) == b'\x89PNG\r\n\x1a\n'
+        # Drawing the diagram is not allowed to have changed the assessment itself.
+        record = _sole_record(t3)
+        assert record.status == STATUS_QUALIFIED
+
+    def test_a_diagram_failure_is_a_logged_warning_not_a_crash(self, tmp_path, monkeypatch):
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        run_arkane_job, _ = _arkane_writing(t3, {'CSE': _build_sa_dict(t3)})
+        monkeypatch.setattr(t3_main, 'run_arkane_job', run_arkane_job)
+
+        logged_warnings = []
+        monkeypatch.setattr(t3.logger, 'warning', lambda message: logged_warnings.append(message))
+
+        def _raise(*args, **kwargs):
+            raise ValueError('a species with no E0, e.g.')
+
+        monkeypatch.setattr(t3_main, 'compute_pes_diagram_data', _raise)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assert not os.path.isfile(self._diagram_path(t3))
+        assert any('PES diagram' in message and NETWORK_NAME in message for message in logged_warnings), \
+            'the diagram failure should have been logged as a warning naming the network'
+        # The assessment outcome itself must be unaffected by the diagram failure.
+        record = _sole_record(t3)
+        assert record.status == STATUS_QUALIFIED
+        assert record.reason_code == REASON_QUALIFIED_UNCERTAIN_TS
