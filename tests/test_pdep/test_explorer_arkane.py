@@ -1482,6 +1482,72 @@ class TestArkaneExplorerAdapterManifest:
             assert artifact['sha256'].startswith('sha256:')
             assert artifact['size'] > 0
 
+    def test_an_arkane_network_pdf_is_collected_into_the_manifest(self, tmp_path, monkeypatch):
+        """
+        Arkane's explorer draws its own PES diagram ('network<p>.pdf', arkane/explorer.py:357-359)
+        into the run directory, and T3 used to throw it away: the manifest hashed only
+        input.py/output*.py/network<i>_(full|reduced).py/arkane.log. When the PDF exists it is an
+        artifact of this run like any other, so it must be recorded.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY,
+                              'network0.pdf': '%PDF-1.4 fake arkane network drawing'},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is True
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert os.path.join(adapter.output_directory, 'network0.pdf') in paths_recorded
+        pdf_artifact = next(a for a in adapter.manifest['artifacts']
+                            if a['path'].endswith('network0.pdf'))
+        assert pdf_artifact['sha256'].startswith('sha256:')
+        assert pdf_artifact['size'] > 0
+
+    def test_an_unrenamed_network_pdf_is_also_collected(self, tmp_path, monkeypatch):
+        """
+        Arkane's rename of 'network.pdf' to 'network<p>.pdf' happens in whatever CWD the Arkane
+        process ran in (a bare relative 'network.pdf', arkane/explorer.py:358-359), while the PDF
+        itself is drawn into the run directory (PressureDependenceJob.draw). When the CWD is not
+        the run directory the rename misses, and the artifact stays 'network.pdf' -- both
+        spellings are the same drawing and both must be collected.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY,
+                              'network.pdf': '%PDF-1.4 fake arkane network drawing'},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is True
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert os.path.join(adapter.output_directory, 'network.pdf') in paths_recorded
+
+    def test_a_file_merely_resembling_the_arkane_pdf_is_not_collected(self, tmp_path, monkeypatch):
+        """
+        Only Arkane's own naming ('network.pdf' / 'network<p>.pdf', digits only) is collected:
+        the manifest asserts provenance, and recording an arbitrary stray PDF as a run artifact
+        would fabricate provenance for a file this run never produced.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY,
+                              'mynetwork0.pdf': 'not arkane naming',
+                              'networkX.pdf': 'not arkane naming either'},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is True
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert not any(p.endswith('mynetwork0.pdf') for p in paths_recorded)
+        assert not any(p.endswith('networkX.pdf') for p in paths_recorded)
+
 
 class TestTheClaimStageCannotEscapeTheStateContract:
     """
