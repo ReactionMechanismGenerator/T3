@@ -68,6 +68,15 @@ _EXPLORER_KWARG_NAMES = {
 # is read verbatim out of the source network file, so it is untrusted input either way.
 _KINETICS_LABEL_INJECTION_CHARS = ('\n', '\r', "'", '"', '\\')
 
+# Sentinel distinguishing "the species() block carries no 'reactive' keyword at all" from every
+# value the keyword could literally hold (True/False, or None for a non-literal expression, which
+# ``_literal_or_none`` cannot tell apart from a literal ``None``). The distinction is load-bearing
+# for the bath-gas rule: an ABSENT keyword on a declared bath-gas species is the shape every
+# RMG-written network file has (``arkane/pdep.py:654`` ``save_input_file`` never emits ``reactive``
+# for any species) and gets ``reactive = False`` injected into the generated file, while an
+# explicit ``reactive=True`` is a contradiction that is refused (see ``_validate_bath_gas``).
+_REACTIVE_ABSENT = object()
+
 # The subset of Arkane's own input-file namespace (``local_context`` at RMG-Py
 # ``arkane/input.py:607``; T3 must not import arkane, hence a transcription rather than a reference)
 # that this module will splice verbatim out of an untrusted source and into a NEW file Arkane will
@@ -148,6 +157,12 @@ class ExplorerInputSummary:
         kinetics_labels_emitted (tuple): The reaction labels a ``kinetics('<label>')`` job
                                         directive was emitted for (reactions that had no explicit
                                         ``kinetics=`` keyword of their own).
+        reactive_false_injected (tuple): The bath-gas species labels whose ``species()`` blocks had
+                                        no ``reactive`` keyword in the source and had
+                                        ``reactive = False`` injected into the generated file
+                                        (issue #183: an RMG-written source never carries the
+                                        keyword, so this records exactly what the writer added on
+                                        the source's behalf).
         warnings (tuple): Human-readable warnings (e.g. that a multi-species bath gas's fractions
                           are recorded here but will not be honored by Arkane; see P16).
     """
@@ -155,6 +170,7 @@ class ExplorerInputSummary:
     seed_species: tuple
     bath_gas: dict
     kinetics_labels_emitted: tuple = field(default_factory=tuple)
+    reactive_false_injected: tuple = field(default_factory=tuple)
     warnings: tuple = field(default_factory=tuple)
 
 
@@ -187,9 +203,15 @@ def write_arkane_explorer_input_file(source_path: str,
         method (str): 'CSE', 'MSC' or 'RS' (see ``t3.utils.writer.METHOD_MAP``), used to rewrite
                      the kept ``pressureDependence(...)`` block's ``method = ...`` line.
         bath_gas (dict): The bath gas composition, mapping species labels to mole fractions. Every
-                        label must be a ``species()`` block in the source carrying a literal
-                        ``reactive=False`` keyword (P16: Arkane/RMG identify the bath gas as every
-                        unreactive core species, not by name).
+                        label must be a ``species()`` block in the source. P16: Arkane/RMG identify
+                        the bath gas as every unreactive core species, not by name, so the
+                        generated file must carry ``reactive=False`` on each of these blocks --
+                        and since no RMG-written source ever carries the keyword
+                        (``arkane/pdep.py:654`` never emits it; issue #183), this writer INJECTS
+                        ``reactive = False`` into a declared bath-gas species block that has no
+                        ``reactive`` keyword, and refuses one carrying an explicit literal
+                        ``reactive=True`` (a contradiction) or a non-literal value (unverifiable).
+                        See ``_validate_bath_gas``.
         explore_tol (float, optional): The energy tolerance for exploring new isomers/reactions.
         energy_tol (float, optional): The energy tolerance for including a well/transition state in
                                       the output network.
@@ -218,8 +240,10 @@ def write_arkane_explorer_input_file(source_path: str,
                    or 2 labels; if a seed label is not a ``species()`` block in the source (e.g. it
                    is a ``transitionState()`` label, or does not exist at all, or is defined as
                    BOTH a ``species()`` and a ``transitionState()``); if a ``bath_gas`` label is
-                   not a ``species()`` block, or is a ``species()`` block that does not carry a
-                   literal ``reactive=False`` keyword; if the source does not contain exactly one
+                   not a ``species()`` block, or is a ``species()`` block carrying an explicit
+                   literal ``reactive=True`` or a non-literal ``reactive`` value (an absent
+                   keyword is NOT refused -- ``reactive = False`` is injected into the generated
+                   file instead); if the source does not contain exactly one
                    ``pressureDependence(...)`` block; if a ``reaction()`` block has neither an
                    explicit ``kinetics=`` keyword nor a literal ``label`` to target a
                    ``kinetics('<label>')`` job directive at; or if ``expected_source_hash`` is
@@ -296,7 +320,8 @@ def write_arkane_explorer_input_file(source_path: str,
             if label is not None:
                 species_nodes[label] = node
                 reactive_node = kwargs.get('reactive')
-                species_reactive[label] = True if reactive_node is None else _literal_or_none(reactive_node)
+                species_reactive[label] = _REACTIVE_ABSENT if reactive_node is None \
+                    else _literal_or_none(reactive_node)
 
         elif call_name == 'transitionState':
             label = _literal_or_none(kwargs.get('label'))
@@ -347,8 +372,22 @@ def write_arkane_explorer_input_file(source_path: str,
         raise ValueError(f"The master-equation 'method' must be one of {sorted(METHOD_MAP)}, got "
                          f"{method!r}. Arkane's own name for it is written into the kept "
                          f"pressureDependence(...) block, so an unrecognized method cannot be rendered.")
-    warnings_list = _validate_bath_gas(bath_gas=bath_gas, species_nodes=species_nodes,
-                                       species_reactive=species_reactive, source_path=source_path)
+    warnings_list, reactive_injection_labels = _validate_bath_gas(
+        bath_gas=bath_gas, species_nodes=species_nodes,
+        species_reactive=species_reactive, source_path=source_path)
+
+    # Inject 'reactive = False,' into each declared bath-gas species() block that carries no
+    # 'reactive' keyword in the source -- see _validate_bath_gas's docstring for why this is a
+    # faithful translation of the caller's declaration rather than a rewrite of user input, and why
+    # no RMG-written source ever carries the keyword itself (issue #183). The insertion lands at
+    # the first keyword's own position (a keyword argument's placement inside the call is
+    # semantically free), so the edit is computed structurally from the AST like every other edit
+    # here, never by text-scanning for a species block.
+    for label in reactive_injection_labels:
+        species_call = species_nodes[label].value
+        first_kw = species_call.keywords[0]
+        insert_pos = _pos(text, line_starts, first_kw.lineno, first_kw.col_offset)
+        edits.append((insert_pos, insert_pos, f"reactive = False,\n{' ' * first_kw.col_offset}"))
 
     # Remove every network(...) block: Arkane's explorer input parser does not recognize it, and
     # keeping it would (at best) be dead text and (at worst) confuse a human re-reading the file.
@@ -459,6 +498,7 @@ def write_arkane_explorer_input_file(source_path: str,
         seed_species=seed_species,
         bath_gas=dict(bath_gas),
         kinetics_labels_emitted=tuple(kinetics_labels_emitted),
+        reactive_false_injected=tuple(reactive_injection_labels),
         warnings=tuple(warnings_list),
     )
 
@@ -690,24 +730,47 @@ def validate_explorer_field_values(explore_tol, energy_tol, flux_tol, maximum_ra
 
 
 def _validate_bath_gas(bath_gas: dict, species_nodes: dict, species_reactive: dict,
-                       source_path: str) -> list:
+                       source_path: str) -> tuple:
     """
-    Validate the bath gas composition against Arkane/RMG's bath-gas identification rule (P16).
+    Validate the bath gas composition against Arkane/RMG's bath-gas identification rule (P16), and
+    decide which species blocks need ``reactive = False`` injected into the generated file.
+
+    Arkane/RMG identify the bath gas as every UNREACTIVE core species, never by name
+    (``rmgpy/rmg/pdep.py:856-863``), and the literal keyword in the ``species()`` block is the only
+    channel that survives: the explorer's own ``make_new_species(spec, reactive=False)``
+    (``arkane/explorer.py:141``) is overridden when the species enters the core, because
+    ``rmgpy/rmg/model.py:475`` re-reads ``reactive = object.reactive`` from the loaded species
+    object. Yet no RMG-written network file ever carries the keyword -- ``arkane/pdep.py:654``
+    (``save_input_file``) emits species blocks with no ``reactive`` at all (issue #183). So an
+    ABSENT keyword on a declared bath-gas species is not a refusal case but the normal case, and
+    since this module GENERATES the destination file, it emits the fact the caller declared
+    (``bath_gas`` names this species as the collider) as ``reactive = False`` in the generated
+    blocks: a translation between two encodings of one fact, not a rewrite of user input. Only a
+    species that EXPLICITLY contradicts the declaration (a literal ``reactive=True``), or whose
+    ``reactive`` value cannot be literally evaluated at all, is refused.
 
     Args:
         bath_gas (dict): Bath gas species label -> mole fraction.
         species_nodes (dict): species() label -> AST node, as collected from the source.
-        species_reactive (dict): species() label -> whether it carries a literal 'reactive=False'
-                                 keyword (True by default, matching Arkane/RMG's own default).
+        species_reactive (dict): species() label -> the literal value of its 'reactive' keyword,
+                                 or ``_REACTIVE_ABSENT`` when the block carries no such keyword
+                                 (``None`` means the keyword exists but its value is not a
+                                 literal).
         source_path (str): The source network path, used in error messages.
 
     Raises:
-        ValueError: If a bath gas label is not a species() block in the source, or is a species()
-                   block that does not carry a literal 'reactive=False' keyword.
+        ValueError: If the bath gas is empty; if a fraction violates its contract or the
+                   composition's sum/equality contracts; if a bath gas label is not a species()
+                   block in the source; if a bath gas species carries an explicit literal
+                   ``reactive=True`` (a contradiction this writer refuses to resolve either way);
+                   or if its ``reactive`` value is not a literal ``True``/``False``.
 
     Returns:
-        list: Warnings, e.g. that a multi-species bath gas's requested fractions are recorded here
-             but will not be honored by Arkane/RMG (P16).
+        tuple: A 2-tuple of
+              - list: Warnings, e.g. that a multi-species bath gas's requested fractions are
+                recorded but will not be honored by Arkane/RMG (P16).
+              - tuple: The bath-gas labels whose species() blocks need ``reactive = False``
+                injected (those carrying no ``reactive`` keyword in the source).
     """
     # An EMPTY bath gas is refused here rather than passed through. Every check below is a loop
     # over ``bath_gas``, so an empty dict satisfies all of them vacuously -- the guard would report
@@ -744,11 +807,35 @@ def _validate_bath_gas(bath_gas: dict, species_nodes: dict, species_reactive: di
         if label not in species_nodes:
             raise ValueError(f"Bath gas label '{label}' is not defined as a species() block anywhere in the "
                              f"source. Known species labels are {sorted(species_nodes)}.")
-        if species_reactive.get(label, True) is not False:
-            raise ValueError(f"Bath gas label '{label}' is a species() block that does not carry a literal "
-                             f"'reactive=False' keyword. Per P16 (rmgpy/rmg/pdep.py:856-863), Arkane/RMG identify "
-                             f"the bath gas as every unreactive core species, not by name; a bath gas species that "
-                             f"is not explicitly marked reactive=False would never be recognized as bath gas.")
+
+    # Decided per label AFTER the membership loop above so a mixed error (one unknown label, one
+    # conflicted one) always reports the missing block first -- the more fundamental problem.
+    inject_labels = list()
+    for label in bath_gas:
+        reactive_value = species_reactive[label]
+        if reactive_value is _REACTIVE_ABSENT:
+            # The RMG-written shape (arkane/pdep.py:654 emits no 'reactive' for any species):
+            # marked for injection into the generated file, see this function's docstring.
+            inject_labels.append(label)
+        elif reactive_value is True:
+            raise ValueError(f"Bath gas label '{label}' is a species() block carrying an explicit literal "
+                             f"'reactive=True', which contradicts its declaration as bath gas. Per P16 "
+                             f"(rmgpy/rmg/pdep.py:856-863), Arkane/RMG identify the bath gas as every "
+                             f"unreactive core species, and the species block's own keyword is the only "
+                             f"channel that survives into the core (rmgpy/rmg/model.py:475 re-reads "
+                             f"'reactive' from the loaded species, overriding arkane/explorer.py:141's "
+                             f"make_new_species(..., reactive=False)). Honouring the bath-gas declaration "
+                             f"would silently rewrite the source's own explicit claim, and honouring the "
+                             f"claim would have Arkane generate statmech for the collider -- so this "
+                             f"contradiction is refused rather than resolved either way. Fix the source, "
+                             f"or drop '{label}' from bath_gas.")
+        elif reactive_value is not False:
+            raise ValueError(f"Bath gas label '{label}' is a species() block whose 'reactive' keyword is not "
+                             f"a literal True or False, so it cannot be verified either way: injecting "
+                             f"'reactive = False' beside it could contradict whatever the expression "
+                             f"evaluates to when Arkane loads the file, and leaving it is a bath gas "
+                             f"Arkane may never recognize as one (P16, rmgpy/rmg/pdep.py:856-863). Make it "
+                             f"a literal, or remove it so this writer can inject the declared fact itself.")
 
     # Checked once over the whole composition rather than per species, because it is the only property
     # here that no individual fraction can violate on its own. ``math.isclose`` with an absolute
@@ -804,7 +891,7 @@ def _validate_bath_gas(bath_gas: dict, species_nodes: dict, species_reactive: di
                              f"CORE species. The fractions therefore match what will run, but the species SET "
                              f"may not -- if the core carries other unreactive species, they are included and "
                              f"the per-species weight changes accordingly.")
-    return warnings_list
+    return warnings_list, tuple(inject_labels)
 
 
 def _rewrite_method_line(text: str, method: str, source_path: str) -> str:
