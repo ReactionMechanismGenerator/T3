@@ -18,6 +18,8 @@ from t3.pdep.parser import (
     PDepArkaneReaction,
     parse_arkane_pdep_output_file,
     parse_arkane_pdep_output_text,
+    parse_pdep_network_e0_file,
+    parse_pdep_network_e0_text,
     parse_pdep_network_file,
     parse_pdep_network_text,
     to_json_safe,
@@ -1139,3 +1141,95 @@ def test_parse_pdep_network_file_strips_a_utf8_bom(tmp_path):
     network = parse_pdep_network_file(path=str(path))
     assert network.path_reactions
     assert network.source_hash == hash_file(path=str(path))
+
+
+class TestParsePDepNetworkE0:
+    """
+    The E0 reader that feeds T3's own PES diagram (``t3.pdep.diagram``): species and
+    transitionState ``E0 = (value, unit)`` keywords, converted to kJ/mol, read with the same
+    never-execute ast machinery as the rest of this module.
+    """
+
+    def test_real_fixture_values_network4_2(self):
+        e0 = parse_pdep_network_e0_file(path=os.path.join(PDEP_NETWORK_DIR, 'network4_2.py'))
+        assert len(e0.species) == 16
+        assert len(e0.transition_states) == 10
+        assert e0.species['butyl_2(67)'] == pytest.approx(52.4618)
+        assert e0.species['H(34)'] == pytest.approx(211.8)
+        assert e0.transition_states['TS1'] == pytest.approx(505.143)
+
+    def test_real_fixture_values_network799_1(self):
+        e0 = parse_pdep_network_e0_file(path=os.path.join(
+            TEST_DATA_BASE_PATH, 'pdep_real_networks', 'network799_1', 'network799_1.py'))
+        assert e0.species['O=C1OO1(21648)'] == pytest.approx(-170.357)
+        assert e0.transition_states['TS2'] == pytest.approx(-58.4241)
+
+    def test_every_rmg_energy_unit_is_converted_to_kj_per_mol(self):
+        text = """species(label='a', E0=(1000.0, 'J/mol'))
+species(label='b', E0=(2.5, 'kJ/mol'))
+species(label='c', E0=(1.0, 'kcal/mol'))
+species(label='d', E0=(1000.0, 'cal/mol'))
+species(label='e', E0=(1.0, 'eV/molecule'))
+species(label='f', E0=(100.0, 'cm^-1'))
+species(label='g', E0=(1000.0, 'K'))
+"""
+        e0 = parse_pdep_network_e0_text(text=text)
+        assert e0.species['a'] == pytest.approx(1.0)
+        assert e0.species['b'] == pytest.approx(2.5)
+        assert e0.species['c'] == pytest.approx(4.184)
+        assert e0.species['d'] == pytest.approx(4.184)
+        assert e0.species['e'] == pytest.approx(96.485332, abs=1e-4)
+        # h * c * 100 * Na = 11.9627 J/mol per cm^-1 (rmgpy.quantity's own conversion)
+        assert e0.species['f'] == pytest.approx(1.19627, abs=1e-4)
+        # R = 8.31446 J/(mol*K)
+        assert e0.species['g'] == pytest.approx(8.31446, abs=1e-4)
+
+    def test_an_unknown_unit_is_refused_not_guessed(self):
+        with pytest.raises(ValueError, match='furlong'):
+            parse_pdep_network_e0_text(text="species(label='a', E0=(1.0, 'furlong'))")
+
+    def test_a_non_literal_e0_is_refused_not_read_as_absent(self):
+        """An E0 that is a call (or any non-literal) must raise: silently treating it as absent
+        would later report 'this species has no E0' about a species whose file plainly gives one."""
+        with pytest.raises(ValueError, match='E0'):
+            parse_pdep_network_e0_text(text="species(label='a', E0=Quantity(1.0, 'kJ/mol'))")
+
+    def test_a_malformed_e0_shape_is_refused(self):
+        for bad in ("species(label='a', E0=5.0)",
+                    "species(label='a', E0=(1.0, 2.0))",
+                    "species(label='a', E0=(1.0, 'kJ/mol', 'extra'))"):
+            with pytest.raises(ValueError, match='E0'):
+                parse_pdep_network_e0_text(text=bad)
+
+    def test_a_missing_e0_is_absent_not_zero(self):
+        e0 = parse_pdep_network_e0_text(
+            text="species(label='a')\nspecies(label='b', E0=(1.0, 'kJ/mol'))")
+        assert 'a' not in e0.species
+        assert e0.species['b'] == pytest.approx(1.0)
+
+    def test_conflicting_duplicate_labels_are_refused(self):
+        """The same label declared twice with different E0 values is ambiguity, not data:
+        last-wins would silently pick one of two contradictory statements about one species."""
+        with pytest.raises(ValueError, match="'a'"):
+            parse_pdep_network_e0_text(
+                text="species(label='a', E0=(1.0, 'kJ/mol'))\n"
+                     "species(label='a', E0=(2.0, 'kJ/mol'))")
+        with pytest.raises(ValueError, match='TS1'):
+            parse_pdep_network_e0_text(
+                text="transitionState(label='TS1', E0=(1.0, 'kJ/mol'))\n"
+                     "transitionState(label='TS1', E0=(2.0, 'kJ/mol'))")
+
+    def test_an_identical_duplicate_is_tolerated(self):
+        """Two identical declarations carry no ambiguity; refusing them would refuse a file whose
+        meaning is perfectly clear."""
+        e0 = parse_pdep_network_e0_text(
+            text="species(label='a', E0=(1.0, 'kJ/mol'))\n"
+                 "species(label='a', E0=(1.0, 'kJ/mol'))")
+        assert e0.species['a'] == pytest.approx(1.0)
+
+    def test_transition_states_and_species_are_kept_apart(self):
+        e0 = parse_pdep_network_e0_text(
+            text="species(label='a', E0=(1.0, 'kJ/mol'))\n"
+                 "transitionState(label='TS1', E0=(2.0, 'kJ/mol'))")
+        assert set(e0.species) == {'a'}
+        assert set(e0.transition_states) == {'TS1'}

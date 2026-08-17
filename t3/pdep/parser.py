@@ -42,6 +42,7 @@ __all__ = [
     'NetworkTextUnparseable',
     'PDepArkaneReaction',
     'PDepNetwork',
+    'PDepNetworkE0',
     'PDepPathReaction',
     'TGridClampRecord',
     'canonical_channel_pair',
@@ -49,12 +50,35 @@ __all__ = [
     'network_thermo_t_max',
     'parse_arkane_pdep_output_file',
     'parse_arkane_pdep_output_text',
+    'parse_pdep_network_e0_file',
+    'parse_pdep_network_e0_text',
     'parse_pdep_network_file',
     'parse_pdep_network_text',
     'to_json_safe',
 ]
 
 RECOGNIZED_TOP_LEVEL_CALLS = {'species', 'transitionState', 'reaction', 'network', 'pressureDependence'}
+
+# kJ/mol per one of each energy unit RMG itself accepts for an E0 quantity: the five named
+# ``rmgpy.quantity.Energy`` units plus its two extra-dimensionality conversions ('K' via R and
+# 'cm^-1' via h*c*100*Na -- see rmgpy/quantity.py:747-756). Factors are computed from CODATA 2018
+# exact constants rather than typed in rounded, so they match rmgpy's own conversions to full
+# precision. A unit outside this table is refused, never guessed: a wrong energy scale would
+# produce a diagram that looks plausible and is quantitatively wrong everywhere.
+_AVOGADRO = 6.02214076e23           # mol^-1
+_PLANCK = 6.62607015e-34            # J*s
+_SPEED_OF_LIGHT = 299792458.0       # m/s
+_ELEMENTARY_CHARGE = 1.602176634e-19  # C
+_GAS_CONSTANT = 8.31446261815324    # J/(mol*K)
+E0_UNIT_TO_KJ_PER_MOL = {
+    'J/mol': 1e-3,
+    'kJ/mol': 1.0,
+    'cal/mol': 4.184e-3,
+    'kcal/mol': 4.184,
+    'eV/molecule': _ELEMENTARY_CHARGE * _AVOGADRO * 1e-3,
+    'cm^-1': _PLANCK * _SPEED_OF_LIGHT * 100.0 * _AVOGADRO * 1e-3,
+    'K': _GAS_CONSTANT * 1e-3,
+}
 
 # ``pdepreaction(...)`` is deliberately NOT part of ``RECOGNIZED_TOP_LEVEL_CALLS`` above: it is
 # not part of the Arkane *input* DSL that RMG pdep network files use. It is a write-only call
@@ -825,6 +849,144 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
         product_channels_declared=product_channels_declared,
         source_hash=source_hash,
     )
+
+
+@dataclass(frozen=True)
+class PDepNetworkE0:
+    """
+    The E0 values a pdep network file declares, converted to kJ/mol.
+
+    A mapping deliberately SEPARATE from ``PDepNetwork``: the network dataclass is a frozen,
+    hashable-by-field topology record that several persistence paths serialize, while these are
+    plain dicts (unhashable) that only the PES-diagram path needs. Species without an ``E0``
+    keyword are ABSENT from the mapping, never recorded as 0.0 -- a consumer that needs a missing
+    species' energy must fail closed itself rather than silently place the species at the origin.
+
+    Args:
+        species (dict): Species label -> E0 (kJ/mol).
+        transition_states (dict): Transition state label -> E0 (kJ/mol).
+    """
+    species: dict
+    transition_states: dict
+
+
+def _e0_kj_per_mol(node, *, path: str, call_name: str, label: str) -> float | None:
+    """
+    Evaluate a ``species(...)``/``transitionState(...)`` ``E0=`` keyword node to kJ/mol.
+
+    Args:
+        node: The keyword's (still-AST) value node, or ``None`` if the keyword is absent.
+        path (str): The file path being parsed (for error messages only).
+        call_name (str): ``'species'`` or ``'transitionState'`` (for error messages only).
+        label (str): The declaring call's label (for error messages only).
+
+    Raises:
+        ValueError: If ``E0`` is present but is not a literal ``(number, unit_string)`` pair, or
+            its unit is not one RMG's own Energy quantity accepts (see ``E0_UNIT_TO_KJ_PER_MOL``).
+
+    Returns:
+        Optional[float]: The E0 in kJ/mol, or ``None`` if the keyword is genuinely absent.
+    """
+    if node is None:
+        return None
+    value = _literal_or_none(node)
+    # A written-but-unevaluable E0 (a call such as Quantity(...), a bare name) must raise rather
+    # than read as absent: a consumer would then report "no E0 declared" about a species whose
+    # file plainly gives one -- the same fail-open shape _literal_or_raise exists to refuse.
+    if value is None \
+            or not (isinstance(value, tuple) and len(value) == 2
+                    and isinstance(value[0], (int, float)) and not isinstance(value[0], bool)
+                    and isinstance(value[1], str)):
+        raise ValueError(f"The pdep network file at '{path}' declares an 'E0' keyword on "
+                         f"{call_name}(label={label!r}) that is not a literal (number, "
+                         f"unit-string) pair; refusing to read it as absent in its place.")
+    magnitude, unit = value
+    if unit not in E0_UNIT_TO_KJ_PER_MOL:
+        raise ValueError(f"The pdep network file at '{path}' declares E0={value!r} on "
+                         f"{call_name}(label={label!r}) with the unrecognized energy unit "
+                         f"{unit!r}; the recognized units are "
+                         f"{sorted(E0_UNIT_TO_KJ_PER_MOL)}. Refusing to guess an energy scale.")
+    return magnitude * E0_UNIT_TO_KJ_PER_MOL[unit]
+
+
+def parse_pdep_network_e0_file(path: str) -> PDepNetworkE0:
+    """
+    Read the E0 values (kJ/mol) a pdep network file on disk declares.
+
+    Args:
+        path (str): The path to the RMG pdep network file.
+
+    Raises:
+        ValueError: As ``parse_pdep_network_e0_text``.
+
+    Returns:
+        PDepNetworkE0: The declared species/transition-state E0 values, in kJ/mol.
+    """
+    with open(path, 'rb') as f:
+        data = f.read()
+    # Decoded via the PEP 263 cookie for the same reason parse_pdep_network_file is: these files
+    # are Python source, and a hard-coded 'utf-8' or the locale encoding mis-reads legal ones.
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+    return parse_pdep_network_e0_text(text=data.decode(encoding), path=path)
+
+
+def parse_pdep_network_e0_text(text: str, path: str = '') -> PDepNetworkE0:
+    """
+    Read the E0 values (kJ/mol) pdep network file text declares.
+
+    This is the energy companion to ``parse_pdep_network_text``: the same never-execute ast walk,
+    reading only the ``E0 = (value, unit)`` keyword of every ``species(...)`` and
+    ``transitionState(...)`` call. It deliberately does NOT require any ``reaction(...)`` entries:
+    it answers "what energies does this file declare", not "is this a well-formed network" -- the
+    topology parser owns the latter.
+
+    Args:
+        text (str): The RMG pdep network file content.
+        path (str, optional): The path the text was read from, if any (error messages only).
+
+    Raises:
+        ValueError: If the text cannot be parsed as Python; if any ``E0`` is present but not a
+            literal ``(number, unit_string)`` pair, or carries an unrecognized unit; or if the
+            same label is declared twice with CONFLICTING E0 values (last-wins would silently pick
+            one of two contradictory statements about one stationary point; an identical duplicate
+            carries no ambiguity and is tolerated).
+
+    Returns:
+        PDepNetworkE0: The declared species/transition-state E0 values, in kJ/mol. Labels whose
+            declaration carries no ``E0`` keyword are absent from the mappings.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SyntaxWarning)
+            tree = ast.parse(text)
+    except SyntaxError as e:
+        raise ValueError(f"Could not parse the pdep network file at '{path}' as Python: {e}")
+
+    e0_by_call_name = {'species': dict(), 'transitionState': dict()}
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        call_name = _get_call_name(call)
+        if call_name not in e0_by_call_name:
+            continue
+        kwargs = _call_keywords(call, path=path, call_name=call_name)
+        label = _literal_or_raise(kwargs.get('label'), path=path, keyword='label',
+                                  action="omit it from the E0 mapping")
+        if label is None:
+            continue
+        e0 = _e0_kj_per_mol(kwargs.get('E0'), path=path, call_name=call_name, label=label)
+        if e0 is None:
+            continue
+        recorded = e0_by_call_name[call_name]
+        if label in recorded and recorded[label] != e0:
+            raise ValueError(f"The pdep network file at '{path}' declares "
+                             f"{call_name}(label={label!r}) twice with conflicting E0 values "
+                             f"({recorded[label]} vs. {e0} kJ/mol); refusing to pick one of two "
+                             f"contradictory statements about the same stationary point.")
+        recorded[label] = e0
+    return PDepNetworkE0(species=e0_by_call_name['species'],
+                         transition_states=e0_by_call_name['transitionState'])
 
 
 def _parse_reaction(kwargs: dict, path: str = '') -> PDepPathReaction:
