@@ -870,9 +870,100 @@ class PDepNetworkE0:
     transition_states: dict
 
 
+class _NotAConstantNumber(Exception):
+    """
+    Internal signal that an AST node is not a constant arithmetic numeric expression.
+
+    Carries a human-readable description of the offending construct (e.g. ``"a name ('x')"``) so
+    the catching call site can build an error message that names what it refused, without every
+    call site re-deriving that description itself.
+    """
+
+    def __init__(self, description: str):
+        self.description = description
+        super().__init__(description)
+
+
+def _describe_non_numeric_node(node) -> str:
+    """
+    Describe an AST node that ``_fold_constant_number`` refused, for use in an error message.
+
+    Args:
+        node: The offending AST node.
+
+    Returns:
+        str: A short, human-readable description of the node (e.g. ``"a name ('x')"``).
+    """
+    if isinstance(node, ast.Name):
+        return f"a name ({node.id!r})"
+    if isinstance(node, ast.Call):
+        return f"a call ({_get_call_name(node) or '<unnamed>'}(...))"
+    if isinstance(node, ast.Attribute):
+        return f"an attribute access ('.{node.attr}')"
+    if isinstance(node, ast.Subscript):
+        return "a subscript"
+    if isinstance(node, ast.Compare):
+        return "a comparison"
+    if isinstance(node, ast.BinOp):
+        return f"a {type(node.op).__name__} operator"
+    return f"a {type(node).__name__} node"
+
+
+def _fold_constant_number(node) -> float:
+    """
+    Fold an AST expression node to a float, IF AND ONLY IF it is built entirely from numeric
+    literals combined with unary +/- and binary +, -, *, / (parenthesised nesting included).
+
+    This exists because RMG writes a TS's ``E0`` as an arithmetic expression rather than a plain
+    literal whenever an energy correction was applied (e.g. ``E0 = (264.497 - 411.735,
+    "kJ/mol")``), and ``ast.literal_eval`` -- correctly -- refuses any ``BinOp``. The expression is
+    still fully constant, so it can be evaluated safely by hand: this function walks the tree
+    itself and combines only numbers with +, -, *, /, so nothing beyond that arithmetic can ever
+    run. It NEVER calls ``eval``/``exec``, and a ``Name`` is refused outright rather than looked up
+    in any namespace -- there is no namespace here, so there is nothing a name could safely mean.
+
+    Args:
+        node: An AST expression node.
+
+    Raises:
+        _NotAConstantNumber: If ``node`` (or any subnode) is not built solely from numeric
+            literals and +, -, *, / arithmetic -- e.g. a name, a call, an attribute access, a
+            subscript, a comparison, or a non-arithmetic operator such as ``**``.
+        ZeroDivisionError: If the expression divides by a folded zero.
+
+    Returns:
+        float: The folded numeric value.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) \
+            and not isinstance(node.value, bool):
+        return float(node.value)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        operand = _fold_constant_number(node.operand)
+        return -operand if isinstance(node.op, ast.USub) else operand
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
+        left = _fold_constant_number(node.left)
+        right = _fold_constant_number(node.right)
+        if isinstance(node.op, ast.Add):
+            return left + right
+        if isinstance(node.op, ast.Sub):
+            return left - right
+        if isinstance(node.op, ast.Mult):
+            return left * right
+        if right == 0:
+            raise ZeroDivisionError('division by zero in a constant numeric expression')
+        return left / right
+    raise _NotAConstantNumber(_describe_non_numeric_node(node))
+
+
 def _e0_kj_per_mol(node, *, path: str, call_name: str, label: str) -> float | None:
     """
     Evaluate a ``species(...)``/``transitionState(...)`` ``E0=`` keyword node to kJ/mol.
+
+    The numeric half of the pair is folded via ``_fold_constant_number`` rather than
+    ``ast.literal_eval``, so a constant arithmetic expression such as
+    ``E0 = (264.497 - 411.735, "kJ/mol")`` -- what RMG writes whenever an energy correction was
+    applied to a transition state -- is read exactly rather than refused. The unit half keeps the
+    plain-literal reading it always had: it is a bare string, never an expression.
 
     Args:
         node: The keyword's (still-AST) value node, or ``None`` if the keyword is absent.
@@ -881,28 +972,44 @@ def _e0_kj_per_mol(node, *, path: str, call_name: str, label: str) -> float | No
         label (str): The declaring call's label (for error messages only).
 
     Raises:
-        ValueError: If ``E0`` is present but is not a literal ``(number, unit_string)`` pair, or
-            its unit is not one RMG's own Energy quantity accepts (see ``E0_UNIT_TO_KJ_PER_MOL``).
+        ValueError: If ``E0`` is present but is not a 2-element tuple, its numeric half is not a
+            constant numeric literal/expression (e.g. a name, a call, an attribute access), its
+            numeric half divides by zero, or its unit is not one RMG's own Energy quantity accepts
+            (see ``E0_UNIT_TO_KJ_PER_MOL``).
 
     Returns:
         Optional[float]: The E0 in kJ/mol, or ``None`` if the keyword is genuinely absent.
     """
     if node is None:
         return None
-    value = _literal_or_none(node)
-    # A written-but-unevaluable E0 (a call such as Quantity(...), a bare name) must raise rather
-    # than read as absent: a consumer would then report "no E0 declared" about a species whose
-    # file plainly gives one -- the same fail-open shape _literal_or_raise exists to refuse.
-    if value is None \
-            or not (isinstance(value, tuple) and len(value) == 2
-                    and isinstance(value[0], (int, float)) and not isinstance(value[0], bool)
-                    and isinstance(value[1], str)):
+    # The unit half must be a bare string constant; there is no arithmetic to fold there. The
+    # numeric half is folded separately below so a BinOp there (unreadable by ast.literal_eval
+    # alone) does not doom the whole pair.
+    if not (isinstance(node, ast.Tuple) and len(node.elts) == 2
+            and isinstance(node.elts[1], ast.Constant) and isinstance(node.elts[1].value, str)):
         raise ValueError(f"The pdep network file at '{path}' declares an 'E0' keyword on "
                          f"{call_name}(label={label!r}) that is not a literal (number, "
                          f"unit-string) pair; refusing to read it as absent in its place.")
-    magnitude, unit = value
+    magnitude_node, unit_node = node.elts
+    try:
+        magnitude = _fold_constant_number(magnitude_node)
+    except _NotAConstantNumber as e:
+        # A written-but-unfoldable E0 (a call such as Quantity(...), a bare name) must raise
+        # rather than read as absent: a consumer would then report "no E0 declared" about a
+        # species whose file plainly gives one -- the same fail-open shape _literal_or_raise
+        # exists to refuse.
+        raise ValueError(f"The pdep network file at '{path}' declares an 'E0' keyword on "
+                         f"{call_name}(label={label!r}) whose numeric half is {e.description}, "
+                         f"not a constant number or arithmetic expression; refusing to read it "
+                         f"as absent in its place.") from e
+    except ZeroDivisionError as e:
+        raise ValueError(f"The pdep network file at '{path}' declares an 'E0' keyword on "
+                         f"{call_name}(label={label!r}) whose numeric half divides by zero; "
+                         f"refusing to read it as absent in its place.") from e
+    unit = unit_node.value
     if unit not in E0_UNIT_TO_KJ_PER_MOL:
-        raise ValueError(f"The pdep network file at '{path}' declares E0={value!r} on "
+        raise ValueError(f"The pdep network file at '{path}' declares E0=({magnitude!r}, "
+                         f"{unit!r}) on "
                          f"{call_name}(label={label!r}) with the unrecognized energy unit "
                          f"{unit!r}; the recognized units are "
                          f"{sorted(E0_UNIT_TO_KJ_PER_MOL)}. Refusing to guess an energy scale.")
