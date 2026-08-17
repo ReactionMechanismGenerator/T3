@@ -80,7 +80,8 @@ from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           ts_join_sidecar_path,
                           write_ts_join_sidecar,
                           )
-from t3.pdep.parser import PDepNetwork, parse_pdep_network_file
+from t3.pdep.diagram import T3_PES_DIAGRAM_FILENAME, compute_pes_diagram_data, render_pes_diagram
+from t3.pdep.parser import PDepNetwork, parse_pdep_network_e0_file, parse_pdep_network_file
 from t3.pdep.reason_codes import (REASON_CODE_STATUS,
                                   REASON_INTERNAL_ERROR,
                                   REASON_NETWORK_DISCOVERY_FAILED,
@@ -2314,6 +2315,35 @@ class T3:
                                       assessments=self.pdep_network_assessments,
                                       complete=False)
 
+    def _draw_pdep_pes_diagram(self, network: PDepNetwork, network_name: str, network_path: str) -> None:
+        """
+        Draw T3's own normalized-E0 PES diagram for a successfully-parsed P-dep network.
+
+        Reuses the already-parsed ``network`` (topology) rather than re-reading ``network_path``,
+        and only re-reads the file for its E0 data, which ``network`` does not carry.
+
+        Never raises: a cosmetic artifact must not be able to fail a multi-day campaign. This
+        includes ``compute_pes_diagram_data``'s legitimate ``ValueError`` refusals (a species with
+        no E0, a path reaction whose side matches no configuration) on real RMG networks it
+        genuinely cannot draw honestly -- those degrade to a logged warning here, same as any other
+        failure, rather than being treated as bugs.
+
+        Args:
+            network (PDepNetwork): The network already parsed by the caller.
+            network_name (str): The network file stem, e.g. ``'network4_2'``.
+            network_path (str): The network file this network was parsed from.
+        """
+        try:
+            output_dir = os.path.join(self.paths['PDep SA'], network_name)
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, T3_PES_DIAGRAM_FILENAME)
+            data = compute_pes_diagram_data(network=network,
+                                            e0=parse_pdep_network_e0_file(path=network_path))
+            render_pes_diagram(data=data, output_path=output_path)
+        except Exception as e:
+            self.logger.warning(f'Could not draw the PES diagram for PDep network {network_name} '
+                               f'({network_path}): {e}')
+
     def _assess_pdep_network_candidate(self,
                                        reaction: T3Reaction,
                                        reaction_tuple: tuple,
@@ -2562,6 +2592,8 @@ class T3:
                 assessment = _pdep_assessment(REASON_NETWORK_PARSE_FAILED, provenance, warnings)
             else:
                 provenance['network_source_hash'] = network.source_hash
+                self._draw_pdep_pes_diagram(network=network, network_name=network_name,
+                                            network_path=network_path)
                 selection, reason_code, secondary_reason_codes = select_from_sa_dict_with_diagnostics(
                     sa_dict=sa_dict,
                     network=network,
