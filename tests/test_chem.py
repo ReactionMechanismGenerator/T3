@@ -6,7 +6,12 @@ t3 tests test_chem module
 Tests for t3/chem.py - T3Species and T3Reaction classes
 """
 
+import inspect
+import re
+
 import pytest
+
+from arc.species.species import ARCSpecies
 
 from t3.chem import (
     T3Status,
@@ -14,6 +19,7 @@ from t3.chem import (
     KineticsMethod,
     T3Species,
     T3Reaction,
+    remove_bad_arc_keys,
 )
 
 
@@ -551,3 +557,35 @@ class TestT3Reaction:
         assert reconstructed.t3_status == T3Status.CONVERGED
         assert reconstructed.created_at_iteration == 2
         assert reconstructed.reasons == ['sensitivity']
+
+
+class TestRemoveBadArcKeys:
+    """Tests for remove_bad_arc_keys()."""
+
+    def test_no_surviving_key_is_rejected_by_arcspecies(self):
+        """Test that every key ARCSpecies.as_dict() can emit is either dropped or accepted."""
+        # ``ARCSpecies.__init__`` declares no ``**kwargs``, so a key that survives the filter and
+        # is not an init argument is not ignored -- it raises ``TypeError`` at the call site.
+        emitted = set(re.findall(r"species_dict\['([a-zA-Z0-9_]+)'\]",
+                                 inspect.getsource(ARCSpecies.as_dict)))
+        assert 'radius' in emitted, 'as_dict no longer emits radius; update this test'
+        accepted = set(inspect.signature(ARCSpecies.__init__).parameters) - {'self'}
+        survivors = set(remove_bad_arc_keys({key: None for key in emitted}))
+        assert not survivors - accepted
+
+    def test_radius_is_dropped(self):
+        """Test that the lazily-computed radius does not reach ARCSpecies.__init__."""
+        # ARCSpecies stores it as ``_radius`` and emits it as ``radius``; blocking the private
+        # name matched nothing, so the key survived and broke copy() once radius was computed.
+        assert 'radius' not in remove_bad_arc_keys({'label': 'H2O', 'radius': 1.23})
+        assert remove_bad_arc_keys({'label': 'H2O', 'radius': 1.23})['label'] == 'H2O'
+
+    def test_copy_survives_a_computed_radius(self):
+        """Test that copying a species whose radius was computed does not raise."""
+        spc = T3Species(label='H2O', smiles='O', xyz={'symbols': ('O', 'H', 'H'),
+                                                      'isotopes': (16, 1, 1),
+                                                      'coords': ((0.0, 0.0, 0.12),
+                                                                 (0.0, 0.76, -0.48),
+                                                                 (0.0, -0.76, -0.48))})
+        _ = spc.radius  # ARC touches this whenever it lays out a multi-fragment reaction side
+        assert spc.copy().label == 'H2O'

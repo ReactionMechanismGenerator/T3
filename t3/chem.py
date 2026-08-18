@@ -7,6 +7,7 @@ underlying chemical definitions found in ARC.
 """
 
 from __future__ import annotations
+import inspect
 from enum import Enum
 from typing import Any
 
@@ -565,9 +566,9 @@ def remove_bad_arc_keys(species_dict: dict) -> dict:
         'recent_md_conformer',
         'rotors_dict',  # Complex internal dictionary
         'number_of_rotors',
-        '_radius',
-        '_is_linear',
-        '_number_of_atoms',
+        'radius',  # ARCSpecies stores it as ``_radius`` but ``as_dict()`` emits it unprefixed
+        'is_linear',
+        'number_of_atoms',
         'mol_list',  # Derived from mol
 
         # Thermo / Transport Outputs
@@ -603,4 +604,31 @@ def remove_bad_arc_keys(species_dict: dict) -> dict:
         'neg_freqs_trshed'
     }
 
-    return {k: v for k, v in species_dict.items() if k not in bad_keys}
+    species_dict = {k: v for k, v in species_dict.items() if k not in bad_keys}
+
+    # A hand-maintained blocklist can only reject the keys someone thought of, and it silently
+    # stops matching whenever ARC renames an attribute or starts serializing a new one. Because
+    # ``ARCSpecies.__init__`` takes no ``**kwargs``, every miss becomes a ``TypeError`` at the
+    # call site rather than an ignored key -- which is how ``radius`` (blocked as ``_radius``,
+    # emitted as ``radius``) broke ``T3Species.copy()``, but only after something had touched the
+    # lazily-computed property, making the failure look intermittent. Filter against the real
+    # signature so an unforeseen key is dropped instead of raising.
+    accepted = _arc_species_init_args()
+    if accepted is None:
+        return species_dict
+    return {k: v for k, v in species_dict.items() if k in accepted}
+
+
+def _arc_species_init_args() -> set | None:
+    """
+    Get the keyword arguments ``ARCSpecies.__init__`` actually accepts.
+
+    Returns: set | None
+        The accepted argument names, or ``None`` if ``ARCSpecies.__init__`` declares ``**kwargs``
+        and therefore tolerates anything -- in which case filtering could only drop keys ARC wants.
+    """
+    params = inspect.signature(ARCSpecies.__init__).parameters
+    if any(param.kind == param.VAR_KEYWORD for param in params.values()):
+        return None
+    return {name for name, param in params.items()
+            if name != 'self' and param.kind != param.VAR_POSITIONAL}
