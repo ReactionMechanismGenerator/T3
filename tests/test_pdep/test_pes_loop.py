@@ -319,24 +319,33 @@ class TestRunPESLoop(object):
         _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
         adopt_calls = []
 
-        def _fake_adopt(from_t3_projects, network_id, level_of_theory):
-            adopt_calls.append((tuple(from_t3_projects), network_id, level_of_theory))
+        def _fake_adopt(from_t3_projects, network_id, level_of_theory, path_reaction_labels_by_ts_label):
+            adopt_calls.append((tuple(from_t3_projects), network_id, level_of_theory,
+                                path_reaction_labels_by_ts_label))
             return {'TS0': '/fake/prior/TS0.py'}
 
         monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm', _fake_adopt)
+        # Distinct sp_level from the default opt_level (mutation (e)): a fix that accidentally
+        # compared against opt_level rather than sp_level must fail this test.
         reuse_config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
                                           'bath_gas': {'He': 1.0}},
+                                     qm={'sp_level': 'ccsd(t)-f12/cc-pvtz-f12'},
                                      termination={'max_rounds': 3},
                                      reuse={'from_t3_projects': ['/prior/project']})
         queued = []
 
-        def _runner(candidates, paths, cfg, network_id):
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
             queued.extend(c.ts_label for c in candidates)
             _touch_hybrid_file(paths, network_id)
             return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         run_pes_loop(reuse_config, project_directory=str(tmp_path), qm_runner=_runner)
-        assert adopt_calls == [(('/prior/project',), 'network1_1', reuse_config.qm.sp_level)]
+        assert len(adopt_calls) == 1
+        call_projects, call_network_id, call_level, call_labels = adopt_calls[0]
+        assert call_projects == ('/prior/project',)
+        assert call_network_id == 'network1_1'
+        assert call_level == reuse_config.qm.sp_level == 'ccsd(t)-f12/cc-pvtz-f12'
+        assert call_labels == {'TS0': ('reaction0',), 'TS1': ('reaction1',)}
         assert 'TS0' not in queued
         assert 'TS1' in queued
 

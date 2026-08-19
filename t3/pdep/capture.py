@@ -843,6 +843,7 @@ def _manifest_entry(record: TSArtifactRecord, source_hashes: dict | None, captur
         'source_logs': source_logs,
         'coefficient': record.coefficient,
         'delta_ln_k': record.delta_ln_k,
+        'path_reaction_labels': list(record.path_reaction_labels),
         'captured_artifact_path': captured_artifact_path,
         'captured_log_paths': captured_log_paths or dict(),
         'captured_artifact_sha256': captured_artifact_sha256,
@@ -1571,6 +1572,7 @@ def verify_capture(capture_dir: str) -> VerifyResult:
             reason=entry.get('reason') or '',
             coefficient=entry.get('coefficient'),
             delta_ln_k=entry.get('delta_ln_k'),
+            path_reaction_labels=tuple(entry.get('path_reaction_labels') or ()),
         ))
 
     if captured_artifact_count > 0:

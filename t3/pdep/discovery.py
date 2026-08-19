@@ -442,6 +442,14 @@ class TSArtifactRecord:
             evidence was supplied for this transition state.
         delta_ln_k (float, optional): The corresponding dimensionless rate response, when
             sensitivity evidence was supplied for this transition state.
+        path_reaction_labels (tuple): The labels of the path reactions this transition state owns,
+            carried through from the ``t3.pdep.join.TSJoinRecord`` this record was resolved from.
+            This is the structural identity of the transition state -- unlike ``network_ts_label``
+            (positional: Arkane numbers ``TS1``, ``TS2``, ... by path-reaction index, so pruning a
+            reaction shifts every later label) or ``network_id`` (Arkane's final network artifact is
+            named by explorer run index, e.g. ``network0_full``, not by any stem a caller controls),
+            this tuple identifies the actual saddle point and is what any cross-capture matching
+            (e.g. reusing a prior capture's QM for a differently-named network) must key on.
     """
 
     def __init__(self,
@@ -454,6 +462,7 @@ class TSArtifactRecord:
                  reason: str = '',
                  coefficient: float | None = None,
                  delta_ln_k: float | None = None,
+                 path_reaction_labels: tuple = tuple(),
                  ):
         if status not in TS_ARTIFACT_STATUSES:
             raise ValueError(f"Unrecognized transition state artifact status '{status}'; "
@@ -467,6 +476,7 @@ class TSArtifactRecord:
         self.reason = reason
         self.coefficient = coefficient
         self.delta_ln_k = delta_ln_k
+        self.path_reaction_labels = tuple(path_reaction_labels)
 
     @property
     def key(self) -> tuple:
@@ -495,6 +505,7 @@ class TSArtifactRecord:
             'reason': self.reason,
             'coefficient': self.coefficient,
             'delta_ln_k': self.delta_ln_k,
+            'path_reaction_labels': list(self.path_reaction_labels),
         }
 
     @classmethod
@@ -525,6 +536,7 @@ class TSArtifactRecord:
             reason=record_dict.get('reason') or '',
             coefficient=record_dict.get('coefficient'),
             delta_ln_k=record_dict.get('delta_ln_k'),
+            path_reaction_labels=tuple(record_dict.get('path_reaction_labels') or ()),
         )
 
     def __repr__(self) -> str:
@@ -581,6 +593,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
             records.append(TSArtifactRecord(
                 network_id=join_record.network_id,
                 network_ts_label=join_record.network_ts_label,
+                path_reaction_labels=join_record.path_reaction_labels,
                 arc_ts_label=join_record.arc_ts_label,
                 status=ARTIFACT_STATUS_NOT_QUEUED,
                 artifact_path=None,
@@ -595,6 +608,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
             records.append(TSArtifactRecord(
                 network_id=join_record.network_id,
                 network_ts_label=join_record.network_ts_label,
+                path_reaction_labels=join_record.path_reaction_labels,
                 arc_ts_label=join_record.arc_ts_label,
                 status=ARTIFACT_STATUS_MISSING,
                 artifact_path=None,
@@ -638,6 +652,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
             records.append(TSArtifactRecord(
                 network_id=join_record.network_id,
                 network_ts_label=join_record.network_ts_label,
+                path_reaction_labels=join_record.path_reaction_labels,
                 arc_ts_label=recomputed_label,
                 status=ARTIFACT_STATUS_UNUSABLE,
                 artifact_path=None,
@@ -655,6 +670,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
             records.append(TSArtifactRecord(
                 network_id=join_record.network_id,
                 network_ts_label=join_record.network_ts_label,
+                path_reaction_labels=join_record.path_reaction_labels,
                 arc_ts_label=recomputed_label,
                 status=ARTIFACT_STATUS_UNUSABLE,
                 artifact_path=None,
@@ -682,6 +698,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
             records.append(TSArtifactRecord(
                 network_id=join_record.network_id,
                 network_ts_label=join_record.network_ts_label,
+                path_reaction_labels=join_record.path_reaction_labels,
                 arc_ts_label=recomputed_label,
                 status=ARTIFACT_STATUS_UNUSABLE,
                 artifact_path=None,
@@ -698,6 +715,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
             records.append(TSArtifactRecord(
                 network_id=join_record.network_id,
                 network_ts_label=join_record.network_ts_label,
+                path_reaction_labels=join_record.path_reaction_labels,
                 arc_ts_label=recomputed_label,
                 status=ARTIFACT_STATUS_MISSING,
                 artifact_path=None,
@@ -717,6 +735,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
             records.append(TSArtifactRecord(
                 network_id=join_record.network_id,
                 network_ts_label=join_record.network_ts_label,
+                path_reaction_labels=join_record.path_reaction_labels,
                 arc_ts_label=recomputed_label,
                 status=ARTIFACT_STATUS_UNUSABLE,
                 artifact_path=None,
@@ -741,6 +760,7 @@ def discover_ts_artifacts(join_records: list, arc_project_directory: str, sensit
         records.append(TSArtifactRecord(
             network_id=join_record.network_id,
             network_ts_label=join_record.network_ts_label,
+            path_reaction_labels=join_record.path_reaction_labels,
             arc_ts_label=recomputed_label,
             status=artifact_status,
             artifact_path=recomputed_path,

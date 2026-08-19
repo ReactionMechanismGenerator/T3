@@ -3,19 +3,20 @@
 import os
 import shutil
 
+from arc.level import Level, assign_frequency_scale_factor
 from arc.reaction.reaction import ARCReaction
 from arc.species.species import ARCSpecies
+from arc.statmech.arkane import get_arkane_model_chemistry
 
 import t3.pdep.pes_qm as pes_qm
-from t3.pdep.capture import CaptureResult, capture_ts_artifacts
+from t3.pdep.capture import CaptureResult, VerifyResult, capture_ts_artifacts
 from t3.pdep.discovery import ARTIFACT_STATUS_UNVERIFIED, ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import HybridNetworkResult
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label, expected_ts_artifact_path
 from t3.pdep.parser import PDepPathReaction
-from t3.pdep.pes_loop import hybrid_network_path
 from t3.pdep.pes_qm import ARC_INPUT_FILE_NAME, adopt_prior_qm, arc_qm_runner, build_arc_input
-from t3.pdep.pes_rounds import QMCandidate, round_paths
+from t3.pdep.pes_rounds import QMCandidate, hybrid_network_path, round_paths
 from t3.schema import PESLoopConfig
 
 
@@ -493,9 +494,86 @@ class TestArcQmRunner(object):
         assert converged == frozenset({'TS1'})
         assert queued == frozenset({'TS1'})
 
+    def test_adopted_artifact_is_vendored_and_folded_into_hybrid_write(self, tmp_path, monkeypatch):
+        """C2: an adopted prior-round artifact must be copied into this round's own
+        paths.capture/adopted/ subdir and merged into qm_transition_states -- even when ARC itself
+        converges nothing new this round -- so the hybrid write still fires and the adopted TS
+        does not silently revert to an ILT estimate."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        os.makedirs(os.path.join(capture_dir, 'networks'))
+        shutil.copyfile(_FIXTURE_NETWORK_PATH,
+                        os.path.join(capture_dir, 'networks', f'{_NETWORK_ID}.py'))
+        capture_result = CaptureResult(
+            capture_dir=capture_dir, manifest_path=os.path.join(capture_dir, 'manifest.yml'),
+            records=(
+                TSArtifactRecord(network_id=_NETWORK_ID, network_ts_label='TS1', arc_ts_label=None,
+                                 status=ARTIFACT_STATUS_UNVERIFIED,
+                                 artifact_path=os.path.join(capture_dir, 'qm', 'TS1.py')),
+            ),
+            energy_settings=_FROZEN_ENERGY_SETTINGS,
+            networks={_NETWORK_ID: {'source_path': '', 'source_sha256': '', 'method': 'MSC',
+                                    'captured_path': os.path.join('networks', f'{_NETWORK_ID}.py')}},
+        )
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
+        recorder.hybrid_result = HybridNetworkResult(
+            dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
+            vendored_files=(), warnings=())
+
+        prior_artifact_dir = str(tmp_path / 'prior_project' / 'output' / 'SPs')
+        os.makedirs(prior_artifact_dir)
+        prior_artifact_path = os.path.join(prior_artifact_dir, 'TS1.py')
+        with open(prior_artifact_path, 'w') as f:
+            f.write("geometry = Log('output.out')\n")
+
+        converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
+                                          adopted={'TS1': prior_artifact_path})
+        assert converged == frozenset()
+        assert queued == frozenset({'TS1'})
+        assert len(recorder.write_hybrid_calls) == 1
+        call = recorder.write_hybrid_calls[0]
+        vendored_path = call['qm_transition_states']['TS1']
+        assert vendored_path != prior_artifact_path
+        assert os.path.dirname(vendored_path) == os.path.join(capture_dir, 'adopted')
+        assert os.path.isfile(vendored_path)
+        with open(vendored_path) as f:
+            assert "geometry = Log('output.out')" in f.read()
+        assert call['qm_artifacts_root'] == capture_dir
+
+    def test_mutant_adopted_artifact_path_is_not_silently_accepted(self, tmp_path, monkeypatch):
+        """Deliverable mutation: substituting an adopted artifact's path with a nonexistent path
+        must fail loudly at the hybrid-write boundary, not silently reach
+        write_hybrid_network_input_file's qm_transition_states."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        os.makedirs(os.path.join(capture_dir, 'networks'))
+        shutil.copyfile(_FIXTURE_NETWORK_PATH,
+                        os.path.join(capture_dir, 'networks', f'{_NETWORK_ID}.py'))
+        capture_result = _empty_capture_result(capture_dir)
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
+        recorder.hybrid_result = HybridNetworkResult(
+            dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
+            vendored_files=(), warnings=())
+
+        try:
+            arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
+                          adopted={'TS1': 'MUTANT-NOT-A-PATH'})
+            assert False, 'expected a FileNotFoundError'
+        except FileNotFoundError:
+            pass
+        assert recorder.write_hybrid_calls == []
+
+
+def _arc_model_chemistry_text(sp_level: str) -> str:
+    """The exact ``modelChemistry`` source text ARC itself writes for ``sp_level`` -- run the
+    same normalization chain C1's fix in ``adopt_prior_qm`` uses, so this fixture's manifest is
+    faithful to what a real ARC project's ``calcs/statmech/kinetics/input.py`` actually contains
+    (see ``tests/data/pdep_energy_settings/xl1001_project/calcs/statmech/kinetics/input.py``)."""
+    level = Level(repr=sp_level)
+    scale = assign_frequency_scale_factor(level)
+    return get_arkane_model_chemistry(level, freq_scale_factor=scale)
+
 
 def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
-                            network_id='network1_1') -> None:
+                            network_id='network1_1', path_reaction_labels=('reaction1',)) -> None:
     """Build a real capture manifest under ``tmp_path`` by calling ``capture_ts_artifacts`` itself
     (mirrors ``tests/test_pdep/test_capture.py``'s own fixture-building style), so
     ``adopt_prior_qm`` is exercised against the exact format ``t3.pdep.capture`` writes rather than
@@ -510,7 +588,8 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
     expected_path = expected_ts_artifact_path(arc_dir, arc_label)
     record = TSJoinRecord(network_id=network_id, network_ts_label=ts_label, status=JOIN_STATUS_QUEUED,
                           arc_ts_label=arc_label, expected_artifact_path=expected_path,
-                          reason='Queued to ARC.', coefficient=0.05, delta_ln_k=0.02)
+                          reason='Queued to ARC.', coefficient=0.05, delta_ln_k=0.02,
+                          path_reaction_labels=path_reaction_labels)
 
     os.makedirs(os.path.dirname(expected_path), exist_ok=True)
     log_path = os.path.join(os.path.dirname(expected_path), 'output.out')
@@ -531,7 +610,8 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
     statmech_dir = os.path.join(arc_dir, 'calcs', 'statmech', 'kinetics')
     os.makedirs(statmech_dir, exist_ok=True)
     with open(os.path.join(statmech_dir, 'input.py'), 'w') as f:
-        f.write(f"modelChemistry = '{level}'\n\nuseHinderedRotors = True\n\nuseAtomCorrections = True\n\n"
+        f.write(f"modelChemistry = {_arc_model_chemistry_text(level)}\n\nuseHinderedRotors = True\n\n"
+                "useAtomCorrections = True\n\n"
                 "atomEnergies = {'C': -37.844411, 'H': -0.499818, 'N': -54.581501, 'O': -75.062219}\n\n"
                 "useBondCorrections = False\n")
 
@@ -548,28 +628,110 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
                          sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)})
 
 
+_TS1_PATH_REACTION_LABELS = {'TS1': ('reaction1',)}
+
+
 class TestAdoptPriorQM(object):
 
     def test_no_projects_adopts_nothing(self):
-        assert adopt_prior_qm([], 'network1_1', 'wb97xd/def2tzvp') == {}
+        assert adopt_prior_qm([], 'network1_1', 'wb97xd/def2tzvp', _TS1_PATH_REACTION_LABELS) == {}
 
     def test_a_missing_project_is_skipped_not_fatal(self, tmp_path):
         """A stale path in a config must not kill a run that would otherwise work."""
-        assert adopt_prior_qm([str(tmp_path / 'gone')], 'network1_1', 'wb97xd/def2tzvp') == {}
+        assert adopt_prior_qm([str(tmp_path / 'gone')], 'network1_1', 'wb97xd/def2tzvp',
+                              _TS1_PATH_REACTION_LABELS) == {}
 
     def test_matching_level_of_theory_is_adopted(self, tmp_path):
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
-        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp')
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                                 _TS1_PATH_REACTION_LABELS)
         assert 'TS1' in adopted
+
+    def test_adopted_artifact_path_points_at_the_real_captured_file(self, tmp_path):
+        """Regression for mutation (f): a prior round asserted only key membership, so a mutant
+        that returns the wrong path (or a constant) still passed. Assert the value itself."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                                 _TS1_PATH_REACTION_LABELS)
+        assert os.path.isfile(adopted['TS1'])
+        with open(adopted['TS1']) as f:
+            content = f.read()
+        assert "geometry = Log(" in content and 'output.out' in content
+        assert adopted['TS1'] != 'MUTANT-NOT-A-PATH'
 
     def test_mismatched_level_of_theory_is_refused(self, tmp_path):
         """Mixing levels inside one barrier makes the rate inconsistent, so a non-matching prior
-        result is not adopted even though it exists and converged."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2svp')
-        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp') == {}
+        result is not adopted even though it exists and converged. b3lyp/def2tzvp normalizes to a
+        genuinely different LevelOfTheory(...) string, not merely a different raw string."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='b3lyp/def2tzvp')
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                              _TS1_PATH_REACTION_LABELS) == {}
 
     def test_a_different_network_is_not_adopted(self, tmp_path):
-        """Labels are namespace-local: another network's TS1 is not this network's TS1."""
+        """network_id is a pre-filter: another network's manifest is not adopted even when its
+        recorded path_reaction_labels happen to match, since network_id itself never matches."""
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
                                 network_id='network9_9')
-        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp') == {}
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                              _TS1_PATH_REACTION_LABELS) == {}
+
+    def test_no_structural_match_is_not_adopted(self, tmp_path):
+        """C3/I1: network_id alone is not enough -- a record whose path_reaction_labels do not
+        structurally match any of THIS run's own candidates is refused, even with a matching
+        network_id and level of theory."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
+                                path_reaction_labels=('reaction7',))
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                              _TS1_PATH_REACTION_LABELS) == {}
+
+    def test_status_gate_refuses_non_usable_artifacts(self, tmp_path, monkeypatch):
+        """Regression for mutation (d): dropping the ARTIFACT_STATUS_USABLE check must not let a
+        non-usable (e.g. UNVERIFIED) record be adopted."""
+        manifest_dir = tmp_path / 'proj' / 'capture'
+        manifest_dir.mkdir(parents=True)
+        (manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
+        record = TSArtifactRecord(network_id='network1_1', network_ts_label='TS1', arc_ts_label='X',
+                                  status=ARTIFACT_STATUS_UNVERIFIED,
+                                  artifact_path=str(tmp_path / 'qm' / 'TS1.py'),
+                                  path_reaction_labels=('reaction1',))
+        verify_result = VerifyResult(
+            capture_dir=str(manifest_dir),
+            manifest_path=str(manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME),
+            record_count=1, captured_artifact_count=1,
+            networks={'network1_1': {}},
+            energy_settings={'model_chemistry': _arc_model_chemistry_text('wb97xd/def2tzvp')},
+            ts_records=(record,))
+        monkeypatch.setattr(pes_qm, 'verify_capture', lambda root: verify_result)
+        adopted = adopt_prior_qm([str(tmp_path / 'proj')], 'network1_1', 'wb97xd/def2tzvp',
+                                 _TS1_PATH_REACTION_LABELS)
+        assert adopted == {}
+
+    def test_conflicting_prior_captures_are_refused_not_last_write_wins(self, tmp_path, monkeypatch):
+        """I5: two manifests offering different artifacts for the same structurally-matched local
+        TS label must not silently pick one by os.walk order -- reuse for that label is refused."""
+        record_a = TSArtifactRecord(network_id='network1_1', network_ts_label='TS1', arc_ts_label='A',
+                                    status=ARTIFACT_STATUS_USABLE, artifact_path='/a/TS1.py',
+                                    path_reaction_labels=('reaction1',))
+        record_b = TSArtifactRecord(network_id='network1_1', network_ts_label='TS1', arc_ts_label='B',
+                                    status=ARTIFACT_STATUS_USABLE, artifact_path='/b/TS1.py',
+                                    path_reaction_labels=('reaction1',))
+        energy_settings = {'model_chemistry': _arc_model_chemistry_text('wb97xd/def2tzvp')}
+        results_by_root = {}
+
+        def _fake_verify_capture(root):
+            return results_by_root[root]
+
+        for name, record in (('proj_a', record_a), ('proj_b', record_b)):
+            manifest_dir = tmp_path / name / 'capture'
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
+            results_by_root[str(manifest_dir)] = VerifyResult(
+                capture_dir=str(manifest_dir),
+                manifest_path=str(manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME),
+                record_count=1, captured_artifact_count=1, networks={'network1_1': {}},
+                energy_settings=energy_settings, ts_records=(record,))
+
+        monkeypatch.setattr(pes_qm, 'verify_capture', _fake_verify_capture)
+        adopted = adopt_prior_qm([str(tmp_path / 'proj_a'), str(tmp_path / 'proj_b')],
+                                 'network1_1', 'wb97xd/def2tzvp', _TS1_PATH_REACTION_LABELS)
+        assert adopted == {}

@@ -244,12 +244,22 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     """
     rounds = []
     computed_ts_labels = frozenset(adopted_ts_labels) if adopted_ts_labels else frozenset()
+    adopted = dict()
     if config.reuse.from_t3_projects:
         network_id = Path(config.pes.network).stem
-        adopted = adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level)
-        if adopted and logger is not None:
-            logger.info(f"PES loop: reusing {len(adopted)} prior QM result(s) for network "
-                       f"{network_id!r}: {sorted(adopted)}.")
+        seed_network = parse_pdep_network_file(path=config.pes.network)
+        path_reaction_labels_by_ts_label = {
+            ts_label: tuple(sorted(path_reaction.label for path_reaction in path_reactions))
+            for ts_label, path_reactions in seed_network.path_reactions_by_ts().items()
+        }
+        adopted = adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level,
+                                 path_reaction_labels_by_ts_label)
+        if adopted:
+            message = (f"PES loop: reusing {len(adopted)} prior QM result(s) for network "
+                      f"{network_id!r}: {sorted(adopted)}.")
+            _logger.info(message)
+            if logger is not None:
+                logger.info(message)
         computed_ts_labels = computed_ts_labels | frozenset(adopted)
     current_network_path = config.pes.network
     max_rounds = config.termination.max_rounds
@@ -338,7 +348,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                  reason=rounds[-1].reason, final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
-        newly_computed, actually_queued = qm_runner(candidates, paths, config, network.network_id)
+        if round_index == 0 and adopted:
+            newly_computed, actually_queued = qm_runner(candidates, paths, config,
+                                                         network.network_id, adopted=adopted)
+        else:
+            newly_computed, actually_queued = qm_runner(candidates, paths, config, network.network_id)
         computed_ts_labels = computed_ts_labels | newly_computed
         queued_ts_labels = tuple(actually_queued)
 
