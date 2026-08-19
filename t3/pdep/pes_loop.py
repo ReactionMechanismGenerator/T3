@@ -60,7 +60,9 @@ from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED
 from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.pes_qm import adopt_prior_qm
-from t3.pdep.pes_rounds import RoundPaths, hybrid_network_path, round_paths, split_qm_candidates
+from t3.pdep.pes_rounds import (RoundPaths, attach_sensitivity_evidence, hybrid_network_path,
+                                round_paths, split_qm_candidates)
+from t3.pdep.pes_sa import run_round_me_sensitivity
 from t3.schema import PESLoopConfig
 
 _logger = logging.getLogger(__name__)
@@ -170,30 +172,35 @@ def _trim_candidates(candidates: tuple, config: PESLoopConfig, logger) -> tuple:
     """
     Apply ``config.qm.scope`` and ``config.qm.max_transition_states_per_round`` to ``candidates``.
 
-    Standalone mode has no sensitivity-analysis dict to rank candidates by -- that ranking only
-    exists inside a T3 iteration, where ``t3.pdep.budget`` has a whole field of networks and an SA
-    result to weigh them against. So ``scope == 'sensitive'`` degrades to the network file's own
-    order here, and that degradation is logged at WARNING level rather than applied silently: a
-    caller who asked for sensitivity-ranked spend and silently got file order instead has no way to
-    notice unless the degradation is loud.
+    Every candidate reaching this function already carries the REAL sensitivity evidence this
+    round's own master-equation SA measured for it (``t3.pdep.pes_sa.run_round_me_sensitivity``,
+    stamped by ``t3.pdep.pes_rounds.attach_sensitivity_evidence``), so ``scope == 'sensitive'``
+    ranks by that evidence -- descending ``abs(coefficient)``, ties keeping network-file order --
+    rather than degrading to file order the way it had to before the loop had an SA of its own.
+    ``scope == 'all'`` keeps the network file's own order. Both take the first ``limit``.
 
     Args:
-        candidates (tuple): The ``QMCandidate`` entries to trim, in network-file order.
+        candidates (tuple): The ``QMCandidate`` entries to trim, in network-file order, each
+                            already stamped with its sensitivity evidence.
         config (PESLoopConfig): The loop's configuration.
         logger: A T3 ``Logger``, or ``None``.
 
     Returns:
-        tuple: The trimmed candidates, in network-file order.
+        tuple: The trimmed candidates -- evidence-ranked for ``scope == 'sensitive'``,
+        network-file order for ``scope == 'all'``.
     """
     limit = config.qm.max_transition_states_per_round
-    if config.qm.scope == 'sensitive' and len(candidates) > limit:
-        message = ("PES loop: qm.scope='sensitive' was requested, but standalone mode has no "
-                   "sensitivity-analysis dict to rank candidates by. Degrading to the network "
-                   f"file's own order and taking the first {limit} of {len(candidates)} "
-                   f"candidate(s).")
-        _logger.warning(message)
+    if config.qm.scope == 'sensitive':
+        # sorted() is stable, so equal |coefficient| keeps network-file order -- the determinism
+        # split_qm_candidates' own docstring promises.
+        candidates = tuple(sorted(candidates, key=lambda candidate: -abs(candidate.coefficient)))
+    if len(candidates) > limit:
+        message = (f"PES loop: taking the {'most sensitive' if config.qm.scope == 'sensitive' else 'first'} "
+                   f'{limit} of {len(candidates)} candidate(s) '
+                   f'(qm.max_transition_states_per_round).')
+        _logger.info(message)
         if logger is not None:
-            logger.warning(message)
+            logger.info(message)
     return candidates[:limit]
 
 
@@ -338,22 +345,70 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
-        candidates = _trim_candidates(split.candidates, config, logger)
-        # Offered, not yet queued -- qm_runner=None never runs a runner at all, so nothing can be
-        # dropped, and this is the honest record. A real qm_runner's own reported queued_ts_labels
-        # (below) supersedes this once it runs, because build_arc_input can silently drop a
-        # candidate the loop offered (N3).
-        offered_ts_labels = tuple(candidate.ts_label for candidate in candidates)
-
         if qm_runner is None:
+            # Offered, not queued -- no runner ever runs, so nothing can be dropped, and this is
+            # the honest record. No ME SA runs on this path either (there is no QM spend to
+            # justify and no capture to evidence), so scope='sensitive' cannot rank here: the
+            # record simply reports the first `limit` candidates in network-file order.
+            offered = split.candidates[:config.qm.max_transition_states_per_round]
             rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                      diagram_path=diagram_path, queued_ts_labels=offered_ts_labels,
+                                      diagram_path=diagram_path,
+                                      queued_ts_labels=tuple(candidate.ts_label
+                                                             for candidate in offered),
                                       skipped=split.skipped, status=PES_LOOP_DIAGRAM_ONLY,
                                       reason='no qm_runner configured: explored and drew the '
                                             'diagram only, nothing was computed.'))
             return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_DIAGRAM_ONLY,
                                  reason=rounds[-1].reason, final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
+
+        if split.candidates:
+            # Defect-1 fix: every queued transition state must carry REAL sensitivity evidence --
+            # capture_ts_artifacts refuses (fail-closed, by design) any captured artifact without
+            # it, so a loop with no evidence source could never complete a round that converged
+            # anything. The evidence is measured, never invented: this round's own Arkane ME SA
+            # on the freshly explored network, through the same production seams T3's in-iteration
+            # pipeline uses (see t3.pdep.pes_sa). An SA that fails, or leaves every candidate
+            # without a finite row, fails the ROUND loudly -- a stall reported honestly, never a
+            # fabricated coefficient shimmed past the capture guard.
+            try:
+                evidence = run_round_me_sensitivity(network_path=explored_network_path,
+                                                    sa_dir=paths.sa,
+                                                    method=config.pes.method,
+                                                    timeout=config.pes.timeout,
+                                                    logger=logger)
+            except (OSError, ValueError) as e:
+                reason = (f'round {round_index}: could not obtain master-equation sensitivity '
+                          f'evidence for network {network.network_id!r}: {e} Every queued '
+                          f'transition state must carry real sensitivity evidence '
+                          f'(t3.pdep.capture refuses a captured artifact without it), so this '
+                          f'round cannot queue QM.')
+                rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
+                                          diagram_path=diagram_path, queued_ts_labels=(),
+                                          skipped=split.skipped, status=PES_LOOP_FAILED,
+                                          reason=reason))
+                return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+                                     final_network_path=explored_network_path,
+                                     final_diagram_path=diagram_path)
+            split = attach_sensitivity_evidence(split, evidence)
+            if not split.candidates and not round0_has_adopted:
+                reason = (f'round {round_index}: the master-equation sensitivity analysis for '
+                          f'network {network.network_id!r} measured no finite sensitivity '
+                          f'evidence for any QM candidate, so nothing can be queued (see the '
+                          f"round record's skipped entries for the per-candidate reasons).")
+                rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
+                                          diagram_path=diagram_path, queued_ts_labels=(),
+                                          skipped=split.skipped, status=PES_LOOP_FAILED,
+                                          reason=reason))
+                return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+                                     final_network_path=explored_network_path,
+                                     final_diagram_path=diagram_path)
+
+        candidates = _trim_candidates(split.candidates, config, logger)
+        # Offered, not yet queued. A real qm_runner's own reported queued_ts_labels (below)
+        # supersedes this once it runs, because build_arc_input can silently drop a candidate the
+        # loop offered (N3).
+        offered_ts_labels = tuple(candidate.ts_label for candidate in candidates)
 
         if round0_has_adopted:
             newly_computed, actually_queued = qm_runner(candidates, paths, config,

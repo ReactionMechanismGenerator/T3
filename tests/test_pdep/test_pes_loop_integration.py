@@ -131,7 +131,15 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
 
     write_hybrid_calls = []
 
-    def _fake_capture_ts_artifacts(*, join_records, arc_project_directory, capture_dir, networks):
+    def _fake_capture_ts_artifacts(*, join_records, arc_project_directory, capture_dir, networks,
+                                   sensitivity_by_ts):
+        # Defect 1: the real capture_ts_artifacts refuses (via its verify_capture self-check) any
+        # captured artifact whose join record carries no finite sensitivity evidence -- so even
+        # this double must insist the runner actually passed it, keyed and finite, or the pairing
+        # this module corroborates would still be one that cannot run against the real capture.
+        assert sensitivity_by_ts, 'arc_qm_runner must pass the sensitivity evidence to capture'
+        for key, (coefficient, delta_ln_k) in sensitivity_by_ts.items():
+            assert coefficient is not None and delta_ln_k is not None, key
         os.makedirs(capture_dir, exist_ok=True)
         return CaptureResult(
             capture_dir=capture_dir,

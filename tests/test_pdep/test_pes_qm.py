@@ -26,12 +26,13 @@ def _config(**qm) -> PESLoopConfig:
 
 
 def _candidate(ts_label='TS1', family='1,2_Insertion_CO', reactants=('A',), products=('B',),
-              label='reaction1') -> QMCandidate:
+              label='reaction1', coefficient=0.05, delta_ln_k=0.02) -> QMCandidate:
     path_reaction = PDepPathReaction(
         label=label, reactants=reactants, products=products,
         transition_state=ts_label, kinetics_type='Arrhenius', kinetics_comment='',
     )
-    return QMCandidate(path_reaction=path_reaction, ts_label=ts_label, family=family)
+    return QMCandidate(path_reaction=path_reaction, ts_label=ts_label, family=family,
+                       coefficient=coefficient, delta_ln_k=delta_ln_k)
 
 
 # Adjacency-list text is opaque to build_arc_input -- any non-empty string exercises the
@@ -839,3 +840,29 @@ class TestAdoptedEnergySettings(object):
                                    {'TS2': ('reaction2',)})
         with pytest.raises(ValueError, match='conflicting'):
             pes_qm._adopted_energy_settings(adopted_a | adopted_b)
+
+
+class TestArcQmRunnerSensitivityEvidence(object):
+    """Defect 1: arc_qm_runner must freeze real sensitivity evidence onto its join records and
+    hand it to capture_ts_artifacts -- and must refuse, BEFORE any QM is spent, a candidate that
+    carries none, rather than let capture (rightly) refuse the artifact after ARC already ran."""
+
+    def test_capture_receives_the_candidates_own_evidence_keyed_by_record(self, tmp_path, monkeypatch):
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, capture_result=None)
+        recorder.capture_result = _empty_capture_result(os.path.join(str(tmp_path), 'capture'))
+        arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
+        assert len(recorder.capture_ts_artifacts_calls) == 1
+        sensitivity_by_ts = recorder.capture_ts_artifacts_calls[0]['sensitivity_by_ts']
+        assert sensitivity_by_ts == {(_NETWORK_ID, 'TS1'): (0.05, 0.02)}
+
+    def test_a_candidate_without_evidence_is_refused_before_arc_ever_runs(self, tmp_path, monkeypatch):
+        paths, _candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, capture_result=None)
+        naked = (_candidate(ts_label='TS1', reactants=('O-2(13598)', 'CO2(11)'),
+                            products=('O=C1OO1(21648)',), coefficient=None, delta_ln_k=None),)
+        with pytest.raises(ValueError, match='no sensitivity evidence'):
+            arc_qm_runner(naked, paths, _config(), _NETWORK_ID)
+        assert _FakeARC.constructions == []
+        assert _FakeARC.execute_calls == 0
+        assert recorder.capture_ts_artifacts_calls == []

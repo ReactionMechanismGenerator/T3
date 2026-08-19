@@ -23,7 +23,7 @@ runs of the same input incomparable.
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from t3.pdep.barrierless import classify_barrierless
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
@@ -38,10 +38,21 @@ class QMCandidate:
         path_reaction (PDepPathReaction): The parsed path reaction.
         ts_label (str): The network-local transition state label (e.g. ``'TS1'``).
         family (str | None): The RMG family, when the kinetics comment named one.
+        coefficient (float | None): The signed dln(k)/dE0 sensitivity coefficient (mol/J) this
+            round's master-equation SA measured for this transition state
+            (``t3.pdep.pes_sa.run_round_me_sensitivity``), stamped by
+            ``attach_sensitivity_evidence``. ``None`` only before stamping;
+            ``t3.pdep.pes_qm.arc_qm_runner`` refuses to queue a candidate left at ``None``,
+            because ``t3.pdep.capture`` would (rightly) refuse its artifact after the QM spend.
+        delta_ln_k (float | None): The corresponding dimensionless rate response,
+            ``abs(coefficient) * perturbation`` -- same convention as
+            ``t3.pdep.selector.SensitiveTransitionState``.
     """
     path_reaction: PDepPathReaction
     ts_label: str
     family: str | None
+    coefficient: float | None = None
+    delta_ln_k: float | None = None
 
 
 @dataclass(frozen=True)
@@ -106,6 +117,44 @@ def split_qm_candidates(network: PDepNetwork, computed_ts_labels: frozenset) -> 
     return CandidateSplit(candidates=tuple(candidates), skipped=tuple(skipped))
 
 
+def attach_sensitivity_evidence(split: CandidateSplit,
+                                evidence_by_ts_label: dict) -> CandidateSplit:
+    """
+    Stamp each candidate with the real sensitivity evidence this round's ME SA measured for it.
+
+    A candidate whose transition state has NO entry in ``evidence_by_ts_label`` is moved to
+    ``skipped`` with its reason recorded, never queued: ``t3.pdep.capture`` refuses (fail-closed,
+    by design) any captured artifact that carries no ``coefficient``/``delta_ln_k`` evidence, so
+    queueing such a candidate would spend real QM and then lose the result at capture time -- and
+    inventing a number instead would violate the standing constraint that no rate-determining
+    parameter may be fabricated.
+
+    Args:
+        split (CandidateSplit): The split to stamp, from ``split_qm_candidates``.
+        evidence_by_ts_label (dict): Network-local TS label -> ``(coefficient, delta_ln_k)``,
+            from ``t3.pdep.pes_sa.run_round_me_sensitivity``.
+
+    Returns:
+        CandidateSplit: The same candidates in the same order, each carrying its evidence, minus
+        the ones with no evidence (appended to ``skipped``, each with its reason).
+    """
+    candidates, skipped = [], list(split.skipped)
+    for candidate in split.candidates:
+        pair = evidence_by_ts_label.get(candidate.ts_label)
+        if pair is None:
+            skipped.append(SkippedChannel(
+                label=candidate.path_reaction.label,
+                reason=f"'{candidate.path_reaction.label}': transition state "
+                       f'{candidate.ts_label} has no finite sensitivity evidence in this '
+                       f"round's master-equation sensitivity analysis, and a captured artifact "
+                       f'must carry the evidence that justified selecting it '
+                       f'(t3.pdep.capture); not queueing it rather than inventing a number.'))
+            continue
+        coefficient, delta_ln_k = pair
+        candidates.append(replace(candidate, coefficient=coefficient, delta_ln_k=delta_ln_k))
+    return CandidateSplit(candidates=tuple(candidates), skipped=tuple(skipped))
+
+
 PES_LOOP_DIAGRAM_FILENAME = 'pes_diagram.png'
 
 
@@ -118,6 +167,8 @@ class RoundPaths:
         root (str): The round's own directory.
         arc_project (str): The ARC project directory for this round's QM.
         explorer_output (str): Where the Arkane explorer writes.
+        sa (str): Where this round's master-equation sensitivity analysis runs
+            (``t3.pdep.pes_sa.run_round_me_sensitivity``).
         capture (str): Where this round's QM artifacts are frozen.
         hybrid (str): Where this round's hybrid network input file is written.
         diagram (str): The PES diagram for this round.
@@ -125,6 +176,7 @@ class RoundPaths:
     root: str
     arc_project: str
     explorer_output: str
+    sa: str
     capture: str
     hybrid: str
     diagram: str
@@ -164,6 +216,7 @@ def round_paths(project_directory: str, round_index: int) -> RoundPaths:
     return RoundPaths(root=root,
                       arc_project=os.path.join(root, 'ARC'),
                       explorer_output=os.path.join(root, 'explorer'),
+                      sa=os.path.join(root, 'SA'),
                       capture=os.path.join(root, 'capture'),
                       hybrid=os.path.join(root, 'hybrid'),
                       diagram=os.path.join(root, PES_LOOP_DIAGRAM_FILENAME))

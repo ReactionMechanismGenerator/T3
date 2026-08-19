@@ -15,6 +15,20 @@ from t3.pdep.pes_rounds import round_paths
 from t3.schema import PESLoopConfig
 
 
+@pytest.fixture(autouse=True)
+def stub_me_sensitivity(monkeypatch):
+    """Stand in for the round's Arkane ME sensitivity analysis (t3.pdep.pes_sa), which this
+    module's loop-sequencing tests cannot run (Arkane stays out of scope here, exactly as the
+    explorer does). Returns finite evidence for every TS label the stub networks below can
+    declare, with strictly decreasing |coefficient| in file order so the default scope='sensitive'
+    ranking preserves the file order these tests were written against. Tests about the SA step
+    itself re-monkeypatch over this."""
+    def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+        return {f'TS{i}': (0.05 - 0.001 * i, (0.05 - 0.001 * i) * 8368.0) for i in range(10)}
+
+    monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+
+
 @pytest.fixture
 def config():
     """A minimal config pointing at a network fixture.
@@ -506,3 +520,127 @@ class TestRunPESLoop(object):
         assert len(result.rounds) == 2
         assert result.rounds[0].status != PES_LOOP_FAILED
         assert calls[1] == written_hybrid_paths[0]
+
+
+class TestRoundMeSensitivityWiring(object):
+    """Defect 1: the loop's own ME SA is the source of the real sensitivity evidence every queued
+    transition state must carry. These tests re-monkeypatch over this module's autouse SA stub."""
+
+    def test_candidates_reach_the_runner_stamped_with_the_sas_own_evidence(self, tmp_path,
+                                                                           monkeypatch, config):
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        sa_calls = []
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            sa_calls.append({'network_path': network_path, 'sa_dir': sa_dir, 'method': method,
+                             'timeout': timeout})
+            return {'TS0': (-3.0e-5, 0.25)}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        received = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            received.extend(candidates)
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert len(sa_calls) == 1
+        # The SA runs on THIS round's freshly explored network, into this round's own SA dir,
+        # with the configured ME method and the explorer's own timeout budget.
+        assert os.path.basename(sa_calls[0]['network_path']) == 'explored_round0.py'
+        assert sa_calls[0]['sa_dir'] == round_paths(str(tmp_path), 0).sa
+        assert sa_calls[0]['method'] == config.pes.method
+        assert sa_calls[0]['timeout'] == config.pes.timeout
+        assert received[0].coefficient == -3.0e-5
+        assert received[0].delta_ln_k == 0.25
+
+    def test_a_failed_sa_fails_the_round_rather_than_inventing_evidence(self, tmp_path,
+                                                                        monkeypatch, config):
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            raise ValueError('the master-equation sensitivity analysis failed')
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        runner_calls = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            runner_calls.append(candidates)
+            return frozenset(), frozenset()
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_FAILED
+        assert 'sensitivity' in result.reason
+        assert runner_calls == []
+
+    def test_a_candidate_without_evidence_is_skipped_not_queued(self, tmp_path, monkeypatch, config):
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            return {'TS1': (-3.0e-5, 0.25)}  # nothing for TS0
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        queued = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            queued.extend(c.ts_label for c in candidates)
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert 'TS0' not in queued
+        assert 'TS1' in queued
+        skipped_labels = {s.label: s.reason for record in result.rounds for s in record.skipped}
+        assert 'reaction0' in skipped_labels
+        assert 'no finite sensitivity evidence' in skipped_labels['reaction0']
+
+    def test_no_candidate_with_evidence_fails_the_round(self, tmp_path, monkeypatch, config):
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity',
+                            lambda **kwargs: dict())
+        result = run_pes_loop(config, project_directory=str(tmp_path),
+                              qm_runner=lambda candidates, paths, cfg, network_id, adopted=None:
+                              (frozenset(), frozenset()))
+        assert result.status == PES_LOOP_FAILED
+        assert 'no finite sensitivity evidence' in result.reason
+
+    def test_scope_sensitive_ranks_by_the_sas_own_evidence_not_file_order(self, tmp_path,
+                                                                          monkeypatch):
+        """Before this fix, scope='sensitive' degraded to file order with a warning because the
+        standalone loop had no SA to rank by. It has one now, so the budget must go to the most
+        sensitive transition state, not the first one in the file."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               qm={'scope': 'sensitive', 'max_transition_states_per_round': 1},
+                               termination={'max_rounds': 1, 'stop_when_no_new_ts': False})
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            return {'TS0': (1.0e-6, 0.008), 'TS1': (-9.0e-5, 0.75)}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        queued = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            queued.extend(c.ts_label for c in candidates)
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert queued == ['TS1']
+
+    def test_diagram_only_runs_no_sa_at_all(self, tmp_path, monkeypatch, config):
+        """qm_runner=None spends no QM and captures nothing, so there is no evidence to justify
+        and no Arkane SA to pay for."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        sa_calls = []
+
+        def _fake_sa(**kwargs):
+            sa_calls.append(kwargs)
+            return {}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        result = run_pes_loop(config, project_directory=str(tmp_path))
+        assert result.status == PES_LOOP_DIAGRAM_ONLY
+        assert sa_calls == []

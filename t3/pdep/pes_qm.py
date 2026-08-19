@@ -341,6 +341,15 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
                were actually queued. Reporting this back, rather than letting the caller assume
                every offered candidate was queued, is what lets
                ``t3.pdep.pes_loop.RoundRecord.queued_ts_labels`` stay honest.
+
+    Raises:
+        ValueError: If any candidate that would be queued carries no sensitivity evidence
+                   (``QMCandidate.coefficient``/``delta_ln_k`` is ``None``) -- refused BEFORE ARC
+                   runs, because ``capture_ts_artifacts`` would refuse the artifact AFTER the QM
+                   spend; anything ``capture_ts_artifacts`` itself raises; anything the hybrid
+                   write raises.
+        KeyError: If the capture did not vendor a copy of ``network_id`` even though something
+                 converged for it.
     """
     source_path = _explored_network_path(paths, network_id)
     network = parse_pdep_network_file(path=source_path)
@@ -356,6 +365,25 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         if arc_ts_label(network_id, candidate.ts_label) in queued_arc_ts_labels
     )
     queued_ts_labels = frozenset(candidate.ts_label for candidate in queued_candidates)
+
+    # Defect-1 fix (fail-closed, BEFORE any QM is spent): every queued transition state must carry
+    # the real sensitivity evidence that justified selecting it -- capture_ts_artifacts (below)
+    # refuses, by deliberate design, any captured artifact without a finite coefficient/delta_ln_k,
+    # and that refusal would land AFTER ARC already ran, losing the QM result with no second
+    # chance. run_pes_loop stamps this evidence from the round's own master-equation SA
+    # (t3.pdep.pes_sa via t3.pdep.pes_rounds.attach_sensitivity_evidence); a caller driving this
+    # function directly must supply QMCandidate.coefficient/delta_ln_k itself. Refused here rather
+    # than defaulted: no rate-determining parameter may ever be invented.
+    missing_evidence = sorted(candidate.ts_label for candidate in queued_candidates
+                              if candidate.coefficient is None or candidate.delta_ln_k is None)
+    if missing_evidence:
+        raise ValueError(
+            f'Refusing to queue transition state(s) {missing_evidence} of network {network_id!r}: '
+            f'they carry no sensitivity evidence (QMCandidate.coefficient/delta_ln_k is None). '
+            f'capture_ts_artifacts would refuse their artifacts AFTER the QM spend, so this is '
+            f'refused BEFORE ARC runs. Evidence comes from the round\'s own master-equation '
+            f'sensitivity analysis (t3.pdep.pes_sa.run_round_me_sensitivity, stamped by '
+            f't3.pdep.pes_rounds.attach_sensitivity_evidence); it is never defaulted or invented.')
 
     if not os.path.isdir(paths.arc_project):
         os.makedirs(paths.arc_project)
@@ -386,6 +414,11 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
             status=JOIN_STATUS_QUEUED,
             arc_ts_label=arc_ts_label(network_id, candidate.ts_label),
             path_reaction_labels=(candidate.path_reaction.label,) if candidate.path_reaction is not None else (),
+            # The sensitivity evidence that justified selecting this transition state, frozen onto
+            # the join record at queue time exactly as t3.main.T3.queue_pdep_transition_states
+            # freezes it -- the guaranteed-present-by-now evidence the refusal above enforced.
+            coefficient=candidate.coefficient,
+            delta_ln_k=candidate.delta_ln_k,
         )
         # N3: only candidates that actually reached ARC (queued_candidates), not every candidate
         # this function was handed -- a candidate build_arc_input dropped for missing structure
@@ -398,6 +431,12 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         arc_project_directory=paths.arc_project,
         capture_dir=paths.capture,
         networks=networks,
+        # Derived off the join records' own frozen evidence, mirroring
+        # t3.main.T3._capture_pdep_ts_artifacts byte for byte -- the argument whose omission was
+        # defect 1: without it every captured artifact carries coefficient=None/delta_ln_k=None
+        # and capture's own verify_capture self-check (rightly) refuses the staged capture.
+        sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)
+                           for record in join_records},
     )
 
     converged_labels = frozenset(

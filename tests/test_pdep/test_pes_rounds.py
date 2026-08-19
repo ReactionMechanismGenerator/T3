@@ -5,7 +5,8 @@ import pytest
 
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
 from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME, QMCandidate,
-                                SkippedChannel, round_paths, split_qm_candidates)
+                                SkippedChannel, attach_sensitivity_evidence, round_paths,
+                                split_qm_candidates)
 
 
 def _rxn(label: str, comment: str, ts: str | None = None) -> PDepPathReaction:
@@ -110,3 +111,45 @@ class TestRoundLayout(object):
         """An absolute root is what makes the confinement checks downstream meaningful."""
         with pytest.raises(ValueError, match='absolute'):
             round_paths('proj', 0)
+
+
+class TestAttachSensitivityEvidence(object):
+    """attach_sensitivity_evidence is what stands between the loop and a fabricated coefficient:
+    real evidence is stamped, absent evidence removes the candidate (with its reason), and no
+    default ever fills the gap."""
+
+    def test_evidence_is_stamped_onto_candidates_in_order(self):
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO'),
+                            _rxn('r2', 'family: 1,3_Insertion_CO2')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        stamped = attach_sensitivity_evidence(
+            split, {'TS_r1': (-2.0e-5, 0.17), 'TS_r2': (1.0e-6, 0.008)})
+        assert [c.ts_label for c in stamped.candidates] == ['TS_r1', 'TS_r2']
+        assert stamped.candidates[0].coefficient == -2.0e-5
+        assert stamped.candidates[0].delta_ln_k == 0.17
+        assert stamped.candidates[1].coefficient == 1.0e-6
+        assert stamped.skipped == ()
+
+    def test_candidate_without_evidence_is_skipped_with_its_reason_never_defaulted(self):
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO'),
+                            _rxn('r2', 'family: 1,3_Insertion_CO2')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        stamped = attach_sensitivity_evidence(split, {'TS_r2': (1.0e-6, 0.008)})
+        assert [c.ts_label for c in stamped.candidates] == ['TS_r2']
+        assert len(stamped.skipped) == 1
+        assert stamped.skipped[0].label == 'r1'
+        assert 'no finite sensitivity evidence' in stamped.skipped[0].reason
+        assert 'inventing' in stamped.skipped[0].reason
+
+    def test_prior_skips_are_preserved(self):
+        network = _network([_rxn('r1', 'in family R_Recombination.'),
+                            _rxn('r2', 'family: 1,2_Insertion_CO')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        stamped = attach_sensitivity_evidence(split, {'TS_r2': (1.0e-6, 0.008)})
+        assert {s.label for s in stamped.skipped} == {'r1'}
+        assert [c.ts_label for c in stamped.candidates] == ['TS_r2']
+
+    def test_sa_dir_is_part_of_the_round_layout(self):
+        paths = round_paths('/proj', 1)
+        assert paths.sa == os.path.join('/proj', 'round_1', 'SA')
+        assert paths.sa.startswith(paths.root + os.sep)
