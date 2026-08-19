@@ -1,7 +1,10 @@
 """Tests for t3.pdep.pes_qm."""
 
+import logging
 import os
 import shutil
+
+import pytest
 
 from arc.reaction.reaction import ARCReaction
 from arc.species.species import ARCSpecies
@@ -763,3 +766,76 @@ class TestAdoptPriorQM(object):
         adopted = adopt_prior_qm([str(tmp_path / 'proj_a'), str(tmp_path / 'proj_b')],
                                  'network1_1', 'wb97xd/def2tzvp', _TS1_PATH_REACTION_LABELS)
         assert adopted == {}
+
+
+class TestNormalizedModelChemistry(object):
+    """Direct coverage for _normalized_model_chemistry, which previously had none -- and whose
+    raise-instead-of-None defect (a ValueError out of ARC's get_arkane_model_chemistry for a level
+    with no tabulated frequency scale factor) killed the loop before round 0."""
+
+    def test_resolvable_level_returns_arcs_own_literal(self):
+        assert pes_qm._normalized_model_chemistry('wb97xd/def2tzvp') \
+            == _arc_model_chemistry_text('wb97xd/def2tzvp')
+
+    def test_year_suffixed_level_with_no_tabulated_scale_factor_returns_none_not_raise(self, caplog):
+        """'wb97xd2023/def2tzvp' is ARC's OWN normalized form -- exactly what a user copying a
+        level out of a prior capture manifest would write. ARC has no tabulated frequency scale
+        factor for the year-suffixed spelling, so get_arkane_model_chemistry raises 'freq_level
+        required when freq_scale_factor isn't provided'; this function must convert that raise
+        into its documented None answer rather than letting it kill the run."""
+        with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
+            assert pes_qm._normalized_model_chemistry('wb97xd2023/def2tzvp') is None
+        assert 'could not normalize' in caplog.text
+
+    def test_adopt_prior_qm_survives_an_unresolvable_level(self, tmp_path, caplog):
+        """End to end through adopt_prior_qm: an unresolvable requested level must degrade to
+        'nothing adopted' with a warning, never to a crash before round 0."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
+        with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
+            adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd2023/def2tzvp',
+                                     _TS1_PATH_REACTION_LABELS)
+        assert adopted == {}
+        assert 'nothing will be adopted' in caplog.text
+
+
+class TestAdoptPriorQMRefusesRecordsWithoutStructuralEvidence(object):
+
+    def test_record_with_no_path_reaction_labels_is_refused_with_its_own_reason(self, tmp_path, caplog):
+        """A usable record that carries NO path_reaction_labels cannot be structurally matched at
+        all -- it must be refused with a log line saying exactly that, not fall through the match
+        loop to a misleading 'matches none of this run's candidates' message."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
+                                path_reaction_labels=())
+        with caplog.at_level(logging.INFO, logger='t3.pdep.pes_qm'):
+            adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                                     _TS1_PATH_REACTION_LABELS)
+        assert adopted == {}
+        assert 'records no path_reaction_labels' in caplog.text
+        assert 'match none of' not in caplog.text
+
+
+class TestAdoptedEnergySettings(object):
+    """Direct coverage for _adopted_energy_settings, which previously had none at all -- deleting
+    its whole fallback left the suite green."""
+
+    def test_empty_adopted_returns_none(self):
+        assert pes_qm._adopted_energy_settings(dict()) is None
+
+    def test_settings_come_from_the_adopted_artifacts_own_prior_manifest(self, tmp_path):
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                                 _TS1_PATH_REACTION_LABELS)
+        settings = pes_qm._adopted_energy_settings(adopted)
+        assert settings['model_chemistry'] == _arc_model_chemistry_text('wb97xd/def2tzvp')
+        assert settings['use_hindered_rotors'] is True
+
+    def test_conflicting_prior_manifests_raise_rather_than_guess(self, tmp_path):
+        _write_capture_manifest(tmp_path / 'proj_a', ts_label='TS1', level='wb97xd/def2tzvp')
+        _write_capture_manifest(tmp_path / 'proj_b', ts_label='TS2', level='b3lyp/def2tzvp',
+                                path_reaction_labels=('reaction2',))
+        adopted_a = adopt_prior_qm([str(tmp_path / 'proj_a')], 'network1_1', 'wb97xd/def2tzvp',
+                                   _TS1_PATH_REACTION_LABELS)
+        adopted_b = adopt_prior_qm([str(tmp_path / 'proj_b')], 'network1_1', 'b3lyp/def2tzvp',
+                                   {'TS2': ('reaction2',)})
+        with pytest.raises(ValueError, match='conflicting'):
+            pes_qm._adopted_energy_settings(adopted_a | adopted_b)

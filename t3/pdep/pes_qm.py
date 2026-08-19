@@ -467,6 +467,16 @@ def _normalized_model_chemistry(sp_level: str) -> str | None:
     normalization chain ARC itself used to write the manifest, so the comparison is apples to
     apples.
 
+    ``None`` -- never an exception -- is the answer whenever ARC cannot resolve one. In
+    particular, ``get_arkane_model_chemistry`` itself RAISES (``ValueError: freq_level required
+    when freq_scale_factor isn't provided``) for a non-composite level with no tabulated
+    frequency scale factor -- e.g. ``'wb97xd2023/def2tzvp'``, ARC's own normalized form, exactly
+    what a user copying a level out of a prior capture manifest would write. This function only
+    ever has the single ``sp_level`` string, no frequency level to hand ARC in that case, so the
+    raise is converted to the documented "could not resolve" answer: the caller
+    (``adopt_prior_qm``) then warns that nothing will match, rather than the whole run dying
+    before round 0.
+
     Args:
         sp_level (str): A T3 level-of-theory string, e.g. ``config.qm.sp_level``, undashed.
 
@@ -476,7 +486,12 @@ def _normalized_model_chemistry(sp_level: str) -> str | None:
     """
     level = Level(repr=sp_level)
     scale = assign_frequency_scale_factor(level)
-    return get_arkane_model_chemistry(level, freq_scale_factor=scale)
+    try:
+        return get_arkane_model_chemistry(level, freq_scale_factor=scale)
+    except ValueError as e:
+        _logger.warning(f'PES loop: ARC could not normalize the level of theory {sp_level!r} '
+                        f'into a model_chemistry ({e}); treating it as unresolvable.')
+        return None
 
 
 def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str,
@@ -573,6 +588,15 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                 if record.status != ARTIFACT_STATUS_USABLE:
                     continue
                 if not record.path_reaction_labels:
+                    # Refused EXPLICITLY, with its own log line, rather than left to fall through
+                    # the structural-match loop below (whose `candidate_labels and ...` guard would
+                    # also never match an empty tuple, but whose "matches none of this run's own
+                    # candidates" message would misdescribe the problem: the record carries no
+                    # structural evidence at all, so matching was never even attempted).
+                    _logger.info(
+                        f"PES loop: refusing prior QM for {record.network_ts_label!r} at "
+                        f"{manifest_path!r} -- it records no path_reaction_labels, so it cannot be "
+                        f"structurally matched to any of this run's own candidates.")
                     continue
                 if record.network_id != network_id:
                     # Never a gate -- see this function's own docstring: Arkane's network_id is
