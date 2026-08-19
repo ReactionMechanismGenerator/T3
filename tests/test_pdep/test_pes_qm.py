@@ -185,7 +185,12 @@ class _FakeARC(object):
         _FakeARC.execute_calls += 1
 
     def as_dict(self):
-        return dict(self.kwargs)
+        # N5 (round 3): must be DERIVED from self.kwargs but not equal to it, or a test
+        # asserting content == _FakeARC.constructions[0] can no longer tell 'the persisted
+        # content came from arc.as_dict()' apart from 'the persisted content is just
+        # arc_kwargs verbatim' -- which is exactly the I2 defect (persisting arc_kwargs
+        # instead of calling as_dict()) that round 2's tightening silently stopped catching.
+        return dict(self.kwargs) | {'_from_as_dict': True}
 
 
 class _FakeCalls(object):
@@ -309,7 +314,11 @@ class TestArcQmRunner(object):
         assert _FakeARC.execute_calls == 1
 
     def test_arc_input_yml_is_persisted_from_arc_as_dict_after_construction(self, tmp_path, monkeypatch):
-        """I2: persisted only after ARC(**arc_kwargs) exists, from arc.as_dict()."""
+        """I2: persisted only after ARC(**arc_kwargs) exists, from arc.as_dict() -- not from
+        arc_kwargs itself. _FakeARC.as_dict() returns arc_kwargs PLUS a '_from_as_dict' marker
+        (N5, round 3) specifically so this assertion can tell the two apart: content must carry
+        the marker (proving it came from as_dict()) AND match arc_kwargs on every other key
+        (proving as_dict() wasn't just handed something unrelated)."""
         capture_dir = os.path.join(str(tmp_path), 'capture')
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
             tmp_path, monkeypatch, _empty_capture_result(capture_dir))
@@ -317,7 +326,8 @@ class TestArcQmRunner(object):
         assert len(recorder.save_yaml_file_calls) == 1
         call = recorder.save_yaml_file_calls[0]
         assert call['path'] == os.path.join(paths.arc_project, ARC_INPUT_FILE_NAME)
-        assert call['content'] == _FakeARC.constructions[0]
+        assert call['content'].get('_from_as_dict') is True
+        assert call['content'] == dict(_FakeARC.constructions[0]) | {'_from_as_dict': True}
 
     def test_arc_input_yml_is_not_rewritten_when_it_already_exists(self, tmp_path, monkeypatch):
         capture_dir = os.path.join(str(tmp_path), 'capture')
@@ -411,6 +421,34 @@ class TestArcQmRunner(object):
             vendored_files=(), warnings=())
         arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
         assert recorder.write_hybrid_calls[0]['dest_path'] == hybrid_network_path(paths, _NETWORK_ID)
+
+    def test_missing_network_entry_in_capture_result_raises_keyerror(self, tmp_path, monkeypatch):
+        """Round 2's guard: ARC converged transition states for network_id, but
+        CaptureResult.networks has no entry for it (e.g. a concurrent/prior capture vendored a
+        different network under this id, or capture_ts_artifacts's own bookkeeping is stale).
+        Writing the hybrid network file from a nonexistent captured source would either crash
+        confusingly deep inside write_hybrid_network_input_file or -- worse -- silently read the
+        wrong file; the guard must fail loudly and immediately instead."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        os.makedirs(os.path.join(capture_dir, 'networks'))
+        capture_result = CaptureResult(
+            capture_dir=capture_dir,
+            manifest_path=os.path.join(capture_dir, 'manifest.yml'),
+            records=(
+                TSArtifactRecord(network_id=_NETWORK_ID, network_ts_label='TS1',
+                                 arc_ts_label='T3PDep_network799_1_TS1', status=ARTIFACT_STATUS_USABLE,
+                                 artifact_path=os.path.join(capture_dir, 'qm', 'TS1.py'), converged=True),
+            ),
+            energy_settings=_FROZEN_ENERGY_SETTINGS,
+            networks={},  # no entry for _NETWORK_ID even though TS1 converged for it
+        )
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
+        try:
+            arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
+            assert False, 'expected a KeyError'
+        except KeyError as err:
+            assert _NETWORK_ID in str(err)
+        assert len(recorder.write_hybrid_calls) == 0
 
     def test_qm_transition_states_dict_only_carries_usable_records(self, tmp_path, monkeypatch):
         capture_dir = os.path.join(str(tmp_path), 'capture')

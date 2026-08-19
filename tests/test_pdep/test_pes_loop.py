@@ -218,6 +218,39 @@ class TestRunPESLoop(object):
         assert len(result.rounds) == 1
         assert result.rounds[0].diagram_path is not None
 
+    def test_diagram_only_branch_reports_every_offered_candidate_as_queued(self, tmp_path,
+                                                                           monkeypatch, config):
+        """N3 (round 3): qm_runner=None never runs a runner at all, so nothing CAN be dropped --
+        the diagram-only branch's queued_ts_labels must report every candidate that was offered.
+        Mutation M6 (reverting this branch to queued_ts_labels=()) must fail this test."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+        result = run_pes_loop(config, project_directory=str(tmp_path))
+        assert result.rounds[0].queued_ts_labels == ('TS0', 'TS1')
+
+    def test_queued_ts_labels_reflects_what_the_runner_actually_queued_not_what_was_offered(
+            self, tmp_path, monkeypatch, config):
+        """N3 (round 3): every qm_runner double elsewhere in this file returns the offered set
+        verbatim as its queued half, which cannot distinguish RoundRecord.queued_ts_labels from
+        the offered set the loop built before the runner ran. This runner drops one offered
+        candidate from what it reports as queued (as build_arc_input legitimately can, for a
+        candidate missing structure) -- proving the loop records the runner's OWN report, not what
+        it offered. Mutation M5 (queued_ts_labels = tuple(offered_ts_labels) at pes_loop.py:348)
+        must fail this test."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+
+        def _runner(candidates, paths, cfg, network_id):
+            offered = tuple(c.ts_label for c in candidates)
+            assert offered == ('TS0', 'TS1')
+            _touch_hybrid_file(paths, network_id)
+            # Converge nothing, and report only TS0 as queued -- TS1 is dropped, as build_arc_input
+            # legitimately drops a candidate missing structure.
+            return frozenset(), frozenset({'TS0'})
+
+        result = run_pes_loop(config, project_directory=str(tmp_path),
+                              qm_runner=_runner)
+        assert result.rounds[0].queued_ts_labels == ('TS0',)
+        assert 'TS1' not in result.rounds[0].queued_ts_labels
+
     def test_a_failed_explore_stops_the_loop_and_says_why(self, tmp_path, monkeypatch, config):
         """A round that cannot explore must not be papered over as convergence."""
         _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'], fail=True)
