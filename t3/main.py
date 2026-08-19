@@ -3255,25 +3255,55 @@ class T3:
             reaction.label = ' <=> '.join([' + '.join([spc.label for spc in full_reactants]),
                                            ' + '.join([spc.label for spc in full_products])])
 
+            # reaction.reactants/products (plain string lists) must track reaction.label/r_species/
+            # p_species, or ARC's check_attributes() raises (reverse membership test against
+            # reaction.label). Built from the deduplicated r_species/p_species (not the
+            # stoichiometry-expanded full_reactants/full_products), since multiplicity is encoded
+            # in the label text alone (e.g., "OH[2] + OH[2]") and re-derived from it via
+            # get_species_count().
+            reaction.reactants = [spc.label for spc in reaction.r_species]
+            reaction.products = [spc.label for spc in reaction.p_species]
+
             reaction.reactant_keys = [self.get_species_key(species=spc) for spc in full_reactants]
             reaction.product_keys = [self.get_species_key(species=spc) for spc in full_products]
 
             reaction.rmg_label = reaction.label or str(reaction)
 
-            qm_label = ' <=> '.join([' + '.join([spc.label for spc in species_list])
-                                     for species_list in [full_reactants, full_products]])
-
-            reaction.label = qm_label
-            reaction.qm_label = qm_label
-
             self.reactions[rxn_key] = reaction
 
+            # qm_reaction is a separate object handed off to ARC for QM/TS calculations: its
+            # r_species/p_species get qm-labelled copies (e.g., "s0_CHO"), so its label and
+            # reactants/products must be rebuilt in that same qm-labelled namespace too, or ARC's
+            # Scheduler (which rebuilds species by string-matching label/reactants/products against
+            # r_species/p_species) silently fails to match anything and proceeds with atomless TS
+            # species.
+            # get_species_with_qm_label() is deterministic per species key, so applying it to both
+            # the deduplicated r_species/p_species (for qm_reaction.r_species/p_species and
+            # reactants/products) and to the stoichiometry-expanded full_reactants/full_products
+            # (for the label text only) yields the same qm labels either way, keeping the same
+            # stoichiometry encoding (e.g., "s2_OH + s2_OH") that reaction.label uses.
+            qm_r_species = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
+                           for spc in reaction.r_species]
+            qm_p_species = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
+                           for spc in reaction.p_species]
+            full_reactants_qm = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
+                                 for spc in full_reactants]
+            full_products_qm = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
+                                for spc in full_products]
+
             qm_reaction = reaction.copy()
-            qm_reaction.r_species = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
-                                     for spc in full_reactants]
-            qm_reaction.p_species = [get_species_with_qm_label(species=spc, key=self.get_species_key(species=spc))
-                                     for spc in full_products]
-            qm_reaction.label = qm_label
+            qm_reaction.r_species = qm_r_species
+            qm_reaction.p_species = qm_p_species
+            qm_reaction.label = ' <=> '.join([' + '.join([spc.label for spc in full_reactants_qm]),
+                                              ' + '.join([spc.label for spc in full_products_qm])])
+            qm_reaction.reactants = [spc.label for spc in qm_reaction.r_species]
+            qm_reaction.products = [spc.label for spc in qm_reaction.p_species]
+
+            # reaction.qm_label must equal qm_reaction.label exactly: process_arc_run() later looks
+            # up the T3 reaction by get_reaction_key(label=<ARC's reported label>), which compares
+            # against t3_reaction.qm_label. ARC reports results using qm_reaction's own label (the
+            # object it actually ran), so the round trip only closes if these two match.
+            reaction.qm_label = qm_reaction.label
 
             self.qm['reactions'].append(qm_reaction)
             return rxn_key

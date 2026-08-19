@@ -1363,12 +1363,151 @@ def test_add_reaction():
     t3.add_reaction(reaction=rmg_rxn_1, reasons='reason 4')
     assert t3.get_reaction_key(reaction=rmg_rxn_1) == 3
     assert t3.reactions[3].rmg_label == 'H + CH4 <=> CH3 + H2'
-    # qm_label is built from species labels (these species have simple labels, no RMG index)
-    assert t3.reactions[3].qm_label == 'H + CH4 <=> CH3 + H2'
+    # qm_label is built in the qm-labelled namespace (matching the qm_reaction handed off to ARC),
+    # not in the RMG/core namespace that rmg_label/label use.
+    assert t3.reactions[3].qm_label == t3.qm['reactions'][-1].label
+    assert re.match(r's\d+_H \+ s\d+_CH4 <=> s\d+_CH3 \+ s\d+_H2', t3.reactions[3].qm_label)
     assert isinstance(t3.reactions[3], T3Reaction)
     assert t3.reactions[3].reasons == ['reason 4']
     assert t3.reactions[3].is_converged is False
     assert t3.reactions[3].created_at_iteration == 1
+
+
+def test_add_reaction_resolves_reactant_product_namespace():
+    """
+    Regression test for a reaction whose incoming r_species/p_species labels differ from the
+    labels of the already-stored (isomorphic) species (e.g. the formyl radical spelled 'CHO' in
+    the Chemkin dictionary vs '[CH]=O' in a pdep network file, both resolving to the same stored
+    T3Species by isomorphism). After add_reaction(), reaction.label, reaction.reactants/products
+    and reaction.r_species/p_species must all be mutually consistent in the SAME (stored/core)
+    namespace, or ARC's check_attributes() raises a ReactionError.
+    """
+    t3 = T3(project='test_add_reaction_namespace',
+           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           t3=t3_minimal,
+           rmg=rmg_minimal,
+           qm=qm_minimal,
+           )
+    # Pre-populate self.species with the formyl radical under its "core" label.
+    cho_core = T3Species(label='CHO', smiles='[CH]=O')
+    co_species = T3Species(label='CO', smiles='[C-]#[O+]')
+    o2_species = T3Species(label='O2', smiles='[O][O]')
+    ho2_species = T3Species(label='HO2', smiles='[O]O')
+    t3.add_species(species=cho_core, reasons='seed core species')
+    t3.add_species(species=co_species, reasons='seed core species')
+    t3.add_species(species=o2_species, reasons='seed core species')
+    t3.add_species(species=ho2_species, reasons='seed core species')
+
+    # The incoming reaction uses an isomorphic but differently-spelled label for the formyl
+    # radical ('[CH]=O' instead of the already-stored 'CHO'), simulating the pdep-network vs
+    # Chemkin-dictionary label mismatch.
+    cho_isomorphic = T3Species(label='[CH]=O', smiles='[CH]=O')
+    reaction = T3Reaction(label='[CH]=O + O2 <=> CO + HO2',
+                          r_species=[cho_isomorphic, o2_species],
+                          p_species=[co_species, ho2_species],
+                          kinetics=Arrhenius(A=(1, 'cm^3/(mol*s)'), n=0, Ea=(0, 'kJ/mol'), comment='kinetic comment'))
+    t3.add_reaction(reaction=reaction, reasons='reason')
+
+    rxn_key = t3.get_reaction_key(reaction=reaction)
+    stored_reaction = t3.reactions[rxn_key]
+
+    # label, reactants/products and r_species/p_species must all agree on the same (core) namespace.
+    assert set(stored_reaction.reactants) == {spc.label for spc in stored_reaction.r_species}
+    assert set(stored_reaction.products) == {spc.label for spc in stored_reaction.p_species}
+    stored_reaction.check_attributes()  # must not raise
+
+
+def test_add_reaction_deduplicates_reactants_products_stoichiometry():
+    """
+    Regression test: a reaction with a repeated species on one side (H + HO2 <=> OH + OH) must
+    keep reaction.reactants/products deduplicated (no repeated 'OH' entry), while reaction.label
+    keeps the full stoichiometry-expanded text ('OH + OH'), and check_attributes() passes.
+    """
+    t3 = T3(project='test_add_reaction_stoichiometry',
+           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           t3=t3_minimal,
+           rmg=rmg_minimal,
+           qm=qm_minimal,
+           )
+    h_species = T3Species(label='H', smiles='[H]')
+    ho2_species = T3Species(label='HO2', smiles='[O]O')
+    oh_species_1 = T3Species(label='OH', smiles='[OH]')
+    oh_species_2 = T3Species(label='OH', smiles='[OH]')
+
+    reaction = T3Reaction(label='H + HO2 <=> OH + OH',
+                          r_species=[h_species, ho2_species],
+                          p_species=[oh_species_1, oh_species_2],
+                          kinetics=Arrhenius(A=(1, 'cm^3/(mol*s)'), n=0, Ea=(0, 'kJ/mol'), comment='kinetic comment'))
+    t3.add_reaction(reaction=reaction, reasons='reason')
+
+    rxn_key = t3.get_reaction_key(reaction=reaction)
+    stored_reaction = t3.reactions[rxn_key]
+
+    assert stored_reaction.products.count('OH') == 1
+    assert 'OH + OH' in stored_reaction.label
+    stored_reaction.check_attributes()  # must not raise
+
+
+def test_add_reaction_qm_reaction_namespace_consistency():
+    """
+    Regression test: the qm_reaction object handed off to ARC (self.qm['reactions'][-1]) must have
+    reactants/products matching its own r_species/p_species labels, mimicking ARC's Scheduler
+    string-match logic (arc/scheduler.py:371-378), which rebuilds species objects by testing
+    e.g. 's0_CHO' in qm_reaction.reactants.
+    """
+    t3 = T3(project='test_add_reaction_qm_consistency',
+           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           t3=t3_minimal,
+           rmg=rmg_minimal,
+           qm=qm_minimal,
+           )
+    h_species = T3Species(label='H', smiles='[H]')
+    ch4_species = T3Species(label='CH4', smiles='C')
+    ch3_species = T3Species(label='CH3', smiles='[CH3]')
+    h2_species = T3Species(label='H2', smiles='[H][H]')
+
+    reaction = T3Reaction(label='H + CH4 <=> CH3 + H2',
+                          r_species=[h_species, ch4_species],
+                          p_species=[ch3_species, h2_species],
+                          kinetics=Arrhenius(A=(1, 'cm^3/(mol*s)'), n=0, Ea=(0, 'kJ/mol'), comment='kinetic comment'))
+    t3.add_reaction(reaction=reaction, reasons='reason')
+
+    qm_reaction = t3.qm['reactions'][-1]
+    for spc in qm_reaction.r_species + qm_reaction.p_species:
+        # This is the exact check ARC's Scheduler performs (arc/scheduler.py:371-378) to rebuild
+        # species objects from the reaction's plain reactants/products string lists.
+        assert spc.label in qm_reaction.reactants or spc.label in qm_reaction.products
+
+
+def test_add_reaction_qm_label_round_trip():
+    """
+    Regression test: after add_reaction(), simulating an ARC result reported using the
+    qm_reaction's own label string must round-trip back to the same T3 reaction via
+    get_reaction_key(label=...), which compares against t3_reaction.qm_label.
+    """
+    t3 = T3(project='test_add_reaction_qm_label_round_trip',
+           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           t3=t3_minimal,
+           rmg=rmg_minimal,
+           qm=qm_minimal,
+           )
+    h_species = T3Species(label='H', smiles='[H]')
+    ch4_species = T3Species(label='CH4', smiles='C')
+    ch3_species = T3Species(label='CH3', smiles='[CH3]')
+    h2_species = T3Species(label='H2', smiles='[H][H]')
+
+    reaction = T3Reaction(label='H + CH4 <=> CH3 + H2',
+                          r_species=[h_species, ch4_species],
+                          p_species=[ch3_species, h2_species],
+                          kinetics=Arrhenius(A=(1, 'cm^3/(mol*s)'), n=0, Ea=(0, 'kJ/mol'), comment='kinetic comment'))
+    t3.add_reaction(reaction=reaction, reasons='reason')
+
+    rxn_key = t3.get_reaction_key(reaction=reaction)
+    qm_reaction = t3.qm['reactions'][-1]
+
+    # ARC reports results using the label of the reaction object it actually ran (qm_reaction).
+    arc_reported_label = qm_reaction.label
+    assert t3.get_reaction_key(label=arc_reported_label) == rxn_key
 
 
 def test_dump_species():
