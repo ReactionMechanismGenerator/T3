@@ -28,10 +28,14 @@ Why ``qm_runner`` is injected rather than called directly: this loop's own job i
 explore, draw, split candidates from skips, decide whether to stop -- and none of that requires an
 ARC cluster to test. Injecting the QM step as a callable with the signature
 ``qm_runner(candidates, paths, config, network_id) -> frozenset[str]`` lets every round-sequencing
-decision (no-candidates, converged, stalled, max-rounds, failed-explore) be covered by tests that
-never touch ARC. Task 6 supplies the real ARC-backed implementation; ``qm_runner=None`` is not a
-placeholder for "not implemented yet", it is the honest, permanent behaviour for a caller who wants
-explore-and-draw only, with no QM spend at all -- so it must never raise.
+decision (no-candidates, converged, stalled, diagram-only, max-rounds, failed-explore) be covered
+by tests that never touch ARC. Task 6 supplies the real ARC-backed implementation; ``qm_runner=None``
+is not a placeholder for "not implemented yet", it is the honest, permanent behaviour for a caller
+who wants explore-and-draw only, with no QM spend at all -- so it must never raise, and it is
+recorded as ``PES_LOOP_DIAGRAM_ONLY``, never ``PES_LOOP_STALLED``: the two look similar (a round
+that computed no new TS) but differ in kind -- ``stalled`` is an operational fault worth
+investigating (ARC ran and made no progress), ``diagram_only`` is complete success of exactly what
+was asked (no QM was ever requested).
 
 Why every round gets its own ARC project directory (``t3.pdep.pes_rounds.round_paths``): ARC
 recreates its ``calcs/statmech/`` directory with ``delete_existing_subdir=True`` on every rate
@@ -58,6 +62,33 @@ from t3.schema import PESLoopConfig
 
 _logger = logging.getLogger(__name__)
 
+
+def hybrid_network_path(paths: RoundPaths, network_id: str) -> str:
+    """
+    Where a round's ``qm_runner`` must write its hybrid network input file.
+
+    ``RoundPaths.hybrid`` (``t3.pdep.pes_rounds``) is a directory, not a file, and this loop needs
+    a file path to hand the next round's explorer. It also needs that file's stem to carry
+    ``network_id`` rather than the literal ``'hybrid'``, because ``parse_pdep_network_file`` derives
+    ``network_id = Path(path).stem`` (``t3/pdep/parser.py:729``) -- every round writing to a
+    ``hybrid.py`` stem would collapse distinct networks onto one ``network_id``, and with it one ARC
+    job-label namespace (the exact failure ruling C4 exists to prevent).
+
+    This is a module-level function, not an inline expression, so Task 6's real ``qm_runner`` can
+    import and call it directly rather than re-deriving the convention -- the contract lives in
+    code, not in a comment.
+
+    Args:
+        paths (RoundPaths): This round's paths.
+        network_id (str): The network id to preserve in the file's stem (normally the just-explored
+            network's own ``network_id``).
+
+    Returns:
+        str: The hybrid network file path this round's ``qm_runner`` must write to, and the path
+        the next round explores from.
+    """
+    return os.path.join(paths.hybrid, f'{network_id}.py')
+
 # Status values for PESLoopResult.status / RoundRecord.status.
 #
 # - 'converged'      every barriered channel the network declares now has QM (round > 0).
@@ -67,18 +98,23 @@ _logger = logging.getLogger(__name__)
 # - 'stalled'        a round ran the QM runner and it returned no newly-converged TS labels, and
 #                     ``config.termination.stop_when_no_new_ts`` says that is a reason to stop now
 #                     rather than spend the rest of the round budget on a runner that is not making
-#                     progress. Also used for the ``qm_runner=None`` case -- no QM was ever going to
-#                     be attempted, so there is equally nothing to make progress -- because in both
-#                     cases the honest statement is the same: this loop is not going to move the
-#                     network closer to convergence on its own from here.
+#                     progress. This is an OPERATIONAL FAULT: ARC ran, spent time, and produced
+#                     nothing usable, which is worth investigating.
+# - 'diagram_only'    ``qm_runner=None``: no QM was ever going to be attempted, so the loop explored
+#                     and drew one diagram and stopped, exactly as asked. This is the COMPLETE
+#                     SUCCESS of a diagram-only request, not a fault, and must be distinguishable
+#                     from 'stalled' so that a monitor alerting on 'stalled' does not page on every
+#                     diagram-only run.
 # - 'max_rounds'      the round budget was exhausted without converging, without stalling, and
 #                     without a failed explore.
-# - 'failed'          a round could not explore its network at all; never papered over as
-#                     convergence.
+# - 'failed'          a round could not explore its network at all -- including a round whose
+#                     expected hybrid network input file was never written by ``qm_runner`` -- never
+#                     papered over as convergence.
 PES_LOOP_CONVERGED = 'converged'
 PES_LOOP_MAX_ROUNDS = 'max_rounds'
 PES_LOOP_NO_CANDIDATES = 'no_candidates'
 PES_LOOP_STALLED = 'stalled'
+PES_LOOP_DIAGRAM_ONLY = 'diagram_only'
 PES_LOOP_FAILED = 'failed'
 
 
@@ -169,7 +205,7 @@ def _trim_candidates(candidates: tuple, config: PESLoopConfig, logger) -> tuple:
         tuple: The trimmed candidates, in network-file order.
     """
     limit = config.qm.max_transition_states_per_round
-    if config.qm.scope == 'sensitive' and candidates:
+    if config.qm.scope == 'sensitive' and len(candidates) > limit:
         message = ("PES loop: qm.scope='sensitive' was requested, but standalone mode has no "
                    "sensitivity-analysis dict to rank candidates by. Degrading to the network "
                    f"file's own order and taking the first {limit} of {len(candidates)} "
@@ -201,6 +237,15 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
 
     Returns:
         PESLoopResult: The rounds that ran and why the loop stopped.
+
+    Raises:
+        ValueError: If ``config.pes`` cannot build a valid ``PDepExplorerConfig`` (e.g. no
+            ``bath_gas``), propagated from ``PDepExplorerConfig.__post_init__``.
+        FileNotFoundError: If a successfully explored network's own output file cannot be read,
+            propagated from ``parse_pdep_network_file``. A round-N ``qm_runner`` that fails to
+            write its hybrid network file is NOT this case -- that is caught explicitly and
+            returned as ``PES_LOOP_FAILED`` rather than left to raise (see the file-existence check
+            at the top of every round after the first).
     """
     rounds = []
     computed_ts_labels = frozenset(adopted_ts_labels) if adopted_ts_labels else frozenset()
@@ -210,6 +255,23 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     for round_index in range(max_rounds):
         paths = round_paths(project_directory, round_index)
         os.makedirs(paths.root, exist_ok=True)
+
+        # Rounds after the first explore a hybrid network that a previous round's qm_runner is
+        # contractually obliged to have written (see hybrid_network_path). If it did not, letting
+        # that reach parse_pdep_network_file would raise a bare FileNotFoundError here -- after the
+        # PREVIOUS round already spent real ARC time -- with no round record explaining why. Fail
+        # the round explicitly instead, naming the contract that was broken.
+        if round_index > 0 and not os.path.isfile(current_network_path):
+            reason = (f"round {round_index}: the expected hybrid network file "
+                     f"{current_network_path!r} does not exist. The previous round's qm_runner "
+                     "must write it (see t3.pdep.pes_loop.hybrid_network_path) before returning.")
+            prior = rounds[-1] if rounds else None
+            rounds.append(RoundRecord(index=round_index, network_path=current_network_path,
+                                      diagram_path=None, queued_ts_labels=(), skipped=(),
+                                      status=PES_LOOP_FAILED, reason=reason))
+            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+                                 final_network_path=prior.network_path if prior else None,
+                                 final_diagram_path=prior.diagram_path if prior else None)
 
         explorer_config = _build_explorer_config(config, project_directory, paths)
         # No selection is available in standalone mode: there is no PDepNetworkSelection to bind
@@ -263,10 +325,10 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         if qm_runner is None:
             rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
                                       diagram_path=diagram_path, queued_ts_labels=queued_ts_labels,
-                                      skipped=split.skipped, status=PES_LOOP_STALLED,
+                                      skipped=split.skipped, status=PES_LOOP_DIAGRAM_ONLY,
                                       reason='no qm_runner configured: explored and drew the '
                                             'diagram only, nothing was computed.'))
-            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_STALLED,
+            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_DIAGRAM_ONLY,
                                  reason=rounds[-1].reason, final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
@@ -288,11 +350,12 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                   skipped=split.skipped, status='continuing'))
 
         # The next round explores the QM-informed surface: a real qm_runner (Task 6) writes this
-        # round's hybrid network input file (t3.pdep.hybrid) into paths.hybrid from its captured
-        # statmech artifacts, folding the newly converged transition states in as Log(...)
-        # references. This driver trusts that contract rather than writing the hybrid file itself --
-        # that write belongs with the capture step that knows what it captured.
-        current_network_path = paths.hybrid
+        # round's hybrid network input file (t3.pdep.hybrid) to hybrid_network_path(paths,
+        # network.network_id) from its captured statmech artifacts, folding the newly converged
+        # transition states in as Log(...) references. This driver trusts that contract rather than
+        # writing the hybrid file itself -- that write belongs with the capture step that knows what
+        # it captured -- and enforces it explicitly at the top of the next round (above).
+        current_network_path = hybrid_network_path(paths, network.network_id)
 
     reason = f'the round budget ({max_rounds}) was exhausted without converging.'
     return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_MAX_ROUNDS, reason=reason,
