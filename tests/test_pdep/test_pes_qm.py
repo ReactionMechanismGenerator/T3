@@ -7,13 +7,14 @@ from arc.reaction.reaction import ARCReaction
 from arc.species.species import ARCSpecies
 
 import t3.pdep.pes_qm as pes_qm
-from t3.pdep.capture import CaptureResult
+from t3.pdep.capture import CaptureResult, capture_ts_artifacts
 from t3.pdep.discovery import ARTIFACT_STATUS_UNVERIFIED, ARTIFACT_STATUS_USABLE, TSArtifactRecord
+from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import HybridNetworkResult
-from t3.pdep.join import JOIN_STATUS_QUEUED, arc_ts_label
+from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label, expected_ts_artifact_path
 from t3.pdep.parser import PDepPathReaction
 from t3.pdep.pes_loop import hybrid_network_path
-from t3.pdep.pes_qm import ARC_INPUT_FILE_NAME, arc_qm_runner, build_arc_input
+from t3.pdep.pes_qm import ARC_INPUT_FILE_NAME, adopt_prior_qm, arc_qm_runner, build_arc_input
 from t3.pdep.pes_rounds import QMCandidate, round_paths
 from t3.schema import PESLoopConfig
 
@@ -491,3 +492,84 @@ class TestArcQmRunner(object):
         converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
         assert converged == frozenset({'TS1'})
         assert queued == frozenset({'TS1'})
+
+
+def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
+                            network_id='network1_1') -> None:
+    """Build a real capture manifest under ``tmp_path`` by calling ``capture_ts_artifacts`` itself
+    (mirrors ``tests/test_pdep/test_capture.py``'s own fixture-building style), so
+    ``adopt_prior_qm`` is exercised against the exact format ``t3.pdep.capture`` writes rather than
+    a hand-rolled shape. The manifest ends up at ``tmp_path/capture/capture_manifest.yml``, nested
+    the same way a real T3 project's ``PDep_capture`` directory is nested under an iteration
+    subdirectory -- ``adopt_prior_qm`` must find it by walking ``tmp_path``, not by assuming a
+    fixed relative path.
+    """
+    arc_dir = str(tmp_path / 'arc_project')
+    os.makedirs(arc_dir, exist_ok=True)
+    arc_label = arc_ts_label(network_id, ts_label)
+    expected_path = expected_ts_artifact_path(arc_dir, arc_label)
+    record = TSJoinRecord(network_id=network_id, network_ts_label=ts_label, status=JOIN_STATUS_QUEUED,
+                          arc_ts_label=arc_label, expected_artifact_path=expected_path,
+                          reason='Queued to ARC.', coefficient=0.05, delta_ln_k=0.02)
+
+    os.makedirs(os.path.dirname(expected_path), exist_ok=True)
+    log_path = os.path.join(os.path.dirname(expected_path), 'output.out')
+    with open(log_path, 'w') as f:
+        f.write('stub quantum chemistry log\n')
+    with open(expected_path, 'w') as f:
+        f.write("linear = False\n\nspinMultiplicity = 2\n\nenergy = Log('output.out')\n\n"
+                "geometry = Log('output.out')\n\nfrequencies = Log('output.out')\n")
+
+    output_dir = os.path.join(arc_dir, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, 'status.yml'), 'a') as f:
+        f.write(f"{arc_label}:\n  convergence: true\n  job_types: {{}}\n  paths: {{}}\n  info: ''\n"
+                "  errors: ''\n")
+    with open(os.path.join(output_dir, 'output.yml'), 'w') as f:
+        f.write('{}\n')
+
+    statmech_dir = os.path.join(arc_dir, 'calcs', 'statmech', 'kinetics')
+    os.makedirs(statmech_dir, exist_ok=True)
+    with open(os.path.join(statmech_dir, 'input.py'), 'w') as f:
+        f.write(f"modelChemistry = '{level}'\n\nuseHinderedRotors = True\n\nuseAtomCorrections = True\n\n"
+                "atomEnergies = {'C': -37.844411, 'H': -0.499818, 'N': -54.581501, 'O': -75.062219}\n\n"
+                "useBondCorrections = False\n")
+
+    networks_dir = str(tmp_path / 'networks')
+    os.makedirs(networks_dir, exist_ok=True)
+    source_path = os.path.join(networks_dir, f'{network_id}.py')
+    with open(source_path, 'w') as f:
+        f.write(f"# stub RMG network file\nnetwork(label='{network_id}')\n")
+    networks = {network_id: {'source_path': source_path, 'source_sha256': hash_file(source_path),
+                             'method': 'MSC'}}
+
+    capture_dir = str(tmp_path / 'capture')
+    capture_ts_artifacts([record], arc_dir, capture_dir, networks=networks,
+                         sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)})
+
+
+class TestAdoptPriorQM(object):
+
+    def test_no_projects_adopts_nothing(self):
+        assert adopt_prior_qm([], 'network1_1', 'wb97xd/def2tzvp') == {}
+
+    def test_a_missing_project_is_skipped_not_fatal(self, tmp_path):
+        """A stale path in a config must not kill a run that would otherwise work."""
+        assert adopt_prior_qm([str(tmp_path / 'gone')], 'network1_1', 'wb97xd/def2tzvp') == {}
+
+    def test_matching_level_of_theory_is_adopted(self, tmp_path):
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp')
+        assert 'TS1' in adopted
+
+    def test_mismatched_level_of_theory_is_refused(self, tmp_path):
+        """Mixing levels inside one barrier makes the rate inconsistent, so a non-matching prior
+        result is not adopted even though it exists and converged."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2svp')
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp') == {}
+
+    def test_a_different_network_is_not_adopted(self, tmp_path):
+        """Labels are namespace-local: another network's TS1 is not this network's TS1."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
+                                network_id='network9_9')
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp') == {}

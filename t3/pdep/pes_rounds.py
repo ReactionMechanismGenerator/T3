@@ -167,3 +167,30 @@ def round_paths(project_directory: str, round_index: int) -> RoundPaths:
                       capture=os.path.join(root, 'capture'),
                       hybrid=os.path.join(root, 'hybrid'),
                       diagram=os.path.join(root, PES_LOOP_DIAGRAM_FILENAME))
+
+
+def hybrid_network_path(paths: RoundPaths, network_id: str) -> str:
+    """
+    Where a round's ``qm_runner`` must write its hybrid network input file.
+
+    ``RoundPaths.hybrid`` is a directory, not a file, and the PES loop needs a file path to hand
+    the next round's explorer. It also needs that file's stem to carry ``network_id`` rather than
+    the literal ``'hybrid'``, because ``parse_pdep_network_file`` derives ``network_id =
+    Path(path).stem`` (``t3/pdep/parser.py:729``) -- every round writing to a ``hybrid.py`` stem
+    would collapse distinct networks onto one ``network_id``, and with it one ARC job-label
+    namespace (the exact failure ruling C4 exists to prevent).
+
+    This lives in ``t3.pdep.pes_rounds`` (not ``t3.pdep.pes_loop``, which re-exports it for
+    backward compatibility) so that both ``t3.pdep.pes_loop`` and ``t3.pdep.pes_qm`` can import it
+    without creating an import cycle between those two modules.
+
+    Args:
+        paths (RoundPaths): This round's paths.
+        network_id (str): The network id to preserve in the file's stem (normally the just-explored
+            network's own ``network_id``).
+
+    Returns:
+        str: The hybrid network file path this round's ``qm_runner`` must write to, and the path
+        the next round explores from.
+    """
+    return os.path.join(paths.hybrid, f'{network_id}.py')

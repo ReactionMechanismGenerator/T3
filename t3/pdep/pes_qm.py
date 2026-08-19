@@ -37,14 +37,13 @@ import os
 from arc.common import save_yaml_file
 from arc.main import ARC
 
-from t3.pdep.capture import capture_ts_artifacts
+from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import QMEnergySettings, write_hybrid_network_input_file
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label
 from t3.pdep.parser import parse_pdep_network_file
-from t3.pdep.pes_loop import hybrid_network_path
-from t3.pdep.pes_rounds import RoundPaths
+from t3.pdep.pes_rounds import RoundPaths, hybrid_network_path
 from t3.schema import PESLoopConfig
 
 _logger = logging.getLogger(__name__)
@@ -318,3 +317,65 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
     for warning in result.warnings:
         _logger.warning(warning)
     return converged_labels, queued_ts_labels
+
+
+def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str) -> dict[str, str]:
+    """
+    Reuse transition states a previous T3 (or standalone PES loop) run already computed.
+
+    Walks each configured project directory looking for capture manifests
+    (``t3.pdep.capture.CAPTURE_MANIFEST_FILE_NAME``) written anywhere under it -- a capture
+    directory is nested under a run's own iteration subdirectory (e.g. ``t3.main.T3``'s
+    ``self.paths['PDep capture']``) whose exact name and depth this function cannot assume, so it
+    is discovered by walking rather than by a fixed relative path.
+
+    Each manifest found is re-validated with ``verify_capture`` before anything in it is trusted
+    (the same re-hashing, tamper/torn-capture detection a live consumer gets -- see
+    ``t3.main``'s own use of it). An entry is adopted only when BOTH:
+
+    - ``record.network_id == network_id``: labels are namespace-local (a network-local ``TS1``
+      collides across networks), so matching on label alone would silently cross-wire two
+      networks' transition states.
+    - the capture's recorded ``energy_settings['model_chemistry']`` equals ``level_of_theory``:
+      mixing levels of theory inside one barrier's rate makes it inconsistent, so a prior result
+      computed at a different level is refused even though it exists and converged (never adopted
+      "close enough").
+
+    A project directory that does not exist, or whose manifest fails ``verify_capture`` (corrupt,
+    torn, tampered, or simply absent), is skipped with a logged warning rather than raised -- a
+    stale path left in a config must not kill a run that would otherwise work.
+
+    Args:
+        from_t3_projects (list): T3 (or standalone PES loop) project directories to search for
+                                 reusable prior QM, e.g. ``config.reuse.from_t3_projects``.
+        network_id (str): The network id this run's adopted transition states must belong to.
+        level_of_theory (str): The level of theory ``model_chemistry`` must match to be adopted
+                               (e.g. ``config.qm.sp_level``), undashed.
+
+    Returns:
+        dict[str, str]: Network-local TS label -> the adopted artifact path (already resolved,
+        by ``verify_capture``, to an absolute path inside its capture directory).
+    """
+    adopted = dict()
+    for project_directory in from_t3_projects:
+        if not os.path.isdir(project_directory):
+            _logger.warning(f"PES loop: reuse project directory {project_directory!r} does not "
+                            f"exist; skipping it rather than failing this run.")
+            continue
+        for root, _, files in os.walk(project_directory):
+            if CAPTURE_MANIFEST_FILE_NAME not in files:
+                continue
+            try:
+                verified = verify_capture(root)
+            except ValueError as e:
+                _logger.warning(f"PES loop: skipping capture at {root!r} while looking for prior "
+                                f"QM to reuse -- it failed verification: {e}")
+                continue
+            energy_settings = verified.energy_settings or {}
+            if energy_settings.get('model_chemistry') != level_of_theory:
+                continue
+            for record in verified.ts_records:
+                if record.network_id != network_id or record.status != ARTIFACT_STATUS_USABLE:
+                    continue
+                adopted[record.network_ts_label] = record.artifact_path
+    return adopted

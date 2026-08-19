@@ -310,6 +310,51 @@ class TestRunPESLoop(object):
         assert 'TS0' not in queued
         assert 'TS1' in queued
 
+    def test_reuse_config_calls_adopt_prior_qm_and_seeds_round_0(self, tmp_path, monkeypatch,
+                                                                  config):
+        """Ruling 1: ``config.reuse.from_t3_projects`` being non-empty must actually call
+        ``adopt_prior_qm`` and remove what it returns from round 0's candidates -- a config knob
+        that has no reachable call site is exactly the "ships dead" failure this test exists to
+        catch."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+        adopt_calls = []
+
+        def _fake_adopt(from_t3_projects, network_id, level_of_theory):
+            adopt_calls.append((tuple(from_t3_projects), network_id, level_of_theory))
+            return {'TS0': '/fake/prior/TS0.py'}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm', _fake_adopt)
+        reuse_config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                          'bath_gas': {'He': 1.0}},
+                                     termination={'max_rounds': 3},
+                                     reuse={'from_t3_projects': ['/prior/project']})
+        queued = []
+
+        def _runner(candidates, paths, cfg, network_id):
+            queued.extend(c.ts_label for c in candidates)
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        run_pes_loop(reuse_config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert adopt_calls == [(('/prior/project',), 'network1_1', reuse_config.qm.sp_level)]
+        assert 'TS0' not in queued
+        assert 'TS1' in queued
+
+    def test_empty_reuse_config_does_not_call_adopt_prior_qm(self, tmp_path, monkeypatch, config):
+        """The default (empty) ``reuse.from_t3_projects`` must not pay for a filesystem walk that
+        can never find anything to adopt."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        adopt_calls = []
+        monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm',
+                            lambda *a, **kw: adopt_calls.append((a, kw)) or {})
+
+        def _runner(candidates, paths, cfg, network_id):
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert adopt_calls == []
+
     def test_a_missing_hybrid_file_fails_loudly_instead_of_a_bare_traceback(self, tmp_path,
                                                                              monkeypatch, config):
         """qm_runner's contract is to write the round's hybrid network file; if it doesn't, that

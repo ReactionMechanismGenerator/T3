@@ -52,43 +52,19 @@ file: everything at that boundary flows through ``t3.pdep.parser`` (``ast.parse`
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from t3.pdep.api import explore_pdep_network
 from t3.pdep.diagram import draw_pes_diagram
 from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED
 from t3.pdep.parser import parse_pdep_network_file
-from t3.pdep.pes_rounds import RoundPaths, round_paths, split_qm_candidates
+from t3.pdep.pes_qm import adopt_prior_qm
+from t3.pdep.pes_rounds import RoundPaths, hybrid_network_path, round_paths, split_qm_candidates
 from t3.schema import PESLoopConfig
 
 _logger = logging.getLogger(__name__)
 
-
-def hybrid_network_path(paths: RoundPaths, network_id: str) -> str:
-    """
-    Where a round's ``qm_runner`` must write its hybrid network input file.
-
-    ``RoundPaths.hybrid`` (``t3.pdep.pes_rounds``) is a directory, not a file, and this loop needs
-    a file path to hand the next round's explorer. It also needs that file's stem to carry
-    ``network_id`` rather than the literal ``'hybrid'``, because ``parse_pdep_network_file`` derives
-    ``network_id = Path(path).stem`` (``t3/pdep/parser.py:729``) -- every round writing to a
-    ``hybrid.py`` stem would collapse distinct networks onto one ``network_id``, and with it one ARC
-    job-label namespace (the exact failure ruling C4 exists to prevent).
-
-    This is a module-level function, not an inline expression, so Task 6's real ``qm_runner`` can
-    import and call it directly rather than re-deriving the convention -- the contract lives in
-    code, not in a comment.
-
-    Args:
-        paths (RoundPaths): This round's paths.
-        network_id (str): The network id to preserve in the file's stem (normally the just-explored
-            network's own ``network_id``).
-
-    Returns:
-        str: The hybrid network file path this round's ``qm_runner`` must write to, and the path
-        the next round explores from.
-    """
-    return os.path.join(paths.hybrid, f'{network_id}.py')
 
 # Status values for PESLoopResult.status / RoundRecord.status.
 #
@@ -239,8 +215,20 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             crash.
         adopted_ts_labels (frozenset, optional): Network-local TS labels already computed before
             this loop started (e.g. reused from an earlier T3 project), seeded into
-            ``computed_ts_labels`` before round 0.
+            ``computed_ts_labels`` before round 0. This is unioned with -- not replaced by --
+            whatever ``config.reuse.from_t3_projects`` itself resolves to (see below); passing this
+            explicitly is for callers (e.g. tests) that already have the adopted set in hand and
+            want to skip re-discovering it.
         logger: A T3 ``Logger``, or ``None``.
+
+    When ``config.reuse.from_t3_projects`` is non-empty, this function itself calls
+    ``t3.pdep.pes_qm.adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level)``
+    before round 0 (``network_id`` derived the same way ``t3.pdep.parser.parse_pdep_network_file``
+    would derive it from ``config.pes.network``, i.e. ``Path(config.pes.network).stem``) and unions
+    the result into ``computed_ts_labels``'s round-0 seed. A TS adopted this way is therefore never
+    offered to ``qm_runner`` at round 0 (``t3.pdep.pes_rounds.split_qm_candidates`` treats any label
+    already in ``computed_ts_labels`` as already computed) -- it is not merely available for the
+    caller to use, it actually prevents the redundant ARC submission.
 
     Returns:
         PESLoopResult: The rounds that ran and why the loop stopped.
@@ -256,6 +244,13 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     """
     rounds = []
     computed_ts_labels = frozenset(adopted_ts_labels) if adopted_ts_labels else frozenset()
+    if config.reuse.from_t3_projects:
+        network_id = Path(config.pes.network).stem
+        adopted = adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level)
+        if adopted and logger is not None:
+            logger.info(f"PES loop: reusing {len(adopted)} prior QM result(s) for network "
+                       f"{network_id!r}: {sorted(adopted)}.")
+        computed_ts_labels = computed_ts_labels | frozenset(adopted)
     current_network_path = config.pes.network
     max_rounds = config.termination.max_rounds
 
