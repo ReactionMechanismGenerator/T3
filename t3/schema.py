@@ -4,6 +4,7 @@ used for input validation
 """
 
 import os
+import re
 from enum import Enum
 from typing import Annotated, Literal
 
@@ -862,6 +863,158 @@ class QM(BaseModel):
         if value not in supported_qm_adapters:
             raise ValueError(f'Supported QM adapters are:\n{supported_qm_adapters}\nGot:{value}')
         return value
+
+
+# Only def2 basis sets and the wb97xd functional must be written hyphen-free: ARC's cached
+# frequency scale factors (data/freq_scale_factors.yml) are keyed without hyphens, so a dashed
+# form silently falls back to a Truhlar fit, logs "Could not determine software for job type",
+# and makes Gaussian reject the route line. Genuine Dunning names (cc-pvtz-f12) keep their dashes,
+# so this checks only the two families that are actually affected.
+# Source: Vault/Code/ARC/Canonical Levels of Theory.md
+_DASHED_LEVEL_PATTERNS = (re.compile(r'\bwb97x-d\b', re.IGNORECASE),
+                          re.compile(r'\bdef2-', re.IGNORECASE))
+
+
+def _refuse_dashed_level(value: str, field_name: str) -> str:
+    """
+    Refuse a level of theory written with hyphens where ARC requires none.
+
+    Args:
+        value (str): The level of theory.
+        field_name (str): The field being validated, named in the error.
+
+    Returns:
+        str: The unchanged value.
+
+    Raises:
+        ValueError: If the value contains a dashed def2 basis or a dashed wb97xd functional.
+    """
+    for pattern in _DASHED_LEVEL_PATTERNS:
+        if pattern.search(value):
+            raise ValueError(
+                f"The '{field_name}' level of theory must be written undashed for def2 basis sets "
+                f"and the wb97xd functional: got {value!r}. Write e.g. 'wb97xd/def2tzvp'. A dashed "
+                f"form makes ARC miss the cached frequency scale factor and makes Gaussian reject "
+                f"the route line. Genuine Dunning names such as 'cc-pvtz-f12' keep their dashes.")
+    return value
+
+
+class PESSection(BaseModel):
+    """
+    A class for validating input.pes arguments of the standalone PES exploration loop.
+    """
+    network: Annotated[str, Field(min_length=1)]
+    source: list[str]
+    method: str = 'MSC'
+    bath_gas: dict | None = None
+    explore_tol: Annotated[float, Field(gt=0)] | None = None
+    energy_tol: Annotated[float, Field(gt=0)] | None = None
+    flux_tol: Annotated[float, Field(gt=0)] | None = None
+    maximum_radical_electrons: Annotated[int, Field(gt=0, strict=True)] | None = None
+    # Explorer runtime is unbounded, so this is load-bearing rather than decorative: without it a
+    # single pathological network parks the loop forever.
+    timeout: Annotated[float, Field(gt=0)] = 7200.0
+
+    @field_validator('source')
+    @classmethod
+    def check_source(cls, value):
+        """PESSection.source validator.
+
+        Arkane's explorer resolves ``source`` from ``species_dict`` only and accepts a
+        unimolecular or bimolecular entry channel -- never three or more, and never a transition
+        state. Refusing here beats a failure deep inside an Arkane run.
+        """
+        if not 1 <= len(value) <= 2:
+            raise ValueError(
+                f"The PES 'source' must name 1 or 2 species -- 1 for a unimolecular well, 2 for a "
+                f"bimolecular entry channel (A + B). Arkane's explorer accepts nothing else. "
+                f"Got {len(value)}: {value}.")
+        return value
+
+    @field_validator('method')
+    @classmethod
+    def check_method(cls, value):
+        """PESSection.method validator."""
+        if value not in ('CSE', 'RS', 'MSC'):
+            raise ValueError(f"The PES method must be either 'CSE', 'RS', or 'MSC'.\nGot: {value}")
+        return value
+
+
+class PESQMSection(BaseModel):
+    """
+    A class for validating input.qm arguments of the standalone PES exploration loop.
+
+    Level defaults are the proven ones from Vault/Code/ARC/Canonical Levels of Theory.md, not
+    ARC's repo defaults.
+    """
+    opt_level: str = 'wb97xd/def2tzvp'
+    freq_level: str = 'wb97xd/def2tzvp'
+    sp_level: str = 'wb97xd/def2tzvp'
+    irc_level: str = 'wb97xd/def2tzvp'
+    scan_level: str = 'wb97xd/def2tzvp'
+    ts_adapters: list[str] = Field(default_factory=lambda: ['heuristics', 'linear', 'kinbot',
+                                                            'goflow', 'rits'])
+    rotors: bool = False
+    irc: bool = False
+    scope: Literal['all', 'sensitive'] = 'sensitive'
+    max_transition_states_per_round: Annotated[int, Field(gt=0, strict=True)] = 10
+
+    @field_validator('opt_level', 'freq_level', 'sp_level', 'irc_level', 'scan_level')
+    @classmethod
+    def check_undashed(cls, value, info):
+        """PESQMSection level validators."""
+        return _refuse_dashed_level(value, info.field_name)
+
+    @model_validator(mode='after')
+    def check_level_pairings(self):
+        """PESQMSection cross-field validator.
+
+        freq must be evaluated at the same level as opt (so frequencies belong to a real minimum
+        of that surface), scan at the same level as freq (so rotors project out correctly), and
+        irc at the same level as opt. Source: Canonical Levels of Theory.
+        """
+        if self.freq_level != self.opt_level:
+            raise ValueError(f"'freq_level' must equal 'opt_level' so frequencies are evaluated at "
+                             f"a real minimum of the same surface. Got freq_level="
+                             f"{self.freq_level!r}, opt_level={self.opt_level!r}.")
+        if self.scan_level != self.freq_level:
+            raise ValueError(f"'scan_level' must equal 'freq_level' so rotors project out "
+                             f"correctly. Got scan_level={self.scan_level!r}, freq_level="
+                             f"{self.freq_level!r}.")
+        if self.irc_level != self.opt_level:
+            raise ValueError(f"'irc_level' must equal 'opt_level'. Got irc_level="
+                             f"{self.irc_level!r}, opt_level={self.opt_level!r}.")
+        return self
+
+
+class PESTerminationSection(BaseModel):
+    """
+    A class for validating input.termination arguments of the standalone PES exploration loop.
+    """
+    # strict=True because bool is a subclass of int: without it, `max_rounds: true` in a YAML
+    # input validates happily as 1 and silently caps the loop at a single round.
+    max_rounds: Annotated[int, Field(gt=0, strict=True)] = 5
+    stop_when_no_new_ts: bool = True
+
+
+class PESReuseSection(BaseModel):
+    """
+    A class for validating input.reuse arguments of the standalone PES exploration loop.
+    """
+    from_t3_projects: list[str] = Field(default_factory=list)
+
+
+class PESLoopConfig(BaseModel):
+    """
+    A class for validating the standalone PES exploration loop's input file.
+    """
+    pes: PESSection
+    qm: PESQMSection = Field(default_factory=PESQMSection)
+    termination: PESTerminationSection = Field(default_factory=PESTerminationSection)
+    reuse: PESReuseSection = Field(default_factory=PESReuseSection)
+
+    class Config:
+        extra = "forbid"
 
 
 class InputBase(BaseModel):
