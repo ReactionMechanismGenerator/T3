@@ -173,7 +173,8 @@ def _explored_network_path(paths: RoundPaths, network_id: str) -> str:
     return os.path.join(paths.explorer_output, 'pdep', 'final', f'{network_id}.py')
 
 
-def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, network_id: str) -> frozenset:
+def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
+                  network_id: str) -> tuple[frozenset, frozenset]:
     """
     Run ARC on one round's QM candidates and fold whatever converges into a hybrid network file.
 
