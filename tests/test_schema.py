@@ -1172,6 +1172,12 @@ class TestPESLoopConfig(object):
             PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
                           qm={'freq_level': 'wb97xd/def2tzvp', 'scan_level': 'wb97xd/def2svp'})
 
+    def test_irc_level_must_equal_opt_level(self):
+        """#10: irc must be evaluated at the same level as opt -- had zero coverage."""
+        with pytest.raises(ValidationError, match='irc_level'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
+                          qm={'opt_level': 'wb97xd/def2tzvp', 'irc_level': 'wb97xd/def2svp'})
+
     def test_scope_must_be_all_or_sensitive(self):
         with pytest.raises(ValidationError):
             PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']}, qm={'scope': 'some'})

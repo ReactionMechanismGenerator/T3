@@ -2,16 +2,19 @@
 t3 pdep pes_qm module
 
 The real ARC-backed ``qm_runner`` that ``t3.pdep.pes_loop.run_pes_loop`` injects and calls as
-``qm_runner(candidates, paths, config, network_id) -> frozenset[str]``. Everything else in
-``t3.pdep`` is exercised without ever touching ARC (see ``pes_loop.py``'s own module docstring for
-why); this module is the one piece the loop cannot run without an ARC cluster behind it.
+``qm_runner(candidates, paths, config, network_id) -> tuple[frozenset[str], frozenset[str]]`` --
+``(converged_ts_labels, queued_ts_labels)``. Everything else in ``t3.pdep`` is exercised without
+ever touching ARC (see ``pes_loop.py``'s own module docstring for why); this module is the one
+piece the loop cannot run without an ARC cluster behind it.
 
 ``build_arc_input`` is kept a pure function -- no I/O, no ARC import at call time beyond the plain
 dict it returns -- specifically so the levels of theory, job types and TS label namespacing it
 decides are unit-testable without running anything. ``arc_qm_runner`` is the thin, impure shell
 around it: it writes that input, runs ARC via the exact mechanism ``t3.main.T3.run_arc`` already
 uses, captures whatever transition-state QM artifacts converged, folds them into a hybrid Arkane
-network input file, and reports back which network-local transition states are now usable.
+network input file, and reports back which network-local transition states are now usable AND
+which were actually queued -- ``build_arc_input`` can silently drop a candidate for missing
+structure, so the two are not always the caller's own candidate list (N3).
 
 Every ``QMCandidate`` this module receives has already been screened by
 ``t3.pdep.pes_rounds.split_qm_candidates``: barrierless channels, channels that already have QM,
@@ -114,7 +117,14 @@ def build_arc_input(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         for label in labels:
             species_by_label.setdefault(label, species_structures[label])
         reactions.append({
-            'label': path_reaction.label,
+            # N1: no 'label' key here, deliberately. ARCReaction.from_dict only synthesizes
+            # self.label from reactants/products (arc/reaction/reaction.py's
+            # set_label_reactants_products) when self.label starts out falsy -- if 'reactants'
+            # and 'products' are already populated (as they always are here) AND 'label' carries
+            # the network's raw path-reaction label (e.g. 'reaction1', no '<=>'), that synthesis
+            # is skipped and check_atom_balance later crashes doing self.label.split('<=>')[well].
+            # t3.main.T3.build_pdep_path_reaction never sets a label either -- this matches that
+            # precedent.
             'ts_label': arc_ts_label(network_id, candidate.ts_label),
             'family': candidate.family,
             'reactants': list(path_reaction.reactants),
@@ -198,14 +208,33 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
         network_id (str): The network file stem this round explored.
 
     Returns:
-        frozenset: The network-local TS labels ARC converged this round (``status ==
-                   t3.pdep.discovery.ARTIFACT_STATUS_USABLE`` only -- an ``UNVERIFIED`` artifact's
-                   convergence is, by design, unknown, and is never treated as usable).
+        tuple: ``(converged_ts_labels, queued_ts_labels)``, both ``frozenset``. ``converged_ts_labels``
+               is the network-local TS labels ARC converged this round (``status ==
+               t3.pdep.discovery.ARTIFACT_STATUS_USABLE`` only -- an ``UNVERIFIED`` artifact's
+               convergence is, by design, unknown, and is never treated as usable).
+               ``queued_ts_labels`` is the network-local TS labels that actually reached ARC --
+               N3: ``build_arc_input`` silently drops a candidate whose reactant/product has no
+               entry in ``species_structures`` (logging a warning and continuing rather than
+               crashing), so the candidates this function was HANDED are not always the ones that
+               were actually queued. Reporting this back, rather than letting the caller assume
+               every offered candidate was queued, is what lets
+               ``t3.pdep.pes_loop.RoundRecord.queued_ts_labels`` stay honest.
     """
     source_path = _explored_network_path(paths, network_id)
     network = parse_pdep_network_file(path=source_path)
 
     arc_input = build_arc_input(candidates, paths, config, network_id, network.species_structures)
+    # N3: build_arc_input may have silently dropped some candidates (missing structure). Only the
+    # candidates whose namespaced TS label actually made it into arc_input['reactions'] were
+    # queued -- recompute the set from what build_arc_input actually returned rather than
+    # trusting that every candidate handed in survived.
+    queued_arc_ts_labels = frozenset(reaction['ts_label'] for reaction in arc_input['reactions'])
+    queued_candidates = tuple(
+        candidate for candidate in candidates
+        if arc_ts_label(network_id, candidate.ts_label) in queued_arc_ts_labels
+    )
+    queued_ts_labels = frozenset(candidate.ts_label for candidate in queued_candidates)
+
     if not os.path.isdir(paths.arc_project):
         os.makedirs(paths.arc_project)
     arc_kwargs = dict(arc_input)
@@ -236,7 +265,10 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
             arc_ts_label=arc_ts_label(network_id, candidate.ts_label),
             path_reaction_labels=(candidate.path_reaction.label,) if candidate.path_reaction is not None else (),
         )
-        for candidate in candidates
+        # N3: only candidates that actually reached ARC (queued_candidates), not every candidate
+        # this function was handed -- a candidate build_arc_input dropped for missing structure
+        # was never queued, so recording a JOIN_STATUS_QUEUED join record for it would be false.
+        for candidate in queued_candidates
     ]
 
     capture_result = capture_ts_artifacts(
@@ -252,7 +284,7 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
     )
     if not converged_labels:
         _logger.info(f'ARC converged no transition states for network {network_id!r} this round.')
-        return frozenset()
+        return frozenset(), queued_ts_labels
 
     qm_transition_states = {
         record.network_ts_label: record.artifact_path
@@ -265,7 +297,12 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
     # docstring), never from the live/original explored network -- capture_result.networks may
     # differ from `networks` above if a concurrent/prior capture already vendored this network
     # under a different method or path.
-    captured_network = capture_result.networks[network_id]
+    captured_network = capture_result.networks.get(network_id) if capture_result.networks else None
+    if captured_network is None:
+        raise KeyError(
+            f"capture_ts_artifacts did not vendor a copy of network {network_id!r} even though "
+            f"ARC converged {sorted(converged_labels)} for it -- CaptureResult.networks is "
+            f"missing an entry this call needs to write the round's hybrid network file.")
     captured_source_path = os.path.join(capture_result.capture_dir, captured_network['captured_path'])
     result = write_hybrid_network_input_file(
         source_path=captured_source_path,
@@ -279,4 +316,4 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
                 f"QM/RRKM for {list(result.qm_ts_labels)}, RMG/ILT for {list(result.ilt_ts_labels)}.")
     for warning in result.warnings:
         _logger.warning(warning)
-    return converged_labels
+    return converged_labels, queued_ts_labels

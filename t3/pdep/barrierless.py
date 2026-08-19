@@ -51,9 +51,9 @@ BARRIERLESS_FAMILIES = frozenset({
 #   "Estimated from node Root_N-1R->H_N-1CNOS->N in family R_Recombination."
 #   "family: 1,2_Insertion_CO"
 # A family name is not [A-Za-z_]+ -- '1,2_Insertion_CO' and '1,3_Insertion_CO2' both start with a
-# digit and contain a comma -- so the character class has to admit those or the two insertion
-# families silently come back as None.
-_FAMILY_CHARS = r"[A-Za-z0-9_,\-]+"
+# digit and contain a comma, and '1+2_Cycloaddition' contains a '+' -- so the character class has
+# to admit those or these families silently come back as None.
+_FAMILY_CHARS = r"[A-Za-z0-9_,+\-]+"
 _FAMILY_IN_NODE_RE = re.compile(rf'\bin family ({_FAMILY_CHARS})')
 _FAMILY_LABELLED_RE = re.compile(rf'^family:\s*({_FAMILY_CHARS})\s*$', re.MULTILINE)
 

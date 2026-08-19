@@ -27,8 +27,9 @@ saddle point.
 Why ``qm_runner`` is injected rather than called directly: this loop's own job is sequencing --
 explore, draw, split candidates from skips, decide whether to stop -- and none of that requires an
 ARC cluster to test. Injecting the QM step as a callable with the signature
-``qm_runner(candidates, paths, config, network_id) -> frozenset[str]`` lets every round-sequencing
-decision (no-candidates, converged, stalled, diagram-only, max-rounds, failed-explore) be covered
+``qm_runner(candidates, paths, config, network_id) -> tuple[frozenset[str], frozenset[str]]``
+(``converged_ts_labels, queued_ts_labels``) lets every round-sequencing decision (no-candidates,
+converged, stalled, diagram-only, max-rounds, failed-explore) be covered
 by tests that never touch ARC. Task 6 supplies the real ARC-backed implementation; ``qm_runner=None``
 is not a placeholder for "not implemented yet", it is the honest, permanent behaviour for a caller
 who wants explore-and-draw only, with no QM spend at all -- so it must never raise, and it is
@@ -129,7 +130,11 @@ class RoundRecord:
             re-exploration), or the freshly explored network if exploration succeeded.
         diagram_path (str | None): Where this round's PES diagram was written, or ``None`` if
             drawing it was refused (a species with no ``E0``) or exploration itself failed.
-        queued_ts_labels (tuple): The network-local TS labels sent to ``qm_runner`` this round.
+        queued_ts_labels (tuple): The network-local TS labels ``qm_runner`` actually queued this
+            round. For a real ``qm_runner`` this is its own reported ``queued_ts_labels`` (N3: it
+            can silently drop a candidate the loop offered, e.g. for missing structure, so this is
+            not simply every candidate the loop handed it); for ``qm_runner=None`` or a round that
+            never reaches a runner, it is every candidate the loop would have offered.
         skipped (tuple): The ``SkippedChannel`` entries for this round, each carrying its reason.
         status (str): This round's outcome. ``'continuing'`` for a round that queued QM and is not
             the loop's last one; otherwise one of the ``PES_LOOP_*`` status constants, matching the
@@ -226,8 +231,10 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         project_directory (str): The loop's project directory. Must be absolute (see
             ``t3.pdep.pes_rounds.round_paths``).
         qm_runner: An injected callable, ``qm_runner(candidates, paths, config, network_id) ->
-            frozenset[str]``, returning the network-local TS labels that converged this round.
-            ``None`` (the default) means "no QM this run" -- explore and draw the first round's
+            tuple[frozenset[str], frozenset[str]]`` -- ``(converged_ts_labels, queued_ts_labels)``,
+            the network-local TS labels that converged this round and the ones the runner actually
+            queued (not necessarily every candidate it was handed -- N3). ``None`` (the default)
+            means "no QM this run" -- explore and draw the first round's
             diagram only, which is the honest behaviour when no QM runner is configured, not a
             crash.
         adopted_ts_labels (frozenset, optional): Network-local TS labels already computed before
@@ -320,11 +327,15 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                  final_diagram_path=diagram_path)
 
         candidates = _trim_candidates(split.candidates, config, logger)
-        queued_ts_labels = tuple(candidate.ts_label for candidate in candidates)
+        # Offered, not yet queued -- qm_runner=None never runs a runner at all, so nothing can be
+        # dropped, and this is the honest record. A real qm_runner's own reported queued_ts_labels
+        # (below) supersedes this once it runs, because build_arc_input can silently drop a
+        # candidate the loop offered (N3).
+        offered_ts_labels = tuple(candidate.ts_label for candidate in candidates)
 
         if qm_runner is None:
             rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                      diagram_path=diagram_path, queued_ts_labels=queued_ts_labels,
+                                      diagram_path=diagram_path, queued_ts_labels=offered_ts_labels,
                                       skipped=split.skipped, status=PES_LOOP_DIAGRAM_ONLY,
                                       reason='no qm_runner configured: explored and drew the '
                                             'diagram only, nothing was computed.'))
@@ -332,8 +343,9 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                  reason=rounds[-1].reason, final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
-        newly_computed = qm_runner(candidates, paths, config, network.network_id)
+        newly_computed, actually_queued = qm_runner(candidates, paths, config, network.network_id)
         computed_ts_labels = computed_ts_labels | newly_computed
+        queued_ts_labels = tuple(actually_queued)
 
         if config.termination.stop_when_no_new_ts and not newly_computed:
             reason = ('qm_runner returned no newly-converged transition states and '

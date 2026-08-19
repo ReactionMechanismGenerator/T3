@@ -2,7 +2,6 @@
 
 import dataclasses
 import os
-import tempfile
 
 import pytest
 
@@ -31,7 +30,7 @@ def config():
                          termination={'max_rounds': 3})
 
 
-def _stub_explorer(monkeypatch, families, fail=False):
+def _stub_explorer(monkeypatch, tmp_path, families, fail=False):
     """
     Patch ``explore_pdep_network``, ``parse_pdep_network_file``, and ``draw_pes_diagram`` at the
     names bound in ``t3.pdep.pes_loop``, so ``run_pes_loop`` can be tested without Arkane.
@@ -52,6 +51,8 @@ def _stub_explorer(monkeypatch, families, fail=False):
 
     Args:
         monkeypatch: pytest's monkeypatch fixture.
+        tmp_path: pytest's per-test scratch directory fixture, used instead of tempfile.mkdtemp
+            so this helper leaves nothing behind for pytest to clean up itself.
         families (list): One path reaction is fabricated per entry, carrying that family in its
             kinetics comment (recognized by ``t3.pdep.barrierless.classify_barrierless``).
         fail (bool): If True, every call to the stubbed explorer reports a failed exploration
@@ -76,7 +77,8 @@ def _stub_explorer(monkeypatch, families, fail=False):
 
     calls = []
     drawn = []
-    explore_dir = tempfile.mkdtemp()
+    explore_dir = os.path.join(str(tmp_path), 'explored')
+    os.makedirs(explore_dir, exist_ok=True)
 
     def _fake_explore(*, network_path, config, logger=None):
         calls.append(network_path)
@@ -128,7 +130,7 @@ class TestRunPESLoop(object):
     def test_no_candidates_terminates_immediately(self, tmp_path, monkeypatch, config):
         """A network whose every channel is barrierless has nothing to compute: one explore, one
         diagram, done -- not three empty rounds."""
-        _stub_explorer(monkeypatch, families=['R_Recombination', 'R_Recombination'])
+        _stub_explorer(monkeypatch, tmp_path, families=['R_Recombination', 'R_Recombination'])
         result = run_pes_loop(config, project_directory=str(tmp_path))
         assert result.status == PES_LOOP_NO_CANDIDATES
         assert len(result.rounds) == 1
@@ -140,11 +142,11 @@ class TestRunPESLoop(object):
         config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
                                     'bath_gas': {'He': 1.0}},
                                termination={'max_rounds': 3, 'stop_when_no_new_ts': False})
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
 
         def _runner(candidates, paths, cfg, network_id):
             _touch_hybrid_file(paths, network_id)
-            return frozenset()
+            return frozenset(), frozenset(c.ts_label for c in candidates)
 
         result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert result.status == PES_LOOP_MAX_ROUNDS
@@ -154,19 +156,20 @@ class TestRunPESLoop(object):
         """With the default stop_when_no_new_ts=True, a runner that converges nothing must stop
         after round 1 rather than spend the rest of the round budget -- this is what distinguishes
         'stalled' from 'max_rounds' (ruling C3)."""
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
         result = run_pes_loop(config, project_directory=str(tmp_path),
-                              qm_runner=lambda candidates, paths, cfg, network_id: frozenset())
+                              qm_runner=lambda candidates, paths, cfg, network_id:
+                              (frozenset(), frozenset(c.ts_label for c in candidates)))
         assert result.status == PES_LOOP_STALLED
         assert len(result.rounds) == 1
 
     def test_converges_when_every_candidate_is_computed(self, tmp_path, monkeypatch, config):
         """Once QM exists for every barriered channel, the loop stops on its own."""
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
 
         def _runner(candidates, paths, cfg, network_id):
             _touch_hybrid_file(paths, network_id)
-            return frozenset(c.ts_label for c in candidates)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert result.status == PES_LOOP_CONVERGED
@@ -177,11 +180,11 @@ class TestRunPESLoop(object):
         network -- not the pre-explore input, and not another round's output. Drawing from the
         input instead of the explored network is exactly the bug this feature exists to remove
         (byte-identical diagrams across runs even when a saddle point converged)."""
-        calls, drawn = _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        calls, drawn = _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
 
         def _runner(candidates, paths, cfg, network_id):
             _touch_hybrid_file(paths, network_id)
-            return frozenset(c.ts_label for c in candidates)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert len(result.rounds) == 2
@@ -195,12 +198,12 @@ class TestRunPESLoop(object):
     def test_barrierless_channels_are_never_queued(self, tmp_path, monkeypatch, config):
         """The F21 gate, asserted end to end rather than only at the unit level."""
         queued = []
-        _stub_explorer(monkeypatch, families=['R_Recombination', '1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['R_Recombination', '1,2_Insertion_CO'])
 
         def _runner(candidates, paths, cfg, network_id):
             queued.extend(c.family for c in candidates)
             _touch_hybrid_file(paths, network_id)
-            return frozenset(c.ts_label for c in candidates)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert 'R_Recombination' not in queued
@@ -209,7 +212,7 @@ class TestRunPESLoop(object):
     def test_no_qm_runner_explores_and_draws_only(self, tmp_path, monkeypatch, config):
         """The honest behaviour without a configured runner: one round, a diagram, no crash -- and
         a status distinct from an operational stall, per the ruling on concern 4."""
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
         result = run_pes_loop(config, project_directory=str(tmp_path))
         assert result.status == PES_LOOP_DIAGRAM_ONLY
         assert len(result.rounds) == 1
@@ -217,7 +220,7 @@ class TestRunPESLoop(object):
 
     def test_a_failed_explore_stops_the_loop_and_says_why(self, tmp_path, monkeypatch, config):
         """A round that cannot explore must not be papered over as convergence."""
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'], fail=True)
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'], fail=True)
         result = run_pes_loop(config, project_directory=str(tmp_path))
         assert result.status == 'failed'
         assert result.reason
@@ -227,11 +230,11 @@ class TestRunPESLoop(object):
         """Round 1 must explore the QM-informed hybrid network qm_runner wrote, not re-explore
         round 0's original input -- otherwise this is N re-explorations of one file, never a loop
         (Critical 1)."""
-        calls, _ = _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        calls, _ = _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
 
         def _runner(candidates, paths, cfg, network_id):
             _touch_hybrid_file(paths, network_id)
-            return frozenset(c.ts_label for c in candidates)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert calls[0] == '/abs/network1_1.py'
@@ -244,13 +247,13 @@ class TestRunPESLoop(object):
         """qm_runner must be handed the id of the network THIS round explored, not the loop's
         static input path's id -- ruling C4 exists precisely so a wrong id cannot misnamespace ARC
         jobs (Critical 1)."""
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
         received = []
 
         def _runner(candidates, paths, cfg, network_id):
             received.append(network_id)
             _touch_hybrid_file(paths, network_id)
-            return frozenset(c.ts_label for c in candidates)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert received[0] == 'explored_round0'
@@ -261,13 +264,13 @@ class TestRunPESLoop(object):
         """C1: TS labels adopted from an earlier T3 project must be treated as already computed
         before round 0 ever runs, not just before some later round -- there was previously zero
         coverage of this ruling at all."""
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
         queued = []
 
         def _runner(candidates, paths, cfg, network_id):
             queued.extend(c.ts_label for c in candidates)
             _touch_hybrid_file(paths, network_id)
-            return frozenset(c.ts_label for c in candidates)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner,
                     adopted_ts_labels=frozenset({'TS0'}))
@@ -279,11 +282,11 @@ class TestRunPESLoop(object):
         """qm_runner's contract is to write the round's hybrid network file; if it doesn't, that
         must surface as a PES_LOOP_FAILED round with a stated reason, not a FileNotFoundError
         escaping from round N after round N-1 already spent real ARC time (Important 3)."""
-        _stub_explorer(monkeypatch, families=['1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
 
         def _runner(candidates, paths, cfg, network_id):
             # Deliberately does NOT write the hybrid file, breaking its contract.
-            return frozenset(c.ts_label for c in candidates)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert result.status == PES_LOOP_FAILED
@@ -337,7 +340,7 @@ class TestRunPESLoop(object):
         def _runner(candidates, paths, cfg, network_id):
             # Deliberately does NOT write the hybrid file -- this is the correct, contractual
             # behaviour when nothing converged, not a bug being simulated.
-            return frozenset()
+            return frozenset(), frozenset(c.ts_label for c in candidates)
 
         result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert result.status == PES_LOOP_MAX_ROUNDS

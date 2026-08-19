@@ -32,6 +32,14 @@ class TestRMGFamily(object):
         comment = 'Matched reaction 0 H2 + CO2 <=> CH2O2 in 1,3_Insertion_CO2/training\nfamily: 1,3_Insertion_CO2'
         assert rmg_family(_rxn(comment)) == '1,3_Insertion_CO2'
 
+    def test_family_with_a_plus_sign_survives(self):
+        """A family name may contain '+': '1+2_Cycloaddition' (real family, network799_1
+        reaction1) must not silently come back as None (N4)."""
+        comment = ('Estimated using template [o_atom_singlet;multiplebond] for rate rule '
+                  '[o_atom_singlet;mb_carbonyl]\nEuclidian distance = 1.0\nMultiplied by '
+                  'reaction path degeneracy 2.0\nfamily: 1+2_Cycloaddition')
+        assert rmg_family(_rxn(comment)) == '1+2_Cycloaddition'
+
     def test_no_family_returns_none(self):
         """A comment with no family is not guessed at."""
         assert rmg_family(_rxn('From a library.')) is None

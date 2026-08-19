@@ -3,10 +3,14 @@
 import os
 import shutil
 
+from arc.reaction.reaction import ARCReaction
+from arc.species.species import ARCSpecies
+
 import t3.pdep.pes_qm as pes_qm
 from t3.pdep.capture import CaptureResult
 from t3.pdep.discovery import ARTIFACT_STATUS_UNVERIFIED, ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.hybrid import HybridNetworkResult
+from t3.pdep.join import JOIN_STATUS_QUEUED, arc_ts_label
 from t3.pdep.parser import PDepPathReaction
 from t3.pdep.pes_loop import hybrid_network_path
 from t3.pdep.pes_qm import ARC_INPUT_FILE_NAME, arc_qm_runner, build_arc_input
@@ -30,6 +34,18 @@ def _candidate(ts_label='TS1', family='1,2_Insertion_CO', reactants=('A',), prod
 # Adjacency-list text is opaque to build_arc_input -- any non-empty string exercises the
 # species_structures plumbing without needing a chemically valid structure.
 _STRUCTURES = {'A': '1 A u0 p0 c0\n', 'B': '1 B u0 p0 c0\n'}
+
+# A real, atom-balanced RMG adjacency list (ethyl radical) used for the one test (N1) that must
+# construct a genuine ARCReaction/ARCSpecies rather than merely assert on dict shape -- ARC's own
+# atom-balance check (check_atom_balance) requires both wells to carry the same molecular formula.
+_ETHYL_ADJLIST = ('1 C u0 p0 c0 {2,S} {3,S} {4,S} {5,S}\n'
+                  '2 C u1 p0 c0 {1,S} {6,S} {7,S}\n'
+                  '3 H u0 p0 c0 {1,S}\n'
+                  '4 H u0 p0 c0 {1,S}\n'
+                  '5 H u0 p0 c0 {1,S}\n'
+                  '6 H u0 p0 c0 {2,S}\n'
+                  '7 H u0 p0 c0 {2,S}')
+_BALANCED_STRUCTURES = {'A': _ETHYL_ADJLIST, 'B': _ETHYL_ADJLIST}
 
 
 class TestBuildARCInput(object):
@@ -80,23 +96,28 @@ class TestBuildARCInput(object):
         assert arc_input['irc_level'] == 'wb97xd/def2tzvp'
         assert arc_input['reactions'][0]['family'] == '1,2_Insertion_CO'
 
-    def test_reaction_and_species_dicts_can_construct_a_real_arc_reaction(self):
-        """C2: a reaction dict alone (no top-level 'species' list) cannot construct a valid
-        ARCReaction -- ARCReaction.from_dict resolves r_species/p_species by matching their
-        'label' against ARC's own top-level species list. This asserts build_arc_input emits
-        both halves of that contract."""
-        candidate = _candidate(reactants=('A',), products=('B',))
+    def test_reaction_and_species_dicts_construct_a_real_arc_reaction(self):
+        """N1: build_arc_input must not set a 'label' key on the reaction dict it emits.
+        ARCReaction.from_dict only synthesizes a label from reactants/products when self.label
+        starts empty (arc/reaction/reaction.py, set_label_reactants_products) -- a raw network
+        label like 'reaction1' passed through as 'label' short-circuits that fallback, and
+        check_atom_balance then crashes with IndexError on self.label.split('<=>')[well] because
+        'reaction1' has no '<=>' in it. This constructs a REAL ARCReaction (mirroring ARC.__init__'s
+        own order: ARCSpecies built first, then ARCReaction(reaction_dict=..., species_list=...))
+        to prove the emitted dict actually survives ARC's construction path, not just that it has
+        the right shape."""
+        candidate = _candidate(ts_label='TS1', reactants=('A',), products=('B',), label='reaction1')
         arc_input = build_arc_input((candidate,), round_paths('/proj', 0), _config(), 'network1_1',
-                                    _STRUCTURES)
+                                    _BALANCED_STRUCTURES)
         reaction = arc_input['reactions'][0]
-        assert reaction['reactants'] == ['A']
-        assert reaction['products'] == ['B']
-        assert reaction['r_species'] == [{'label': 'A'}]
-        assert reaction['p_species'] == [{'label': 'B'}]
-        species_by_label = {spc['label']: spc for spc in arc_input['species']}
-        assert set(species_by_label) == {'A', 'B'}
-        assert species_by_label['A']['adjlist'] == _STRUCTURES['A']
-        assert species_by_label['B']['adjlist'] == _STRUCTURES['B']
+        assert 'label' not in reaction
+
+        species_list = [ARCSpecies(**spc) for spc in arc_input['species']]
+        rxn = ARCReaction(reaction_dict=reaction, species_list=species_list)
+
+        assert rxn.ts_label == reaction['ts_label']
+        assert [spc.label for spc in rxn.r_species] == ['A']
+        assert [spc.label for spc in rxn.p_species] == ['B']
 
     def test_compute_thermo_is_explicitly_disabled_on_every_species(self):
         """ARC defaults a bare species dict's compute_thermo to True, which would queue full
@@ -108,12 +129,16 @@ class TestBuildARCInput(object):
         assert arc_input['species']
         assert all(spc['compute_thermo'] is False for spc in arc_input['species'])
 
-    def test_candidate_with_no_structure_is_dropped_not_crashed(self):
+    def test_candidate_with_no_structure_is_dropped_not_crashed(self, caplog):
         candidate = _candidate(reactants=('A',), products=('unknown_species',))
-        arc_input = build_arc_input((candidate,), round_paths('/proj', 0), _config(), 'network1_1',
-                                    _STRUCTURES)
+        with caplog.at_level('WARNING', logger='t3.pdep.pes_qm'):
+            arc_input = build_arc_input((candidate,), round_paths('/proj', 0), _config(),
+                                        'network1_1', _STRUCTURES)
         assert arc_input['reactions'] == []
         assert arc_input['species'] == []
+        warnings = [r.message for r in caplog.records if r.levelname == 'WARNING']
+        assert any('unknown_species' in message for message in warnings), \
+            f'expected a WARNING naming the missing species, got: {warnings}'
 
     def test_dead_network_ts_label_key_is_not_emitted(self):
         candidate = _candidate()
@@ -160,7 +185,7 @@ class _FakeARC(object):
         _FakeARC.execute_calls += 1
 
     def as_dict(self):
-        return {'fake_as_dict_of': self.kwargs.get('project')}
+        return dict(self.kwargs)
 
 
 class _FakeCalls(object):
@@ -265,6 +290,17 @@ class TestArcQmRunner(object):
         assert kwargs['species'], 'ARC received zero species'
         assert kwargs['reactions'][0]['ts_label'] == 'T3PDep_network799_1_TS1'
 
+    def test_arc_is_constructed_with_this_rounds_own_project_and_project_directory(self, tmp_path, monkeypatch):
+        """#9: project/project_directory must be asserted on the recorded ARC(**kwargs) call
+        itself, not merely inferred from build_arc_input's own output."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, _empty_capture_result(capture_dir))
+        arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
+        kwargs = _FakeARC.constructions[0]
+        assert kwargs['project'] == _NETWORK_ID
+        assert kwargs['project_directory'] == paths.arc_project
+
     def test_arc_execute_is_called_exactly_once(self, tmp_path, monkeypatch):
         capture_dir = os.path.join(str(tmp_path), 'capture')
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
@@ -281,7 +317,7 @@ class TestArcQmRunner(object):
         assert len(recorder.save_yaml_file_calls) == 1
         call = recorder.save_yaml_file_calls[0]
         assert call['path'] == os.path.join(paths.arc_project, ARC_INPUT_FILE_NAME)
-        assert call['content'] == {'fake_as_dict_of': _NETWORK_ID}
+        assert call['content'] == _FakeARC.constructions[0]
 
     def test_arc_input_yml_is_not_rewritten_when_it_already_exists(self, tmp_path, monkeypatch):
         capture_dir = os.path.join(str(tmp_path), 'capture')
@@ -305,15 +341,45 @@ class TestArcQmRunner(object):
         assert call['networks'][_NETWORK_ID]['source_path'] == network_path
         assert call['networks'][_NETWORK_ID]['method'] == 'MSC'
         assert len(call['join_records']) == 1
-        assert call['join_records'][0].network_ts_label == 'TS1'
+        join_record = call['join_records'][0]
+        assert join_record.network_ts_label == 'TS1'
+        assert join_record.arc_ts_label == arc_ts_label(_NETWORK_ID, 'TS1')
+        assert join_record.network_id == _NETWORK_ID
+        assert join_record.status == JOIN_STATUS_QUEUED
 
     def test_no_usable_artifact_returns_empty_and_skips_hybrid_write(self, tmp_path, monkeypatch):
         capture_dir = os.path.join(str(tmp_path), 'capture')
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
             tmp_path, monkeypatch, _empty_capture_result(capture_dir))
-        result = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
-        assert result == frozenset()
+        converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
+        assert converged == frozenset()
+        assert queued == frozenset({'TS1'})
         assert recorder.write_hybrid_calls == []
+
+    def test_dropped_candidate_is_not_reported_as_queued(self, tmp_path, monkeypatch):
+        """N3: build_arc_input silently drops a candidate with no adjacency list for a
+        reactant/product (a warning, not a crash) -- arc_qm_runner's own queued_ts_labels must not
+        claim that dropped candidate was ever sent to ARC, even though it was among the candidates
+        this function was handed."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, _empty_capture_result(capture_dir))
+        dropped = _candidate(ts_label='TS_missing', family='1,2_Insertion_CO',
+                             reactants=('no_such_species',), products=('also_missing',),
+                             label='reaction_missing')
+        candidates = candidates + (dropped,)
+        converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
+        assert queued == frozenset({'TS1'})
+        assert 'TS_missing' not in queued
+        # The dropped candidate must not have reached ARC either.
+        assert len(_FakeARC.constructions) == 1
+        ts_labels_sent_to_arc = {r['ts_label'] for r in _FakeARC.constructions[0]['reactions']}
+        assert 'TS_missing' not in {label.rsplit('_', 1)[-1] for label in ts_labels_sent_to_arc}
+        # And the join record capture_ts_artifacts was handed must not claim it was queued either.
+        assert len(recorder.capture_ts_artifacts_calls) == 1
+        join_ts_labels = {jr.network_ts_label
+                          for jr in recorder.capture_ts_artifacts_calls[0]['join_records']}
+        assert join_ts_labels == {'TS1'}
 
     def test_usable_artifact_triggers_hybrid_write_from_the_captures_own_network_copy(self, tmp_path, monkeypatch):
         """I1: source_path/method must come from CaptureResult.networks, never the live network."""
@@ -373,7 +439,8 @@ class TestArcQmRunner(object):
         qm_transition_states = recorder.write_hybrid_calls[0]['qm_transition_states']
         assert qm_transition_states == {'TS1': os.path.join(capture_dir, 'qm', 'TS1.py')}
 
-    def test_return_value_is_the_frozenset_of_usable_network_ts_labels_only(self, tmp_path, monkeypatch):
+    def test_return_value_is_converged_and_queued_ts_labels_as_a_tuple(self, tmp_path, monkeypatch):
+        """arc_qm_runner returns (converged_ts_labels, queued_ts_labels) -- N3."""
         capture_dir = os.path.join(str(tmp_path), 'capture')
         os.makedirs(os.path.join(capture_dir, 'networks'))
         shutil.copyfile(_FIXTURE_NETWORK_PATH,
@@ -383,5 +450,6 @@ class TestArcQmRunner(object):
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
             vendored_files=(), warnings=())
-        result = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
-        assert result == frozenset({'TS1'})
+        converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
+        assert converged == frozenset({'TS1'})
+        assert queued == frozenset({'TS1'})
