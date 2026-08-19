@@ -3,10 +3,8 @@
 import os
 import shutil
 
-from arc.level import Level, assign_frequency_scale_factor
 from arc.reaction.reaction import ARCReaction
 from arc.species.species import ARCSpecies
-from arc.statmech.arkane import get_arkane_model_chemistry
 
 import t3.pdep.pes_qm as pes_qm
 from t3.pdep.capture import CaptureResult, VerifyResult, capture_ts_artifacts
@@ -519,11 +517,17 @@ class TestArcQmRunner(object):
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
             vendored_files=(), warnings=())
 
+        # Critical 1 (fix round 2): the adopted artifact's own Log(...) argument is relative to
+        # its OWN directory (SPs/), the same way a real captured artifact's is (see
+        # t3.pdep.hybrid.write_hybrid_network_input_file's docstring) -- so the referenced log file
+        # actually has to exist next to it for a real (non-mocked) vendoring pass to succeed.
         prior_artifact_dir = str(tmp_path / 'prior_project' / 'output' / 'SPs')
         os.makedirs(prior_artifact_dir)
         prior_artifact_path = os.path.join(prior_artifact_dir, 'TS1.py')
         with open(prior_artifact_path, 'w') as f:
             f.write("geometry = Log('output.out')\n")
+        with open(os.path.join(prior_artifact_dir, 'output.out'), 'w') as f:
+            f.write('# stub ARC log output\n')
 
         converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
                                           adopted={'TS1': prior_artifact_path})
@@ -536,7 +540,14 @@ class TestArcQmRunner(object):
         assert os.path.dirname(vendored_path) == os.path.join(capture_dir, 'adopted')
         assert os.path.isfile(vendored_path)
         with open(vendored_path) as f:
-            assert "geometry = Log('output.out')" in f.read()
+            vendored_content = f.read()
+        # C1: the artifact's Log(...) reference must be rewritten to point at the log file that was
+        # ALSO vendored alongside it (t3.pdep.hybrid._vendor_qm_artifacts), not left pointing at
+        # 'output.out' relative to a directory that no longer exists next to the vendored copy.
+        assert "geometry = Log('output.out')" not in vendored_content
+        assert "geometry = Log('logs/TS1/output.out')" in vendored_content
+        vendored_log_path = os.path.join(capture_dir, 'adopted', 'logs', 'TS1', 'output.out')
+        assert os.path.isfile(vendored_log_path)
         assert call['qm_artifacts_root'] == capture_dir
 
     def test_mutant_adopted_artifact_path_is_not_silently_accepted(self, tmp_path, monkeypatch):
@@ -562,14 +573,27 @@ class TestArcQmRunner(object):
         assert recorder.write_hybrid_calls == []
 
 
+# The exact modelChemistry source text a real ARC project writes, keyed by T3 sp_level. The
+# 'wb97xd/def2tzvp' entry is copied verbatim (not recomputed) from a real ARC-written
+# calcs/statmech/kinetics/input.py -- see
+# tests/data/pdep_energy_settings/xl1001_project/calcs/statmech/kinetics/input.py:9. The
+# 'b3lyp/def2tzvp' entry was captured once, out-of-band, the same way (by inspecting real ARC
+# output), NOT by calling _normalized_model_chemistry's own Level/get_arkane_model_chemistry chain
+# at test-collection time -- doing that would make this fixture pass or fail in lockstep with
+# whatever that chain currently does, so a real bug in it could never be caught by a test built
+# from it. A stored manifest written by an older ARC version is exactly the case a fixture that
+# re-derives its own expectation at test time cannot represent.
+_ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL = {
+    'wb97xd/def2tzvp': "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')",
+    'b3lyp/def2tzvp': "LevelOfTheory(method='b3lyp2023',basis='def2tzvp',software='gaussian')",
+}
+
+
 def _arc_model_chemistry_text(sp_level: str) -> str:
-    """The exact ``modelChemistry`` source text ARC itself writes for ``sp_level`` -- run the
-    same normalization chain C1's fix in ``adopt_prior_qm`` uses, so this fixture's manifest is
-    faithful to what a real ARC project's ``calcs/statmech/kinetics/input.py`` actually contains
-    (see ``tests/data/pdep_energy_settings/xl1001_project/calcs/statmech/kinetics/input.py``)."""
-    level = Level(repr=sp_level)
-    scale = assign_frequency_scale_factor(level)
-    return get_arkane_model_chemistry(level, freq_scale_factor=scale)
+    """The exact ``modelChemistry`` source text a real ARC project writes for ``sp_level`` -- a
+    fixed, pre-captured literal (see ``_ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL`` above), not one
+    recomputed via the same normalization chain the code under test uses."""
+    return _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL[sp_level]
 
 
 def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
@@ -667,13 +691,17 @@ class TestAdoptPriorQM(object):
         assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
                               _TS1_PATH_REACTION_LABELS) == {}
 
-    def test_a_different_network_is_not_adopted(self, tmp_path):
-        """network_id is a pre-filter: another network's manifest is not adopted even when its
-        recorded path_reaction_labels happen to match, since network_id itself never matches."""
+    def test_a_different_network_id_is_still_adopted_on_structural_match(self, tmp_path):
+        """Important (fix round 2): network_id is NEVER a gate -- this function's own docstring
+        states Arkane's network_id never matches across independent PES-loop runs by construction,
+        so gating on it would refuse the exact case adoption exists to serve. A manifest recorded
+        under a completely different network_id is still adopted when its path_reaction_labels
+        structurally match THIS run's own candidates."""
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
                                 network_id='network9_9')
-        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                              _TS1_PATH_REACTION_LABELS) == {}
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+                                 _TS1_PATH_REACTION_LABELS)
+        assert 'TS1' in adopted
 
     def test_no_structural_match_is_not_adopted(self, tmp_path):
         """C3/I1: network_id alone is not enough -- a record whose path_reaction_labels do not

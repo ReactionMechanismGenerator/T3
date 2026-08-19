@@ -33,7 +33,6 @@ This module never imports ``rmgpy`` or ``arkane``. It imports ``arc`` directly, 
 
 import logging
 import os
-import shutil
 
 from arc.common import save_yaml_file
 from arc.level import Level, assign_frequency_scale_factor
@@ -43,7 +42,8 @@ from arc.statmech.arkane import get_arkane_model_chemistry
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.hashing import hash_file
-from t3.pdep.hybrid import QMEnergySettings, write_hybrid_network_input_file
+from t3.pdep.hybrid import (QMEnergySettings, _read_qm_artifact, _vendor_qm_artifacts,
+                            write_hybrid_network_input_file)
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label
 from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.pes_rounds import RoundPaths, hybrid_network_path
@@ -177,7 +177,8 @@ def _explored_network_path(paths: RoundPaths, network_id: str) -> str:
 
 def _vendor_adopted_artifacts(adopted: dict, capture_dir: str) -> dict[str, str]:
     """
-    Copy adopted prior-QM artifacts into this round's own capture directory.
+    Copy adopted prior-QM artifacts, AND every log file they reference, into this round's own
+    capture directory.
 
     ``write_hybrid_network_input_file``'s ``qm_artifacts_root`` guard only trusts artifact paths
     that live under the capture directory it is given -- a deliberate fail-closed security guard
@@ -187,10 +188,27 @@ def _vendor_adopted_artifacts(adopted: dict, capture_dir: str) -> dict[str, str]
     ``qm_transition_states`` -- the existing guard then covers it for free, since ``adopted/``
     lives under the same ``capture_dir`` passed as ``qm_artifacts_root``.
 
+    A captured artifact's own ``Log(...)`` arguments are relative to the artifact's OWN directory
+    (see ``t3.pdep.hybrid.write_hybrid_network_input_file``'s docstring), so copying only the
+    ``.py`` file -- without also copying the log tree it points at -- leaves those references
+    dangling: ``write_hybrid_network_input_file``'s own pre-flight, run later on the vendored copy,
+    would then raise a ``ValueError`` for a ``Log(...)`` file that "does not exist". This function
+    therefore reuses ``t3.pdep.hybrid``'s own artifact-reading and vendoring machinery
+    (``_read_qm_artifact``, ``_vendor_qm_artifacts``) -- the same functions ``t3.pdep.capture``
+    already imports for the same reason -- instead of hand-copying just the ``.py`` file.
+
+    Every adopted artifact was, by construction, itself produced by a PRIOR call to
+    ``t3.pdep.capture.capture_ts_artifacts``, which always vendors an artifact to exactly
+    ``<that capture's own capture_dir>/qm/<arc_ts_label>.py`` (see
+    ``t3.pdep.capture``'s ``_CAPTURE_QM_SUBDIR`` and ``verify_capture``). So the artifact's own
+    ``allowed_log_root`` for confinement -- the prior run's own capture directory -- is always
+    recoverable as two directories up from its ``artifact_path``, with no need for
+    ``adopt_prior_qm`` to separately track or pass it.
+
     Args:
         adopted (dict): Network-local TS label -> source artifact path, as returned by
                         ``adopt_prior_qm``.
-        capture_dir (str): This round's own capture directory (``paths.capture``).
+        capture_dir (str): This round's own capture directory (``capture_result.capture_dir``).
 
     Returns:
         dict[str, str]: Network-local TS label -> the vendored (copied) artifact path, now inside
@@ -199,22 +217,76 @@ def _vendor_adopted_artifacts(adopted: dict, capture_dir: str) -> dict[str, str]
     Raises:
         FileNotFoundError: An adopted artifact's source path no longer exists -- fail closed
                            rather than silently dropping it from the hybrid network.
+        ValueError: An adopted artifact references a ``Log(...)`` file that no longer exists, or
+                   that resolves outside its own prior capture directory -- see
+                   ``t3.pdep.hybrid._read_qm_artifact``.
     """
     if not adopted:
         return dict()
-    adopted_dir = os.path.join(capture_dir, 'adopted')
-    os.makedirs(adopted_dir, exist_ok=True)
-    vendored = dict()
     for ts_label, source_path in adopted.items():
         if not os.path.isfile(source_path):
             raise FileNotFoundError(
                 f"PES loop: adopted artifact for {ts_label!r} no longer exists at "
                 f"{source_path!r}; refusing to fold a missing artifact into this round's hybrid "
                 f"network.")
-        dest_path = os.path.join(adopted_dir, f'{ts_label}{os.path.splitext(source_path)[1]}')
-        shutil.copy2(source_path, dest_path)
-        vendored[ts_label] = dest_path
-    return vendored
+    artifact_infos = {
+        ts_label: _read_qm_artifact(
+            ts_label=ts_label,
+            artifact_path=source_path,
+            allowed_log_root=os.path.dirname(os.path.dirname(os.path.abspath(source_path))),
+        )
+        for ts_label, source_path in adopted.items()
+    }
+    adopted_dir = os.path.join(capture_dir, 'adopted')
+    _vendor_qm_artifacts(artifact_infos=artifact_infos, qm_dir=adopted_dir, dest_dir=capture_dir)
+    return {ts_label: os.path.join(adopted_dir, f'{ts_label}.py') for ts_label in adopted}
+
+
+def _adopted_energy_settings(adopted: dict) -> dict | None:
+    """
+    Recover the frozen energy-reference settings adopted artifacts were computed under, from their
+    OWN prior capture manifest(s).
+
+    ``t3.pdep.capture.capture_ts_artifacts`` only reads ``energy_settings`` from the live ARC
+    project when THIS round captured at least one new artifact (``records_with_artifact``) -- a
+    round that adopted a prior result but converged nothing new gets ``CaptureResult.energy_settings
+    = None`` from that call, even though the adopted artifacts plainly WERE computed under some
+    settings. Those settings are recorded in each adopted artifact's own (prior) capture manifest --
+    the same manifest ``adopt_prior_qm`` already re-validated with ``verify_capture`` before
+    adopting from it -- so this function re-derives the artifact's prior capture directory the same
+    way ``_vendor_adopted_artifacts`` does (two directories up from ``artifact_path``, since a
+    captured artifact always lives at ``<capture_dir>/qm/<label>.py``) and reads that manifest's
+    settings directly, rather than treating "nothing new this round" as "no settings available".
+
+    Args:
+        adopted (dict): Network-local TS label -> ORIGINAL (pre-vendoring) adopted artifact path,
+                        as returned by ``adopt_prior_qm``.
+
+    Returns:
+        dict, optional: The frozen ``energy_settings`` block, or ``None`` if ``adopted`` is empty.
+
+    Raises:
+        ValueError: Two adopted artifacts come from prior captures whose manifests disagree on
+                   ``energy_settings`` -- refuse to guess which one is authoritative for this
+                   round's hybrid network rather than silently picking one.
+    """
+    if not adopted:
+        return None
+    settings_by_capture_dir = dict()
+    for source_path in adopted.values():
+        capture_dir = os.path.dirname(os.path.dirname(os.path.abspath(source_path)))
+        if capture_dir in settings_by_capture_dir:
+            continue
+        settings_by_capture_dir[capture_dir] = verify_capture(capture_dir).energy_settings
+    settings_values = list(settings_by_capture_dir.values())
+    first = settings_values[0]
+    for capture_dir, other in list(settings_by_capture_dir.items())[1:]:
+        if other != first:
+            raise ValueError(
+                f"PES loop: adopted artifacts come from prior captures with conflicting "
+                f"energy_settings ({first!r} vs {other!r} at {capture_dir!r}); refusing to guess "
+                f"which one is authoritative for this round's hybrid network.")
+    return first
 
 
 def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
@@ -229,7 +301,7 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
     (``t3.pdep.capture.capture_ts_artifacts``) against this round's own capture directory, and
     writes this round's hybrid Arkane network input file
     (``t3.pdep.hybrid.write_hybrid_network_input_file``) to exactly
-    ``t3.pdep.pes_loop.hybrid_network_path(paths, network_id)`` -- the loop checks for that exact
+    ``t3.pdep.pes_rounds.hybrid_network_path(paths, network_id)`` -- the loop checks for that exact
     file at the top of every round after the first and fails the round if it is absent.
 
     No ``_refuse_if_queued_ts_lack_artifacts``-equivalent guard exists here, unlike
@@ -347,7 +419,15 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         if record.status == ARTIFACT_STATUS_USABLE
     }
     qm_transition_states.update(vendored_adopted)
-    energy_settings = QMEnergySettings.from_frozen(capture_result.energy_settings)
+    # C3: capture_ts_artifacts only reads energy_settings when THIS round captured at least one
+    # new artifact (records_with_artifact) -- a round that adopted a prior result but converged
+    # nothing new gets capture_result.energy_settings=None, which would otherwise crash
+    # QMEnergySettings.from_frozen. The adopted artifacts were computed under settings recorded in
+    # their OWN prior manifest -- and those, not a guess, are the correct provenance for them.
+    energy_settings_frozen = capture_result.energy_settings
+    if energy_settings_frozen is None:
+        energy_settings_frozen = _adopted_energy_settings(adopted or dict())
+    energy_settings = QMEnergySettings.from_frozen(energy_settings_frozen)
     # I1: the hybrid network is built from the CAPTURE's own vendored network copy and recorded
     # method (CaptureResult.networks is the authoritative source -- see t3.pdep.capture's own
     # docstring), never from the live/original explored network -- capture_result.networks may
@@ -422,16 +502,16 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
       different level is refused even though it exists and converged (never adopted "close
       enough"). A refusal is logged with the manifest path, its raw ``model_chemistry``, and the
       requested level, so a silent "nothing was reused" is always explainable.
-    - ``record.network_id == network_id`` is used only as a cheap pre-filter, never the sole
-      guard: Arkane names TS artifacts positionally (``'TS{i+1}'``, see ``arkane/pdep.py``), so a
-      pruned or reordered exploration can re-issue the same label for a different transition
-      state, and ``network_id`` itself never matches across independent PES-loop runs (Arkane
-      names its own output by index, e.g. ``network0_full.py``, disjoint from T3's
-      ``network<digits>_<digits>`` convention). The real match is structural: the record's
-      ``path_reaction_labels`` (the path reaction label(s) its transition state actually joined)
-      against THIS run's own network-local candidates, supplied via
+    - ``record.network_id`` is NEVER a gate -- it is logged only. Arkane names TS artifacts
+      positionally (``'TS{i+1}'``, see ``arkane/pdep.py``), so a pruned or reordered exploration
+      can re-issue the same label for a different transition state, and ``network_id`` itself
+      never matches across independent PES-loop runs (Arkane names its own output by index, e.g.
+      ``network0_full.py``, disjoint from T3's ``network<digits>_<digits>`` convention) -- gating
+      on it would refuse the exact case this function exists to serve. The real match is
+      structural: the record's ``path_reaction_labels`` (the path reaction label(s) its transition
+      state actually joined) against THIS run's own network-local candidates, supplied via
       ``path_reaction_labels_by_ts_label``. A record with no recorded ``path_reaction_labels``,
-      or one that matches no local candidate, is refused.
+      or one that matches no local candidate, is refused (logged).
 
     If two prior captures offer conflicting artifacts for what structurally matches the same
     local TS label, adoption for that label is refused (not a last-write-wins guess) and a
@@ -444,7 +524,8 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
     Args:
         from_t3_projects (list): T3 (or standalone PES loop) project directories to search for
                                  reusable prior QM, e.g. ``config.reuse.from_t3_projects``.
-        network_id (str): This run's network id, used only as a cheap pre-filter (see above).
+        network_id (str): This run's network id. Logged for traceability only -- never a gate
+                          (see above).
         level_of_theory (str): The level of theory ``model_chemistry`` must match to be adopted
                                (e.g. ``config.qm.sp_level``), undashed.
         path_reaction_labels_by_ts_label (dict): THIS run's own network-local TS label -> tuple
@@ -457,6 +538,11 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
         by ``verify_capture``, to an absolute path inside its capture directory).
     """
     normalized_requested = _normalized_model_chemistry(level_of_theory)
+    if normalized_requested is None:
+        _logger.warning(
+            f"PES loop: ARC could not resolve a model_chemistry for the requested level of "
+            f"theory {level_of_theory!r}; every prior capture's model_chemistry will therefore "
+            f"fail to match and nothing will be adopted from {from_t3_projects!r}.")
     adopted = dict()
     conflicted = set()
     for project_directory in from_t3_projects:
@@ -484,16 +570,36 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                     f"{level_of_theory!r} (normalized: {normalized_requested!r}).")
                 continue
             for record in verified.ts_records:
-                if record.network_id != network_id or record.status != ARTIFACT_STATUS_USABLE:
+                if record.status != ARTIFACT_STATUS_USABLE:
                     continue
                 if not record.path_reaction_labels:
                     continue
+                if record.network_id != network_id:
+                    # Never a gate -- see this function's own docstring: Arkane's network_id is
+                    # per-run and never matches across independent PES-loop runs by construction.
+                    # Logged only, so a structural match is always explainable even when the
+                    # network ids visibly differ.
+                    _logger.debug(
+                        f"PES loop: matching prior QM at {manifest_path!r} for a different "
+                        f"network_id ({record.network_id!r} vs this run's {network_id!r}) on "
+                        f"structural path_reaction_labels alone -- network_id is a log-only field, "
+                        f"never a gate (see this function's docstring).")
                 local_label = None
                 for candidate_label, candidate_labels in path_reaction_labels_by_ts_label.items():
                     if candidate_labels and set(candidate_labels) == set(record.path_reaction_labels):
                         local_label = candidate_label
                         break
-                if local_label is None or local_label in conflicted:
+                if local_label is None:
+                    _logger.info(
+                        f"PES loop: refusing prior QM for {record.network_ts_label!r} at "
+                        f"{manifest_path!r} -- its path_reaction_labels "
+                        f"{record.path_reaction_labels!r} match none of this run's own "
+                        f"network-local candidates.")
+                    continue
+                if local_label in conflicted:
+                    _logger.info(
+                        f"PES loop: refusing prior QM for {local_label!r} at {manifest_path!r} -- "
+                        f"already refused earlier this call due to a conflicting prior capture.")
                     continue
                 if local_label in adopted and adopted[local_label] != record.artifact_path:
                     _logger.warning(

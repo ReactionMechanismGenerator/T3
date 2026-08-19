@@ -73,8 +73,8 @@ class _FakeARC(object):
         return dict(self.kwargs)
 
 
-def _config(max_rounds=3):
-    return PESLoopConfig(pes={'network': _FIXTURE_NETWORK_PATH, 'source': ['A'],
+def _config(network_path, max_rounds=3):
+    return PESLoopConfig(pes={'network': network_path, 'source': ['A'],
                               'bath_gas': {'He': 1.0}},
                          termination={'max_rounds': max_rounds, 'stop_when_no_new_ts': False})
 
@@ -85,7 +85,16 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
     least two rounds, and -- the actual N6 contract -- that the exact hybrid file arc_qm_runner
     writes for round 0 is the exact file run_pes_loop hands its round-1 explorer, observed end to
     end through the real loop rather than inferred from two separately-passing unit tests."""
-    real_network = parse_pdep_network_file(path=_FIXTURE_NETWORK_PATH)
+    # The fixture file's own stem ('network799_1') follows T3's own hybrid-file convention
+    # (network<digits>_<digits>), not the real Arkane explorer's
+    # ('^network(\\d+)_(full|reduced)\\.py$', t3.pdep.explorer.arkane._FINAL_NETWORK_FILENAME_RE).
+    # This fake explorer stands in for that real explorer, so it must hand downstream a network_id
+    # shaped the way Arkane's really is -- parse from a renamed copy rather than the fixture path
+    # directly, so real_network.network_id and every path derived from it looks like what Arkane
+    # would actually produce.
+    fixture_network_path = os.path.join(str(tmp_path), 'network0_full.py')
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, fixture_network_path)
+    real_network = parse_pdep_network_file(path=fixture_network_path)
     real_split = split_qm_candidates(real_network, frozenset())
     assert real_split.candidates, 'fixture must offer at least one real QM candidate'
     target = real_split.candidates[0]
@@ -109,7 +118,7 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
         paths = round_paths(project_directory, round_index)
         dest_path = _explored_network_path(paths, real_network.network_id)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        shutil.copyfile(_FIXTURE_NETWORK_PATH, dest_path)
+        shutil.copyfile(fixture_network_path, dest_path)
         return PDepExplorationResult(network_id=real_network.network_id,
                                      status=EXPLORATION_STATUS_SUCCEEDED,
                                      network_paths=(dest_path,))
@@ -133,7 +142,8 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
                                  arc_ts_label=f'{real_network.network_id}_{target.ts_label}',
                                  status=ARTIFACT_STATUS_USABLE,
                                  artifact_path=os.path.join(capture_dir, f'{target.ts_label}.py'),
-                                 converged=True),
+                                 converged=True,
+                                 path_reaction_labels=(target.path_reaction.label,)),
             ),
             energy_settings=_ENERGY_SETTINGS,
             networks={
@@ -160,7 +170,7 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
     monkeypatch.setattr(pes_qm, 'write_hybrid_network_input_file',
                         _fake_write_hybrid_network_input_file)
 
-    config = _config(max_rounds=3)
+    config = _config(fixture_network_path, max_rounds=3)
     result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=arc_qm_runner)
 
     assert len(result.rounds) >= 2, (

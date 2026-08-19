@@ -440,3 +440,69 @@ class TestRunPESLoop(object):
                                                     'explored_round0')
         assert calls[1] != never_written_hybrid
         assert not os.path.isfile(never_written_hybrid)
+
+    def test_round_0_full_adoption_does_not_early_return_no_candidates(self, tmp_path, monkeypatch,
+                                                                        config):
+        """C2 (fix round 2): when EVERY round-0 candidate was satisfied by reuse,
+        split.candidates is empty -- but that must not be read as "nothing to do" and short-circuit
+        to PES_LOOP_NO_CANDIDATES carrying the raw, all-ILT explored network. The headline reuse
+        scenario (reuse everything -> get nothing back) was silently reported as a benign status
+        before this fix; qm_runner must still be called (with an empty candidates tuple) so it can
+        fold the adopted artifact into a hybrid network."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+
+        def _fake_adopt(from_t3_projects, network_id, level_of_theory, path_reaction_labels_by_ts_label):
+            return {'TS0': '/fake/prior/TS0.py'}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm', _fake_adopt)
+        reuse_config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                          'bath_gas': {'He': 1.0}},
+                                     termination={'max_rounds': 3},
+                                     reuse={'from_t3_projects': ['/prior/project']})
+        runner_calls = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            runner_calls.append((tuple(candidates), adopted))
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(), frozenset()
+
+        result = run_pes_loop(reuse_config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert len(runner_calls) == 1
+        called_candidates, called_adopted = runner_calls[0]
+        assert called_candidates == ()
+        assert called_adopted == {'TS0': '/fake/prior/TS0.py'}
+        assert result.status != PES_LOOP_NO_CANDIDATES
+
+    def test_round_0_full_adoption_advances_to_the_hybrid_file_it_wrote(self, tmp_path, monkeypatch,
+                                                                        config):
+        """Important (fix round 2): a round-0-only-adoption round's hybrid file, once written, must
+        actually be what the NEXT round explores -- qm_runner's returned newly_computed excludes
+        adopted labels by contract, so advancing current_network_path on newly_computed alone would
+        ignore the hybrid this round demonstrably wrote."""
+        calls, _drawn = _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+
+        def _fake_adopt(from_t3_projects, network_id, level_of_theory, path_reaction_labels_by_ts_label):
+            return {'TS0': '/fake/prior/TS0.py'}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm', _fake_adopt)
+        reuse_config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                          'bath_gas': {'He': 1.0}},
+                                     termination={'max_rounds': 2, 'stop_when_no_new_ts': False},
+                                     reuse={'from_t3_projects': ['/prior/project']})
+        written_hybrid_paths = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            written_hybrid_paths.append(_touch_hybrid_file(paths, network_id))
+            return frozenset(), frozenset()
+
+        result = run_pes_loop(reuse_config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert len(written_hybrid_paths) == 1
+        # TS0 was folded into computed_ts_labels by adoption before round 0 even ran, so round 1
+        # (having nothing left to queue) correctly converges rather than exhausting max_rounds --
+        # that convergence, not a particular status, is the honest outcome here. What this test
+        # pins is that round 1 reached that conclusion by exploring the hybrid round 0 actually
+        # wrote, not the raw pre-adoption network (the fix-round-2 regression).
+        assert result.status == PES_LOOP_CONVERGED
+        assert len(result.rounds) == 2
+        assert result.rounds[0].status != PES_LOOP_FAILED
+        assert calls[1] == written_hybrid_paths[0]

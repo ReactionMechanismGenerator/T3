@@ -276,7 +276,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         if round_index > 0 and not os.path.isfile(current_network_path):
             reason = (f"round {round_index}: the expected hybrid network file "
                      f"{current_network_path!r} does not exist. The previous round's qm_runner "
-                     "must write it (see t3.pdep.pes_loop.hybrid_network_path) before returning.")
+                     "must write it (see t3.pdep.pes_rounds.hybrid_network_path) before returning.")
             prior = rounds[-1] if rounds else None
             rounds.append(RoundRecord(index=round_index, network_path=current_network_path,
                                       diagram_path=None, queued_ts_labels=(), skipped=(),
@@ -322,7 +322,14 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
 
         split = split_qm_candidates(network, computed_ts_labels)
 
-        if not split.candidates:
+        # C2: a round that adopted prior QM at round 0 must not early-return here just because it
+        # has no NEW candidates to queue -- every candidate having been satisfied by reuse is the
+        # headline success case for reuse, not "nothing to do". qm_runner is still called below
+        # (with an empty candidates tuple) so it can fold the adopted artifacts into a hybrid
+        # network; only when there is also no qm_runner to do that (no way to write a hybrid at
+        # all) does this fall through to the diagram-only return below.
+        round0_has_adopted = round_index == 0 and bool(adopted)
+        if not split.candidates and not round0_has_adopted:
             status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
             rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
                                       diagram_path=diagram_path, queued_ts_labels=(),
@@ -348,7 +355,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                  reason=rounds[-1].reason, final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
-        if round_index == 0 and adopted:
+        if round0_has_adopted:
             newly_computed, actually_queued = qm_runner(candidates, paths, config,
                                                          network.network_id, adopted=adopted)
         else:
@@ -356,7 +363,16 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         computed_ts_labels = computed_ts_labels | newly_computed
         queued_ts_labels = tuple(actually_queued)
 
-        if config.termination.stop_when_no_new_ts and not newly_computed:
+        # Important: qm_runner's returned newly_computed excludes adopted TS labels by contract
+        # (t3.pdep.pes_qm.arc_qm_runner's converged_ts_labels is what ARC itself converged THIS
+        # round; adopted artifacts were already usable before this round even ran). Folding
+        # `adopted` in was still real progress -- a hybrid network carrying them was written this
+        # round (see t3.pdep.pes_qm.arc_qm_runner's C2) -- so "no progress" and "advance to the
+        # hybrid file" must both look at newly_computed OR round0_has_adopted, not newly_computed
+        # alone.
+        made_progress = bool(newly_computed) or round0_has_adopted
+
+        if config.termination.stop_when_no_new_ts and not made_progress:
             reason = ('qm_runner returned no newly-converged transition states and '
                      'termination.stop_when_no_new_ts is set: continuing would not make progress.')
             rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
@@ -366,14 +382,14 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
-        # A round that converges nothing correctly does NOT write a hybrid file (qm_runner's
-        # empty-convergence contract -- see t3.pdep.pes_qm.arc_qm_runner). Advancing
+        # A round that converges nothing AND adopted nothing correctly does NOT write a hybrid file
+        # (qm_runner's empty-convergence contract -- see t3.pdep.pes_qm.arc_qm_runner). Advancing
         # current_network_path to hybrid_network_path anyway would make the next round's
         # file-existence check (above) blame qm_runner for "failing to write" a file it was never
-        # supposed to write. So only advance to the hybrid file when qm_runner actually converged
-        # something this round; otherwise stay on the network just explored and let max_rounds
-        # bound the (otherwise honest) repetition.
-        no_progress_reason = ('' if newly_computed else
+        # supposed to write. So only advance to the hybrid file when qm_runner actually converged or
+        # folded in something this round; otherwise stay on the network just explored and let
+        # max_rounds bound the (otherwise honest) repetition.
+        no_progress_reason = ('' if made_progress else
                               'qm_runner converged no new transition states this round; '
                               're-exploring the same network next round rather than advancing to '
                               'a hybrid file that was never written.')
@@ -385,11 +401,12 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         # The next round explores the QM-informed surface: a real qm_runner (Task 6) writes this
         # round's hybrid network input file (t3.pdep.hybrid) to hybrid_network_path(paths,
         # network.network_id) from its captured statmech artifacts, folding the newly converged
-        # transition states in as Log(...) references. This driver trusts that contract rather than
-        # writing the hybrid file itself -- that write belongs with the capture step that knows what
-        # it captured -- and enforces it explicitly at the top of the next round (above). When
-        # nothing converged this round, there is no hybrid file to trust -- see no_progress_reason.
-        current_network_path = (hybrid_network_path(paths, network.network_id) if newly_computed
+        # (and any adopted) transition states in as Log(...) references. This driver trusts that
+        # contract rather than writing the hybrid file itself -- that write belongs with the capture
+        # step that knows what it captured -- and enforces it explicitly at the top of the next
+        # round (above). When nothing converged or was adopted this round, there is no hybrid file
+        # to trust -- see no_progress_reason.
+        current_network_path = (hybrid_network_path(paths, network.network_id) if made_progress
                                 else explored_network_path)
 
     reason = f'the round budget ({max_rounds}) was exhausted without converging.'
