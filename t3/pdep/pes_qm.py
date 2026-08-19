@@ -39,6 +39,7 @@ from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import QMEnergySettings, write_hybrid_network_input_file
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label
+from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.pes_loop import hybrid_network_path
 from t3.pdep.pes_rounds import RoundPaths
 from t3.schema import PESLoopConfig
@@ -51,13 +52,35 @@ _logger = logging.getLogger(__name__)
 ARC_INPUT_FILE_NAME = 'arc_input.yml'
 
 
-def build_arc_input(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, network_id: str) -> dict:
+def build_arc_input(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, network_id: str,
+                    species_structures: dict) -> dict:
     """
-    Build the ARC input dict for one round's quantum chemistry, with no I/O.
+    Build the ARC input dict for one round's quantum chemistry, with no file or network I/O.
 
-    Kept pure so the levels of theory, job types, and TS label namespacing this function decides
-    are unit-testable without running ARC, without writing a file, and without an ARC project
-    directory existing on disk.
+    Kept pure (beyond logging a warning for a candidate that cannot be built) so the levels of
+    theory, job types, and TS label namespacing this function decides are unit-testable without
+    running ARC, without writing a file, and without an ARC project directory existing on disk.
+
+    Every reaction dict this function emits mirrors ``t3.main.T3.build_pdep_path_reaction`` --
+    ARC's own ``ARCReaction.from_dict`` (``arc/reaction/reaction.py``), when handed a top-level
+    ``species_list``, resolves a reaction's ``r_species``/``p_species`` entries by matching their
+    ``'label'`` against that list rather than building fresh ``ARCSpecies`` from the reaction
+    dict itself -- so a reaction dict alone, without a top-level ``'species'`` list, can never
+    construct a valid ``ARCReaction``. ``species_structures`` (``t3.pdep.parser.PDepNetwork``'s
+    field of the same name) is what supplies the adjacency list every ``'species'`` entry needs.
+
+    A candidate whose reactant or product labels have no entry in ``species_structures`` is
+    dropped from the returned ``reactions`` list (with a warning logged) rather than raising --
+    the same fail-open choice ``build_pdep_path_reaction`` makes, so one network species with an
+    unreadable structure loses only the reactions it participates in, not every candidate in the
+    round.
+
+    ``compute_thermo`` is explicitly set to ``False`` on every emitted species dict. ARC defaults
+    a bare species dict's ``compute_thermo`` to ``True``, which would queue a full thermodynamics
+    job for every reactant and product species reaching ARC through this path -- unbounded by
+    ``config.qm.max_transition_states_per_round`` and outside what this round's TS-only QM budget
+    is meant to cover. This loop only ever needs the transition state itself; reactant/product
+    thermo, if wanted, is a distinct, separately-budgeted concern.
 
     Args:
         candidates (tuple): The ``t3.pdep.pes_rounds.QMCandidate`` entries to queue, already
@@ -70,18 +93,39 @@ def build_arc_input(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
                           to namespace every candidate's TS label via ``arc_ts_label`` so it can
                           never collide with another network's transition state of the same
                           network-local name.
+        species_structures (dict): Network species label -> RMG adjacency-list text, i.e. the
+                                   explored network's own ``PDepNetwork.species_structures``.
 
     Returns:
         dict: The ARC input, suitable for ``arc.main.ARC(**arc_input)``.
     """
     qm = config.qm
+    species_by_label = dict()
     reactions = []
     for candidate in candidates:
+        path_reaction = candidate.path_reaction
+        labels = tuple(path_reaction.reactants) + tuple(path_reaction.products)
+        missing = [label for label in labels if not species_structures.get(label)]
+        if missing:
+            _logger.warning(f"Network {network_id!r} carries no adjacency list for species "
+                            f"{missing} of transition state '{candidate.ts_label}', so that "
+                            f"reaction cannot be sent to ARC.")
+            continue
+        for label in labels:
+            species_by_label.setdefault(label, species_structures[label])
         reactions.append({
+            'label': path_reaction.label,
             'ts_label': arc_ts_label(network_id, candidate.ts_label),
-            'network_ts_label': candidate.ts_label,
             'family': candidate.family,
+            'reactants': list(path_reaction.reactants),
+            'products': list(path_reaction.products),
+            'r_species': [{'label': label} for label in path_reaction.reactants],
+            'p_species': [{'label': label} for label in path_reaction.products],
         })
+    species = [
+        {'label': label, 'adjlist': adjlist, 'compute_thermo': False}
+        for label, adjlist in species_by_label.items()
+    ]
     return {
         'project_directory': paths.arc_project,
         'opt_level': qm.opt_level,
@@ -94,6 +138,7 @@ def build_arc_input(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
             'rotors': qm.rotors,
             'irc': qm.irc,
         },
+        'species': species,
         'reactions': reactions,
     }
 
@@ -122,14 +167,28 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
     """
     Run ARC on one round's QM candidates and fold whatever converges into a hybrid network file.
 
-    This is the real ``qm_runner`` ``t3.pdep.pes_loop.run_pes_loop`` injects. It: builds the ARC
-    input (``build_arc_input``), runs ARC via the same construction ``t3.main.T3.run_arc`` uses
-    (``ARC(**arc_kwargs)`` then ``arc.execute()``), captures whatever transition-state QM
-    artifacts converged (``t3.pdep.capture.capture_ts_artifacts``) against this round's own
-    capture directory, and writes this round's hybrid Arkane network input file
+    This is the real ``qm_runner`` ``t3.pdep.pes_loop.run_pes_loop`` injects. It: parses this
+    round's explored network to get species structures, builds the ARC input (``build_arc_input``),
+    runs ARC via the same construction ``t3.main.T3.run_arc`` uses (``ARC(**arc_kwargs)`` then
+    ``arc.execute()``), captures whatever transition-state QM artifacts converged
+    (``t3.pdep.capture.capture_ts_artifacts``) against this round's own capture directory, and
+    writes this round's hybrid Arkane network input file
     (``t3.pdep.hybrid.write_hybrid_network_input_file``) to exactly
     ``t3.pdep.pes_loop.hybrid_network_path(paths, network_id)`` -- the loop checks for that exact
     file at the top of every round after the first and fails the round if it is absent.
+
+    No ``_refuse_if_queued_ts_lack_artifacts``-equivalent guard exists here, unlike
+    ``t3.main.T3._capture_pdep_ts_artifacts``. That guard exists because ``t3.main`` can capture
+    the SAME ARC project directory twice across separate iterations (a fresh capture, or a
+    skip-re-capture replay over an existing manifest), and ARC deletes and recreates
+    ``calcs/statmech/kinetics/`` on its next rate pass -- so a second capture over a project ARC
+    has since wiped can silently see fewer artifacts than the first one did. This loop never
+    reuses a project directory: every round gets its own freshly created ``paths.arc_project``
+    (``t3.pdep.pes_rounds.round_paths`` namespaces it by round index), and capture happens exactly
+    once, synchronously, immediately after ``arc.execute()`` returns within this same call -- there
+    is no second call, no later iteration, and no window in which ARC could have cleaned up this
+    round's own artifacts before they are captured. The artifact-wipe race the guard defends
+    against is structurally excluded here, not merely unobserved.
 
     Args:
         candidates (tuple): The ``t3.pdep.pes_rounds.QMCandidate`` entries to queue, already
@@ -143,25 +202,25 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
                    t3.pdep.discovery.ARTIFACT_STATUS_USABLE`` only -- an ``UNVERIFIED`` artifact's
                    convergence is, by design, unknown, and is never treated as usable).
     """
-    arc_input = dict(build_arc_input(candidates, paths, config, network_id))
+    source_path = _explored_network_path(paths, network_id)
+    network = parse_pdep_network_file(path=source_path)
+
+    arc_input = build_arc_input(candidates, paths, config, network_id, network.species_structures)
     if not os.path.isdir(paths.arc_project):
         os.makedirs(paths.arc_project)
-    arc_input.setdefault('project', network_id)
-    reactions = arc_input.pop('reactions')
-
-    arc_kwargs = {key: value for key, value in arc_input.items()}
-    arc_input_path = os.path.join(paths.arc_project, ARC_INPUT_FILE_NAME)
-    if not os.path.isfile(arc_input_path):
-        save_yaml_file(path=arc_input_path, content={**arc_kwargs, 'reactions': reactions})
+    arc_kwargs = dict(arc_input)
+    arc_kwargs.setdefault('project', network_id)
 
     arc = ARC(**arc_kwargs)
+    arc_input_path = os.path.join(paths.arc_project, ARC_INPUT_FILE_NAME)
+    if not os.path.isfile(arc_input_path):
+        save_yaml_file(path=arc_input_path, content=arc.as_dict())
     try:
         arc.execute()
     except Exception as e:
         _logger.error(f'ARC crashed with {e.__class__}. Got the following error message:\n{e}')
         raise
 
-    source_path = _explored_network_path(paths, network_id)
     networks = {
         network_id: {
             'source_path': source_path,
@@ -201,11 +260,23 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig, n
         if record.status == ARTIFACT_STATUS_USABLE
     }
     energy_settings = QMEnergySettings.from_frozen(capture_result.energy_settings)
-    write_hybrid_network_input_file(
-        source_path=source_path,
+    # I1: the hybrid network is built from the CAPTURE's own vendored network copy and recorded
+    # method (CaptureResult.networks is the authoritative source -- see t3.pdep.capture's own
+    # docstring), never from the live/original explored network -- capture_result.networks may
+    # differ from `networks` above if a concurrent/prior capture already vendored this network
+    # under a different method or path.
+    captured_network = capture_result.networks[network_id]
+    captured_source_path = os.path.join(capture_result.capture_dir, captured_network['captured_path'])
+    result = write_hybrid_network_input_file(
+        source_path=captured_source_path,
         dest_path=hybrid_network_path(paths, network_id),
-        method=config.pes.method,
+        method=captured_network['method'],
         qm_transition_states=qm_transition_states,
         energy_settings=energy_settings,
+        qm_artifacts_root=capture_result.capture_dir,
     )
+    _logger.info(f"Wrote a hybrid P-dep network input for {network_id!r} to {result.dest_path}: "
+                f"QM/RRKM for {list(result.qm_ts_labels)}, RMG/ILT for {list(result.ilt_ts_labels)}.")
+    for warning in result.warnings:
+        _logger.warning(warning)
     return converged_labels

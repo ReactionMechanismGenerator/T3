@@ -345,17 +345,31 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
+        # A round that converges nothing correctly does NOT write a hybrid file (qm_runner's
+        # empty-convergence contract -- see t3.pdep.pes_qm.arc_qm_runner). Advancing
+        # current_network_path to hybrid_network_path anyway would make the next round's
+        # file-existence check (above) blame qm_runner for "failing to write" a file it was never
+        # supposed to write. So only advance to the hybrid file when qm_runner actually converged
+        # something this round; otherwise stay on the network just explored and let max_rounds
+        # bound the (otherwise honest) repetition.
+        no_progress_reason = ('' if newly_computed else
+                              'qm_runner converged no new transition states this round; '
+                              're-exploring the same network next round rather than advancing to '
+                              'a hybrid file that was never written.')
         rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
                                   diagram_path=diagram_path, queued_ts_labels=queued_ts_labels,
-                                  skipped=split.skipped, status='continuing'))
+                                  skipped=split.skipped, status='continuing',
+                                  reason=no_progress_reason))
 
         # The next round explores the QM-informed surface: a real qm_runner (Task 6) writes this
         # round's hybrid network input file (t3.pdep.hybrid) to hybrid_network_path(paths,
         # network.network_id) from its captured statmech artifacts, folding the newly converged
         # transition states in as Log(...) references. This driver trusts that contract rather than
         # writing the hybrid file itself -- that write belongs with the capture step that knows what
-        # it captured -- and enforces it explicitly at the top of the next round (above).
-        current_network_path = hybrid_network_path(paths, network.network_id)
+        # it captured -- and enforces it explicitly at the top of the next round (above). When
+        # nothing converged this round, there is no hybrid file to trust -- see no_progress_reason.
+        current_network_path = (hybrid_network_path(paths, network.network_id) if newly_computed
+                                else explored_network_path)
 
     reason = f'the round budget ({max_rounds}) was exhausted without converging.'
     return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_MAX_ROUNDS, reason=reason,

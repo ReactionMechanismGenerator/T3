@@ -2,6 +2,7 @@
 
 import dataclasses
 import os
+import tempfile
 
 import pytest
 
@@ -41,9 +42,11 @@ def _stub_explorer(monkeypatch, families, fail=False):
     - The exploration stub records the ``network_path`` it was called with (in ``calls``, in call
       order), so a test can pin that round 1 explores round 0's hybrid output rather than
       re-exploring round 0's original input.
-    - Each call returns a DISTINCT output path (``/abs/explored_round{N}.py``), and the parse stub
-      derives ``network_id`` from that path's stem exactly as the real ``parse_pdep_network_file``
-      does (``Path(path).stem`` -- ``t3/pdep/parser.py:729``). This means a loop that ever passes
+    - Each call returns a DISTINCT, real (on-disk, in a scratch temp dir) output path named
+      ``explored_round{N}.py``, and the parse stub derives ``network_id`` from that path's stem
+      exactly as the real ``parse_pdep_network_file`` does (``Path(path).stem`` --
+      ``t3/pdep/parser.py:729``). The file must actually exist because ``run_pes_loop`` checks for
+      it at the top of every round after the first (Important 4). This means a loop that ever passes
       the wrong network id to ``qm_runner`` or draws from the wrong path is directly observable,
       not masked by every round looking identical.
 
@@ -73,6 +76,7 @@ def _stub_explorer(monkeypatch, families, fail=False):
 
     calls = []
     drawn = []
+    explore_dir = tempfile.mkdtemp()
 
     def _fake_explore(*, network_path, config, logger=None):
         calls.append(network_path)
@@ -80,7 +84,13 @@ def _stub_explorer(monkeypatch, families, fail=False):
             return PDepExplorationResult(network_id=base_network.network_id,
                                          status=EXPLORATION_STATUS_FAILED,
                                          reasons=('the explorer adapter crashed',))
-        output_path = f'/abs/explored_round{len(calls) - 1}.py'
+        # A real explore_pdep_network writes a real file to disk; the file-existence guard at the
+        # top of every round after the first (t3.pdep.pes_loop.run_pes_loop) depends on that, so
+        # this stub must too -- a bare fabricated path string is not enough once a round is
+        # allowed to re-explore its own prior output (Important 4) rather than always advancing to
+        # a hybrid file a separate helper (_touch_hybrid_file) creates.
+        output_path = os.path.join(explore_dir, f'explored_round{len(calls) - 1}.py')
+        open(output_path, 'w').close()
         return PDepExplorationResult(network_id=base_network.network_id,
                                      status=EXPLORATION_STATUS_SUCCEEDED,
                                      network_paths=(output_path,))
@@ -178,7 +188,8 @@ class TestRunPESLoop(object):
         for record in result.rounds:
             assert record.diagram_path is not None
             assert os.path.basename(record.diagram_path) == 'pes_diagram.png'
-        assert drawn == ['/abs/explored_round0.py', '/abs/explored_round1.py']
+        assert [os.path.basename(path) for path in drawn] == \
+            ['explored_round0.py', 'explored_round1.py']
         assert drawn != calls
 
     def test_barrierless_channels_are_never_queued(self, tmp_path, monkeypatch, config):
@@ -279,3 +290,63 @@ class TestRunPESLoop(object):
         assert len(result.rounds) == 2
         assert result.rounds[-1].status == PES_LOOP_FAILED
         assert 'hybrid' in result.reason.lower()
+
+    def test_a_round_that_converges_nothing_does_not_advance_to_a_hybrid_file_never_written(
+            self, tmp_path, monkeypatch, config):
+        """A round whose qm_runner converges nothing correctly writes no hybrid file (its
+        empty-convergence contract -- see t3.pdep.pes_qm.arc_qm_runner). The loop must re-explore
+        that round's own explored network next round rather than advance current_network_path to
+        a hybrid file that was never written -- otherwise the next round's file-existence guard
+        blames qm_runner for breaking a contract it never had, turning an honest stall into a
+        bogus PES_LOOP_FAILED (Important 4)."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               termination={'max_rounds': 2, 'stop_when_no_new_ts': False})
+
+        path_reactions = (PDepPathReaction(label='reaction0', reactants=('A',), products=('B',),
+                                           transition_state='TS0', kinetics_type='Arrhenius',
+                                           kinetics_comment='family: 1,2_Insertion_CO'),)
+        base_network = PDepNetwork(network_id='network1_1', path='/abs/network1_1.py', label=None,
+                                   species_labels=('A', 'B'), transition_state_labels=('TS0',),
+                                   path_reactions=path_reactions, isomers=(), reactant_channels=(),
+                                   product_channels=())
+
+        calls = []
+        explored_paths = []
+
+        def _fake_explore(*, network_path, config, logger=None):
+            calls.append(network_path)
+            output_path = os.path.join(str(tmp_path), f'explored_round{len(calls) - 1}.py')
+            open(output_path, 'w').close()
+            explored_paths.append(output_path)
+            return PDepExplorationResult(network_id=base_network.network_id,
+                                         status=EXPLORATION_STATUS_SUCCEEDED,
+                                         network_paths=(output_path,))
+
+        def _fake_parse(path):
+            network_id = os.path.splitext(os.path.basename(path))[0]
+            return dataclasses.replace(base_network, network_id=network_id, path=path)
+
+        def _fake_draw(network_path, output_path):
+            open(output_path, 'w').close()
+
+        monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
+        monkeypatch.setattr('t3.pdep.pes_loop.parse_pdep_network_file', _fake_parse)
+        monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram', _fake_draw)
+
+        def _runner(candidates, paths, cfg, network_id):
+            # Deliberately does NOT write the hybrid file -- this is the correct, contractual
+            # behaviour when nothing converged, not a bug being simulated.
+            return frozenset()
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_MAX_ROUNDS
+        assert len(result.rounds) == 2
+        assert all(round_record.status != PES_LOOP_FAILED for round_record in result.rounds)
+        # Round 1 must re-explore round 0's own explored output, not a hybrid file round 0's
+        # qm_runner never wrote.
+        assert calls[1] == explored_paths[0]
+        never_written_hybrid = hybrid_network_path(round_paths(str(tmp_path), 0),
+                                                    'explored_round0')
+        assert calls[1] != never_written_hybrid
+        assert not os.path.isfile(never_written_hybrid)
