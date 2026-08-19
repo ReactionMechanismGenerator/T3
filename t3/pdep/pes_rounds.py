@@ -22,6 +22,7 @@ this list, so a non-deterministic order would admit a different subset on each r
 runs of the same input incomparable.
 """
 
+import os
 from dataclasses import dataclass
 
 from t3.pdep.barrierless import classify_barrierless
@@ -103,3 +104,66 @@ def split_qm_candidates(network: PDepNetwork, computed_ts_labels: frozenset) -> 
         candidates.append(QMCandidate(path_reaction=path_reaction, ts_label=ts_label,
                                       family=verdict.family))
     return CandidateSplit(candidates=tuple(candidates), skipped=tuple(skipped))
+
+
+PES_LOOP_DIAGRAM_FILENAME = 'pes_diagram.png'
+
+
+@dataclass(frozen=True)
+class RoundPaths:
+    """
+    Where one round of the loop puts its artifacts.
+
+    Attributes:
+        root (str): The round's own directory.
+        arc_project (str): The ARC project directory for this round's QM.
+        explorer_output (str): Where the Arkane explorer writes.
+        capture (str): Where this round's QM artifacts are frozen.
+        hybrid (str): Where this round's hybrid network input file is written.
+        diagram (str): The PES diagram for this round.
+    """
+    root: str
+    arc_project: str
+    explorer_output: str
+    capture: str
+    hybrid: str
+    diagram: str
+
+
+def round_paths(project_directory: str, round_index: int) -> RoundPaths:
+    """
+    Resolve the artifact layout for one round.
+
+    Every round is self-contained, and in particular gets its OWN ARC project directory. That is
+    what lets the loop run ARC more than once without fighting ``t3.pdep.capture``'s single-shot
+    window: ARC recreates ``calcs/statmech/`` with ``delete_existing_subdir=True`` on every rate
+    pass, so a second ARC run sharing one project directory would destroy the first round's
+    un-captured artifacts. Separate projects make that structurally impossible rather than
+    merely discouraged.
+
+    The capture directory is deliberately a sibling of the ARC project, never nested inside it:
+    ``capture_ts_artifacts`` refuses a ``capture_dir`` that resolves inside the ARC project
+    directory, for the same reason.
+
+    Args:
+        project_directory (str): The loop's project directory. Must be absolute.
+        round_index (int): The zero-based round number.
+
+    Returns:
+        RoundPaths: The resolved layout.
+
+    Raises:
+        ValueError: If ``project_directory`` is not absolute, or ``round_index`` is negative.
+    """
+    if not os.path.isabs(project_directory):
+        raise ValueError(f"'project_directory' must be an absolute path, got "
+                         f"{project_directory!r}.")
+    if round_index < 0:
+        raise ValueError(f"'round_index' must be non-negative, got {round_index}.")
+    root = os.path.join(project_directory, f'round_{round_index}')
+    return RoundPaths(root=root,
+                      arc_project=os.path.join(root, 'ARC'),
+                      explorer_output=os.path.join(root, 'explorer'),
+                      capture=os.path.join(root, 'capture'),
+                      hybrid=os.path.join(root, 'hybrid'),
+                      diagram=os.path.join(root, PES_LOOP_DIAGRAM_FILENAME))
