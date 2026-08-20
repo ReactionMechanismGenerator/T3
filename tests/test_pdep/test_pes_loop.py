@@ -382,7 +382,7 @@ class TestRunPESLoop(object):
         # The 4th argument is the seed network's STRUCTURAL channel-key map (canonical species
         # structures, direction-insensitive), never a positional-label map -- reaction and TS
         # labels are both positional in Arkane-written files and cannot identify a channel.
-        assert call_labels == {'TS0': (('C',), ('CC',)), 'TS1': (('CCC',), ('CCCC',))}
+        assert call_labels == {'TS0': (('CC|m1',), ('C|m1',)), 'TS1': (('CCCC|m1',), ('CCC|m1',))}
         assert 'TS0' not in queued
         assert 'TS1' in queued
 

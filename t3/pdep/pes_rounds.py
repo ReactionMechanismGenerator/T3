@@ -193,23 +193,33 @@ def _canonical_structure(adjlist: str) -> str | None:
     SMILES, so two projects that wrote the same molecule with different species labels or a
     different atom order still produce the same identity string.
 
+    What the identity is NOT independent of -- deliberately: the spin multiplicity is appended
+    explicitly (``...|m<multiplicity>``), because SMILES alone does not encode spin state and two
+    genuinely distinct RMG species collapse onto one string without it -- singlet and triplet CH2
+    are both ``'[CH2]'``. Adopting a singlet channel's barrier onto the triplet channel (or vice
+    versa) is exactly the wrong-saddle-point misattribution structural keying exists to prevent,
+    so the multiplicity is part of the identity. Charge and lone-pair differences already separate
+    through the SMILES itself (``[OH]`` vs ``[OH-]``; O(3P) ``[O]`` vs O(1D) ``O``).
+
     Args:
         adjlist (str): The RMG adjacency-list text.
 
     Returns:
-        str | None: The canonical SMILES, or ``None`` if the text could not be parsed into a
-        molecule -- the caller must then refuse to key the channel rather than guess.
+        str | None: The canonical identity (``<canonical SMILES>|m<multiplicity>``), or ``None``
+        if the text could not be parsed into a molecule -- the caller must then refuse to key the
+        channel rather than guess.
     """
     if adjlist in _CANONICAL_STRUCTURE_CACHE:
         return _CANONICAL_STRUCTURE_CACHE[adjlist]
     try:
-        smiles = Molecule().from_adjacency_list(adjlist).to_smiles()
+        molecule = Molecule().from_adjacency_list(adjlist)
+        identity = f'{molecule.to_smiles()}|m{molecule.multiplicity}'
     except Exception as e:
         _logger.warning(f'Could not canonicalize an adjacency list into a molecule ({e}); the '
                         f'channel using it cannot be structurally keyed.')
-        smiles = None
-    _CANONICAL_STRUCTURE_CACHE[adjlist] = smiles
-    return smiles
+        identity = None
+    _CANONICAL_STRUCTURE_CACHE[adjlist] = identity
+    return identity
 
 
 def structural_channel_key(path_reaction: PDepPathReaction,

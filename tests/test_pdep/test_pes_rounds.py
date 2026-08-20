@@ -199,7 +199,7 @@ class TestStructuralChannelKeys(object):
         backward = dataclasses.replace(forward, reactants=('B_r1',), products=('A_r1',))
         key_f = structural_channel_key(forward, network.species_structures)
         key_b = structural_channel_key(backward, network.species_structures)
-        assert key_f == key_b == (('C',), ('CC',))
+        assert key_f == key_b == (('CC|m1',), ('C|m1',))
 
     def test_key_is_label_and_atom_order_independent(self):
         """The same molecule written under a different species label and a permuted atom order
@@ -255,3 +255,29 @@ class TestStructuralChannelKeys(object):
         network = dataclasses.replace(
             _network([r1, r2]), species_structures={'A': adj_a, 'B': adj_b, 'C': adj_c})
         assert channel_keys_by_ts_label(network) == {}
+
+    def test_spin_states_do_not_collapse_onto_one_key(self):
+        """BLOCKING regression pin: SMILES does not encode spin state -- singlet and triplet CH2
+        both render '[CH2]' -- so without the explicit multiplicity suffix a prior
+        CH2(S) + CO <=> CH2CO barrier would be adopted onto the CH2(T) channel: a FALSE structural
+        match, i.e. exactly the wrong-saddle-point misattribution structural keying exists to
+        prevent."""
+        ch2_triplet = ('multiplicity 2\n'
+                       '1 C u2 p0 c0 {2,S} {3,S}\n'
+                       '2 H u0 p0 c0 {1,S}\n'
+                       '3 H u0 p0 c0 {1,S}\n').replace('multiplicity 2', 'multiplicity 3')
+        ch2_singlet = ('1 C u0 p1 c0 {2,S} {3,S}\n'
+                       '2 H u0 p0 c0 {1,S}\n'
+                       '3 H u0 p0 c0 {1,S}\n')
+        co = Molecule().from_smiles('[C-]#[O+]').to_adjacency_list()
+        ch2co = Molecule().from_smiles('C=C=O').to_adjacency_list()
+        rxn_triplet = dataclasses.replace(_rxn('t', 'family: x'), reactants=('CH2(T)', 'CO'),
+                                          products=('CH2CO',))
+        rxn_singlet = dataclasses.replace(_rxn('s', 'family: x'), reactants=('CH2(S)', 'CO'),
+                                          products=('CH2CO',))
+        key_triplet = structural_channel_key(
+            rxn_triplet, {'CH2(T)': ch2_triplet, 'CO': co, 'CH2CO': ch2co})
+        key_singlet = structural_channel_key(
+            rxn_singlet, {'CH2(S)': ch2_singlet, 'CO': co, 'CH2CO': ch2co})
+        assert key_triplet is not None and key_singlet is not None
+        assert key_triplet != key_singlet
