@@ -156,7 +156,14 @@ class T3Species(ARCSpecies):
         self.formula = self.mol.get_formula()
         _dict_qm_label = _t3_dict.pop('qm_label', None) if _t3_dict else None
         self.qm_label = _dict_qm_label or t3_extras.get('qm_label') or f"s{self.key}_{self.formula}"
-        self.thermo = thermo
+        # Only override when the caller actually supplied thermo. ``ARCSpecies.__init__`` (called
+        # above) guarantees ``self.thermo`` is a ``ThermoData()``, and ARC relies on that invariant:
+        # ``parse_arkane_thermo_output`` does ``spc.thermo.H298 = ...`` on the very objects T3 hands
+        # it, without a None check. An unconditional assignment here therefore reset the attribute
+        # to None for every T3-created species and crashed ARC at the *reporting* stage -- after all
+        # of its QM had already converged, discarding a completed run.
+        if thermo is not None:
+            self.thermo = thermo
 
         if thermo_method is None:
             self.thermo_method: ThermoMethod | None = None
