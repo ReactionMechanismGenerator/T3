@@ -28,16 +28,19 @@ module only corroborates that the loop and the real runner agree with each other
 import os
 import shutil
 
-from t3.pdep.capture import CaptureResult, captured_qm_artifact_path
-from t3.pdep.join import arc_ts_label
+from t3.pdep.capture import (CaptureResult, capture_ts_artifacts, captured_qm_artifact_path,
+                             verify_capture)
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED, PDepExplorationResult
+from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import HybridNetworkResult
+from t3.pdep.join import (JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label,
+                          expected_ts_artifact_path)
 from t3.pdep.parser import parse_pdep_network_file
 import t3.pdep.pes_qm as pes_qm
 from t3.pdep.pes_loop import run_pes_loop
 from t3.pdep.pes_qm import _explored_network_path, arc_qm_runner
-from t3.pdep.pes_rounds import round_paths, split_qm_candidates
+from t3.pdep.pes_rounds import hybrid_network_path, round_paths, split_qm_candidates
 from t3.schema import PESLoopConfig
 
 _FIXTURE_NETWORK_PATH = os.path.join(
@@ -204,3 +207,233 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
     # The actual N6 contract: round 1's explorer must be handed EXACTLY the file arc_qm_runner
     # wrote for round 0.
     assert received_network_paths[1] == round0_hybrid_path
+
+
+# ---------------------------------------------------------------------------------------------
+# Real-capture pairing (this fix round). Everything below drives the REAL run_pes_loop with the
+# REAL arc_qm_runner, the REAL capture_ts_artifacts (no capture double -- the gap every prior
+# test on this branch shared, which is how defects 1-3 stayed green), the REAL Arkane
+# master-equation SA (t3.pdep.pes_sa -- Arkane actually runs, once per round with candidates),
+# the REAL adopt_prior_qm against a REAL prior capture, the REAL vendoring, and the REAL hybrid
+# writer. Faked: ONLY the explorer (as everywhere in this suite) and ARC (execute() writes
+# converged statmech artifacts into the round's own ARC project instead of submitting cluster
+# jobs).
+# ---------------------------------------------------------------------------------------------
+
+_MODEL_CHEMISTRY = "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')"
+
+
+def _write_artifact(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(os.path.join(os.path.dirname(path), 'output.out'), 'w') as f:
+        f.write('stub quantum chemistry log\n')
+    with open(path, 'w') as f:
+        f.write("linear = False\n\nspinMultiplicity = 2\n\nenergy = Log('output.out')\n\n"
+                "geometry = Log('output.out')\n\nfrequencies = Log('output.out')\n")
+
+
+def _write_status(arc_dir, label, converged):
+    output_dir = os.path.join(arc_dir, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, 'status.yml'), 'a') as f:
+        f.write(f"{label}:\n  convergence: {str(converged).lower()}\n  job_types: {{}}\n"
+                f"  paths: {{}}\n  info: ''\n  errors: ''\n")
+
+
+def _write_energy_settings(arc_dir):
+    statmech_dir = os.path.join(arc_dir, 'calcs', 'statmech', 'kinetics')
+    os.makedirs(statmech_dir, exist_ok=True)
+    with open(os.path.join(statmech_dir, 'input.py'), 'w') as f:
+        f.write(f"modelChemistry = {_MODEL_CHEMISTRY}\n\nuseHinderedRotors = True\n\n"
+                "useAtomCorrections = True\n\n"
+                "atomEnergies = {'C': -37.844411, 'H': -0.499818, 'O': -75.062219}\n\n"
+                "useBondCorrections = False\n")
+    output_dir = os.path.join(arc_dir, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    output_yml = os.path.join(output_dir, 'output.yml')
+    if not os.path.isfile(output_yml):
+        with open(output_yml, 'w') as f:
+            f.write('{}\n')
+
+
+def _build_prior_capture(prior_project_dir, ts_labels):
+    """A REAL prior capture for ``ts_labels`` (each joined to the fixture's own
+    ``reaction<i>``), built by capture_ts_artifacts itself so adopt_prior_qm, the vendoring, and
+    _adopted_energy_settings all run against the exact formats production writes."""
+    arc_dir = os.path.join(prior_project_dir, 'arc_project')
+    network_id = 'prior_run_network'
+    records = []
+    for ts_label in ts_labels:
+        label = arc_ts_label(network_id, ts_label)
+        record = TSJoinRecord(network_id=network_id, network_ts_label=ts_label,
+                              status=JOIN_STATUS_QUEUED, arc_ts_label=label,
+                              expected_artifact_path=expected_ts_artifact_path(arc_dir, label),
+                              reason='Queued to ARC.', coefficient=-9.5e-05, delta_ln_k=0.795,
+                              path_reaction_labels=(f'reaction{ts_label[2:]}',))
+        _write_artifact(record.expected_artifact_path)
+        _write_status(arc_dir, label, converged=True)
+        records.append(record)
+    _write_energy_settings(arc_dir)
+    networks_dir = os.path.join(prior_project_dir, 'networks')
+    os.makedirs(networks_dir, exist_ok=True)
+    source_path = os.path.join(networks_dir, f'{network_id}.py')
+    with open(source_path, 'w') as f:
+        f.write(f"# stub RMG network file\nnetwork(label='{network_id}')\n")
+    capture_ts_artifacts(
+        records, arc_dir, os.path.join(prior_project_dir, 'capture'),
+        networks={network_id: {'source_path': source_path,
+                               'source_sha256': hash_file(source_path), 'method': 'MSC'}},
+        sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)
+                           for record in records})
+
+
+class _ArtifactWritingFakeARC(object):
+    """Stands in for arc.main.ARC at exactly the cluster boundary: execute() writes the statmech
+    artifacts, convergence statuses, and energy settings a real ARC run would leave in the round's
+    own project directory, per the class-level ``converge_plan`` (one set of network-local TS
+    labels per execute() call)."""
+
+    converge_plan = ()
+    constructions = []
+    executions = 0
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        _ArtifactWritingFakeARC.constructions.append(kwargs)
+
+    def as_dict(self):
+        return dict(self.kwargs)
+
+    def execute(self):
+        arc_dir = self.kwargs['project_directory']
+        to_converge = _ArtifactWritingFakeARC.converge_plan[_ArtifactWritingFakeARC.executions]
+        _ArtifactWritingFakeARC.executions += 1
+        _write_energy_settings(arc_dir)
+        for reaction in self.kwargs['reactions']:
+            label = reaction['ts_label']
+            if label.rsplit('_', 1)[-1] in to_converge:
+                _write_artifact(expected_ts_artifact_path(arc_dir, label))
+                _write_status(arc_dir, label, converged=True)
+            else:
+                _write_status(arc_dir, label, converged=False)
+
+
+def _hybrid_qm_ilt(hybrid_path):
+    """Which of the fixture's three TSs a hybrid file carries as QM/RRKM vs RMG/ILT: a QM'd TS's
+    reaction block drops its ``kinetics = Arrhenius(...)`` line, an ILT one keeps it. Scanned
+    textually because the hybrid's consumer is Arkane (which accepts its positional
+    ``transitionState(...)`` calls), not ``t3.pdep.parser``."""
+    with open(hybrid_path) as f:
+        content = f.read()
+    qm, ilt = [], []
+    for reaction_label, ts_label in (('reaction1', 'TS1'), ('reaction2', 'TS2'),
+                                     ('reaction3', 'TS3')):
+        start = content.index(f"label = '{reaction_label}'")
+        end = content.find('reaction(', start)
+        block = content[start:end if end != -1 else len(content)]
+        (ilt if 'kinetics = Arrhenius(' in block else qm).append(ts_label)
+    return sorted(qm), sorted(ilt)
+
+
+def _fixture_explorer(monkeypatch, project_directory, network_id):
+    """The canonical fake explorer of this module: each round's 'exploration' deposits a copy of
+    the real fixture at the exact path arc_qm_runner's real _explored_network_path recomputes."""
+    explore_calls = []
+
+    def _fake_explore(*, network_path, config, logger=None):
+        explore_calls.append(network_path)
+        paths = round_paths(project_directory, len(explore_calls) - 1)
+        dest_path = _explored_network_path(paths, network_id)
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        shutil.copyfile(_FIXTURE_NETWORK_PATH, dest_path)
+        return PDepExplorationResult(network_id=network_id,
+                                     status=EXPLORATION_STATUS_SUCCEEDED,
+                                     network_paths=(dest_path,))
+
+    monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
+    return explore_calls
+
+
+def test_real_loop_real_capture_carries_cumulative_qm_across_rounds(tmp_path, monkeypatch):
+    """The reviewer's exact scenario, against the REAL capture_ts_artifacts: round 0 adopts TS1
+    from a real prior capture and converges TS2; round 1 converges TS3. Before this fix round the
+    loop could not complete a single such round (defect 1), and when it did complete, round N+1's
+    hybrid dropped round N's QM back to Arrhenius lines (defect 3)."""
+    prior_project_dir = os.path.join(str(tmp_path), 'prior_project')
+    _build_prior_capture(prior_project_dir, ts_labels=('TS1',))
+    project_directory = os.path.join(str(tmp_path), 'loop_project')
+    os.makedirs(project_directory)
+    seed_path = os.path.join(str(tmp_path), 'network0_full.py')
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, seed_path)
+
+    _fixture_explorer(monkeypatch, project_directory, 'network0_full')
+    _ArtifactWritingFakeARC.converge_plan = ({'TS2'}, {'TS3'})
+    _ArtifactWritingFakeARC.constructions = []
+    _ArtifactWritingFakeARC.executions = 0
+    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+
+    config = PESLoopConfig(
+        pes={'network': seed_path, 'source': ['O-2(13598)', 'CO2(11)'],
+             'bath_gas': {'Ar': 1.0}, 'method': 'MSC'},
+        termination={'max_rounds': 4},
+        reuse={'from_t3_projects': [prior_project_dir]},
+    )
+    result = run_pes_loop(config, project_directory=project_directory, qm_runner=arc_qm_runner)
+
+    assert result.status == 'converged', f'{result.status}: {result.reason}'
+    assert [record.status for record in result.rounds] == ['continuing', 'continuing', 'converged']
+    assert sorted(result.rounds[0].queued_ts_labels) == ['TS2', 'TS3']
+    assert sorted(result.rounds[1].queued_ts_labels) == ['TS3']
+
+    round0_hybrid = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
+    round1_hybrid = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
+    # Round 0: the adopted TS1 and the freshly converged TS2 are QM; TS3 is still ILT.
+    assert _hybrid_qm_ilt(round0_hybrid) == (['TS1', 'TS2'], ['TS3'])
+    # Round 1 -- THE defect-3 pin: the hybrid carries the CUMULATIVE QM, not just this round's.
+    # The defective loop wrote QM=['TS3'], ILT=['TS1', 'TS2'] here.
+    assert _hybrid_qm_ilt(round1_hybrid) == (['TS1', 'TS2', 'TS3'], [])
+
+    # Both rounds' captures are REAL and re-verify cleanly, sensitivity evidence included --
+    # exactly what defect 1 made impossible.
+    for round_index in (0, 1):
+        verified = verify_capture(round_paths(project_directory, round_index).capture)
+        for record in verified.ts_records:
+            if record.artifact_path is not None:
+                assert record.coefficient is not None and record.delta_ln_k is not None
+
+
+def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path, monkeypatch):
+    """Defect 2, end to end against the real vendoring and the real _adopted_energy_settings:
+    when EVERY candidate is adopted from a prior run, round 0 queues nothing, never touches ARC or
+    capture, and still writes a hybrid carrying all three TSs as QM; round 1 then converges."""
+    prior_project_dir = os.path.join(str(tmp_path), 'prior_project')
+    _build_prior_capture(prior_project_dir, ts_labels=('TS1', 'TS2', 'TS3'))
+    project_directory = os.path.join(str(tmp_path), 'loop_project')
+    os.makedirs(project_directory)
+    seed_path = os.path.join(str(tmp_path), 'network0_full.py')
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, seed_path)
+
+    _fixture_explorer(monkeypatch, project_directory, 'network0_full')
+    _ArtifactWritingFakeARC.converge_plan = ()
+    _ArtifactWritingFakeARC.constructions = []
+    _ArtifactWritingFakeARC.executions = 0
+    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+
+    config = PESLoopConfig(
+        pes={'network': seed_path, 'source': ['O-2(13598)', 'CO2(11)'],
+             'bath_gas': {'Ar': 1.0}, 'method': 'MSC'},
+        termination={'max_rounds': 2},
+        reuse={'from_t3_projects': [prior_project_dir]},
+    )
+    result = run_pes_loop(config, project_directory=project_directory, qm_runner=arc_qm_runner)
+
+    assert result.status == 'converged', f'{result.status}: {result.reason}'
+    assert [record.status for record in result.rounds] == ['continuing', 'converged']
+    # Nothing was ever queued, so ARC must never even have been constructed.
+    assert _ArtifactWritingFakeARC.constructions == []
+    round0_hybrid = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
+    assert _hybrid_qm_ilt(round0_hybrid) == (['TS1', 'TS2', 'TS3'], [])
+    # The hybrid's energy settings came from the adopted artifacts' own prior manifest -- the
+    # _adopted_energy_settings path a capture-less round is forced through.
+    with open(round0_hybrid) as f:
+        assert 'wb97xd2023' in f.read()
