@@ -15,7 +15,8 @@ from t3.pdep.join import arc_ts_label
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
 from t3.pdep.pes_loop import (PES_LOOP_CONVERGED, PES_LOOP_DIAGRAM_ONLY, PES_LOOP_FAILED,
                               PES_LOOP_MAX_ROUNDS, PES_LOOP_NO_CANDIDATES, PES_LOOP_STALLED,
-                              PESLoopResult, RoundRecord, hybrid_network_path, run_pes_loop)
+                              PESLoopResult, RoundRecord, _build_explorer_config,
+                              hybrid_network_path, run_pes_loop)
 from t3.pdep.pes_rounds import round_paths
 from t3.schema import PESLoopConfig
 
@@ -607,6 +608,17 @@ class TestRoundMeSensitivityWiring(object):
         assert sa_calls[0]['timeout'] == config.pes.timeout
         assert received[0].coefficient == -3.0e-5
         assert received[0].delta_ln_k == 0.25
+
+    def test_the_explorer_config_carries_the_configured_timeout(self, tmp_path):
+        """The other half of the same budget: explorer runtime is unbounded, so without this a
+        single pathological network parks the loop forever. Asserted against a value that is
+        neither the schema default nor the explorer's own, so a dropped ``timeout=`` cannot pass
+        by coincidence."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}, 'timeout': 137.0})
+        explorer_config = _build_explorer_config(config, str(tmp_path),
+                                                 round_paths(str(tmp_path), 0))
+        assert explorer_config.timeout == 137.0
 
     def test_a_failed_sa_fails_the_round_rather_than_inventing_evidence(self, tmp_path,
                                                                         monkeypatch, config):
