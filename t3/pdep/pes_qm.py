@@ -323,11 +323,16 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         paths (RoundPaths): This round's artifact layout.
         config (PESLoopConfig): The loop's configuration.
         network_id (str): The network file stem this round explored.
-        adopted (dict, optional): Network-local TS label -> artifact path adopted from a prior
-                                  run (``t3.pdep.pes_qm.adopt_prior_qm``), if any. Vendored into
-                                  this round's own capture directory and folded into
-                                  ``qm_transition_states`` alongside whatever ARC converged this
-                                  round.
+        adopted (dict, optional): Network-local TS label -> artifact path for every QM artifact
+                                  already in hand before this round ran -- reused from a prior
+                                  project (``t3.pdep.pes_qm.adopt_prior_qm``) or converged by an
+                                  earlier round of this loop (``t3.pdep.pes_loop`` passes its
+                                  cumulative map every round). Vendored into this round's own
+                                  capture directory and folded into ``qm_transition_states``
+                                  alongside whatever ARC converged this round, so every round's
+                                  hybrid carries the CUMULATIVE QM. With no candidates to queue at
+                                  all, ARC and capture are skipped entirely and this round's whole
+                                  job is vendoring these and writing the hybrid.
 
     Returns:
         tuple: ``(converged_ts_labels, queued_ts_labels)``, both ``frozenset``. ``converged_ts_labels``
@@ -385,28 +390,6 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
             f'sensitivity analysis (t3.pdep.pes_sa.run_round_me_sensitivity, stamped by '
             f't3.pdep.pes_rounds.attach_sensitivity_evidence); it is never defaulted or invented.')
 
-    if not os.path.isdir(paths.arc_project):
-        os.makedirs(paths.arc_project)
-    arc_kwargs = dict(arc_input)
-    arc_kwargs.setdefault('project', network_id)
-
-    arc = ARC(**arc_kwargs)
-    arc_input_path = os.path.join(paths.arc_project, ARC_INPUT_FILE_NAME)
-    if not os.path.isfile(arc_input_path):
-        save_yaml_file(path=arc_input_path, content=arc.as_dict())
-    try:
-        arc.execute()
-    except Exception as e:
-        _logger.error(f'ARC crashed with {e.__class__}. Got the following error message:\n{e}')
-        raise
-
-    networks = {
-        network_id: {
-            'source_path': source_path,
-            'source_sha256': hash_file(source_path),
-            'method': config.pes.method,
-        },
-    }
     join_records = [
         TSJoinRecord(
             network_id=network_id,
@@ -426,28 +409,70 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         for candidate in queued_candidates
     ]
 
-    capture_result = capture_ts_artifacts(
-        join_records=join_records,
-        arc_project_directory=paths.arc_project,
-        capture_dir=paths.capture,
-        networks=networks,
-        # Derived off the join records' own frozen evidence, mirroring
-        # t3.main.T3._capture_pdep_ts_artifacts byte for byte -- the argument whose omission was
-        # defect 1: without it every captured artifact carries coefficient=None/delta_ln_k=None
-        # and capture's own verify_capture self-check (rightly) refuses the staged capture.
-        sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)
-                           for record in join_records},
-    )
+    if join_records:
+        if not os.path.isdir(paths.arc_project):
+            os.makedirs(paths.arc_project)
+        arc_kwargs = dict(arc_input)
+        arc_kwargs.setdefault('project', network_id)
+
+        arc = ARC(**arc_kwargs)
+        arc_input_path = os.path.join(paths.arc_project, ARC_INPUT_FILE_NAME)
+        if not os.path.isfile(arc_input_path):
+            save_yaml_file(path=arc_input_path, content=arc.as_dict())
+        try:
+            arc.execute()
+        except Exception as e:
+            _logger.error(f'ARC crashed with {e.__class__}. Got the following error message:\n{e}')
+            raise
+
+        networks = {
+            network_id: {
+                'source_path': source_path,
+                'source_sha256': hash_file(source_path),
+                'method': config.pes.method,
+            },
+        }
+        capture_result = capture_ts_artifacts(
+            join_records=join_records,
+            arc_project_directory=paths.arc_project,
+            capture_dir=paths.capture,
+            networks=networks,
+            # Derived off the join records' own frozen evidence, mirroring
+            # t3.main.T3._capture_pdep_ts_artifacts byte for byte -- the argument whose omission
+            # was defect 1: without it every captured artifact carries
+            # coefficient=None/delta_ln_k=None and capture's own verify_capture self-check
+            # (rightly) refuses the staged capture.
+            sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)
+                               for record in join_records},
+        )
+    else:
+        # Defect-2 fix: a round with nothing to queue (every candidate satisfied by adoption, or
+        # every candidate dropped by build_arc_input) must not run ARC on an empty reaction list,
+        # and MUST NOT call capture_ts_artifacts at all -- capture refuses an empty join_records
+        # outright ("an iteration that queued no P-dep transition states must not call
+        # capture_ts_artifacts at all"), and that refusal is correct: there is nothing to capture.
+        # With adopted artifacts in hand, this round's whole job is vendoring them and writing the
+        # hybrid; with none, there is nothing to do at all.
+        capture_result = None
+        if not adopted:
+            _logger.info(f'Nothing was queued and nothing was adopted for network {network_id!r} '
+                         f'this round; no hybrid network to write.')
+            return frozenset(), queued_ts_labels
 
     converged_labels = frozenset(
         record.network_ts_label for record in capture_result.records
         if record.status == ARTIFACT_STATUS_USABLE
-    )
+    ) if capture_result is not None else frozenset()
     # C2: vendor adopted artifacts into THIS round's own capture directory before deciding
     # whether there is anything to write -- a round that adopted a prior result but converged
     # nothing new still has a hybrid network worth writing (an adopted TS must not silently
-    # revert to an RMG/ILT rate estimate; see this module's caller, t3.pdep.pes_loop).
-    vendored_adopted = _vendor_adopted_artifacts(adopted or dict(), capture_result.capture_dir)
+    # revert to an RMG/ILT rate estimate; see this module's caller, t3.pdep.pes_loop). When this
+    # round captured nothing at all (capture_result is None), the round's capture directory is
+    # still the vendoring root -- created here, holding only the adopted/ subtree.
+    vendor_root = capture_result.capture_dir if capture_result is not None else paths.capture
+    if capture_result is None and not os.path.isdir(vendor_root):
+        os.makedirs(vendor_root)
+    vendored_adopted = _vendor_adopted_artifacts(adopted or dict(), vendor_root)
     if not converged_labels and not vendored_adopted:
         _logger.info(f'ARC converged no transition states for network {network_id!r} this round.')
         return frozenset(), queued_ts_labels
@@ -456,36 +481,44 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         record.network_ts_label: record.artifact_path
         for record in capture_result.records
         if record.status == ARTIFACT_STATUS_USABLE
-    }
+    } if capture_result is not None else dict()
     qm_transition_states.update(vendored_adopted)
     # C3: capture_ts_artifacts only reads energy_settings when THIS round captured at least one
     # new artifact (records_with_artifact) -- a round that adopted a prior result but converged
-    # nothing new gets capture_result.energy_settings=None, which would otherwise crash
-    # QMEnergySettings.from_frozen. The adopted artifacts were computed under settings recorded in
-    # their OWN prior manifest -- and those, not a guess, are the correct provenance for them.
-    energy_settings_frozen = capture_result.energy_settings
+    # nothing new gets capture_result.energy_settings=None (or no capture_result at all), which
+    # would otherwise crash QMEnergySettings.from_frozen. The adopted artifacts were computed
+    # under settings recorded in their OWN prior manifest -- and those, not a guess, are the
+    # correct provenance for them.
+    energy_settings_frozen = capture_result.energy_settings if capture_result is not None else None
     if energy_settings_frozen is None:
         energy_settings_frozen = _adopted_energy_settings(adopted or dict())
     energy_settings = QMEnergySettings.from_frozen(energy_settings_frozen)
-    # I1: the hybrid network is built from the CAPTURE's own vendored network copy and recorded
-    # method (CaptureResult.networks is the authoritative source -- see t3.pdep.capture's own
-    # docstring), never from the live/original explored network -- capture_result.networks may
-    # differ from `networks` above if a concurrent/prior capture already vendored this network
-    # under a different method or path.
-    captured_network = capture_result.networks.get(network_id) if capture_result.networks else None
-    if captured_network is None:
-        raise KeyError(
-            f"capture_ts_artifacts did not vendor a copy of network {network_id!r} even though "
-            f"ARC converged {sorted(converged_labels)} for it -- CaptureResult.networks is "
-            f"missing an entry this call needs to write the round's hybrid network file.")
-    captured_source_path = os.path.join(capture_result.capture_dir, captured_network['captured_path'])
+    if capture_result is not None:
+        # I1: the hybrid network is built from the CAPTURE's own vendored network copy and
+        # recorded method (CaptureResult.networks is the authoritative source -- see
+        # t3.pdep.capture's own docstring), never from the live/original explored network --
+        # capture_result.networks may differ from `networks` above if a concurrent/prior capture
+        # already vendored this network under a different method or path.
+        captured_network = capture_result.networks.get(network_id) if capture_result.networks else None
+        if captured_network is None:
+            raise KeyError(
+                f"capture_ts_artifacts did not vendor a copy of network {network_id!r} even though "
+                f"ARC converged {sorted(converged_labels)} for it -- CaptureResult.networks is "
+                f"missing an entry this call needs to write the round's hybrid network file.")
+        hybrid_source_path = os.path.join(capture_result.capture_dir, captured_network['captured_path'])
+        hybrid_method = captured_network['method']
+    else:
+        # No capture happened, so no vendored network copy exists; the round's own explored
+        # network (the file this function parsed above) is the only -- and the truthful -- source.
+        hybrid_source_path = source_path
+        hybrid_method = config.pes.method
     result = write_hybrid_network_input_file(
-        source_path=captured_source_path,
+        source_path=hybrid_source_path,
         dest_path=hybrid_network_path(paths, network_id),
-        method=captured_network['method'],
+        method=hybrid_method,
         qm_transition_states=qm_transition_states,
         energy_settings=energy_settings,
-        qm_artifacts_root=capture_result.capture_dir,
+        qm_artifacts_root=vendor_root,
     )
     _logger.info(f"Wrote a hybrid P-dep network input for {network_id!r} to {result.dest_path}: "
                 f"QM/RRKM for {list(result.qm_ts_labels)}, RMG/ILT for {list(result.ilt_ts_labels)}.")

@@ -55,7 +55,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from t3.pdep.api import explore_pdep_network
+from t3.pdep.capture import captured_qm_artifact_path
 from t3.pdep.diagram import draw_pes_diagram
+from t3.pdep.join import arc_ts_label
 from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED
 from t3.pdep.parser import parse_pdep_network_file
@@ -213,10 +215,16 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         config (PESLoopConfig): The loop's configuration.
         project_directory (str): The loop's project directory. Must be absolute (see
             ``t3.pdep.pes_rounds.round_paths``).
-        qm_runner: An injected callable, ``qm_runner(candidates, paths, config, network_id) ->
-            tuple[frozenset[str], frozenset[str]]`` -- ``(converged_ts_labels, queued_ts_labels)``,
-            the network-local TS labels that converged this round and the ones the runner actually
-            queued (not necessarily every candidate it was handed -- N3). ``None`` (the default)
+        qm_runner: An injected callable, ``qm_runner(candidates, paths, config, network_id,
+            adopted=...) -> tuple[frozenset[str], frozenset[str]]`` -- ``(converged_ts_labels,
+            queued_ts_labels)``, the network-local TS labels that converged this round and the
+            ones the runner actually queued (not necessarily every candidate it was handed -- N3).
+            ``adopted`` is passed EVERY round: a dict of network-local TS label -> artifact path
+            for every QM artifact already in hand before this round ran (reused from prior
+            projects, or converged by an earlier round of this loop), which the runner must fold
+            into this round's hybrid network alongside whatever converges now -- every round's
+            hybrid carries the CUMULATIVE QM, never just that round's (a TS that ever converged
+            must never revert to an RMG/ILT rate line in a later hybrid). ``None`` (the default)
             means "no QM this run" -- explore and draw the first round's
             diagram only, which is the honest behaviour when no QM runner is configured, not a
             crash.
@@ -252,6 +260,16 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     rounds = []
     computed_ts_labels = frozenset(adopted_ts_labels) if adopted_ts_labels else frozenset()
     adopted = dict()
+    # Defect-3 fix: every QM artifact this loop can fold into a hybrid, cumulative across rounds --
+    # network-local TS label -> the artifact's path in the capture where it was FIRST captured
+    # (or in the prior project's own capture, for adopted ones). Passed to qm_runner EVERY round
+    # (as `adopted`), because arc_qm_runner builds each round's hybrid from that round's own
+    # capture plus exactly this map: without it, a TS converged in round N silently reverts to an
+    # RMG/ILT Arrhenius line in round N+1's hybrid -- the fail-open shape t3.pdep.hybrid's
+    # invariant 2 exists to prevent. The path always points at the ORIGINATING capture (which has
+    # the verified manifest _adopted_energy_settings needs), never at a later round's re-vendored
+    # copy.
+    qm_artifacts = dict()
     if config.reuse.from_t3_projects:
         network_id = Path(config.pes.network).stem
         seed_network = parse_pdep_network_file(path=config.pes.network)
@@ -268,6 +286,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             if logger is not None:
                 logger.info(message)
         computed_ts_labels = computed_ts_labels | frozenset(adopted)
+        qm_artifacts.update(adopted)
     current_network_path = config.pes.network
     max_rounds = config.termination.max_rounds
 
@@ -410,12 +429,20 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         # loop offered (N3).
         offered_ts_labels = tuple(candidate.ts_label for candidate in candidates)
 
-        if round0_has_adopted:
-            newly_computed, actually_queued = qm_runner(candidates, paths, config,
-                                                         network.network_id, adopted=adopted)
-        else:
-            newly_computed, actually_queued = qm_runner(candidates, paths, config, network.network_id)
+        # Defect-3 fix: EVERY round's qm_runner call carries every previously computed artifact
+        # (adopted from prior projects at round 0, converged by any earlier round of this loop),
+        # uniformly -- the previous round0-only special case is exactly what let QM die at the
+        # round boundary. A copy is passed so a runner cannot mutate the loop's own record.
+        newly_computed, actually_queued = qm_runner(candidates, paths, config, network.network_id,
+                                                    adopted=dict(qm_artifacts))
         computed_ts_labels = computed_ts_labels | newly_computed
+        for ts_label in newly_computed:
+            # Where this round's capture vendored the converged artifact -- a stable layout
+            # invariant of t3.pdep.capture (see captured_qm_artifact_path). Recorded off the
+            # ORIGINATING round's capture so later rounds always re-vendor from a directory whose
+            # own verified manifest still exists.
+            qm_artifacts[ts_label] = captured_qm_artifact_path(
+                paths.capture, arc_ts_label(network.network_id, ts_label))
         queued_ts_labels = tuple(actually_queued)
 
         # Important: qm_runner's returned newly_computed excludes adopted TS labels by contract

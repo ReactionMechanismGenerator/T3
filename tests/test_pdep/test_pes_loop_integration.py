@@ -28,7 +28,8 @@ module only corroborates that the loop and the real runner agree with each other
 import os
 import shutil
 
-from t3.pdep.capture import CaptureResult
+from t3.pdep.capture import CaptureResult, captured_qm_artifact_path
+from t3.pdep.join import arc_ts_label
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED, PDepExplorationResult
 from t3.pdep.hybrid import HybridNetworkResult
@@ -141,6 +142,18 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
         for key, (coefficient, delta_ln_k) in sensitivity_by_ts.items():
             assert coefficient is not None and delta_ln_k is not None, key
         os.makedirs(capture_dir, exist_ok=True)
+        # Defect 3: the loop carries a converged TS across the round boundary as an adopted
+        # artifact at the capture's own vendored path (captured_qm_artifact_path), and the REAL
+        # _vendor_adopted_artifacts in round 1 fails closed on a missing file -- so this double
+        # must actually write the artifact it claims was captured, not merely name it in a result
+        # object (the same rule the hybrid double below already follows).
+        vendored_path = captured_qm_artifact_path(
+            capture_dir, arc_ts_label(real_network.network_id, target.ts_label))
+        os.makedirs(os.path.dirname(vendored_path), exist_ok=True)
+        with open(os.path.join(os.path.dirname(vendored_path), 'output.out'), 'w') as f:
+            f.write('# stub ARC log output\n')
+        with open(vendored_path, 'w') as f:
+            f.write("geometry = Log('output.out')\n")
         return CaptureResult(
             capture_dir=capture_dir,
             manifest_path=os.path.join(capture_dir, 'manifest.yml'),

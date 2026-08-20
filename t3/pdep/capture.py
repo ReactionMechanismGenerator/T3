@@ -99,6 +99,28 @@ _CAPTURE_PROVENANCE_SUBDIR = 'provenance'
 # downstream hybrid-network writing must read -- never the (long-gone) RMG ``pdep/`` directory.
 _CAPTURE_NETWORKS_SUBDIR = 'networks'
 
+
+def captured_qm_artifact_path(capture_dir: str, arc_ts_label: str) -> str:
+    """
+    Where ``capture_ts_artifacts`` vendors the QM artifact for one transition state.
+
+    This layout -- ``<capture_dir>/qm/<arc_ts_label>.py`` -- is a stable invariant of this module
+    (``_CAPTURE_QM_SUBDIR``; ``verify_capture`` re-verifies it, and ``t3.pdep.pes_qm`` already
+    relies on it to recover an adopted artifact's own capture directory). Naming it as a function
+    lets a caller that only knows a converged transition state's label (e.g.
+    ``t3.pdep.pes_loop``, carrying QM artifacts across round boundaries) derive the vendored
+    path without re-encoding the layout.
+
+    Args:
+        capture_dir (str): The capture directory the artifact was vendored into.
+        arc_ts_label (str): The ARC transition state label (``t3.pdep.join.arc_ts_label``).
+
+    Returns:
+        str: The vendored artifact's path.
+    """
+    return os.path.join(capture_dir, _CAPTURE_QM_SUBDIR, f'{arc_ts_label}.py')
+
+
 # Sibling-of-capture_dir naming convention for the atomic-swap machinery in
 # _capture_ts_artifacts_locked and its crash-recovery counterpart, _recover_capture_swap_state.
 # Both live in the same parent_dir as capture_dir itself (never inside it), so a fresh capture's

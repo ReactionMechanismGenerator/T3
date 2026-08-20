@@ -866,3 +866,63 @@ class TestArcQmRunnerSensitivityEvidence(object):
         assert _FakeARC.constructions == []
         assert _FakeARC.execute_calls == 0
         assert recorder.capture_ts_artifacts_calls == []
+
+
+class TestArcQmRunnerWithNothingQueued(object):
+    """Defect 2: a round with nothing to queue (every candidate satisfied by adoption) must skip
+    ARC and capture ENTIRELY -- capture_ts_artifacts refuses an empty join_records by design, and
+    the previous behaviour crashed a fully-adopted round 0 out of run_pes_loop -- and go straight
+    to vendoring the adopted artifacts and writing the hybrid."""
+
+    def test_all_adopted_round_skips_arc_and_capture_and_still_writes_the_hybrid(self, tmp_path,
+                                                                                 monkeypatch):
+        # A REAL prior capture (built by capture_ts_artifacts itself), adopted through the real
+        # adopt_prior_qm, so the vendoring below and _adopted_energy_settings both run against the
+        # exact artifact and manifest formats production writes -- no hand-rolled shapes.
+        _write_capture_manifest(tmp_path / 'prior_project', ts_label='TS1',
+                                level='wb97xd/def2tzvp')
+        adopted = adopt_prior_qm([str(tmp_path / 'prior_project')], _NETWORK_ID,
+                                 'wb97xd/def2tzvp', _TS1_PATH_REACTION_LABELS)
+        assert adopted, 'fixture must adopt TS1 for this test to mean anything'
+
+        paths, _candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, capture_result=None)
+        recorder.hybrid_result = HybridNetworkResult(
+            dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',),
+            ilt_ts_labels=(), vendored_files=(), warnings=())
+
+        converged, queued = arc_qm_runner((), paths, _config(), _NETWORK_ID, adopted=adopted)
+
+        assert converged == frozenset()
+        assert queued == frozenset()
+        # Nothing was queued, so ARC must never have been constructed or executed, and
+        # capture_ts_artifacts must never have been called at all.
+        assert _FakeARC.constructions == []
+        assert _FakeARC.execute_calls == 0
+        assert recorder.capture_ts_artifacts_calls == []
+        # The hybrid still fires: the adopted artifact is vendored under THIS round's own capture
+        # directory, the source is the round's explored network (no captured copy exists), the
+        # method is the configured one, and the energy settings come from the adopted artifact's
+        # own prior manifest.
+        assert len(recorder.write_hybrid_calls) == 1
+        call = recorder.write_hybrid_calls[0]
+        vendored_path = call['qm_transition_states']['TS1']
+        assert os.path.dirname(vendored_path) == os.path.join(paths.capture, 'adopted')
+        assert os.path.isfile(vendored_path)
+        assert call['source_path'] == network_path
+        assert call['method'] == 'MSC'
+        assert call['qm_artifacts_root'] == paths.capture
+        assert call['dest_path'] == hybrid_network_path(paths, _NETWORK_ID)
+        assert call['energy_settings'].model_chemistry == _arc_model_chemistry_text('wb97xd/def2tzvp')
+
+    def test_nothing_queued_and_nothing_adopted_returns_empty_without_touching_arc(self, tmp_path,
+                                                                                   monkeypatch):
+        paths, _candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, capture_result=None)
+        converged, queued = arc_qm_runner((), paths, _config(), _NETWORK_ID)
+        assert converged == frozenset()
+        assert queued == frozenset()
+        assert _FakeARC.constructions == []
+        assert _FakeARC.execute_calls == 0
+        assert recorder.capture_ts_artifacts_calls == []
+        assert recorder.write_hybrid_calls == []
