@@ -2495,7 +2495,6 @@ class T3:
                                      f'to examine reaction {reaction} (iteration {self.iteration})...')
                     if not run_arkane_job(input_file=arkane_input,
                                           output_directory=arkane_output_dir,
-                                          plot=True,
                                           logger=self.logger,
                                           ):
                         # Recorded, not merely logged: without this the record would say nothing at

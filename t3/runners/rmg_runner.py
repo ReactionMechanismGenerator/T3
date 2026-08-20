@@ -582,7 +582,6 @@ def _kill_process_group(process: subprocess.Popen) -> None:
 
 def run_arkane_job(input_file: str,
                    output_directory: str,
-                   plot: bool = False,
                    logger: Logger | None = None,
                    required_artifact: str = os.path.join('sensitivity', 'sa_coefficients.yml'),
                    timeout: float | None = None,
@@ -607,7 +606,6 @@ def run_arkane_job(input_file: str,
     Args:
         input_file (str): The path to the Arkane input file.
         output_directory (str): The path to the output directory.
-        plot (bool, optional): Whether to plot the results.
         logger (Logger, optional): The logger object.
         required_artifact (str, optional): A path, relative to ``output_directory``, naming the
                                            artifact that Arkane must (re)write for the job to be
