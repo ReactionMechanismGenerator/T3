@@ -356,11 +356,17 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         if result.status != EXPLORATION_STATUS_SUCCEEDED:
             reason = '; '.join(result.reasons) if result.reasons else \
                 f"exploration ended with status {result.status!r} and no stated reason."
+            prior = rounds[-1] if rounds else None
             rounds.append(RoundRecord(index=round_index, network_path=current_network_path,
                                       diagram_path=None, queued_ts_labels=(), skipped=(),
                                       status=PES_LOOP_FAILED, reason=reason))
+            # The same rule as the missing-hybrid branch above: this round failed, but rounds
+            # 0..N-1 explored real networks and drew real diagrams, and those remain the best
+            # result this run has. Reporting None here throws them away and makes the caller (e.g.
+            # PES.py, which logs both paths) report a run that produced nothing at all.
             return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
-                                 final_network_path=None, final_diagram_path=None)
+                                 final_network_path=prior.network_path if prior else None,
+                                 final_diagram_path=prior.diagram_path if prior else None)
 
         explored_network_path = result.network_paths[0]
         network = parse_pdep_network_file(explored_network_path)

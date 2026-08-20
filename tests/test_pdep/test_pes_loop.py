@@ -56,7 +56,7 @@ def _alkane_adjlist(n_carbons: int) -> str:
     return Molecule().from_smiles('C' * n_carbons).to_adjacency_list()
 
 
-def _stub_explorer(monkeypatch, tmp_path, families, fail=False):
+def _stub_explorer(monkeypatch, tmp_path, families, fail=False, fail_from=None):
     """
     Patch ``explore_pdep_network``, ``parse_pdep_network_file``, and ``draw_pes_diagram`` at the
     names bound in ``t3.pdep.pes_loop``, so ``run_pes_loop`` can be tested without Arkane.
@@ -117,7 +117,9 @@ def _stub_explorer(monkeypatch, tmp_path, families, fail=False):
 
     def _fake_explore(*, network_path, config, logger=None):
         calls.append(network_path)
-        if fail:
+        # ``fail_from`` fails a LATER round rather than round 0, so a failure with good prior
+        # rounds behind it can be exercised at all.
+        if fail or (fail_from is not None and len(calls) - 1 >= fail_from):
             return PDepExplorationResult(network_id=base_network.network_id,
                                          status=EXPLORATION_STATUS_FAILED,
                                          reasons=('the explorer adapter crashed',))
@@ -418,6 +420,31 @@ class TestRunPESLoop(object):
         assert len(result.rounds) == 2
         assert result.rounds[-1].status == PES_LOOP_FAILED
         assert 'hybrid' in result.reason.lower()
+        # The failed round produced nothing, but round 0's explored network and drawn diagram are
+        # real and remain this run's best result: a failure must not throw them away.
+        assert result.final_network_path == result.rounds[0].network_path
+        assert result.final_diagram_path == result.rounds[0].diagram_path
+        assert result.final_diagram_path is not None
+
+    def test_a_failed_explore_at_round_1_keeps_round_0s_network_and_diagram(self, tmp_path,
+                                                                            monkeypatch, config):
+        """The exploration-failed branch must be as careful with prior rounds' artifacts as the
+        missing-hybrid branch above. Reporting ``None`` for both would make ``PES.py`` log
+        'Final network: None' for a run that in fact explored and drew a perfectly good round 0."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'], fail_from=1)
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_FAILED
+        assert len(result.rounds) == 2
+        assert result.rounds[1].status == PES_LOOP_FAILED
+        assert result.final_network_path == result.rounds[0].network_path
+        assert result.final_network_path is not None
+        assert result.final_diagram_path == result.rounds[0].diagram_path
+        assert result.final_diagram_path is not None
 
     def test_a_round_that_converges_nothing_does_not_advance_to_a_hybrid_file_never_written(
             self, tmp_path, monkeypatch, config):
