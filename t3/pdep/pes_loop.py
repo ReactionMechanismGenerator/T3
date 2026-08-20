@@ -380,6 +380,28 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         # Translate the structural cross-round memory into THIS round's own labels through the
         # freshly explored network -- the only labels this round's file, runner, and hybrid speak.
         keys_by_ts = channel_keys_by_ts_label(network)
+        declared_ts_labels = tuple(sorted(network.path_reactions_by_ts()))
+        if declared_ts_labels and not keys_by_ts:
+            # The network declares transition states but NOT ONE of them could be structurally
+            # keyed (no parseable structures, or every channel duplicated). The refusal semantics
+            # alone are fail-closed but operationally silent: nothing is ever "already computed",
+            # so every round would re-submit the SAME transition states to ARC until max_rounds --
+            # up to a full budget of duplicate QM spend, with only a log line to explain it. This
+            # is a diagnosable fault of the network/exploration, so the ROUND fails, carrying the
+            # unkeyable labels in its reason.
+            reason = (f'round {round_index}: none of the transition states '
+                      f'{list(declared_ts_labels)} declared by network {network.network_id!r} has '
+                      f'an unambiguous structural channel identity (missing/unparseable species '
+                      f'structures, or structurally duplicated channels). QM computed for them '
+                      f'could not be carried across rounds, so every round would re-submit the '
+                      f'same transition states to ARC; refusing to spend the budget on that.')
+            rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
+                                      diagram_path=diagram_path, queued_ts_labels=(),
+                                      skipped=split_qm_candidates(network, frozenset()).skipped,
+                                      status=PES_LOOP_FAILED, reason=reason))
+            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+                                 final_network_path=explored_network_path,
+                                 final_diagram_path=diagram_path)
         computed_ts_labels = frozenset(
             ts_label for ts_label, key in keys_by_ts.items() if key in computed_channels)
         split = split_qm_candidates(network, computed_ts_labels)
@@ -470,12 +492,17 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                 # as having no candidates at all -- each skip carries its measured value in the
                 # round record. Never 'failed' (nothing malfunctioned) and never a queue of
                 # below-floor transition states (their manifests would record a coefficient that
-                # justified nothing).
+                # justified nothing). The reason clause is what separates this, at the summary
+                # level, from "everything was already computed".
                 status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
+                reason = (f'round {round_index}: every remaining QM candidate of network '
+                          f'{network.network_id!r} measured a ln(k) response below the '
+                          f'min_delta_ln_k floor ({config.qm.min_delta_ln_k:.3e}); see the round '
+                          f"record's skipped entries for the measured values.")
                 rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
                                           diagram_path=diagram_path, queued_ts_labels=(),
-                                          skipped=split.skipped, status=status))
-                return PESLoopResult(rounds=tuple(rounds), status=status, reason='',
+                                          skipped=split.skipped, status=status, reason=reason))
+                return PESLoopResult(rounds=tuple(rounds), status=status, reason=reason,
                                      final_network_path=explored_network_path,
                                      final_diagram_path=diagram_path)
 

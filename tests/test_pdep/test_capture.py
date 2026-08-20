@@ -2098,3 +2098,20 @@ class TestSensitivityAggregationMarker:
         manifest = read_yaml_file(result.manifest_path)
         assert manifest['sensitivity_aggregation'] == 'all_directions_max_abs'
         assert verify_capture(result.capture_dir).sensitivity_aggregation == 'all_directions_max_abs'
+
+    def test_an_unrecognized_marker_is_refused_on_write(self, tmp_path):
+        record = _usable_record(tmp_path)
+        with pytest.raises(ValueError, match="Unrecognized 'sensitivity_aggregation'"):
+            _capture([record], str(tmp_path), f'{tmp_path}_capture',
+                     sensitivity_aggregation='made_up_convention')
+
+    def test_a_hand_edited_marker_is_refused_by_verify(self, tmp_path):
+        record = _usable_record(tmp_path)
+        result = _capture([record], str(tmp_path), f'{tmp_path}_capture',
+                          sensitivity_aggregation=capture_module.SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS)
+        manifest = read_yaml_file(result.manifest_path)
+        manifest['sensitivity_aggregation'] = 'tampered'
+        with open(result.manifest_path, 'w') as f:
+            yaml.safe_dump(manifest, f)
+        with pytest.raises(ValueError, match="unrecognized 'sensitivity_aggregation'"):
+            verify_capture(result.capture_dir)

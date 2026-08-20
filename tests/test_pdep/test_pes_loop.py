@@ -1,6 +1,7 @@
 """Tests for t3.pdep.pes_loop."""
 
 import dataclasses
+import logging
 import os
 
 import pytest
@@ -436,7 +437,9 @@ class TestRunPESLoop(object):
         base_network = PDepNetwork(network_id='network1_1', path='/abs/network1_1.py', label=None,
                                    species_labels=('A', 'B'), transition_state_labels=('TS0',),
                                    path_reactions=path_reactions, isomers=(), reactant_channels=(),
-                                   product_channels=())
+                                   product_channels=(),
+                                   species_structures={'A': _alkane_adjlist(1),
+                                                       'B': _alkane_adjlist(2)})
 
         calls = []
         explored_paths = []
@@ -872,3 +875,100 @@ class TestRenumberedNetworksKeepQMOnTheRightChannel(object):
         round0_artifact = captured_qm_artifact_path(
             round_paths(str(tmp_path), 0).capture, arc_ts_label('explored_round0', 'TS0'))
         assert adopted_per_round[1] == {'TS1': round0_artifact}
+
+
+class TestUnkeyableNetworks(object):
+    """A network whose declared transition states cannot be structurally keyed AT ALL would
+    otherwise re-submit the same transition states to ARC every round until max_rounds -- up to a
+    full budget of duplicate QM spend -- with only a log line to explain it. That is a diagnosable
+    fault of the network, so the round fails with the unkeyable labels in its reason."""
+
+    def test_a_fully_unkeyable_network_fails_the_round_with_the_labels_in_the_reason(
+            self, tmp_path, monkeypatch, config):
+        path_reactions = (PDepPathReaction(label='reaction0', reactants=('A',), products=('B',),
+                                           transition_state='TS0', kinetics_type='Arrhenius',
+                                           kinetics_comment='family: 1,2_Insertion_CO'),)
+        # No species_structures at all: nothing can be keyed.
+        base_network = PDepNetwork(network_id='network1_1', path='/abs/network1_1.py', label=None,
+                                   species_labels=('A', 'B'), transition_state_labels=('TS0',),
+                                   path_reactions=path_reactions, isomers=(), reactant_channels=(),
+                                   product_channels=())
+
+        def _fake_explore(*, network_path, config, logger=None):
+            output_path = os.path.join(str(tmp_path), 'explored_round0.py')
+            open(output_path, 'w').close()
+            return PDepExplorationResult(network_id='network1_1',
+                                         status=EXPLORATION_STATUS_SUCCEEDED,
+                                         network_paths=(output_path,))
+
+        monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
+        monkeypatch.setattr('t3.pdep.pes_loop.parse_pdep_network_file',
+                            lambda path: dataclasses.replace(base_network, path=path))
+        monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram',
+                            lambda network_path, output_path: open(output_path, 'w').close())
+        runner_calls = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            runner_calls.append(candidates)
+            return frozenset(), frozenset()
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_FAILED
+        assert len(result.rounds) == 1
+        assert "'TS0'" in result.reason
+        assert 'structural channel identity' in result.reason
+        assert 're-submit the same transition states' in result.reason
+        # Not a single ARC submission was bought with the doomed carry.
+        assert runner_calls == []
+
+    def test_a_partially_unkeyable_converged_ts_is_not_carried_and_says_so(self, tmp_path,
+                                                                           monkeypatch, config,
+                                                                           caplog):
+        """One keyable channel and one unkeyable one: the round proceeds (partial keying is not a
+        fault), but a CONVERGED unkeyable transition state is loudly not carried -- it will be
+        re-decided next round rather than risk a wrong-saddle-point attribution."""
+        adj = {'A0': _alkane_adjlist(1), 'B0': _alkane_adjlist(2)}
+        path_reactions = (
+            PDepPathReaction(label='reaction0', reactants=('A0',), products=('B0',),
+                             transition_state='TS0', kinetics_type='Arrhenius',
+                             kinetics_comment='family: 1,2_Insertion_CO'),
+            PDepPathReaction(label='reaction1', reactants=('A1',), products=('B1',),
+                             transition_state='TS1', kinetics_type='Arrhenius',
+                             kinetics_comment='family: 1,2_Insertion_CO'),
+        )
+        base_network = PDepNetwork(network_id='network1_1', path='/abs/network1_1.py', label=None,
+                                   species_labels=('A0', 'B0', 'A1', 'B1'),
+                                   transition_state_labels=('TS0', 'TS1'),
+                                   path_reactions=path_reactions, isomers=(), reactant_channels=(),
+                                   product_channels=(), species_structures=adj)
+
+        calls = []
+
+        def _fake_explore(*, network_path, config, logger=None):
+            calls.append(network_path)
+            output_path = os.path.join(str(tmp_path), f'explored_round{len(calls) - 1}.py')
+            open(output_path, 'w').close()
+            return PDepExplorationResult(network_id='network1_1',
+                                         status=EXPLORATION_STATUS_SUCCEEDED,
+                                         network_paths=(output_path,))
+
+        monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
+        monkeypatch.setattr('t3.pdep.pes_loop.parse_pdep_network_file',
+                            lambda path: dataclasses.replace(base_network, path=path))
+        monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram',
+                            lambda network_path, output_path: open(output_path, 'w').close())
+        adopted_per_round = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            adopted_per_round.append(dict(adopted))
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_loop'):
+            run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        # TS1 (unkeyable) converged in round 0 but must not be carried: round 1's adopted holds
+        # only the keyable TS0's artifact, and the refusal was loud.
+        assert len(adopted_per_round) >= 2
+        assert set(adopted_per_round[1]) == {'TS0'}
+        assert "'TS1'" in caplog.text
+        assert 'cannot be carried across rounds' in caplog.text

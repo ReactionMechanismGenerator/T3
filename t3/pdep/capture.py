@@ -130,6 +130,12 @@ def captured_qm_artifact_path(capture_dir: str, arc_ts_label: str) -> str:
 # silently compared against a T3-written one on the same field name.
 SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS = 'all_directions_max_abs'
 
+# Every marker value this module will write or verify. An advisory field is still not a free-text
+# field: a value outside this set reaching a consumer means a hand-edited or newer-format
+# manifest, and both the write path and verify_capture refuse it rather than pass it through --
+# the same fail-closed stance verify_capture already takes on an unrecognized artifact status.
+SENSITIVITY_AGGREGATIONS = (SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS,)
+
 # Sibling-of-capture_dir naming convention for the atomic-swap machinery in
 # _capture_ts_artifacts_locked and its crash-recovery counterpart, _recover_capture_swap_state.
 # Both live in the same parent_dir as capture_dir itself (never inside it), so a fresh capture's
@@ -364,6 +370,11 @@ def capture_ts_artifacts(join_records: list,
     Returns:
         CaptureResult: The populated capture directory, its manifest path, and the frozen records.
     """
+    if sensitivity_aggregation is not None and sensitivity_aggregation not in SENSITIVITY_AGGREGATIONS:
+        raise ValueError(f"Unrecognized 'sensitivity_aggregation' value {sensitivity_aggregation!r}; "
+                         f"expected None (T3's unmarked in-run convention) or one of "
+                         f"{sorted(SENSITIVITY_AGGREGATIONS)}. A free-text marker would defeat the "
+                         f"comparison guard this field exists to provide.")
     lock_path = _acquire_capture_lock(capture_dir=capture_dir)
     try:
         # Recover from a crash inside a PRIOR call's atomic swap (see _recover_capture_swap_state)
@@ -1702,11 +1713,20 @@ def verify_capture(capture_dir: str) -> VerifyResult:
                 f"records {entry['source_sha256']}. Refusing to use it."
             )
 
+    sensitivity_aggregation = content.get('sensitivity_aggregation')
+    if sensitivity_aggregation is not None and sensitivity_aggregation not in SENSITIVITY_AGGREGATIONS:
+        raise ValueError(
+            f"Refusing to verify '{capture_dir}': the manifest at '{manifest_path}' carries an "
+            f"unrecognized 'sensitivity_aggregation' value {sensitivity_aggregation!r}; expected "
+            f"the key to be absent (T3's unmarked in-run convention) or one of "
+            f"{sorted(SENSITIVITY_AGGREGATIONS)}. An unrecognized marker means the manifest is "
+            f"hand-edited or from a newer capture format."
+        )
     return VerifyResult(capture_dir=capture_dir, manifest_path=manifest_path, record_count=record_count,
                         captured_artifact_count=captured_artifact_count,
                         networks=networks, energy_settings=content.get('energy_settings'),
                         ts_records=tuple(ts_records),
-                        sensitivity_aggregation=content.get('sensitivity_aggregation'))
+                        sensitivity_aggregation=sensitivity_aggregation)
 
 
 def _verify_one_captured_file(capture_dir: str, relpath: str, expected_sha256: str | None, ts_label) -> None:
