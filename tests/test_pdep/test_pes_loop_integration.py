@@ -572,11 +572,12 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
 def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
     """``PES.main()`` for real, from a real input file: the only things faked are the two external
     engines (Arkane's explorer and ARC). The real ``run_pes_loop``, the real ``arc_qm_runner`` and
-    the real ``capture_ts_artifacts`` all execute, and every assertion below is about what landed
-    on disk under the input file's own directory -- which is what proves the CLI's
-    ``project_directory`` default reached ``round_paths``, that its relative ``pes.network`` was
-    resolved against the input file, and that ``termination.max_rounds`` parsed out of the YAML
-    (2) governed the run rather than the schema default (5)."""
+    the real ``capture_ts_artifacts`` all execute, and the assertions are on artifacts only
+    production writes -- the hybrid network under the input file's own directory (the
+    ``project_directory`` default reaching ``round_paths``), the path the explorer was handed (the
+    relative ``pes.network`` resolved against the input file), and the round count
+    (``termination.max_rounds`` parsed out of the YAML, 2, governing the run rather than the
+    schema default of 5)."""
     project_directory = str(tmp_path)
     input_path = os.path.join(project_directory, 'input.yml')
     shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(project_directory, 'network0_full.py'))
@@ -610,13 +611,23 @@ def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
     assert _ArtifactWritingFakeARC.executions == 2
     assert PES.exit_code_for(result.status) == 0
 
-    # The round directories landed under the INPUT FILE's own directory: the project_directory
-    # default is what the loop actually ran with, not merely what main() computed.
+    # The fake explorer makes its own round directories under this same path, so these two say
+    # only that the run got as far as two rounds -- what proves the CLI's project_directory
+    # default reached round_paths is the hybrid below, which production alone writes. The absence
+    # of round_2 does reflect production: it is the round budget, via the explorer call count.
     assert os.path.isdir(os.path.join(project_directory, 'round_0'))
     assert os.path.isdir(os.path.join(project_directory, 'round_1'))
     assert not os.path.isdir(os.path.join(project_directory, 'round_2'))
-    # Ruling 3: the run left a real log behind.
-    assert os.path.isfile(os.path.join(project_directory, 't3.log'))
+
+    # Ruling 6: the final status, its reason, and the diagram reached the log, and the run was
+    # closed out -- not merely returned to a caller who might never print it.
+    with open(os.path.join(project_directory, 't3.log')) as f:
+        log_text = f.read()
+    assert "terminated with status 'max_rounds' after 2 round(s)." in log_text
+    assert f'Reason: {result.reason}' in log_text
+    assert f'PES diagram: {result.final_diagram_path}' in log_text
+    assert f'Final network: {result.final_network_path}' in log_text
+    assert 'Total T3 execution time' in log_text
 
     round1_hybrid_path = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
     assert os.path.isfile(round1_hybrid_path)
@@ -629,3 +640,83 @@ def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
     # The bytes prove which barrier landed on which channel through the CLI's own run.
     assert _hybrid_marker(round1_hybrid_path, 'TS2') == _CH1_MARKER
     assert _hybrid_marker(round1_hybrid_path, 'TS1') == _CH2_MARKER
+
+
+def test_pes_cli_project_directory_flag_moves_the_whole_run(tmp_path, monkeypatch):
+    """``-p`` end to end: the run must land in the given directory and NOTHING may land beside the
+    input file. Asserted on the hybrid network and the log -- artifacts only production writes --
+    because the fake explorer creates round directories under whatever path it was handed and so
+    cannot distinguish the flag from the default."""
+    input_directory = os.path.join(str(tmp_path), 'inputs')
+    run_directory = os.path.join(str(tmp_path), 'elsewhere', 'run')
+    os.makedirs(input_directory)
+    input_path = os.path.join(input_directory, 'input.yml')
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(input_directory, 'network0_full.py'))
+    with open(input_path, 'w') as f:
+        yaml.dump({'pes': {'network': 'network0_full.py',
+                           'source': ['O-2(13598)', 'CO2(11)'],
+                           'bath_gas': {'Ar': 1.0},
+                           'method': 'MSC'},
+                   'termination': {'max_rounds': 1}}, f)
+
+    _fixture_explorer(monkeypatch, run_directory, 'network0_full')
+    _ArtifactWritingFakeARC.converge_plan = ({_CH1_MARKER},)
+    _ArtifactWritingFakeARC.constructions = []
+    _ArtifactWritingFakeARC.executions = 0
+    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr(sys, 'argv', ['PES.py', input_path, '-p', run_directory])
+
+    result = PES.main()
+
+    assert result.status == 'max_rounds', f'{result.status}: {result.reason}'
+    # The hybrid network -- written by arc_qm_runner, at a path derived from the project_directory
+    # the LOOP was given -- landed under the -p directory, which the CLI also had to create.
+    round0_hybrid_path = hybrid_network_path(round_paths(run_directory, 0), 'network0_full')
+    assert os.path.isfile(round0_hybrid_path)
+    assert _hybrid_channels(round0_hybrid_path)[_CH1] == ('TS1', True)
+    assert os.path.isfile(os.path.join(run_directory, 't3.log'))
+    # Nothing whatsoever landed beside the input file.
+    assert sorted(os.listdir(input_directory)) == ['input.yml', 'network0_full.py']
+
+
+def test_pes_cli_resolves_a_relative_reuse_path_against_the_input_file(tmp_path, monkeypatch):
+    """``reuse.from_t3_projects`` is anchored exactly like ``pes.network``: relative to the input
+    file. Unresolved it fails silently rather than loudly -- the prior project is simply not found,
+    nothing adopts, and the loop pays for it by queueing real quantum chemistry it already had.
+    Here the prior capture holds all three channels, so a correctly resolved path means ARC is
+    never even constructed."""
+    prior_project_dir = os.path.join(str(tmp_path), 'prior_project')
+    _build_prior_capture(prior_project_dir, network_text=_renamed_prior_network_text(),
+                         ts_labels=('TS1', 'TS2', 'TS3'))
+    project_directory = os.path.join(str(tmp_path), 'loop_project')
+    os.makedirs(project_directory)
+    input_path = os.path.join(project_directory, 'input.yml')
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(project_directory, 'network0_full.py'))
+    with open(input_path, 'w') as f:
+        yaml.dump({'pes': {'network': 'network0_full.py',
+                           'source': ['O-2(13598)', 'CO2(11)'],
+                           'bath_gas': {'Ar': 1.0},
+                           'method': 'MSC'},
+                   'termination': {'max_rounds': 2},
+                   'reuse': {'from_t3_projects': ['../prior_project']}}, f)
+
+    _fixture_explorer(monkeypatch, project_directory, 'network0_full')
+    _ArtifactWritingFakeARC.converge_plan = ()
+    _ArtifactWritingFakeARC.constructions = []
+    _ArtifactWritingFakeARC.executions = 0
+    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr(sys, 'argv', ['PES.py', input_path])
+
+    result = PES.main()
+
+    assert result.status == 'converged', f'{result.status}: {result.reason}'
+    # All three channels adopted from the prior project, so nothing was ever queued: an
+    # unresolved reuse path would have adopted nothing and run a real ARC round instead.
+    assert _ArtifactWritingFakeARC.constructions == []
+    round0_hybrid_path = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
+    round0 = _hybrid_channels(round0_hybrid_path)
+    assert [round0[channel][1] for channel in (_CH1, _CH2, _CH3)] == [True, True, True]
+    # Ruling 3: the Logger main() built was actually handed to the loop -- this line is the
+    # LOOP's own, not the CLI's, so it can only be in the file if logger= reached run_pes_loop.
+    with open(os.path.join(project_directory, 't3.log')) as f:
+        assert "PES loop: reusing 3 prior QM result(s)" in f.read()
