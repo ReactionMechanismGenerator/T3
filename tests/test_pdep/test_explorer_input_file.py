@@ -8,10 +8,12 @@ Tests for ``t3.pdep.explorer.input_file.write_arkane_explorer_input_file``: tran
 P-dep network file (or a T3 hybrid network input, both plain Arkane DSL) into a valid Arkane
 PES-explorer input file.
 
-Fixtures are hand-built strings, not the real ``tests/data/pdep_network/...`` fixture, because that
-fixture's bath-gas species lack ``reactive=False`` and its ``reaction()`` blocks all carry explicit
-``kinetics=``, so it cannot exercise the bath-gas-refusal or kinetics-emission paths this module
-must cover. All test outputs are written to pytest's ``tmp_path``, never into ``tests/data/``.
+Most fixtures are hand-built strings so individual paths (kinetics emission, each refusal) can be
+exercised in isolation. The real RMG-written fixture at ``tests/data/pdep_network/.../network4_2.py``
+is exercised end-to-end as well (``test_real_rmg_network_file_writes_end_to_end``): its bath-gas
+species carry no ``reactive`` keyword at all -- the exact shape ``arkane/pdep.py:654``
+(``save_input_file``) emits for every species, and the shape issue #183 showed this writer refused
+wholesale. All test outputs are written to pytest's ``tmp_path``, never into ``tests/data/``.
 """
 
 import ast
@@ -32,6 +34,7 @@ from t3.pdep.explorer.input_file import (
     ExplorerInputSummary,
     write_arkane_explorer_input_file,
 )
+from t3.common import TEST_DATA_BASE_PATH
 from t3.pdep.hashing import hash_file
 
 # A minimal but structurally realistic RMG pdep network source: two species (one of them a bath
@@ -100,11 +103,27 @@ SOURCE_WITH_KINETICS = SOURCE_NO_KINETICS.replace(
     "    kinetics=Arrhenius(A=(1e13, 's^-1'), n=0, Ea=(50, 'kJ/mol')),\n)",
 )
 
-# A variant with two bath gas species, neither marked reactive=False, to exercise the bath-gas
-# validation refusal path.
-SOURCE_BATH_GAS_NOT_UNREACTIVE = SOURCE_NO_KINETICS.replace(
+# A variant whose bath gas species carries no 'reactive' keyword at all -- the shape every
+# RMG-written network file has (arkane/pdep.py:654 save_input_file never emits 'reactive' for any
+# species; issue #183) -- to exercise the reactive=False injection path.
+SOURCE_BATH_GAS_NO_REACTIVE_KEYWORD = SOURCE_NO_KINETICS.replace(
     "    reactive=False,\n)",
     ")",
+)
+
+# A variant whose bath gas species carries an EXPLICIT reactive=True: a self-contradictory
+# declaration (named as bath gas while asserted reactive) that must be refused, never silently
+# rewritten.
+SOURCE_BATH_GAS_EXPLICITLY_REACTIVE = SOURCE_NO_KINETICS.replace(
+    "    reactive=False,\n",
+    "    reactive=True,\n",
+)
+
+# A variant whose bath gas species carries a NON-LITERAL reactive value, which cannot be verified
+# either way and must be refused.
+SOURCE_BATH_GAS_NON_LITERAL_REACTIVE = SOURCE_NO_KINETICS.replace(
+    "    reactive=False,\n",
+    "    reactive=SMILES('[He]'),\n",
 )
 
 # A variant where the reaction() block has no 'label' keyword at all, so a kinetics(...) directive
@@ -141,6 +160,32 @@ def _write_source(tmp_path, text, name='network.py'):
     with open(source_path, 'w') as f:
         f.write(text)
     return source_path
+
+
+def _species_reactive_map(path: str) -> dict:
+    """
+    Parse a generated input file and map every species() label to its literal ``reactive`` keyword
+    value, or ``None`` where the block carries no ``reactive`` keyword at all.
+
+    Args:
+        path (str): The generated input file path.
+
+    Returns:
+        dict: label -> literal reactive value (or None when absent).
+    """
+    with open(path) as f:
+        tree = ast.parse(f.read())
+    reactive_map = dict()
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call) \
+                or not isinstance(node.value.func, ast.Name) or node.value.func.id != 'species':
+            continue
+        kwargs = {kw.arg: kw.value for kw in node.value.keywords if kw.arg is not None}
+        label = ast.literal_eval(kwargs['label'])
+        assert [kw.arg for kw in node.value.keywords].count('reactive') <= 1, \
+            f'species {label!r} carries a duplicated reactive keyword'
+        reactive_map[label] = ast.literal_eval(kwargs['reactive']) if 'reactive' in kwargs else None
+    return reactive_map
 
 
 def test_writes_valid_python_with_all_required_blocks(tmp_path):
@@ -483,15 +528,95 @@ def test_refuses_bath_gas_label_not_a_species_block(tmp_path):
     assert not os.path.isfile(dest_path)
 
 
-def test_refuses_bath_gas_species_not_marked_unreactive(tmp_path):
-    """P16: PDepNetwork.update identifies bath gas as every unreactive core species; a bath-gas
-    species() block that is not reactive=False would never be recognized as bath gas by Arkane."""
-    source_path = _write_source(tmp_path, SOURCE_BATH_GAS_NOT_UNREACTIVE)
+def test_injects_reactive_false_for_bath_gas_species_without_reactive_keyword(tmp_path):
+    """
+    Issue #183, the core defect: RMG's ``save_input_file`` (arkane/pdep.py:654) never writes a
+    ``reactive`` keyword for ANY species, so requiring a literal ``reactive=False`` in the SOURCE
+    refused every real RMG-written network file. The fact "this species is the bath gas" is
+    declared by the caller (``bath_gas``), and this writer GENERATES the destination file -- so it
+    emits ``reactive = False`` on the declared bath-gas species itself: a faithful translation
+    between two encodings of one fact, not a rewrite of user input.
+    """
+    source_path = _write_source(tmp_path, SOURCE_BATH_GAS_NO_REACTIVE_KEYWORD)
     dest_path = str(tmp_path / 'input.py')
 
-    with pytest.raises(ValueError):
+    result = write_arkane_explorer_input_file(source_path=source_path, dest_path=dest_path, **DEFAULT_KWARGS)
+
+    assert result.reactive_false_injected == ('He',)
+    assert _species_reactive_map(dest_path) == {'methoxy': None, 'CH2O': None, 'H': None, 'He': False}
+
+
+def test_does_not_reinject_reactive_false_when_source_already_carries_it(tmp_path):
+    """A source bath-gas species already marked reactive=False is left verbatim: no duplicate
+    keyword (which would be a SyntaxError Arkane could never load), and no injection recorded."""
+    source_path = _write_source(tmp_path, SOURCE_NO_KINETICS)
+    dest_path = str(tmp_path / 'input.py')
+
+    result = write_arkane_explorer_input_file(source_path=source_path, dest_path=dest_path, **DEFAULT_KWARGS)
+
+    assert result.reactive_false_injected == tuple()
+    assert _species_reactive_map(dest_path)['He'] is False
+
+
+def test_refuses_bath_gas_species_explicitly_marked_reactive(tmp_path):
+    """A species named as bath gas while carrying an explicit reactive=True is a contradiction:
+    honouring the name would rewrite the source's own claim, honouring the claim would run Arkane
+    statmech on the collider. Refuse loudly rather than pick a side."""
+    source_path = _write_source(tmp_path, SOURCE_BATH_GAS_EXPLICITLY_REACTIVE)
+    dest_path = str(tmp_path / 'input.py')
+
+    with pytest.raises(ValueError, match='explicit.*reactive=True|reactive=True.*explicit'):
         write_arkane_explorer_input_file(source_path=source_path, dest_path=dest_path, **DEFAULT_KWARGS)
     assert not os.path.isfile(dest_path)
+
+
+def test_refuses_bath_gas_species_with_non_literal_reactive_value(tmp_path):
+    """A bath-gas species whose reactive value cannot be literally evaluated can be verified
+    neither as a conflict nor as already-unreactive; injecting next to it could contradict what the
+    expression evaluates to at Arkane load time."""
+    source_path = _write_source(tmp_path, SOURCE_BATH_GAS_NON_LITERAL_REACTIVE)
+    dest_path = str(tmp_path / 'input.py')
+
+    with pytest.raises(ValueError, match='literal'):
+        write_arkane_explorer_input_file(source_path=source_path, dest_path=dest_path, **DEFAULT_KWARGS)
+    assert not os.path.isfile(dest_path)
+
+
+def test_real_rmg_network_file_writes_end_to_end(tmp_path):
+    """
+    THE issue #183 regression test: a real, RMG-written network file (species blocks carrying no
+    ``reactive`` keyword anywhere, bath gas declared only in the ``network(...)`` block RMG writes)
+    must be writable into a loadable explorer input. Before the injection fix, this writer refused
+    every such file, i.e. the entire feature path was unusable on real RMG output.
+    """
+    source_path = os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'iteration_1', 'RMG', 'pdep',
+                               'network4_2.py')
+    with open(source_path) as f:
+        assert 'reactive' not in f.read(), \
+            'fixture precondition: a real RMG-written network file carries no reactive keyword'
+    dest_path = str(tmp_path / 'input.py')
+
+    result = write_arkane_explorer_input_file(
+        source_path=source_path, dest_path=dest_path,
+        seed_species=('C4rad(5)',), method='MSC',
+        bath_gas={'He': 0.5, 'Ne': 0.5},
+    )
+
+    assert sorted(result.reactive_false_injected) == ['He', 'Ne']
+    reactive_map = _species_reactive_map(dest_path)
+    assert reactive_map['He'] is False
+    assert reactive_map['Ne'] is False
+    assert all(value is None for label, value in reactive_map.items() if label not in ('He', 'Ne'))
+    # The generated text must still be a loadable input: valid Python with exactly one
+    # pressureDependence block, no network block, and the explorer block appended last.
+    with open(dest_path) as f:
+        tree = ast.parse(f.read())
+    top_level_calls = [node.value.func.id for node in tree.body
+                       if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+                       and isinstance(node.value.func, ast.Name)]
+    assert 'network' not in top_level_calls
+    assert top_level_calls.count('pressureDependence') == 1
+    assert top_level_calls[-1] == 'explorer'
 
 
 def test_multiple_bath_gases_warns_and_records_fractions_without_honoring_them(tmp_path):

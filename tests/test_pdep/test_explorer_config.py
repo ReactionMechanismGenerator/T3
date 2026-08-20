@@ -32,6 +32,7 @@ def _valid_kwargs(**overrides) -> dict:
         output_directory='/tmp/root/sub',
         seed_species=['methoxy'],
         method='CSE',
+        bath_gas={'He': 1.0},
     )
     kwargs.update(overrides)
     return kwargs
@@ -113,6 +114,40 @@ def test_refuses_non_mapping_bath_gas():
     """A non-Mapping bath_gas (e.g. a list of pairs) would fail later with a confusing AttributeError."""
     with pytest.raises(ValueError, match="'bath_gas' must be a Mapping"):
         PDepExplorerConfig(**_valid_kwargs(bath_gas=[('He', 1.0)]))
+
+
+def test_refuses_omitted_bath_gas_at_construction_time():
+    """
+    The layering trap from issue #183: bath_gas=None used to pass construction-time validation and
+    only raise inside write_arkane_explorer_input_file -- AFTER the adapter had already claimed the
+    run directory (rule 0 creates it), so the guaranteed failure also burned a directory name. A
+    config that can never be written is refused where it is built.
+    """
+    with pytest.raises(ValueError, match="'bath_gas' is required"):
+        PDepExplorerConfig(**_valid_kwargs(bath_gas=None))
+
+
+def test_refuses_empty_bath_gas_at_construction_time():
+    """An empty bath-gas Mapping is the same guaranteed write-time failure as None (the writer
+    refuses bathGas={}), and is equally knowable from the config's own arguments."""
+    with pytest.raises(ValueError, match="'bath_gas' is required"):
+        PDepExplorerConfig(**_valid_kwargs(bath_gas={}))
+
+
+@pytest.mark.parametrize('bad_timeout', [0, -5, float('inf'), float('nan'), True, '60'])
+def test_refuses_a_timeout_that_is_not_a_positive_finite_number(bad_timeout):
+    """An unenforceable deadline (zero, negative, non-finite, bool, or a string) silently meaning
+    'no deadline' would be worse than refusing it; the same rule run_arkane_job enforces, applied
+    at construction time so it never burns a claimed run directory."""
+    with pytest.raises(ValueError, match="'timeout'"):
+        PDepExplorerConfig(**_valid_kwargs(timeout=bad_timeout))
+
+
+def test_accepts_a_positive_timeout_and_defaults_to_none():
+    """A positive number of seconds is stored verbatim; omitting it means no deadline (None)."""
+    assert PDepExplorerConfig(**_valid_kwargs(timeout=3600)).timeout == 3600
+    assert PDepExplorerConfig(**_valid_kwargs(timeout=0.5)).timeout == 0.5
+    assert PDepExplorerConfig(**_valid_kwargs()).timeout is None
 
 
 def test_refuses_non_mapping_database_kwargs():

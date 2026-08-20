@@ -80,7 +80,8 @@ from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           ts_join_sidecar_path,
                           write_ts_join_sidecar,
                           )
-from t3.pdep.parser import PDepNetwork, parse_pdep_network_file
+from t3.pdep.diagram import T3_PES_DIAGRAM_FILENAME, compute_pes_diagram_data, render_pes_diagram
+from t3.pdep.parser import PDepNetwork, parse_pdep_network_e0_file, parse_pdep_network_file
 from t3.pdep.reason_codes import (REASON_CODE_STATUS,
                                   REASON_INTERNAL_ERROR,
                                   REASON_NETWORK_DISCOVERY_FAILED,
@@ -2314,6 +2315,35 @@ class T3:
                                       assessments=self.pdep_network_assessments,
                                       complete=False)
 
+    def _draw_pdep_pes_diagram(self, network: PDepNetwork, network_name: str, network_path: str) -> None:
+        """
+        Draw T3's own normalized-E0 PES diagram for a successfully-parsed P-dep network.
+
+        Reuses the already-parsed ``network`` (topology) rather than re-reading ``network_path``,
+        and only re-reads the file for its E0 data, which ``network`` does not carry.
+
+        Never raises: a cosmetic artifact must not be able to fail a multi-day campaign. This
+        includes ``compute_pes_diagram_data``'s legitimate ``ValueError`` refusals (a species with
+        no E0, a path reaction whose side matches no configuration) on real RMG networks it
+        genuinely cannot draw honestly -- those degrade to a logged warning here, same as any other
+        failure, rather than being treated as bugs.
+
+        Args:
+            network (PDepNetwork): The network already parsed by the caller.
+            network_name (str): The network file stem, e.g. ``'network4_2'``.
+            network_path (str): The network file this network was parsed from.
+        """
+        try:
+            output_dir = os.path.join(self.paths['PDep SA'], network_name)
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, T3_PES_DIAGRAM_FILENAME)
+            data = compute_pes_diagram_data(network=network,
+                                            e0=parse_pdep_network_e0_file(path=network_path))
+            render_pes_diagram(data=data, output_path=output_path)
+        except Exception as e:
+            self.logger.warning(f'Could not draw the PES diagram for PDep network {network_name} '
+                               f'({network_path}): {e}')
+
     def _assess_pdep_network_candidate(self,
                                        reaction: T3Reaction,
                                        reaction_tuple: tuple,
@@ -2369,6 +2399,24 @@ class T3:
                       }
         warnings, selection = list(), None
         try:
+            # Parsed here, before the master-equation SA below is even attempted, and reused by the
+            # selection logic further down rather than re-read: the network file is drawable the
+            # moment it exists on disk, and a real campaign showed a network whose SA later failed
+            # (``sa_all_methods_failed``) getting no diagram at all, because the draw used to hang
+            # off the SA's success. The picture is of the network file, not of the SA's outcome, so
+            # it must not depend on one. ``network_parse_error`` is kept, not just discarded, so the
+            # warning further down (once it is known this candidate got far enough to need it) can
+            # still name what went wrong. Left inside this ``try`` (rather than ahead of it) so an
+            # unexpected failure here is still caught, recorded as ``internal_error`` and re-raised
+            # by the handler below, same as everywhere else in this method.
+            network, network_parse_error = None, None
+            try:
+                network = parse_pdep_network_file(path=network_path)
+            except (OSError, ValueError) as parse_error:
+                network_parse_error = parse_error
+            else:
+                self._draw_pdep_pes_diagram(network=network, network_name=network_name,
+                                            network_path=network_path)
             # Try running this network using user-specified methods by order.
             # Distinct read failures accumulate in configured-method order rather than the last one
             # winning: which method happened to run last is not a diagnosis, and a record naming only
@@ -2447,7 +2495,6 @@ class T3:
                                      f'to examine reaction {reaction} (iteration {self.iteration})...')
                     if not run_arkane_job(input_file=arkane_input,
                                           output_directory=arkane_output_dir,
-                                          plot=True,
                                           logger=self.logger,
                                           ):
                         # Recorded, not merely logged: without this the record would say nothing at
@@ -2548,14 +2595,14 @@ class T3:
             # observable is already known to be sensitive to this reaction (criterion (a)), so ask
             # whether the network's own rate coefficient is in turn sensitive to a transition state
             # whose kinetics is merely an estimate.
-            network, queue_candidate = None, None
-            try:
-                network = parse_pdep_network_file(path=network_path)
-            except (OSError, ValueError) as e:
-                warning = f'Could not parse the PDep network file {network_path}: {e}'
+            # ``network`` was already parsed (and, if it parsed cleanly, already drawn) up top,
+            # before the master-equation SA was attempted, so there is nothing left to do here but
+            # reason about the outcome of that earlier parse.
+            queue_candidate = None
+            if network is None:
+                warning = f'Could not parse the PDep network file {network_path}: {network_parse_error}'
                 self.logger.warning(f'{warning}\nNot assessing network {network_name} for QM refinement.')
                 warnings.append(warning)
-            if network is None:
                 # The well analysis needs the SA output and the label map, not the parsed network, so
                 # it still runs below: refusing it over this failure would drop species this iteration
                 # would otherwise have refined, for a reason that has nothing to do with them.

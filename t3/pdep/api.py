@@ -591,6 +591,7 @@ def explore_pdep_network(network_path: str,
         logger=logger,
         transition_state_seeds=config.transition_state_seeds,
         database_kwargs=deep_thaw(config.database_kwargs),
+        timeout=config.timeout,
         # The check above (selection.network_source_hash vs. parsed_network.source_hash) proves only
         # what the bytes at network_path WERE at the moment this function parsed them. It says
         # nothing about what write_arkane_explorer_input_file() will later read, because that is a

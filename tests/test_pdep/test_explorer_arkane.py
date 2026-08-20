@@ -349,7 +349,8 @@ def _make_fake_run_arkane_job(*, success=True, output_files=None, final_files=No
     output_files = output_files or {}
     final_files = final_files or {}
 
-    def _fake(input_file, output_directory, plot=False, logger=None, required_artifact='output.py'):
+    def _fake(input_file, output_directory, plot=False, logger=None, required_artifact='output.py',
+              timeout=None):
         for name, content in output_files.items():
             _write(os.path.join(output_directory, name), content)
         for name, content in final_files.items():
@@ -391,6 +392,61 @@ class TestArkaneExplorerAdapterRegistration:
     def test_registered_under_arkane(self):
         from t3.pdep.explorer.arkane import ArkaneExplorerAdapter
         assert _registered_explorer_adapters.get('Arkane') is ArkaneExplorerAdapter
+
+
+class TestArkaneExplorerAdapterTimeout:
+    """
+    The adapter's ``timeout`` is a passthrough to ``run_arkane_job``, and a deadline overrun is a
+    RECORDED, distinguishable failure (issue #183: a hung Arkane used to hang the whole campaign,
+    with no kill path anywhere between the adapter and ARC's un-timeboxed subprocess call).
+    """
+
+    def test_timeout_is_forwarded_to_run_arkane_job(self, tmp_path, monkeypatch):
+        """The configured deadline must reach the runner that enforces it, verbatim."""
+        captured = {}
+        inner = _make_fake_run_arkane_job(success=True)
+
+        def _fake(**kwargs):
+            captured.update(kwargs)
+            return inner(**{key: value for key, value in kwargs.items() if key != 'timeout'})
+
+        monkeypatch.setattr('t3.pdep.explorer.arkane.run_arkane_job', _fake)
+        adapter = _build_adapter(tmp_path, monkeypatch, timeout=42.5)
+        adapter.explore()
+        assert captured['timeout'] == 42.5
+
+    def test_timeout_defaults_to_none(self, tmp_path, monkeypatch):
+        """With no timeout configured, the runner must receive None (the historical, unbounded
+        in-process call), not some invented default deadline."""
+        captured = {}
+        inner = _make_fake_run_arkane_job(success=True)
+
+        def _fake(**kwargs):
+            captured.update(kwargs)
+            return inner(**{key: value for key, value in kwargs.items() if key != 'timeout'})
+
+        monkeypatch.setattr('t3.pdep.explorer.arkane.run_arkane_job', _fake)
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        adapter.explore()
+        assert captured['timeout'] is None
+
+    def test_timed_out_run_is_a_recorded_distinguishable_failure(self, tmp_path, monkeypatch):
+        """A deadline overrun surfaces as succeeded=False with a reason naming the timeout --
+        never as an exception (which would destroy the run record), and never folded into the
+        generic 'Arkane reported job failure' diagnosis."""
+        from t3.runners.rmg_runner import ArkaneJobResult
+
+        timeout_reason = 'Arkane run in /x timed out after 7 s; its process group was killed.'
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            lambda **kwargs: ArkaneJobResult(succeeded=False, timed_out=True, reason=timeout_reason))
+        adapter = _build_adapter(tmp_path, monkeypatch, timeout=7)
+
+        assert adapter.explore() is False
+        assert adapter.succeeded is False
+        assert any('timed out' in reason for reason in adapter.reasons), adapter.reasons
+        assert not any('Arkane reported job failure' in reason for reason in adapter.reasons), \
+            'A timeout must be its own diagnosis, not the generic job-failure one.'
 
 
 class TestArkaneExplorerAdapterExclusivity:
@@ -1425,6 +1481,173 @@ class TestArkaneExplorerAdapterManifest:
         for artifact in adapter.manifest['artifacts']:
             assert artifact['sha256'].startswith('sha256:')
             assert artifact['size'] > 0
+
+    def test_an_arkane_network_pdf_is_collected_into_the_manifest(self, tmp_path, monkeypatch):
+        """
+        Arkane's explorer draws its own PES diagram ('network<p>.pdf', arkane/explorer.py:357-359)
+        into the run directory, and T3 used to throw it away: the manifest hashed only
+        input.py/output*.py/network<i>_(full|reduced).py/arkane.log. When the PDF exists it is an
+        artifact of this run like any other, so it must be recorded.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY,
+                              'network0.pdf': '%PDF-1.4 fake arkane network drawing'},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is True
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert os.path.join(adapter.output_directory, 'network0.pdf') in paths_recorded
+        pdf_artifact = next(a for a in adapter.manifest['artifacts']
+                            if a['path'].endswith('network0.pdf'))
+        assert pdf_artifact['sha256'].startswith('sha256:')
+        assert pdf_artifact['size'] > 0
+
+    def test_an_unrenamed_network_pdf_is_also_collected(self, tmp_path, monkeypatch):
+        """
+        Arkane's rename of 'network.pdf' to 'network<p>.pdf' happens in whatever CWD the Arkane
+        process ran in (a bare relative 'network.pdf', arkane/explorer.py:358-359), while the PDF
+        itself is drawn into the run directory (PressureDependenceJob.draw). When the CWD is not
+        the run directory the rename misses, and the artifact stays 'network.pdf' -- both
+        spellings are the same drawing and both must be collected.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY,
+                              'network.pdf': '%PDF-1.4 fake arkane network drawing'},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is True
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert os.path.join(adapter.output_directory, 'network.pdf') in paths_recorded
+
+    def test_a_file_merely_resembling_the_arkane_pdf_is_not_collected(self, tmp_path, monkeypatch):
+        """
+        Only Arkane's own naming ('network.pdf' / 'network<p>.pdf', digits only) is collected:
+        the manifest asserts provenance, and recording an arbitrary stray PDF as a run artifact
+        would fabricate provenance for a file this run never produced.
+        """
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY,
+                              'mynetwork0.pdf': 'not arkane naming',
+                              'networkX.pdf': 'not arkane naming either'},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is True
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert not any(p.endswith('mynetwork0.pdf') for p in paths_recorded)
+        assert not any(p.endswith('networkX.pdf') for p in paths_recorded)
+
+
+class TestArkaneExplorerAdapterPESDiagram:
+    """
+    Every successful exploration leaves T3's own normalized PES diagram
+    (``t3.pdep.diagram``) in the run directory, recorded in the manifest -- and the drawing is
+    strictly best-effort: no drawing failure may ever flip a successful exploration to failed,
+    because the diagram describes the result, it is not part of it.
+    """
+
+    def test_a_successful_explore_leaves_a_pes_diagram_and_records_it(self, tmp_path, monkeypatch):
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is True
+        diagram_path = os.path.join(adapter.output_directory, 'pes_diagram.png')
+        assert os.path.isfile(diagram_path)
+        assert os.path.getsize(diagram_path) > 0
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert diagram_path in paths_recorded
+
+    def test_a_diagram_failure_never_flips_a_successful_exploration(self, tmp_path, monkeypatch):
+        class _RecordingLogger:
+            def __init__(self):
+                self.warnings = []
+
+            def warning(self, message):
+                self.warnings.append(message)
+
+        logger = _RecordingLogger()
+        adapter = _build_adapter(tmp_path, monkeypatch, logger=logger)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+
+        def _refusing_draw(**kwargs):
+            raise ValueError('deliberately broken drawer')
+
+        monkeypatch.setattr('t3.pdep.explorer.arkane.draw_pes_diagram', _refusing_draw)
+        assert adapter.explore() is True
+        assert adapter.succeeded is True
+        assert adapter.reasons == tuple()
+        diagram_path = os.path.join(adapter.output_directory, 'pes_diagram.png')
+        assert not os.path.isfile(diagram_path)
+        paths_recorded = {a['path'] for a in adapter.manifest['artifacts']}
+        assert diagram_path not in paths_recorded
+        assert any('deliberately broken drawer' in message for message in logger.warnings)
+
+    def test_a_diagram_failure_with_no_logger_is_still_silent_success(self, tmp_path, monkeypatch):
+        adapter = _build_adapter(tmp_path, monkeypatch, logger=None)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        monkeypatch.setattr('t3.pdep.explorer.arkane.draw_pes_diagram',
+                            lambda **kwargs: (_ for _ in ()).throw(RuntimeError('boom')))
+        assert adapter.explore() is True
+
+    def test_a_failed_exploration_draws_no_diagram(self, tmp_path, monkeypatch):
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(success=False))
+        assert adapter.explore() is False
+        assert not os.path.isfile(os.path.join(adapter.output_directory, 'pes_diagram.png'))
+
+    def test_the_diagram_is_drawn_from_the_final_network_artifact(self, tmp_path, monkeypatch):
+        """The final network file is the EXPLORED surface (it carries every species the
+        exploration discovered); the seed network the run started from is not. Drawing from the
+        source network would render the surface as it looked before the exploration ran."""
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY},
+                final_files={'network0_full.py': VALID_NETWORK_PY},
+            ))
+        drawn_from = {}
+
+        def _recording_draw(network_path, output_path):
+            drawn_from['network_path'] = network_path
+            with open(output_path, 'wb') as f:
+                f.write(b'fake png')
+
+        monkeypatch.setattr('t3.pdep.explorer.arkane.draw_pes_diagram', _recording_draw)
+        assert adapter.explore() is True
+        assert drawn_from['network_path'] == os.path.join(
+            adapter.output_directory, 'pdep', 'final', 'network0_full.py')
 
 
 class TestTheClaimStageCannotEscapeTheStateContract:

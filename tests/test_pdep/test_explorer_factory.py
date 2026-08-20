@@ -48,6 +48,7 @@ class _DummyPESExplorerAdapter(PESExplorerAdapter):
                  transition_state_seeds: tuple = None,
                  database_kwargs: dict = None,
                  expected_source_hash: str = None,
+                 timeout: float = None,
                  ):
         super().__init__(seed_species=seed_species, transition_state_seeds=transition_state_seeds)
         self.output_directory = output_directory
@@ -64,6 +65,7 @@ class _DummyPESExplorerAdapter(PESExplorerAdapter):
         # dummy holding a list where the real adapter holds a tuple -- i.e. quietly not well-behaved.
         self.database_kwargs = database_kwargs
         self.expected_source_hash = expected_source_hash
+        self.timeout = timeout
         self.explored = False
 
     def set_up(self):
@@ -277,6 +279,17 @@ class TestExplorerFactory(object):
                                    transition_state_seeds=('TS1',),
                                    )
         assert isinstance(adapter, _DummyTSSeedCompatibleAdapter)
+
+    def test_timeout_is_forwarded_to_the_adapter(self):
+        """The factory forwards ``timeout`` verbatim (and defaults it to None): the deadline is
+        configured on PDepExplorerConfig but enforced layers below, so a dropped passthrough here
+        would silently disable every configured timeout."""
+        adapter = explorer_factory(explorer='DummyExplorer', network_path='network.py', method='CSE',
+                                   seed_species=['OH'], output_directory='out', timeout=12.5)
+        assert adapter.timeout == 12.5
+        adapter = explorer_factory(explorer='DummyExplorer', network_path='network.py', method='CSE',
+                                   seed_species=['OH'], output_directory='out')
+        assert adapter.timeout is None
 
     def test_get_networks_before_explore_raises_runtime_error(self):
         """get_networks() before a successful explore() raises RuntimeError, never returns empty results silently."""

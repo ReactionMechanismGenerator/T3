@@ -48,6 +48,7 @@ def explorer_factory(explorer: str,
                      transition_state_seeds: tuple = None,
                      database_kwargs: dict = None,
                      expected_source_hash: str = None,
+                     timeout: float = None,
                      ) -> PESExplorerAdapter:
     """
     A factory generating the explorer adapter corresponding to ``explorer``.
@@ -93,6 +94,11 @@ def explorer_factory(explorer: str,
                                               ``network_path``'s bytes must match when the adapter's
                                               ``set_up()`` reads them, forwarded verbatim to the
                                               adapter's constructor.
+        timeout (float, optional): The wall-clock deadline, in seconds, for the explorer's
+                                   underlying process, forwarded verbatim to the adapter's
+                                   constructor (``None`` means no deadline; validated and enforced
+                                   at the runner layer, see
+                                   ``t3.runners.rmg_runner.run_arkane_job``).
 
     Raises:
         ValueError: If the provided explorer is not in the keys for the
@@ -151,6 +157,7 @@ def explorer_factory(explorer: str,
                              transition_state_seeds=expected_ts_seeds,
                              database_kwargs=database_kwargs,
                              expected_source_hash=expected_source_hash,
+                             timeout=timeout,
                              )
 
     # The quiet half of the same defect: re-running the rules above only catches a forgetful adapter

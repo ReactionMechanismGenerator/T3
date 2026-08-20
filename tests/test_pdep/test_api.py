@@ -832,6 +832,7 @@ def _make_config(trusted_output_root, output_directory, method='CSE'):
         output_directory=output_directory,
         seed_species=('H',),
         method=method,
+        bath_gas={'He': 1.0},
     )
 
 
