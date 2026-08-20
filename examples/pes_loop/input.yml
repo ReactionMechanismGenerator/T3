@@ -1,0 +1,121 @@
+# The standalone PES exploration loop, driven by PES.py rather than by T3.py.
+#
+# Run it with:
+#
+#     python PES.py examples/pes_loop/input.yml
+#
+# What the loop does, one round at a time:
+#
+#   1. Runs Arkane's explorer on the pressure-dependent network, which discovers
+#      new isomers and channels reachable from the source.
+#   2. Runs a master-equation sensitivity analysis on the explored network to
+#      find which transition states the rate coefficients of interest actually
+#      depend on.
+#   3. Sends those transition states to ARC for quantum chemistry, and captures
+#      the computed statistical-mechanics artifacts.
+#   4. Writes a hybrid network that carries the computed barriers, and explores
+#      again from there.
+#
+# It stops when a round adds no new transition state worth computing, when the
+# round budget runs out, or when nothing measurable is left above the sensitivity
+# floor. Each round leaves a round_<n>/ directory under the project directory,
+# and the PES energy diagram is drawn from the LAST round -- so it carries the
+# computed barriers, not RMG's rate-rule estimates.
+#
+# The project directory defaults to this file's own directory. Override it with
+# `python PES.py <input> -p /some/other/directory`.
+
+pes:
+  # The pressure-dependent network file to start from, as written by RMG or by a
+  # previous Arkane run. A relative path is resolved against THIS file's
+  # directory. Every label used under `source` below must appear in that file's
+  # species dictionary, spelled exactly as the file spells it -- RMG's labels
+  # carry their index, e.g. 'HCOOH(3)'.
+  network: network1_full.py
+
+  # The entry channel the explorer starts from. One species for a unimolecular
+  # well, or two for a bimolecular entry channel (A + B). Arkane's explorer
+  # accepts nothing else -- never three, and never a transition state.
+  source:
+    - HCO(9)
+    - OH(4)
+
+  # The master-equation method. MSC (modified strong collision) is the robust
+  # default; CSE (chemically significant eigenvalues) is more accurate but fails
+  # on networks where the eigenvalues do not separate, which is common on small
+  # surfaces at high temperature.
+  method: MSC
+
+  bath_gas:
+    Ar: 1.0
+
+  # Explorer tolerances. Leave them unset to use Arkane's own defaults; tighten
+  # `explore_tol` to discover more channels at the cost of a longer run.
+  explore_tol: 0.01
+  energy_tol: 1.0e+01
+  flux_tol: 1.0e-06
+
+  # The largest number of radical electrons a discovered species may carry.
+  # Without it the explorer happily generates biradicals whose thermochemistry
+  # nothing in the model can support.
+  maximum_radical_electrons: 2
+
+  # Explorer runtime is otherwise unbounded, and one pathological network parks
+  # the loop forever. Seconds.
+  timeout: 7200.0
+
+qm:
+  # Levels of theory are written UNDASHED. A dashed form ('wb97x-d/def2-tzvp')
+  # makes ARC miss the cached frequency scale factor and makes Gaussian reject
+  # the route line. `freq_level` must equal `opt_level` so frequencies belong to
+  # a real minimum of the same surface, `scan_level` must equal `freq_level` so
+  # rotors project out correctly, and `irc_level` must equal `opt_level`.
+  opt_level: wb97xd/def2tzvp
+  freq_level: wb97xd/def2tzvp
+  sp_level: wb97xd/def2tzvp
+  irc_level: wb97xd/def2tzvp
+  scan_level: wb97xd/def2tzvp
+
+  # The TS search adapters ARC will try, in order. `heuristics` and `linear` are
+  # cheap and cover most abstractions; `kinbot`, `goflow` and `rits` are the
+  # expensive fallbacks. An adapter your installed ARC does not register makes
+  # ARC refuse the whole job at startup, so trim this list to what you have.
+  ts_adapters:
+    - heuristics
+    - linear
+    - kinbot
+    - goflow
+    - rits
+
+  # Rotors and IRC are off by default: both multiply the cost per transition
+  # state, and neither changes which channels the loop discovers. Turn them on
+  # for a production surface, off while corroborating the loop itself.
+  rotors: false
+  irc: false
+
+  # 'sensitive' computes only the transition states the master-equation analysis
+  # says the rate coefficients depend on; 'all' computes every candidate. Under
+  # BOTH scopes a transition state whose measured |dln(k)/dE0| falls below
+  # `min_delta_ln_k` is skipped -- a barrier that never moved a rate coefficient
+  # cannot justify the quantum chemistry it would cost.
+  scope: sensitive
+  max_transition_states_per_round: 10
+  min_delta_ln_k: 1.0e-03
+
+termination:
+  # Each round costs a full ARC project, so this is a real spending cap.
+  max_rounds: 5
+  # Stop as soon as a round turns up no new transition state worth computing,
+  # rather than re-exploring an already-converged surface until the budget runs
+  # out.
+  stop_when_no_new_ts: true
+
+reuse:
+  # Directories of previous T3 or PES-loop projects whose captured quantum
+  # chemistry should be adopted instead of recomputed. A transition state is
+  # adopted only when its channel matches structurally -- same reactants and
+  # products, same spin states -- and only when it was computed at the same
+  # level of theory as the one requested above. Anything that does not match
+  # exactly is recomputed rather than guessed at. Relative paths are resolved
+  # against this file's directory.
+  from_t3_projects: []

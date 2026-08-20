@@ -91,7 +91,12 @@ class TestVerbosity(object):
     @pytest.mark.parametrize('flags, expected_verbose', [([], 20), (['-d'], 10), (['-q'], 30)])
     def test_the_flags_reach_the_logger(self, tmp_path, monkeypatch, flags, expected_verbose):
         input_path = tmp_path / 'input.yml'
-        input_path.write_text(yaml.dump({'pes': {'network': '/abs/n.py', 'source': ['HOCHO']}}))
+        # main() pre-flights the network file's existence, so this has to be a real file on disk
+        # even though the loop that would read it is stubbed out below.
+        network_path = tmp_path / 'n.py'
+        network_path.write_text('# a stand-in network file\n')
+        input_path.write_text(yaml.dump({'pes': {'network': str(network_path),
+                                                 'source': ['HOCHO']}}))
         _RecordingLogger.instances = []
         monkeypatch.setattr(PES, 'Logger', _RecordingLogger)
         # The loop itself is out of scope here -- it is driven for real, end to end, by
@@ -107,3 +112,69 @@ class TestVerbosity(object):
         (logger,) = _RecordingLogger.instances
         assert logger.kwargs['verbose'] == expected_verbose
         assert logger.kwargs['project_directory'] == os.path.abspath(str(tmp_path))
+
+
+class TestShippedExample(object):
+    """The example input is documentation that runs. A shipped input file nobody validates rots
+    silently: the schema moves, the example does not, and the first person to copy it as a
+    starting point pays for it."""
+
+    EXAMPLE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                'examples', 'pes_loop', 'input.yml')
+
+    def test_the_shipped_example_validates(self):
+        config = read_pes_input(self.EXAMPLE_PATH)
+        assert config.pes.method == 'MSC'
+        assert len(config.pes.source) == 2, 'the example demonstrates a bimolecular entry channel'
+        assert config.qm.scope == 'sensitive'
+        assert config.termination.max_rounds == 5
+
+    def test_the_shipped_example_writes_levels_undashed(self):
+        """A dashed level makes ARC miss the cached frequency scale factor and makes Gaussian
+        reject the route line, so an example that shipped one would be actively harmful. The
+        schema's own validator refuses a dashed level at read time, so a bad example fails at
+        read_pes_input rather than at the assertion below -- these assertions are here to name
+        what the example must keep true, where someone editing it will read the reason."""
+        config = read_pes_input(self.EXAMPLE_PATH)
+        levels = (config.qm.opt_level, config.qm.freq_level, config.qm.sp_level,
+                  config.qm.irc_level, config.qm.scan_level)
+        assert all('-' not in level for level in levels), levels
+        assert config.qm.freq_level == config.qm.opt_level
+        assert config.qm.scan_level == config.qm.freq_level
+        assert config.qm.irc_level == config.qm.opt_level
+
+
+class TestNetworkPreflight(object):
+    """A missing network file must fail at the CLI, naming the resolved path, rather than deep
+    inside t3/pdep/parser.py after a project directory and a log file have been created. The
+    resolved path is the whole point of the message: the commonest cause is a relative path
+    anchored somewhere other than where the user assumed."""
+
+    def test_a_missing_network_file_names_the_resolved_path(self, tmp_path, monkeypatch):
+        input_path = tmp_path / 'input.yml'
+        input_path.write_text(yaml.dump({'pes': {'network': 'no_such_network.py',
+                                                 'source': ['HOCHO']}}))
+        monkeypatch.setattr(sys, 'argv', ['PES.py', str(input_path)])
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            PES.main()
+
+        assert str(tmp_path / 'no_such_network.py') in str(exc_info.value)
+
+    def test_the_preflight_runs_before_anything_is_created(self, tmp_path, monkeypatch):
+        """It fires before the Logger, so a mistyped path leaves no t3.log and no project
+        directory behind -- and before check_dependencies(), so the message a user sees is about
+        their input file rather than about their environment."""
+        input_path = tmp_path / 'runs' / 'input.yml'
+        input_path.parent.mkdir()
+        input_path.write_text(yaml.dump({'pes': {'network': 'no_such_network.py',
+                                                 'source': ['HOCHO']}}))
+        project_directory = tmp_path / 'elsewhere'
+        monkeypatch.setattr(sys, 'argv',
+                            ['PES.py', str(input_path), '-p', str(project_directory)])
+
+        with pytest.raises(FileNotFoundError):
+            PES.main()
+
+        assert not project_directory.exists()
+        assert not (input_path.parent / 't3.log').exists()

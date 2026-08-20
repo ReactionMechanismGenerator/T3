@@ -136,6 +136,13 @@ def main():
 
     Returns:
         PESLoopResult: The outcome of the loop.
+
+    Raises:
+        FileNotFoundError: If the input file, or the network file it names, does not exist. The
+                           network is checked here rather than left to the explorer so a mistyped
+                           or wrongly-anchored path fails immediately, with the resolved path in
+                           the message, instead of raising from inside ``t3/pdep/parser.py`` after
+                           a project directory and a log file have already been created.
     """
     args = parse_command_line_arguments()
     input_file = os.path.abspath(args.file)
@@ -154,6 +161,11 @@ def main():
     # chemistry.
     config.reuse.from_t3_projects = [_resolve(path, input_directory)
                                      for path in config.reuse.from_t3_projects]
+    if not os.path.isfile(config.pes.network):
+        raise FileNotFoundError(
+            f'Could not find the pressure-dependent network file {config.pes.network}.\n'
+            f'A relative "pes.network" is resolved against the input file\'s own directory, '
+            f'{input_directory}.')
 
     verbose = verbose_level(args)
 
