@@ -218,18 +218,18 @@ def test_generate_top_rop_bar_figs_1():
         assert os.path.isfile(os.path.join(folder_path, 'bar_ROPs', fig))
 
 
-def test_generate_top_rop_bar_figs_2():
-    """Test generating ROP bar figures for formic acid pyrolysis"""
+def test_generate_top_rop_bar_figs_2(hocho_simulation_data):
+    """Test generating ROP bar figures for formic acid pyrolysis.
+
+    Reuses the module-level fixture rather than re-running the same JSR simulation (~300 s in CI):
+    the fixture is the identical simulation over the superset of times, and its t=0.001 profile
+    was verified bit-for-bit equal (T, P, X and every ROP) to one obtained by simulating t=0.001
+    alone.
+    """
     observables = ['HOCHO(1)', 'CO2(9)']
-    times = [0.001]
-    profiles = flux.get_profiles_from_simulation(model_path=os.path.join(TEST_DATA_BASE_PATH, 'models', 'HOCHO.yaml'),
-                                                 reactor_type='JSR',
-                                                 times=times,
-                                                 composition={'HOCHO(1)': 1.0},
-                                                 T=1000,
-                                                 P=1,
-                                                 V=100,
-                                                 )
+    profiles = {time: profile for time, profile in hocho_simulation_data.items()
+                if abs(time - 0.001) < 1e-6}
+    assert profiles, 'the hocho_simulation_data fixture does not contain the t=0.001 point'
     folder_path = os.path.join(SCRATCH_BASE_PATH, 'test_generate_top_rop_bar_figs_HOCHO_pyrolysis')
     flux.generate_top_rop_bar_figs(profiles=profiles, observables=observables, folder_path=folder_path)
     for fig in ['HOCHO(1)_0.001_s.png', 'CO2(9)_0.001_s.png']:
