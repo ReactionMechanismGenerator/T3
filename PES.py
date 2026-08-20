@@ -64,6 +64,10 @@ def parse_command_line_arguments(command_line_args=None):
                         help='a file describing the PES exploration loop to execute')
     parser.add_argument('-p', '--project-directory', type=str, default=None,
                         help="the directory to run in, defaults to the input file's own directory")
+    parser.add_argument('--diagram-only', action='store_true',
+                        help='a dry run: explore the network and draw its PES diagram without '
+                             'launching any quantum chemistry, so an input file can be '
+                             'smoke-tested without submitting ARC jobs')
 
     # Options for controlling the amount of information printed to the console
     # By default a moderate level of information is printed; you can either
@@ -178,7 +182,11 @@ def main():
     # check that ARC is available
     check_dependencies()
 
-    result = run_pes_loop(config, project_directory, qm_runner=arc_qm_runner, logger=logger)
+    # ``qm_runner=None`` is run_pes_loop's own "no QM this run" mode: it explores the seed network
+    # and draws its diagram, and stops there. That is the only way to smoke-test an input file
+    # without submitting real ARC jobs to a cluster.
+    qm_runner = None if args.diagram_only else arc_qm_runner
+    result = run_pes_loop(config, project_directory, qm_runner=qm_runner, logger=logger)
 
     logger.log(f'\n\nThe PES exploration loop terminated with status {result.status!r} '
                f'after {len(result.rounds)} round(s).', level='always')

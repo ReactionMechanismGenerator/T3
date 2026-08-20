@@ -51,6 +51,14 @@ class TestParseCommandLineArguments(object):
         args = parse_command_line_arguments(['/runs/pes/input.yml', '-p', '/scratch/run'])
         assert args.project_directory == '/scratch/run'
 
+    def test_diagram_only_is_off_by_default(self):
+        args = parse_command_line_arguments(['input.yml'])
+        assert args.diagram_only is False
+
+    def test_diagram_only_can_be_asked_for(self):
+        args = parse_command_line_arguments(['input.yml', '--diagram-only'])
+        assert args.diagram_only is True
+
 
 class TestExitCodeFor(object):
     """A stall or a max_rounds stop is a finding to read in the log, not a crash: only an

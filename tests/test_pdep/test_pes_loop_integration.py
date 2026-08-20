@@ -720,3 +720,41 @@ def test_pes_cli_resolves_a_relative_reuse_path_against_the_input_file(tmp_path,
     # LOOP's own, not the CLI's, so it can only be in the file if logger= reached run_pes_loop.
     with open(os.path.join(project_directory, 't3.log')) as f:
         assert "PES loop: reusing 3 prior QM result(s)" in f.read()
+
+
+def test_pes_cli_diagram_only_explores_and_draws_without_touching_arc(tmp_path, monkeypatch):
+    """``--diagram-only`` is the only way to smoke-test an input file without submitting real
+    cluster jobs, so what matters is not that the flag parses but that ARC is never CONSTRUCTED.
+    The fake ARC here records every construction, and this run must leave that list empty."""
+    project_directory = str(tmp_path)
+    input_path = os.path.join(project_directory, 'input.yml')
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(project_directory, 'network0_full.py'))
+    with open(input_path, 'w') as f:
+        yaml.dump({'pes': {'network': 'network0_full.py',
+                           'source': ['O-2(13598)', 'CO2(11)'],
+                           'bath_gas': {'Ar': 1.0},
+                           'method': 'MSC'},
+                   'termination': {'max_rounds': 3}}, f)
+
+    explore_calls = _fixture_explorer(monkeypatch, project_directory, 'network0_full')
+    _ArtifactWritingFakeARC.converge_plan = ()
+    _ArtifactWritingFakeARC.constructions = []
+    _ArtifactWritingFakeARC.executions = 0
+    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr(sys, 'argv', ['PES.py', input_path, '--diagram-only'])
+
+    result = PES.main()
+
+    assert result.status == 'diagram_only', f'{result.status}: {result.reason}'
+    # Not one ARC object was even built, let alone executed.
+    assert _ArtifactWritingFakeARC.constructions == []
+    assert _ArtifactWritingFakeARC.executions == 0
+    # One exploration, one diagram, no QM: no hybrid network was written, and the loop stopped
+    # after round 0 rather than spending the three rounds the input file allows.
+    assert len(explore_calls) == 1
+    assert len(result.rounds) == 1
+    assert result.final_diagram_path == os.path.join(project_directory, 'round_0',
+                                                     'pes_diagram.png')
+    assert os.path.isfile(result.final_diagram_path)
+    assert not os.path.isfile(hybrid_network_path(round_paths(project_directory, 0),
+                                                  'network0_full'))
