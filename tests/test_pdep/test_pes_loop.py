@@ -5,6 +5,8 @@ import os
 
 import pytest
 
+from arc.molecule.molecule import Molecule
+
 from t3.pdep.capture import captured_qm_artifact_path
 from t3.pdep.explorer.result import (EXPLORATION_STATUS_FAILED, EXPLORATION_STATUS_SUCCEEDED,
                                      PDepExplorationResult)
@@ -46,6 +48,13 @@ def config():
                          termination={'max_rounds': 3})
 
 
+def _alkane_adjlist(n_carbons: int) -> str:
+    """A real RMG adjacency list for the linear alkane with ``n_carbons`` carbons, rendered by
+    ARC's own Molecule so the stub networks below carry genuinely parseable, mutually distinct
+    structures."""
+    return Molecule().from_smiles('C' * n_carbons).to_adjacency_list()
+
+
 def _stub_explorer(monkeypatch, tmp_path, families, fail=False):
     """
     Patch ``explore_pdep_network``, ``parse_pdep_network_file``, and ``draw_pes_diagram`` at the
@@ -80,16 +89,25 @@ def _stub_explorer(monkeypatch, tmp_path, families, fail=False):
         order.
     """
     path_reactions = tuple(
-        PDepPathReaction(label=f'reaction{i}', reactants=('A',), products=('B',),
+        PDepPathReaction(label=f'reaction{i}', reactants=(f'A{i}',), products=(f'B{i}',),
                          transition_state=f'TS{i}', kinetics_type='Arrhenius',
                          kinetics_comment=f'family: {family}')
         for i, family in enumerate(families))
+    # Every channel gets its own pair of REAL, distinct molecules (linear alkanes of increasing
+    # length): the loop carries QM across rounds by STRUCTURAL channel identity
+    # (t3.pdep.pes_rounds.channel_keys_by_ts_label), so a stub whose species had no parseable
+    # structures -- or whose every reaction connected the same pair -- would silently disable the
+    # cross-round memory these tests exist to exercise.
+    species_structures = {}
+    for i in range(len(families)):
+        species_structures[f'A{i}'] = _alkane_adjlist(2 * i + 1)
+        species_structures[f'B{i}'] = _alkane_adjlist(2 * i + 2)
     base_network = PDepNetwork(network_id='network1_1', path='/abs/network1_1.py', label=None,
-                               species_labels=('A', 'B'),
+                               species_labels=tuple(species_structures),
                                transition_state_labels=tuple(f'TS{i}' for i in
                                                               range(len(families))),
                                path_reactions=path_reactions, isomers=(), reactant_channels=(),
-                               product_channels=())
+                               product_channels=(), species_structures=species_structures)
 
     calls = []
     drawn = []
@@ -361,7 +379,10 @@ class TestRunPESLoop(object):
         assert call_projects == ('/prior/project',)
         assert call_network_id == 'network1_1'
         assert call_level == reuse_config.qm.sp_level == 'ccsd(t)-f12/cc-pvtz-f12'
-        assert call_labels == {'TS0': ('reaction0',), 'TS1': ('reaction1',)}
+        # The 4th argument is the seed network's STRUCTURAL channel-key map (canonical species
+        # structures, direction-insensitive), never a positional-label map -- reaction and TS
+        # labels are both positional in Arkane-written files and cannot identify a channel.
+        assert call_labels == {'TS0': (('C',), ('CC',)), 'TS1': (('CCC',), ('CCCC',))}
         assert 'TS0' not in queued
         assert 'TS1' in queued
 
@@ -760,3 +781,88 @@ class TestSensitivityFloor(object):
         assert result.status == PES_LOOP_CONVERGED
         assert [record.status for record in result.rounds] == ['continuing', PES_LOOP_CONVERGED]
         assert sorted(result.rounds[0].queued_ts_labels) == ['TS0']
+
+
+class TestRenumberedNetworksKeepQMOnTheRightChannel(object):
+    """THE wrong-saddle-point pin: every TS label Arkane writes is positional
+    (rmgpy/rmg/pdep.py:854), so a re-exploration can relabel channels between rounds. A
+    label-keyed carry would then skip the WRONG channel as 'already has QM' and fold round 0's
+    barrier onto a different reaction; the structural carry must keep the barrier on its own
+    channel regardless of what the labels do."""
+
+    def test_round_1_relabeling_does_not_misattribute_round_0s_artifact(self, tmp_path,
+                                                                        monkeypatch, config):
+        adj = {name: _alkane_adjlist(n)
+               for name, n in (('A0', 1), ('B0', 2), ('A1', 3), ('B1', 4))}
+
+        def _reaction(label, ts, reactants, products):
+            return PDepPathReaction(label=label, reactants=reactants, products=products,
+                                    transition_state=ts, kinetics_type='Arrhenius',
+                                    kinetics_comment='family: 1,2_Insertion_CO')
+
+        # Round 0's file: TS0 is the (A0, B0) channel. Round 1's re-exploration writes the SAME
+        # two channels with the positions -- and therefore the labels -- swapped: 'TS0' now names
+        # the (A1, B1) channel and 'TS1' names (A0, B0).
+        round0_network = PDepNetwork(
+            network_id='explored_round0', path='/x0.py', label=None,
+            species_labels=tuple(adj), transition_state_labels=('TS0', 'TS1'),
+            path_reactions=(_reaction('reaction0', 'TS0', ('A0',), ('B0',)),
+                            _reaction('reaction1', 'TS1', ('A1',), ('B1',))),
+            isomers=(), reactant_channels=(), product_channels=(), species_structures=adj)
+        round1_network = dataclasses.replace(
+            round0_network, network_id='explored_round1',
+            path_reactions=(_reaction('reaction0', 'TS0', ('A1',), ('B1',)),
+                            _reaction('reaction1', 'TS1', ('A0',), ('B0',))))
+        networks = [round0_network, round1_network, round1_network]
+
+        calls = []
+
+        def _fake_explore(*, network_path, config, logger=None):
+            calls.append(network_path)
+            output_path = os.path.join(str(tmp_path), f'explored_round{len(calls) - 1}.py')
+            open(output_path, 'w').close()
+            return PDepExplorationResult(network_id='network1_1',
+                                         status=EXPLORATION_STATUS_SUCCEEDED,
+                                         network_paths=(output_path,))
+
+        def _fake_parse(path):
+            # The loop parses each round's freshly explored network right after exploring it, so
+            # the round currently being parsed is simply the latest explore call.
+            network = networks[min(len(calls) - 1, 2)] if calls else networks[0]
+            return dataclasses.replace(network, path=path)
+
+        def _fake_draw(network_path, output_path):
+            open(output_path, 'w').close()
+
+        monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
+        monkeypatch.setattr('t3.pdep.pes_loop.parse_pdep_network_file', _fake_parse)
+        monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram', _fake_draw)
+
+        offered_channels_per_round = []
+        adopted_per_round = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            offered_channels_per_round.append(
+                tuple((c.ts_label, c.path_reaction.reactants) for c in candidates))
+            adopted_per_round.append(dict(adopted))
+            _touch_hybrid_file(paths, network_id)
+            # Round 0 converges only its first offered channel; round 1 converges the rest.
+            converged = frozenset({candidates[0].ts_label}) if candidates else frozenset()
+            return converged, frozenset(c.ts_label for c in candidates)
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+
+        assert result.status == PES_LOOP_CONVERGED
+        # Round 0: both channels offered; (A0, B0) converged under its round-0 label 'TS0'.
+        assert offered_channels_per_round[0] == (('TS0', ('A0',)), ('TS1', ('A1',)))
+        # Round 1 (relabeled): the computed (A0, B0) channel now carries label 'TS1' and must be
+        # SKIPPED under that new label; the still-uncomputed (A1, B1) channel -- now labeled
+        # 'TS0', which a label-keyed carry would have wrongly skipped as computed -- must be the
+        # one offered.
+        assert offered_channels_per_round[1] == (('TS0', ('A1',)),)
+        # And round 0's artifact reaches round 1 as an adopted artifact under the channel's NEW
+        # label 'TS1', still pointing at the ORIGINATING (round 0) capture, where it was vendored
+        # under round 0's arc label for 'TS0' -- the right barrier, on the right channel.
+        round0_artifact = captured_qm_artifact_path(
+            round_paths(str(tmp_path), 0).capture, arc_ts_label('explored_round0', 'TS0'))
+        assert adopted_per_round[1] == {'TS1': round0_artifact}

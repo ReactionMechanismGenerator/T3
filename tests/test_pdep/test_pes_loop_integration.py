@@ -26,6 +26,7 @@ module only corroborates that the loop and the real runner agree with each other
 """
 
 import os
+import re
 import shutil
 
 from t3.pdep.capture import (CaptureResult, capture_ts_artifacts, captured_qm_artifact_path,
@@ -218,18 +219,74 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
 # writer. Faked: ONLY the explorer (as everywhere in this suite) and ARC (execute() writes
 # converged statmech artifacts into the round's own ARC project instead of submitting cluster
 # jobs).
+#
+# The fake explorer RENUMBERS between rounds -- from round 1 on it swaps the fixture's
+# 'TS1'<->'TS2' and 'reaction1'<->'reaction2' labels while the channels stay put -- because every
+# label Arkane writes is purely positional (rmgpy/rmg/pdep.py:854) and a test whose labels are
+# trivially stable is blind to the wrong-saddle-point misattribution the structural carry exists
+# to prevent. Assertions are therefore by CHANNEL (reactant/product species), never by label, and
+# each fake ARC artifact carries a channel marker in its (hash-verified, verbatim-vendored) log
+# file so "the right barrier sits on the right channel" is checked on the bytes, not inferred.
 # ---------------------------------------------------------------------------------------------
 
 _MODEL_CHEMISTRY = "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')"
 
+# The fixture's three channels, by species labels (direction-insensitively sorted, as
+# _hybrid_channels below renders them).
+_CH1 = ('CO2(11) + O-2(13598)', 'O=C1OO1(21648)')
+_CH2 = ('O=C1OO1(21648)', '[O]C([O])=O(8160)')
+_CH3 = ('O=C1OO1(21648)', '[O]O[C]=O(8100)')
 
-def _write_artifact(path):
+
+def _channel_marker(reactants, products) -> str:
+    """A stable, label-free identity line for one channel, embedded in fake QM log files."""
+    return 'barrier-marker: ' + ' <=> '.join(
+        sorted((' + '.join(sorted(reactants)), ' + '.join(sorted(products)))))
+
+
+def _swap_quoted(text: str, a: str, b: str) -> str:
+    """Swap every quoted occurrence of two labels in a network file's text."""
+    return text.replace(f"'{a}'", "'@@SWAP@@'").replace(f"'{b}'", f"'{a}'") \
+               .replace("'@@SWAP@@'", f"'{b}'")
+
+
+def _renumbered_fixture_text() -> str:
+    """The real fixture with 'TS1'<->'TS2' and 'reaction1'<->'reaction2' swapped: the same three
+    channels, renumbered exactly the way a pruning/discovery re-exploration renumbers them."""
+    with open(_FIXTURE_NETWORK_PATH) as f:
+        text = f.read()
+    text = _swap_quoted(text, 'TS1', 'TS2')
+    return _swap_quoted(text, 'reaction1', 'reaction2')
+
+
+def _renamed_prior_network_text() -> str:
+    """The real fixture as a DIFFERENT project would have written it: every species label carries
+    that project's own indices, and the TS labels sit at different positions ('TS1'<->'TS3').
+    The adjacency lists -- the structures -- are untouched, so structural matching must still
+    recognize the channels."""
+    with open(_FIXTURE_NETWORK_PATH) as f:
+        text = f.read()
+    text = _swap_quoted(text, 'TS1', 'TS3')
+    for original, renamed in (('O=C1OO1(21648)', 'O=C1OO1(9)'),
+                              ('O-2(13598)', 'O-2(5)'),
+                              ('CO2(11)', 'CO2(7)'),
+                              ('[O]C([O])=O(8160)', '[O]C([O])=O(2)'),
+                              ('[O]O[C]=O(8100)', '[O]O[C]=O(3)')):
+        text = text.replace(f"'{original}'", f"'{renamed}'")
+    return text
+
+
+def _write_artifact(path, log_text='stub quantum chemistry log\n'):
+    # One log file PER artifact, named after it: ARC writes every transition state's statmech
+    # input into one shared TSs/ directory, so a shared 'output.out' would silently overwrite
+    # each artifact's channel marker with the last one written.
+    log_name = os.path.splitext(os.path.basename(path))[0] + '.out'
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(os.path.join(os.path.dirname(path), 'output.out'), 'w') as f:
-        f.write('stub quantum chemistry log\n')
+    with open(os.path.join(os.path.dirname(path), log_name), 'w') as f:
+        f.write(log_text)
     with open(path, 'w') as f:
-        f.write("linear = False\n\nspinMultiplicity = 2\n\nenergy = Log('output.out')\n\n"
-                "geometry = Log('output.out')\n\nfrequencies = Log('output.out')\n")
+        f.write(f"linear = False\n\nspinMultiplicity = 2\n\nenergy = Log('{log_name}')\n\n"
+                f"geometry = Log('{log_name}')\n\nfrequencies = Log('{log_name}')\n")
 
 
 def _write_status(arc_dir, label, converged):
@@ -256,29 +313,33 @@ def _write_energy_settings(arc_dir):
             f.write('{}\n')
 
 
-def _build_prior_capture(prior_project_dir, ts_labels):
-    """A REAL prior capture for ``ts_labels`` (each joined to the fixture's own
-    ``reaction<i>``), built by capture_ts_artifacts itself so adopt_prior_qm, the vendoring, and
-    _adopted_energy_settings all run against the exact formats production writes."""
+def _build_prior_capture(prior_project_dir, network_text, ts_labels):
+    """A REAL prior capture (built by capture_ts_artifacts itself) whose vendored network is a
+    REAL, parseable network file -- ``network_text`` -- and whose artifacts carry channel markers
+    in their log files. ``ts_labels`` are labels of THAT network's own numbering."""
     arc_dir = os.path.join(prior_project_dir, 'arc_project')
     network_id = 'prior_run_network'
+    networks_dir = os.path.join(prior_project_dir, 'networks')
+    os.makedirs(networks_dir, exist_ok=True)
+    source_path = os.path.join(networks_dir, f'{network_id}.py')
+    with open(source_path, 'w') as f:
+        f.write(network_text)
+    prior_network = parse_pdep_network_file(path=source_path)
+    reactions_by_ts = prior_network.path_reactions_by_ts()
     records = []
     for ts_label in ts_labels:
         label = arc_ts_label(network_id, ts_label)
         record = TSJoinRecord(network_id=network_id, network_ts_label=ts_label,
                               status=JOIN_STATUS_QUEUED, arc_ts_label=label,
                               expected_artifact_path=expected_ts_artifact_path(arc_dir, label),
-                              reason='Queued to ARC.', coefficient=-9.5e-05, delta_ln_k=0.795,
-                              path_reaction_labels=(f'reaction{ts_label[2:]}',))
-        _write_artifact(record.expected_artifact_path)
+                              reason='Queued to ARC.', coefficient=-9.5e-05, delta_ln_k=0.795)
+        path_reaction = reactions_by_ts[ts_label][0]
+        _write_artifact(record.expected_artifact_path,
+                        log_text=_channel_marker(path_reaction.reactants,
+                                                 path_reaction.products) + '\n')
         _write_status(arc_dir, label, converged=True)
         records.append(record)
     _write_energy_settings(arc_dir)
-    networks_dir = os.path.join(prior_project_dir, 'networks')
-    os.makedirs(networks_dir, exist_ok=True)
-    source_path = os.path.join(networks_dir, f'{network_id}.py')
-    with open(source_path, 'w') as f:
-        f.write(f"# stub RMG network file\nnetwork(label='{network_id}')\n")
     capture_ts_artifacts(
         records, arc_dir, os.path.join(prior_project_dir, 'capture'),
         networks={network_id: {'source_path': source_path,
@@ -290,8 +351,9 @@ def _build_prior_capture(prior_project_dir, ts_labels):
 class _ArtifactWritingFakeARC(object):
     """Stands in for arc.main.ARC at exactly the cluster boundary: execute() writes the statmech
     artifacts, convergence statuses, and energy settings a real ARC run would leave in the round's
-    own project directory, per the class-level ``converge_plan`` (one set of network-local TS
-    labels per execute() call)."""
+    own project directory. ``converge_plan`` names one set of CHANNELS (as _channel_marker
+    strings) per execute() call -- never labels, which renumber between rounds -- and every
+    converged artifact's log file records its channel marker."""
 
     converge_plan = ()
     constructions = []
@@ -311,41 +373,63 @@ class _ArtifactWritingFakeARC(object):
         _write_energy_settings(arc_dir)
         for reaction in self.kwargs['reactions']:
             label = reaction['ts_label']
-            if label.rsplit('_', 1)[-1] in to_converge:
-                _write_artifact(expected_ts_artifact_path(arc_dir, label))
+            channel = _channel_marker(reaction['reactants'], reaction['products'])
+            if channel in to_converge:
+                _write_artifact(expected_ts_artifact_path(arc_dir, label),
+                                log_text=channel + '\n')
                 _write_status(arc_dir, label, converged=True)
             else:
                 _write_status(arc_dir, label, converged=False)
 
 
-def _hybrid_qm_ilt(hybrid_path):
-    """Which of the fixture's three TSs a hybrid file carries as QM/RRKM vs RMG/ILT: a QM'd TS's
-    reaction block drops its ``kinetics = Arrhenius(...)`` line, an ILT one keeps it. Scanned
-    textually because the hybrid's consumer is Arkane (which accepts its positional
-    ``transitionState(...)`` calls), not ``t3.pdep.parser``."""
+def _hybrid_channels(hybrid_path):
+    """Read a hybrid file's reaction blocks by CHANNEL (never by label): channel pair ->
+    ``(local_ts_label, is_qm)``, where a QM'd channel's block has dropped its
+    ``kinetics = Arrhenius(...)`` line. Scanned textually because the hybrid's consumer is Arkane
+    (which accepts its positional ``transitionState(...)`` calls), not ``t3.pdep.parser``."""
     with open(hybrid_path) as f:
         content = f.read()
-    qm, ilt = [], []
-    for reaction_label, ts_label in (('reaction1', 'TS1'), ('reaction2', 'TS2'),
-                                     ('reaction3', 'TS3')):
-        start = content.index(f"label = '{reaction_label}'")
-        end = content.find('reaction(', start)
-        block = content[start:end if end != -1 else len(content)]
-        (ilt if 'kinetics = Arrhenius(' in block else qm).append(ts_label)
-    return sorted(qm), sorted(ilt)
+    channels = dict()
+    for block in re.split(r'\breaction\(', content)[1:]:
+        block = block.split('\n\n')[0]
+        # Greedy-to-end-of-line bracket matching: species labels themselves contain ']' (e.g.
+        # '[O]C([O])=O(8160)'), so a lazy or ]-excluding match truncates the list.
+        reactants = re.search(r"reactants = \[(.*)\],", block).group(1)
+        products = re.search(r"products = \[(.*)\],", block).group(1)
+        ts_label = re.search(r"transitionState = '([^']*)'", block).group(1)
+        sides = tuple(sorted(
+            ' + '.join(sorted(part.strip().strip("'") for part in side.split(',')))
+            for side in (reactants, products)))
+        channels[sides] = (ts_label, 'kinetics = Arrhenius(' not in block)
+    return channels
+
+
+def _hybrid_marker(hybrid_path, ts_label):
+    """The channel marker inside the hybrid's own vendored log for ``ts_label`` -- the bytes that
+    prove WHICH barrier was folded under that label."""
+    log_dir = os.path.join(os.path.dirname(hybrid_path), 'qm', 'logs', ts_label)
+    (log_name,) = os.listdir(log_dir)
+    with open(os.path.join(log_dir, log_name)) as f:
+        return f.read().strip()
 
 
 def _fixture_explorer(monkeypatch, project_directory, network_id):
-    """The canonical fake explorer of this module: each round's 'exploration' deposits a copy of
-    the real fixture at the exact path arc_qm_runner's real _explored_network_path recomputes."""
+    """The canonical fake explorer of this module: round 0's 'exploration' deposits the pristine
+    fixture; every later round deposits the RENUMBERED variant (_renumbered_fixture_text), so any
+    label-keyed carry across the round boundary is exposed rather than trivially stable."""
     explore_calls = []
 
     def _fake_explore(*, network_path, config, logger=None):
         explore_calls.append(network_path)
-        paths = round_paths(project_directory, len(explore_calls) - 1)
+        round_index = len(explore_calls) - 1
+        paths = round_paths(project_directory, round_index)
         dest_path = _explored_network_path(paths, network_id)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        shutil.copyfile(_FIXTURE_NETWORK_PATH, dest_path)
+        if round_index == 0:
+            shutil.copyfile(_FIXTURE_NETWORK_PATH, dest_path)
+        else:
+            with open(dest_path, 'w') as f:
+                f.write(_renumbered_fixture_text())
         return PDepExplorationResult(network_id=network_id,
                                      status=EXPLORATION_STATUS_SUCCEEDED,
                                      network_paths=(dest_path,))
@@ -354,20 +438,26 @@ def _fixture_explorer(monkeypatch, project_directory, network_id):
     return explore_calls
 
 
-def test_real_loop_real_capture_carries_cumulative_qm_across_rounds(tmp_path, monkeypatch):
-    """Against the REAL capture_ts_artifacts: round 0 queues the two above-floor channels and
-    converges TS1's; round 1 converges TS2's; TS3's channel measures a ln(k) response of exactly
-    0.0 in the live ME SA -- below qm.min_delta_ln_k -- so it is never queued, and the loop
-    reports a measured convergence at round 2 with that skip on the record. Before this fix round
-    the loop could not complete a single such round (defect 1), and when it did complete, round
-    N+1's hybrid dropped round N's QM back to Arrhenius lines (defect 3)."""
+_CH1_MARKER = _channel_marker(('O-2(13598)', 'CO2(11)'), ('O=C1OO1(21648)',))
+_CH2_MARKER = _channel_marker(('O=C1OO1(21648)',), ('[O]C([O])=O(8160)',))
+
+
+def test_real_loop_real_capture_keeps_qm_on_the_right_channel_across_a_renumber(tmp_path,
+                                                                                monkeypatch):
+    """Against the REAL capture_ts_artifacts, across a REAL renumbering: round 0 (pristine
+    labels) converges channel 1 (then labeled 'TS1'); round 1 explores the RENUMBERED network, in
+    which that same channel is labeled 'TS2' -- the loop must skip it under its new label, queue
+    channel 2 (now labeled 'TS1', which a label-keyed carry would have wrongly skipped as
+    computed), and fold round 0's barrier under the new label with the artifact bytes proving the
+    channel. Channel 3 measures a ln(k) response of exactly 0.0 in the live ME SA -- below
+    qm.min_delta_ln_k -- so it is never queued, and the loop converges at round 2."""
     project_directory = os.path.join(str(tmp_path), 'loop_project')
     os.makedirs(project_directory)
     seed_path = os.path.join(str(tmp_path), 'network0_full.py')
     shutil.copyfile(_FIXTURE_NETWORK_PATH, seed_path)
 
     _fixture_explorer(monkeypatch, project_directory, 'network0_full')
-    _ArtifactWritingFakeARC.converge_plan = ({'TS1'}, {'TS2'})
+    _ArtifactWritingFakeARC.converge_plan = ({_CH1_MARKER}, {_CH2_MARKER})
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
     monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
@@ -381,19 +471,32 @@ def test_real_loop_real_capture_carries_cumulative_qm_across_rounds(tmp_path, mo
 
     assert result.status == 'converged', f'{result.status}: {result.reason}'
     assert [record.status for record in result.rounds] == ['continuing', 'continuing', 'converged']
+    # Round 0 (pristine labels): channels 1 and 2 queued; channel 3 gated by its measured zero.
     assert sorted(result.rounds[0].queued_ts_labels) == ['TS1', 'TS2']
-    assert sorted(result.rounds[1].queued_ts_labels) == ['TS2']
-    # TS3's channel was gated by its own measured (zero) response, every round, on the record.
+    # Round 1 (renumbered): ONLY the still-uncomputed channel 2 queued -- under its NEW label
+    # 'TS1'. A label-keyed carry would have skipped 'TS1' as already computed and re-queued 'TS2'.
+    assert result.rounds[1].queued_ts_labels == ('TS1',)
     for record in result.rounds:
         floor_skips = [s for s in record.skipped if 'below the min_delta_ln_k floor' in s.reason]
-        assert [s.label for s in floor_skips] == ['reaction3']
+        assert len(floor_skips) == 1
 
-    round0_hybrid = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
-    round1_hybrid = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
-    assert _hybrid_qm_ilt(round0_hybrid) == (['TS1'], ['TS2', 'TS3'])
-    # Round 1 -- THE defect-3 pin: the hybrid carries the CUMULATIVE QM, not just this round's.
-    # The defective loop dropped round 0's QM back to an Arrhenius line here.
-    assert _hybrid_qm_ilt(round1_hybrid) == (['TS1', 'TS2'], ['TS3'])
+    round0 = _hybrid_channels(hybrid_network_path(round_paths(project_directory, 0),
+                                                  'network0_full'))
+    round1_hybrid_path = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
+    round1 = _hybrid_channels(round1_hybrid_path)
+    # Round 0 hybrid (pristine labels): channel 1 is QM as 'TS1'; channels 2, 3 are ILT.
+    assert round0[_CH1] == ('TS1', True)
+    assert round0[_CH2] == ('TS2', False)
+    assert round0[_CH3] == ('TS3', False)
+    # Round 1 hybrid (renumbered labels): cumulative QM, each channel under its NEW label.
+    assert round1[_CH1] == ('TS2', True)
+    assert round1[_CH2] == ('TS1', True)
+    assert round1[_CH3] == ('TS3', False)
+    # The bytes prove the attribution: under round 1's 'TS2' sits round 0's channel-1 barrier,
+    # and under 'TS1' sits this round's channel-2 barrier -- the right barrier on the right
+    # channel, across the renumber.
+    assert _hybrid_marker(round1_hybrid_path, 'TS2') == _CH1_MARKER
+    assert _hybrid_marker(round1_hybrid_path, 'TS1') == _CH2_MARKER
 
     # Both rounds' captures are REAL and re-verify cleanly, sensitivity evidence included --
     # exactly what defect 1 made impossible.
@@ -408,11 +511,14 @@ def test_real_loop_real_capture_carries_cumulative_qm_across_rounds(tmp_path, mo
 
 
 def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path, monkeypatch):
-    """Defect 2, end to end against the real vendoring and the real _adopted_energy_settings:
-    when EVERY candidate is adopted from a prior run, round 0 queues nothing, never touches ARC or
-    capture, and still writes a hybrid carrying all three TSs as QM; round 1 then converges."""
+    """Defect 2 end to end, with adoption made maximally hostile to label matching: the prior
+    project's vendored network carries DIFFERENT species label indices and different TS positions
+    ('TS1'<->'TS3') -- only the structures match. All three channels adopt, round 0 queues
+    nothing, never touches ARC or capture, and still writes a hybrid carrying all three channels
+    as QM (each barrier's bytes on its own channel); round 1 then converges."""
     prior_project_dir = os.path.join(str(tmp_path), 'prior_project')
-    _build_prior_capture(prior_project_dir, ts_labels=('TS1', 'TS2', 'TS3'))
+    _build_prior_capture(prior_project_dir, network_text=_renamed_prior_network_text(),
+                         ts_labels=('TS1', 'TS2', 'TS3'))
     project_directory = os.path.join(str(tmp_path), 'loop_project')
     os.makedirs(project_directory)
     seed_path = os.path.join(str(tmp_path), 'network0_full.py')
@@ -436,9 +542,21 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
     assert [record.status for record in result.rounds] == ['continuing', 'converged']
     # Nothing was ever queued, so ARC must never even have been constructed.
     assert _ArtifactWritingFakeARC.constructions == []
-    round0_hybrid = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
-    assert _hybrid_qm_ilt(round0_hybrid) == (['TS1', 'TS2', 'TS3'], [])
+    round0_hybrid_path = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
+    round0 = _hybrid_channels(round0_hybrid_path)
+    assert round0[_CH1] == ('TS1', True)
+    assert round0[_CH2] == ('TS2', True)
+    assert round0[_CH3] == ('TS3', True)
+    # Each adopted barrier's bytes sit on their own channel, matched purely structurally: the
+    # prior project's markers carry ITS species labels, so equality here proves the artifact came
+    # from the structurally-matching prior channel, not from any label agreement.
+    assert _hybrid_marker(round0_hybrid_path, 'TS1') \
+        == _channel_marker(('O-2(5)', 'CO2(7)'), ('O=C1OO1(9)',))
+    assert _hybrid_marker(round0_hybrid_path, 'TS2') \
+        == _channel_marker(('O=C1OO1(9)',), ('[O]C([O])=O(2)',))
+    assert _hybrid_marker(round0_hybrid_path, 'TS3') \
+        == _channel_marker(('O=C1OO1(9)',), ('[O]O[C]=O(3)',))
     # The hybrid's energy settings came from the adopted artifacts' own prior manifest -- the
     # _adopted_energy_settings path a capture-less round is forced through.
-    with open(round0_hybrid) as f:
+    with open(round0_hybrid_path) as f:
         assert 'wb97xd2023' in f.read()

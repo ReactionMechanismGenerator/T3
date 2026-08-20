@@ -15,9 +15,10 @@ from t3.pdep.discovery import ARTIFACT_STATUS_UNVERIFIED, ARTIFACT_STATUS_USABLE
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import HybridNetworkResult
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label, expected_ts_artifact_path
-from t3.pdep.parser import PDepPathReaction
+from t3.pdep.parser import PDepPathReaction, parse_pdep_network_file
 from t3.pdep.pes_qm import ARC_INPUT_FILE_NAME, adopt_prior_qm, arc_qm_runner, build_arc_input
-from t3.pdep.pes_rounds import QMCandidate, hybrid_network_path, round_paths
+from t3.pdep.pes_rounds import (QMCandidate, channel_keys_by_ts_label, hybrid_network_path,
+                                round_paths)
 from t3.schema import PESLoopConfig
 
 
@@ -601,14 +602,17 @@ def _arc_model_chemistry_text(sp_level: str) -> str:
 
 
 def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
-                            network_id='network1_1', path_reaction_labels=('reaction1',)) -> None:
+                            network_id='network1_1', network_source_text=None) -> None:
     """Build a real capture manifest under ``tmp_path`` by calling ``capture_ts_artifacts`` itself
     (mirrors ``tests/test_pdep/test_capture.py``'s own fixture-building style), so
     ``adopt_prior_qm`` is exercised against the exact format ``t3.pdep.capture`` writes rather than
     a hand-rolled shape. The manifest ends up at ``tmp_path/capture/capture_manifest.yml``, nested
     the same way a real T3 project's ``PDep_capture`` directory is nested under an iteration
     subdirectory -- ``adopt_prior_qm`` must find it by walking ``tmp_path``, not by assuming a
-    fixed relative path.
+    fixed relative path. The vendored network source defaults to the REAL ``network799_1``
+    fixture, because adoption resolves each record's transition state to its structural channel
+    in the capture's own vendored network copy -- a capture vendored over an unparseable stub
+    offers nothing adoptable (a case one test pins deliberately, via ``network_source_text``).
     """
     arc_dir = str(tmp_path / 'arc_project')
     os.makedirs(arc_dir, exist_ok=True)
@@ -617,7 +621,7 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
     record = TSJoinRecord(network_id=network_id, network_ts_label=ts_label, status=JOIN_STATUS_QUEUED,
                           arc_ts_label=arc_label, expected_artifact_path=expected_path,
                           reason='Queued to ARC.', coefficient=0.05, delta_ln_k=0.02,
-                          path_reaction_labels=path_reaction_labels)
+                          path_reaction_labels=(f'reaction{ts_label[2:]}',))
 
     os.makedirs(os.path.dirname(expected_path), exist_ok=True)
     log_path = os.path.join(os.path.dirname(expected_path), 'output.out')
@@ -646,8 +650,11 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
     networks_dir = str(tmp_path / 'networks')
     os.makedirs(networks_dir, exist_ok=True)
     source_path = os.path.join(networks_dir, f'{network_id}.py')
-    with open(source_path, 'w') as f:
-        f.write(f"# stub RMG network file\nnetwork(label='{network_id}')\n")
+    if network_source_text is None:
+        shutil.copyfile(_FIXTURE_NETWORK_PATH, source_path)
+    else:
+        with open(source_path, 'w') as f:
+            f.write(network_source_text)
     networks = {network_id: {'source_path': source_path, 'source_sha256': hash_file(source_path),
                              'method': 'MSC'}}
 
@@ -656,23 +663,26 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
                          sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)})
 
 
-_TS1_PATH_REACTION_LABELS = {'TS1': ('reaction1',)}
+# THIS run's own structural channel-key map, computed over the same real fixture the prior
+# captures vendor -- what run_pes_loop itself hands adopt_prior_qm (via channel_keys_by_ts_label
+# over the seed network).
+_FIXTURE_CHANNEL_KEYS = channel_keys_by_ts_label(parse_pdep_network_file(path=_FIXTURE_NETWORK_PATH))
 
 
 class TestAdoptPriorQM(object):
 
     def test_no_projects_adopts_nothing(self):
-        assert adopt_prior_qm([], 'network1_1', 'wb97xd/def2tzvp', _TS1_PATH_REACTION_LABELS) == {}
+        assert adopt_prior_qm([], 'network1_1', 'wb97xd/def2tzvp', _FIXTURE_CHANNEL_KEYS) == {}
 
     def test_a_missing_project_is_skipped_not_fatal(self, tmp_path):
         """A stale path in a config must not kill a run that would otherwise work."""
         assert adopt_prior_qm([str(tmp_path / 'gone')], 'network1_1', 'wb97xd/def2tzvp',
-                              _TS1_PATH_REACTION_LABELS) == {}
+                              _FIXTURE_CHANNEL_KEYS) == {}
 
     def test_matching_level_of_theory_is_adopted(self, tmp_path):
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
         adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                                 _TS1_PATH_REACTION_LABELS)
+                                 _FIXTURE_CHANNEL_KEYS)
         assert 'TS1' in adopted
 
     def test_adopted_artifact_path_points_at_the_real_captured_file(self, tmp_path):
@@ -680,7 +690,7 @@ class TestAdoptPriorQM(object):
         that returns the wrong path (or a constant) still passed. Assert the value itself."""
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
         adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                                 _TS1_PATH_REACTION_LABELS)
+                                 _FIXTURE_CHANNEL_KEYS)
         assert os.path.isfile(adopted['TS1'])
         with open(adopted['TS1']) as f:
             content = f.read()
@@ -693,7 +703,7 @@ class TestAdoptPriorQM(object):
         genuinely different LevelOfTheory(...) string, not merely a different raw string."""
         _write_capture_manifest(tmp_path, ts_label='TS1', level='b3lyp/def2tzvp')
         assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                              _TS1_PATH_REACTION_LABELS) == {}
+                              _FIXTURE_CHANNEL_KEYS) == {}
 
     def test_a_different_network_id_is_still_adopted_on_structural_match(self, tmp_path):
         """Important (fix round 2): network_id is NEVER a gate -- this function's own docstring
@@ -704,17 +714,17 @@ class TestAdoptPriorQM(object):
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
                                 network_id='network9_9')
         adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                                 _TS1_PATH_REACTION_LABELS)
+                                 _FIXTURE_CHANNEL_KEYS)
         assert 'TS1' in adopted
 
     def test_no_structural_match_is_not_adopted(self, tmp_path):
-        """C3/I1: network_id alone is not enough -- a record whose path_reaction_labels do not
-        structurally match any of THIS run's own candidates is refused, even with a matching
-        network_id and level of theory."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
-                                path_reaction_labels=('reaction7',))
+        """C3/I1: network_id alone is not enough -- a record whose structural channel key matches
+        none of THIS run's own transition states is refused, even with a matching network_id and
+        level of theory."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
+        other_channels_only = {ts: key for ts, key in _FIXTURE_CHANNEL_KEYS.items() if ts != 'TS1'}
         assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                              _TS1_PATH_REACTION_LABELS) == {}
+                              other_channels_only) == {}
 
     def test_status_gate_refuses_non_usable_artifacts(self, tmp_path, monkeypatch):
         """Regression for mutation (d): dropping the ARTIFACT_STATUS_USABLE check must not let a
@@ -722,6 +732,9 @@ class TestAdoptPriorQM(object):
         manifest_dir = tmp_path / 'proj' / 'capture'
         manifest_dir.mkdir(parents=True)
         (manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
+        networks_dir = manifest_dir / 'networks'
+        networks_dir.mkdir()
+        shutil.copyfile(_FIXTURE_NETWORK_PATH, str(networks_dir / 'network1_1.py'))
         record = TSArtifactRecord(network_id='network1_1', network_ts_label='TS1', arc_ts_label='X',
                                   status=ARTIFACT_STATUS_UNVERIFIED,
                                   artifact_path=str(tmp_path / 'qm' / 'TS1.py'),
@@ -730,12 +743,12 @@ class TestAdoptPriorQM(object):
             capture_dir=str(manifest_dir),
             manifest_path=str(manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME),
             record_count=1, captured_artifact_count=1,
-            networks={'network1_1': {}},
+            networks={'network1_1': {'captured_path': os.path.join('networks', 'network1_1.py')}},
             energy_settings={'model_chemistry': _arc_model_chemistry_text('wb97xd/def2tzvp')},
             ts_records=(record,))
         monkeypatch.setattr(pes_qm, 'verify_capture', lambda root: verify_result)
         adopted = adopt_prior_qm([str(tmp_path / 'proj')], 'network1_1', 'wb97xd/def2tzvp',
-                                 _TS1_PATH_REACTION_LABELS)
+                                 _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
 
     def test_conflicting_prior_captures_are_refused_not_last_write_wins(self, tmp_path, monkeypatch):
@@ -757,15 +770,23 @@ class TestAdoptPriorQM(object):
             manifest_dir = tmp_path / name / 'capture'
             manifest_dir.mkdir(parents=True)
             (manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
+            # Each fake capture must vendor a REAL, parseable network copy: adoption resolves the
+            # record's transition state to its structural channel in that copy, and a capture
+            # without one offers nothing adoptable (so the conflict logic under test would never
+            # even be reached).
+            networks_dir = manifest_dir / 'networks'
+            networks_dir.mkdir()
+            shutil.copyfile(_FIXTURE_NETWORK_PATH, str(networks_dir / 'network1_1.py'))
             results_by_root[str(manifest_dir)] = VerifyResult(
                 capture_dir=str(manifest_dir),
                 manifest_path=str(manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME),
-                record_count=1, captured_artifact_count=1, networks={'network1_1': {}},
+                record_count=1, captured_artifact_count=1,
+                networks={'network1_1': {'captured_path': os.path.join('networks', 'network1_1.py')}},
                 energy_settings=energy_settings, ts_records=(record,))
 
         monkeypatch.setattr(pes_qm, 'verify_capture', _fake_verify_capture)
         adopted = adopt_prior_qm([str(tmp_path / 'proj_a'), str(tmp_path / 'proj_b')],
-                                 'network1_1', 'wb97xd/def2tzvp', _TS1_PATH_REACTION_LABELS)
+                                 'network1_1', 'wb97xd/def2tzvp', _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
 
 
@@ -794,25 +815,28 @@ class TestNormalizedModelChemistry(object):
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
         with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
             adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd2023/def2tzvp',
-                                     _TS1_PATH_REACTION_LABELS)
+                                     _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
         assert 'nothing will be adopted' in caplog.text
 
 
 class TestAdoptPriorQMRefusesRecordsWithoutStructuralEvidence(object):
 
-    def test_record_with_no_path_reaction_labels_is_refused_with_its_own_reason(self, tmp_path, caplog):
-        """A usable record that carries NO path_reaction_labels cannot be structurally matched at
-        all -- it must be refused with a log line saying exactly that, not fall through the match
-        loop to a misleading 'matches none of this run's candidates' message."""
+    def test_record_whose_vendored_network_offers_no_structural_identity_is_refused(self, tmp_path,
+                                                                                    caplog):
+        """A usable record whose transition state cannot be resolved to a channel in the
+        capture's own vendored network copy (here: a stub network with no reactions at all) cannot
+        be structurally matched -- it must be refused with a log line saying exactly that, never
+        matched by any label."""
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
-                                path_reaction_labels=())
+                                network_source_text="# stub RMG network file\n"
+                                                    "network(label='network1_1')\n")
         with caplog.at_level(logging.INFO, logger='t3.pdep.pes_qm'):
             adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                                     _TS1_PATH_REACTION_LABELS)
+                                     _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
-        assert 'records no path_reaction_labels' in caplog.text
-        assert 'match none of' not in caplog.text
+        assert 'no unambiguous structural channel identity' in caplog.text
+        assert 'matches none of' not in caplog.text
 
 
 class TestAdoptedEnergySettings(object):
@@ -825,19 +849,18 @@ class TestAdoptedEnergySettings(object):
     def test_settings_come_from_the_adopted_artifacts_own_prior_manifest(self, tmp_path):
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
         adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
-                                 _TS1_PATH_REACTION_LABELS)
+                                 _FIXTURE_CHANNEL_KEYS)
         settings = pes_qm._adopted_energy_settings(adopted)
         assert settings['model_chemistry'] == _arc_model_chemistry_text('wb97xd/def2tzvp')
         assert settings['use_hindered_rotors'] is True
 
     def test_conflicting_prior_manifests_raise_rather_than_guess(self, tmp_path):
         _write_capture_manifest(tmp_path / 'proj_a', ts_label='TS1', level='wb97xd/def2tzvp')
-        _write_capture_manifest(tmp_path / 'proj_b', ts_label='TS2', level='b3lyp/def2tzvp',
-                                path_reaction_labels=('reaction2',))
+        _write_capture_manifest(tmp_path / 'proj_b', ts_label='TS2', level='b3lyp/def2tzvp')
         adopted_a = adopt_prior_qm([str(tmp_path / 'proj_a')], 'network1_1', 'wb97xd/def2tzvp',
-                                   _TS1_PATH_REACTION_LABELS)
+                                   _FIXTURE_CHANNEL_KEYS)
         adopted_b = adopt_prior_qm([str(tmp_path / 'proj_b')], 'network1_1', 'b3lyp/def2tzvp',
-                                   {'TS2': ('reaction2',)})
+                                   {'TS2': _FIXTURE_CHANNEL_KEYS['TS2']})
         with pytest.raises(ValueError, match='conflicting'):
             pes_qm._adopted_energy_settings(adopted_a | adopted_b)
 
@@ -882,7 +905,7 @@ class TestArcQmRunnerWithNothingQueued(object):
         _write_capture_manifest(tmp_path / 'prior_project', ts_label='TS1',
                                 level='wb97xd/def2tzvp')
         adopted = adopt_prior_qm([str(tmp_path / 'prior_project')], _NETWORK_ID,
-                                 'wb97xd/def2tzvp', _TS1_PATH_REACTION_LABELS)
+                                 'wb97xd/def2tzvp', _FIXTURE_CHANNEL_KEYS)
         assert adopted, 'fixture must adopt TS1 for this test to mean anything'
 
         paths, _candidates, recorder, network_path = _arc_qm_runner_fixture(

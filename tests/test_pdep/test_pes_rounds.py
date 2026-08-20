@@ -1,12 +1,17 @@
 """Tests for t3.pdep.pes_rounds."""
 
+import dataclasses
 import os
+
 import pytest
+
+from arc.molecule.molecule import Molecule
 
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
 from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME, QMCandidate,
-                                SkippedChannel, attach_sensitivity_evidence, round_paths,
-                                split_qm_candidates)
+                                SkippedChannel, attach_sensitivity_evidence,
+                                channel_keys_by_ts_label, round_paths, split_qm_candidates,
+                                structural_channel_key)
 
 
 def _rxn(label: str, comment: str, ts: str | None = None) -> PDepPathReaction:
@@ -176,3 +181,77 @@ class TestAttachSensitivityEvidence(object):
         at_floor = attach_sensitivity_evidence(split, {'TS_r1': (1.2e-7, 1e-3)},
                                                min_delta_ln_k=1e-3)
         assert [c.ts_label for c in at_floor.candidates] == ['TS_r1']
+
+
+class TestStructuralChannelKeys(object):
+    """The identity QM artifacts are carried across network-file writes on. Labels cannot be it:
+    every TS label Arkane writes is purely positional (rmgpy/rmg/pdep.py:854 replaces every path
+    reaction's transition state with a fresh, label-less object before each write), and reaction
+    labels are positional too."""
+
+    def test_keys_are_structural_and_direction_insensitive(self):
+        adj_a = Molecule().from_smiles('C').to_adjacency_list()
+        adj_b = Molecule().from_smiles('CC').to_adjacency_list()
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO')])
+        network = dataclasses.replace(network, species_structures={'A_r1': adj_a, 'B_r1': adj_b})
+        forward = _rxn('f', 'family: x')
+        forward = dataclasses.replace(forward, reactants=('A_r1',), products=('B_r1',))
+        backward = dataclasses.replace(forward, reactants=('B_r1',), products=('A_r1',))
+        key_f = structural_channel_key(forward, network.species_structures)
+        key_b = structural_channel_key(backward, network.species_structures)
+        assert key_f == key_b == (('C',), ('CC',))
+
+    def test_key_is_label_and_atom_order_independent(self):
+        """The same molecule written under a different species label and a permuted atom order
+        keys identically -- this is what makes cross-project adoption structural."""
+        co2_a = ('1 O u0 p2 c0 {2,D}\n'
+                 '2 C u0 p0 c0 {1,D} {3,D}\n'
+                 '3 O u0 p2 c0 {2,D}\n')
+        co2_b = ('1 C u0 p0 c0 {2,D} {3,D}\n'
+                 '2 O u0 p2 c0 {1,D}\n'
+                 '3 O u0 p2 c0 {1,D}\n')
+        water = Molecule().from_smiles('O').to_adjacency_list()
+        rxn_a = dataclasses.replace(_rxn('a', 'family: x'), reactants=('CO2(11)',),
+                                    products=('W(1)',))
+        rxn_b = dataclasses.replace(_rxn('b', 'family: x'), reactants=('carbon dioxide(999)',),
+                                    products=('W(2)',))
+        key_a = structural_channel_key(rxn_a, {'CO2(11)': co2_a, 'W(1)': water})
+        key_b = structural_channel_key(rxn_b, {'carbon dioxide(999)': co2_b, 'W(2)': water})
+        assert key_a == key_b
+
+    def test_missing_or_unparseable_structure_yields_no_key(self):
+        rxn = dataclasses.replace(_rxn('r', 'family: x'), reactants=('A',), products=('B',))
+        assert structural_channel_key(rxn, {'A': Molecule().from_smiles('C').to_adjacency_list()}) \
+            is None
+        assert structural_channel_key(
+            rxn, {'A': 'not an adjacency list', 'B': 'nope'}) is None
+
+    def test_duplicate_channels_are_both_omitted_from_the_map(self):
+        """Two TSs connecting structurally identical channels cannot be told apart by this key;
+        carrying either would risk the wrong-saddle-point misattribution, so both are omitted."""
+        adj_a = Molecule().from_smiles('C').to_adjacency_list()
+        adj_b = Molecule().from_smiles('CC').to_adjacency_list()
+        adj_c = Molecule().from_smiles('CCC').to_adjacency_list()
+        r1 = dataclasses.replace(_rxn('r1', 'family: x', ts='TS1'), reactants=('A',),
+                                 products=('B',))
+        r2 = dataclasses.replace(_rxn('r2', 'family: x', ts='TS2'), reactants=('B',),
+                                 products=('A',))
+        r3 = dataclasses.replace(_rxn('r3', 'family: x', ts='TS3'), reactants=('B',),
+                                 products=('C',))
+        network = dataclasses.replace(
+            _network([r1, r2, r3]),
+            species_structures={'A': adj_a, 'B': adj_b, 'C': adj_c})
+        keys = channel_keys_by_ts_label(network)
+        assert set(keys) == {'TS3'}
+
+    def test_a_ts_shared_by_several_path_reactions_is_omitted(self):
+        adj_a = Molecule().from_smiles('C').to_adjacency_list()
+        adj_b = Molecule().from_smiles('CC').to_adjacency_list()
+        adj_c = Molecule().from_smiles('CCC').to_adjacency_list()
+        r1 = dataclasses.replace(_rxn('r1', 'family: x', ts='TS1'), reactants=('A',),
+                                 products=('B',))
+        r2 = dataclasses.replace(_rxn('r2', 'family: x', ts='TS1'), reactants=('B',),
+                                 products=('C',))
+        network = dataclasses.replace(
+            _network([r1, r2]), species_structures={'A': adj_a, 'B': adj_b, 'C': adj_c})
+        assert channel_keys_by_ts_label(network) == {}

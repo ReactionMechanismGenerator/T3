@@ -22,11 +22,20 @@ this list, so a non-deterministic order would admit a different subset on each r
 runs of the same input incomparable.
 """
 
+import logging
 import os
 from dataclasses import dataclass, replace
 
+from arc.molecule.molecule import Molecule
+
 from t3.pdep.barrierless import classify_barrierless
-from t3.pdep.parser import PDepNetwork, PDepPathReaction
+from t3.pdep.parser import PDepNetwork, PDepPathReaction, canonical_channel_pair
+
+_logger = logging.getLogger(__name__)
+
+# adjacency-list text -> canonical SMILES (or None for unparseable text), memoized because one
+# loop converts the same handful of structures once per round per consumer.
+_CANONICAL_STRUCTURE_CACHE: dict = dict()
 
 
 @dataclass(frozen=True)
@@ -174,6 +183,129 @@ def attach_sensitivity_evidence(split: CandidateSplit,
             continue
         candidates.append(replace(candidate, coefficient=coefficient, delta_ln_k=delta_ln_k))
     return CandidateSplit(candidates=tuple(candidates), skipped=tuple(skipped))
+
+
+def _canonical_structure(adjlist: str) -> str | None:
+    """
+    Reduce one RMG adjacency list to a canonical, label- and atom-order-independent identity.
+
+    ARC's own ``Molecule`` (never ``rmgpy``) parses the adjacency list and renders a canonical
+    SMILES, so two projects that wrote the same molecule with different species labels or a
+    different atom order still produce the same identity string.
+
+    Args:
+        adjlist (str): The RMG adjacency-list text.
+
+    Returns:
+        str | None: The canonical SMILES, or ``None`` if the text could not be parsed into a
+        molecule -- the caller must then refuse to key the channel rather than guess.
+    """
+    if adjlist in _CANONICAL_STRUCTURE_CACHE:
+        return _CANONICAL_STRUCTURE_CACHE[adjlist]
+    try:
+        smiles = Molecule().from_adjacency_list(adjlist).to_smiles()
+    except Exception as e:
+        _logger.warning(f'Could not canonicalize an adjacency list into a molecule ({e}); the '
+                        f'channel using it cannot be structurally keyed.')
+        smiles = None
+    _CANONICAL_STRUCTURE_CACHE[adjlist] = smiles
+    return smiles
+
+
+def structural_channel_key(path_reaction: PDepPathReaction,
+                           species_structures: dict) -> tuple | None:
+    """
+    The direction-insensitive STRUCTURAL identity of the channel a path reaction connects.
+
+    Why labels are not enough: every TS label Arkane writes is purely positional --
+    ``rmgpy/rmg/pdep.py:854`` replaces every path reaction's transition state with a fresh,
+    label-less object before every network file write, so ``TS3`` means nothing more than
+    "whatever sat at ``path_reactions[2]`` when that file was written", and pruning or discovery
+    between explorations shifts indices. Reaction labels (``reaction<i>``) are positional too,
+    and can even collide within one file after a remove-then-append. Carrying anything across
+    network-file writes by either label can attach a computed barrier to the WRONG saddle point.
+    This key is what may be carried instead: the two channels the reaction connects, each species
+    reduced to its canonical structure (``_canonical_structure``), canonicalized
+    direction-insensitively through ``t3.pdep.parser.canonical_channel_pair`` -- the identity the
+    network's own topology assigns the reaction, immune to renumbering AND to per-project species
+    label indices.
+
+    Args:
+        path_reaction (PDepPathReaction): The path reaction to key.
+        species_structures (dict): Species label -> RMG adjacency-list text, i.e. the owning
+            network's ``PDepNetwork.species_structures``.
+
+    Returns:
+        tuple | None: The structural key, or ``None`` when any participating species has no
+        parseable structure in ``species_structures`` -- the channel then has no structural
+        identity and must not be carried (fail closed, never keyed by label instead).
+    """
+    sides = list()
+    for labels in (path_reaction.reactants, path_reaction.products):
+        side = list()
+        for label in labels:
+            adjlist = species_structures.get(label)
+            if not adjlist:
+                return None
+            smiles = _canonical_structure(adjlist)
+            if smiles is None:
+                return None
+            side.append(smiles)
+        sides.append(side)
+    return canonical_channel_pair(sides[0], sides[1])
+
+
+def channel_keys_by_ts_label(network: PDepNetwork) -> dict:
+    """
+    Map each of a network's transition state labels to its channel's structural key.
+
+    Fail-closed by construction, in three ways, because this map is what QM artifacts are carried
+    across network-file writes on (see ``structural_channel_key`` for why labels cannot be):
+
+    - a transition state shared by SEVERAL path reactions is omitted (which of its channels would
+      be "the" identity is ambiguous -- the same reason ``t3.main`` refuses to queue such a TS);
+    - a transition state whose channel cannot be structurally keyed (a species with no parseable
+      structure) is omitted;
+    - two transition states whose channels key IDENTICALLY are BOTH omitted -- a duplicate channel
+      pair means the structural key cannot distinguish them, and attaching an artifact to
+      "whichever matched first" is exactly the wrong-saddle-point failure this keying exists to
+      prevent.
+
+    An omitted transition state is simply re-decided (and, if selected, re-queued) each round
+    rather than carried -- duplicated QM spend, never a misattributed barrier.
+
+    Args:
+        network (PDepNetwork): The parsed network.
+
+    Returns:
+        dict: Network-local TS label -> structural key, for every transition state that has
+        exactly one, unambiguous structural identity.
+    """
+    keys = dict()
+    for ts_label, path_reactions in network.path_reactions_by_ts().items():
+        if len(path_reactions) != 1:
+            _logger.warning(f'Transition state {ts_label!r} of network {network.network_id!r} is '
+                            f'shared by {len(path_reactions)} path reactions; it has no single '
+                            f'structural channel identity and will not be carried across rounds.')
+            continue
+        key = structural_channel_key(path_reactions[0], network.species_structures)
+        if key is None:
+            _logger.warning(f'Transition state {ts_label!r} of network {network.network_id!r} '
+                            f'cannot be structurally keyed (a participating species has no '
+                            f'parseable structure); it will not be carried across rounds.')
+            continue
+        keys[ts_label] = key
+    by_key = dict()
+    for ts_label, key in keys.items():
+        by_key.setdefault(key, list()).append(ts_label)
+    for key, ts_labels in by_key.items():
+        if len(ts_labels) > 1:
+            _logger.warning(f'Transition states {sorted(ts_labels)} of network '
+                            f'{network.network_id!r} connect structurally identical channels; '
+                            f'none of them can be carried across rounds unambiguously.')
+            for ts_label in ts_labels:
+                del keys[ts_label]
+    return keys
 
 
 PES_LOOP_DIAGRAM_FILENAME = 'pes_diagram.png'

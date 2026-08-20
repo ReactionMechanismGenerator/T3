@@ -62,8 +62,9 @@ from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED
 from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.pes_qm import adopt_prior_qm
-from t3.pdep.pes_rounds import (RoundPaths, attach_sensitivity_evidence, hybrid_network_path,
-                                round_paths, split_qm_candidates)
+from t3.pdep.pes_rounds import (RoundPaths, attach_sensitivity_evidence,
+                                channel_keys_by_ts_label, hybrid_network_path, round_paths,
+                                split_qm_candidates)
 from t3.pdep.pes_sa import run_round_me_sensitivity
 from t3.schema import PESLoopConfig
 
@@ -232,22 +233,27 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             means "no QM this run" -- explore and draw the first round's
             diagram only, which is the honest behaviour when no QM runner is configured, not a
             crash.
-        adopted_ts_labels (frozenset, optional): Network-local TS labels already computed before
-            this loop started (e.g. reused from an earlier T3 project), seeded into
-            ``computed_ts_labels`` before round 0. This is unioned with -- not replaced by --
-            whatever ``config.reuse.from_t3_projects`` itself resolves to (see below); passing this
+        adopted_ts_labels (frozenset, optional): TS labels of the SEED network
+            (``config.pes.network``) already computed before this loop started (e.g. reused from
+            an earlier T3 project). Each is translated to its structural channel key through the
+            seed network (labels are positional and do not survive re-exploration -- see the
+            keying comment at the top of this function's body) and seeded as computed before
+            round 0; a label with no unambiguous structural identity is warned about and
+            re-decided each round instead. This is unioned with -- not replaced by -- whatever
+            ``config.reuse.from_t3_projects`` itself resolves to (see below); passing this
             explicitly is for callers (e.g. tests) that already have the adopted set in hand and
             want to skip re-discovering it.
         logger: A T3 ``Logger``, or ``None``.
 
     When ``config.reuse.from_t3_projects`` is non-empty, this function itself calls
-    ``t3.pdep.pes_qm.adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level)``
-    before round 0 (``network_id`` derived the same way ``t3.pdep.parser.parse_pdep_network_file``
-    would derive it from ``config.pes.network``, i.e. ``Path(config.pes.network).stem``) and unions
-    the result into ``computed_ts_labels``'s round-0 seed. A TS adopted this way is therefore never
-    offered to ``qm_runner`` at round 0 (``t3.pdep.pes_rounds.split_qm_candidates`` treats any label
-    already in ``computed_ts_labels`` as already computed) -- it is not merely available for the
-    caller to use, it actually prevents the redundant ARC submission.
+    ``t3.pdep.pes_qm.adopt_prior_qm`` before round 0 (``network_id`` derived the same way
+    ``t3.pdep.parser.parse_pdep_network_file`` would derive it from ``config.pes.network``, i.e.
+    ``Path(config.pes.network).stem``), handing it the seed network's structural channel keys
+    (``t3.pdep.pes_rounds.channel_keys_by_ts_label``) to match prior captures against, and seeds
+    every adopted channel as computed. A channel adopted this way is therefore never offered to
+    ``qm_runner`` (its per-round label is translated into ``split_qm_candidates``'s computed set)
+    -- it is not merely available for the caller to use, it actually prevents the redundant ARC
+    submission.
 
     Returns:
         PESLoopResult: The rounds that ran and why the loop stopped.
@@ -262,35 +268,56 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             at the top of every round after the first).
     """
     rounds = []
-    computed_ts_labels = frozenset(adopted_ts_labels) if adopted_ts_labels else frozenset()
-    adopted = dict()
-    # Defect-3 fix: every QM artifact this loop can fold into a hybrid, cumulative across rounds --
-    # network-local TS label -> the artifact's path in the capture where it was FIRST captured
-    # (or in the prior project's own capture, for adopted ones). Passed to qm_runner EVERY round
-    # (as `adopted`), because arc_qm_runner builds each round's hybrid from that round's own
-    # capture plus exactly this map: without it, a TS converged in round N silently reverts to an
-    # RMG/ILT Arrhenius line in round N+1's hybrid -- the fail-open shape t3.pdep.hybrid's
-    # invariant 2 exists to prevent. The path always points at the ORIGINATING capture (which has
-    # the verified manifest _adopted_energy_settings needs), never at a later round's re-vendored
-    # copy.
-    qm_artifacts = dict()
+    # Cross-round memory is keyed STRUCTURALLY (t3.pdep.pes_rounds.structural_channel_key), never
+    # by TS or reaction label: every label Arkane writes into a network file is purely positional
+    # (rmgpy/rmg/pdep.py:854 replaces every path reaction's transition state with a fresh,
+    # label-less object before each write, and path_reactions is append-with-remove), so a
+    # label-keyed carry can attach a computed barrier to the WRONG saddle point after a pruning or
+    # discovery renumbers the file. computed_channels is every channel whose QM is already in
+    # hand; qm_artifacts_by_channel maps those that have an artifact to its path in the capture
+    # where it was FIRST captured (or the prior project's own capture, for adopted ones) -- the
+    # ORIGINATING capture, whose verified manifest still exists, never a later round's re-vendored
+    # copy. Every round translates both through the freshly explored network's own
+    # channel_keys_by_ts_label map, so the runner always speaks THAT round's labels (defect-3
+    # fix: without the per-round fold, a TS converged in round N silently reverts to an RMG/ILT
+    # Arrhenius line in round N+1's hybrid -- the fail-open shape t3.pdep.hybrid's invariant 2
+    # exists to prevent).
+    computed_channels = set()
+    qm_artifacts_by_channel = dict()
+    if adopted_ts_labels or config.reuse.from_t3_projects:
+        seed_network = parse_pdep_network_file(path=config.pes.network)
+        seed_channel_keys = channel_keys_by_ts_label(seed_network)
+    if adopted_ts_labels:
+        for ts_label in sorted(adopted_ts_labels):
+            key = seed_channel_keys.get(ts_label)
+            if key is None:
+                message = (f'PES loop: adopted_ts_labels names {ts_label!r}, but that transition '
+                           f'state has no unambiguous structural channel identity in '
+                           f'{config.pes.network!r}; it cannot be carried and will be re-decided '
+                           f'each round.')
+                _logger.warning(message)
+                if logger is not None:
+                    logger.warning(message)
+                continue
+            computed_channels.add(key)
     if config.reuse.from_t3_projects:
         network_id = Path(config.pes.network).stem
-        seed_network = parse_pdep_network_file(path=config.pes.network)
-        path_reaction_labels_by_ts_label = {
-            ts_label: tuple(sorted(path_reaction.label for path_reaction in path_reactions))
-            for ts_label, path_reactions in seed_network.path_reactions_by_ts().items()
-        }
         adopted = adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level,
-                                 path_reaction_labels_by_ts_label)
+                                 seed_channel_keys)
         if adopted:
             message = (f"PES loop: reusing {len(adopted)} prior QM result(s) for network "
                       f"{network_id!r}: {sorted(adopted)}.")
             _logger.info(message)
             if logger is not None:
                 logger.info(message)
-        computed_ts_labels = computed_ts_labels | frozenset(adopted)
-        qm_artifacts.update(adopted)
+        for ts_label, artifact_path in adopted.items():
+            # adopt_prior_qm only ever returns labels taken from the keys of seed_channel_keys.
+            key = seed_channel_keys[ts_label]
+            computed_channels.add(key)
+            qm_artifacts_by_channel[key] = artifact_path
+    # Whether round 0 starts with adopted ARTIFACTS to fold (reuse), as opposed to labels merely
+    # marked computed (adopted_ts_labels carries no artifact paths) -- the round-0 fold decision.
+    prior_adopted_artifacts = bool(qm_artifacts_by_channel)
     current_network_path = config.pes.network
     max_rounds = config.termination.max_rounds
 
@@ -350,6 +377,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             if logger is not None:
                 logger.warning(message)
 
+        # Translate the structural cross-round memory into THIS round's own labels through the
+        # freshly explored network -- the only labels this round's file, runner, and hybrid speak.
+        keys_by_ts = channel_keys_by_ts_label(network)
+        computed_ts_labels = frozenset(
+            ts_label for ts_label, key in keys_by_ts.items() if key in computed_channels)
         split = split_qm_candidates(network, computed_ts_labels)
 
         # C2: a round that adopted prior QM at round 0 must not early-return here just because it
@@ -358,7 +390,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         # (with an empty candidates tuple) so it can fold the adopted artifacts into a hybrid
         # network; only when there is also no qm_runner to do that (no way to write a hybrid at
         # all) does this fall through to the diagram-only return below.
-        round0_has_adopted = round_index == 0 and bool(adopted)
+        round0_has_adopted = round_index == 0 and prior_adopted_artifacts
         if not split.candidates and not round0_has_adopted:
             status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
             rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
@@ -455,17 +487,36 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
 
         # Defect-3 fix: EVERY round's qm_runner call carries every previously computed artifact
         # (adopted from prior projects at round 0, converged by any earlier round of this loop),
-        # uniformly -- the previous round0-only special case is exactly what let QM die at the
-        # round boundary. A copy is passed so a runner cannot mutate the loop's own record.
+        # uniformly, translated into THIS round's own labels through keys_by_ts -- the previous
+        # round0-only special case is exactly what let QM die at the round boundary. A channel
+        # carried in qm_artifacts_by_channel but absent from this round's network (pruned, or no
+        # longer unambiguously keyable) is simply not folded this round; it stays in the memory.
+        adopted_for_round = {
+            ts_label: qm_artifacts_by_channel[key]
+            for ts_label, key in keys_by_ts.items() if key in qm_artifacts_by_channel
+        }
         newly_computed, actually_queued = qm_runner(candidates, paths, config, network.network_id,
-                                                    adopted=dict(qm_artifacts))
-        computed_ts_labels = computed_ts_labels | newly_computed
+                                                    adopted=adopted_for_round)
         for ts_label in newly_computed:
+            key = keys_by_ts.get(ts_label)
+            if key is None:
+                # Converged but structurally unkeyable (see channel_keys_by_ts_label): it cannot
+                # be carried without risking a wrong-saddle-point attribution, so it will be
+                # re-decided (and possibly re-queued) next round -- duplicated spend, loudly, in
+                # preference to a misattributed barrier.
+                message = (f'PES loop: transition state {ts_label!r} of network '
+                           f'{network.network_id!r} converged but has no unambiguous structural '
+                           f'channel identity; its artifact cannot be carried across rounds.')
+                _logger.warning(message)
+                if logger is not None:
+                    logger.warning(message)
+                continue
+            computed_channels.add(key)
             # Where this round's capture vendored the converged artifact -- a stable layout
             # invariant of t3.pdep.capture (see captured_qm_artifact_path). Recorded off the
             # ORIGINATING round's capture so later rounds always re-vendor from a directory whose
             # own verified manifest still exists.
-            qm_artifacts[ts_label] = captured_qm_artifact_path(
+            qm_artifacts_by_channel[key] = captured_qm_artifact_path(
                 paths.capture, arc_ts_label(network.network_id, ts_label))
         queued_ts_labels = tuple(actually_queued)
 

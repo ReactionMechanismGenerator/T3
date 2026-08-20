@@ -46,7 +46,7 @@ from t3.pdep.hybrid import (QMEnergySettings, _read_qm_artifact, _vendor_qm_arti
                             write_hybrid_network_input_file)
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label
 from t3.pdep.parser import parse_pdep_network_file
-from t3.pdep.pes_rounds import RoundPaths, hybrid_network_path
+from t3.pdep.pes_rounds import RoundPaths, channel_keys_by_ts_label, hybrid_network_path
 from t3.schema import PESLoopConfig
 
 _logger = logging.getLogger(__name__)
@@ -567,7 +567,7 @@ def _normalized_model_chemistry(sp_level: str) -> str | None:
 
 
 def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str,
-                   path_reaction_labels_by_ts_label: dict) -> dict[str, str]:
+                   channel_key_by_ts_label: dict) -> dict[str, str]:
     """
     Reuse transition states a previous T3 (or standalone PES loop) run already computed.
 
@@ -595,14 +595,22 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
       never matches across independent PES-loop runs (Arkane names its own output by index, e.g.
       ``network0_full.py``, disjoint from T3's ``network<digits>_<digits>`` convention) -- gating
       on it would refuse the exact case this function exists to serve. The real match is
-      structural: the record's ``path_reaction_labels`` (the path reaction label(s) its transition
-      state actually joined) against THIS run's own network-local candidates, supplied via
-      ``path_reaction_labels_by_ts_label``. A record with no recorded ``path_reaction_labels``,
-      or one that matches no local candidate, is refused (logged).
+      STRUCTURAL, and deliberately not by ``path_reaction_labels`` either: reaction labels are
+      just as positional as TS labels (``arkane/pdep.py:665``), and a remove-then-append can even
+      leave two ``reaction(label='reaction3')`` blocks in one file (which ``arkane/input.py``
+      silently renames). Instead, the record's transition state is resolved to its channel in the
+      capture's own VENDORED network copy (the authoritative ``networks`` block every verified
+      capture carries), reduced to a structural channel key
+      (``t3.pdep.pes_rounds.channel_keys_by_ts_label`` -- canonical species structures, direction
+      insensitive, immune to renumbering and to per-project species label indices), and matched
+      against THIS run's own keys, supplied via ``channel_key_by_ts_label``. A record whose
+      vendored network cannot be parsed, or whose transition state has no unambiguous structural
+      identity there, or whose key matches no local transition state, is refused (logged).
 
     If two prior captures offer conflicting artifacts for what structurally matches the same
     local TS label, adoption for that label is refused (not a last-write-wins guess) and a
-    warning is logged.
+    warning is logged. Likewise, if two of THIS run's own transition states share one structural
+    key, neither can be matched unambiguously and both are excluded up front.
 
     A project directory that does not exist, or whose manifest fails ``verify_capture`` (corrupt,
     torn, tampered, or simply absent), is skipped with a logged warning rather than raised -- a
@@ -615,10 +623,11 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                           (see above).
         level_of_theory (str): The level of theory ``model_chemistry`` must match to be adopted
                                (e.g. ``config.qm.sp_level``), undashed.
-        path_reaction_labels_by_ts_label (dict): THIS run's own network-local TS label -> tuple
-                                                 of path reaction labels it joins, e.g. derived
-                                                 from ``PDepNetwork.path_reactions_by_ts()``. The
-                                                 structural key adoption is matched against.
+        channel_key_by_ts_label (dict): THIS run's own network-local TS label -> structural
+                                        channel key, from
+                                        ``t3.pdep.pes_rounds.channel_keys_by_ts_label`` over the
+                                        run's own (seed) network. The identity adoption is
+                                        matched against.
 
     Returns:
         dict[str, str]: Network-local TS label -> the adopted artifact path (already resolved,
@@ -630,6 +639,20 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
             f"PES loop: ARC could not resolve a model_chemistry for the requested level of "
             f"theory {level_of_theory!r}; every prior capture's model_chemistry will therefore "
             f"fail to match and nothing will be adopted from {from_t3_projects!r}.")
+    # Invert THIS run's map up front, refusing local transition states whose keys collide: a key
+    # shared by two local labels cannot be matched unambiguously, and picking either would be the
+    # wrong-saddle-point misattribution this structural matching exists to prevent.
+    local_label_by_key = dict()
+    ambiguous_local_keys = set()
+    for local_label, key in channel_key_by_ts_label.items():
+        if key in local_label_by_key:
+            ambiguous_local_keys.add(key)
+        local_label_by_key[key] = local_label
+    for key in ambiguous_local_keys:
+        _logger.warning(f'PES loop: several of this run\'s own transition states share the '
+                        f'structural channel key {key!r}; none of them can adopt prior QM '
+                        f'unambiguously.')
+        del local_label_by_key[key]
     adopted = dict()
     conflicted = set()
     for project_directory in from_t3_projects:
@@ -656,19 +679,33 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                     f"{manifest_model_chemistry!r} does not match the requested level of theory "
                     f"{level_of_theory!r} (normalized: {normalized_requested!r}).")
                 continue
+            # The capture's own VENDORED network copy is the authoritative structural record of
+            # what each of its transition states connects (verified.networks -- see
+            # t3.pdep.capture); parse each referenced network once and reduce its transition
+            # states to structural channel keys. A network copy that cannot be parsed yields no
+            # keys, so every record referencing it is refused below (logged per record).
+            capture_keys_by_network_id = dict()
+            for capture_network_id, network_entry in (verified.networks or dict()).items():
+                captured_path = (network_entry or dict()).get('captured_path')
+                if not captured_path:
+                    _logger.warning(
+                        f"PES loop: the capture at {root!r} records no vendored copy "
+                        f"('captured_path') for network {capture_network_id!r}; no prior QM can "
+                        f"be adopted from that network's records.")
+                    capture_keys_by_network_id[capture_network_id] = dict()
+                    continue
+                vendored_network_path = os.path.join(root, captured_path)
+                try:
+                    capture_keys_by_network_id[capture_network_id] = channel_keys_by_ts_label(
+                        parse_pdep_network_file(path=vendored_network_path))
+                except (OSError, ValueError) as e:
+                    _logger.warning(
+                        f"PES loop: could not parse the vendored network copy "
+                        f"{vendored_network_path!r} of the capture at {root!r} ({e}); no prior QM "
+                        f"can be adopted from that network's records.")
+                    capture_keys_by_network_id[capture_network_id] = dict()
             for record in verified.ts_records:
                 if record.status != ARTIFACT_STATUS_USABLE:
-                    continue
-                if not record.path_reaction_labels:
-                    # Refused EXPLICITLY, with its own log line, rather than left to fall through
-                    # the structural-match loop below (whose `candidate_labels and ...` guard would
-                    # also never match an empty tuple, but whose "matches none of this run's own
-                    # candidates" message would misdescribe the problem: the record carries no
-                    # structural evidence at all, so matching was never even attempted).
-                    _logger.info(
-                        f"PES loop: refusing prior QM for {record.network_ts_label!r} at "
-                        f"{manifest_path!r} -- it records no path_reaction_labels, so it cannot be "
-                        f"structurally matched to any of this run's own candidates.")
                     continue
                 if record.network_id != network_id:
                     # Never a gate -- see this function's own docstring: Arkane's network_id is
@@ -678,19 +715,23 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                     _logger.debug(
                         f"PES loop: matching prior QM at {manifest_path!r} for a different "
                         f"network_id ({record.network_id!r} vs this run's {network_id!r}) on "
-                        f"structural path_reaction_labels alone -- network_id is a log-only field, "
+                        f"the structural channel key alone -- network_id is a log-only field, "
                         f"never a gate (see this function's docstring).")
-                local_label = None
-                for candidate_label, candidate_labels in path_reaction_labels_by_ts_label.items():
-                    if candidate_labels and set(candidate_labels) == set(record.path_reaction_labels):
-                        local_label = candidate_label
-                        break
+                record_key = capture_keys_by_network_id.get(record.network_id, dict()).get(
+                    record.network_ts_label)
+                if record_key is None:
+                    _logger.info(
+                        f"PES loop: refusing prior QM for {record.network_ts_label!r} at "
+                        f"{manifest_path!r} -- its transition state has no unambiguous structural "
+                        f"channel identity in the capture's own vendored network copy, so it "
+                        f"cannot be matched to any of this run's own transition states.")
+                    continue
+                local_label = local_label_by_key.get(record_key)
                 if local_label is None:
                     _logger.info(
                         f"PES loop: refusing prior QM for {record.network_ts_label!r} at "
-                        f"{manifest_path!r} -- its path_reaction_labels "
-                        f"{record.path_reaction_labels!r} match none of this run's own "
-                        f"network-local candidates.")
+                        f"{manifest_path!r} -- its structural channel key {record_key!r} matches "
+                        f"none of this run's own transition states.")
                     continue
                 if local_label in conflicted:
                     _logger.info(
