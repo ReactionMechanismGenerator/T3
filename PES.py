@@ -94,6 +94,39 @@ def exit_code_for(status: str) -> int:
     return 1 if status == PES_LOOP_FAILED else 0
 
 
+def _resolve(path: str, directory: str) -> str:
+    """
+    Resolve one path from the input file against the input file's own directory.
+
+    Args:
+        path (str): A path as written in the input file, absolute or relative.
+        directory (str): The input file's directory.
+
+    Returns:
+        str: ``path`` if it is already absolute, otherwise its absolute form anchored at
+        ``directory``.
+    """
+    return path if os.path.isabs(path) else os.path.abspath(os.path.join(directory, path))
+
+
+def verbose_level(args) -> int:
+    """
+    The logging level the command-line verbosity flags ask for.
+
+    Args:
+        args: The parsed command-line arguments.
+
+    Returns:
+        int: ``10`` for ``-d/--debug``, ``30`` for ``-q/--quiet``, ``20`` otherwise -- the same
+        mapping ``T3.py`` uses.
+    """
+    if args.debug:
+        return 10
+    if args.quiet:
+        return 30
+    return 20
+
+
 def main():
     """
     The main PES executable function.
@@ -110,17 +143,19 @@ def main():
         else os.path.abspath(os.path.dirname(input_file))
 
     config = read_pes_input(input_file)
+    input_directory = os.path.dirname(input_file)
     # A relative network path is resolved against the input file's own directory here: left alone
     # it would only fail deep inside an Arkane run, long after the input was accepted.
     if not os.path.isabs(config.pes.network):
-        config.pes.network = os.path.abspath(
-            os.path.join(os.path.dirname(input_file), config.pes.network))
+        config.pes.network = _resolve(config.pes.network, input_directory)
+    # Every path in the input file is anchored the SAME way. A relative reuse path left unresolved
+    # does not fail loudly -- it silently adopts nothing (the prior project simply is not there
+    # from the loop's cwd), and the loop pays for it with a redundant round of real quantum
+    # chemistry.
+    config.reuse.from_t3_projects = [_resolve(path, input_directory)
+                                     for path in config.reuse.from_t3_projects]
 
-    verbose = 20
-    if args.debug:
-        verbose = 10
-    elif args.quiet:
-        verbose = 30
+    verbose = verbose_level(args)
 
     os.makedirs(project_directory, exist_ok=True)
     logger = Logger(project=os.path.basename(os.path.normpath(project_directory)),
