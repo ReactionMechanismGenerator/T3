@@ -699,3 +699,64 @@ class TestQMSurvivesTheRoundBoundary(object):
         run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert len(adopted_per_round) >= 2
         assert 'INJECTED' not in adopted_per_round[1]
+
+
+class TestSensitivityFloor(object):
+    """qm.min_delta_ln_k mirrors T3's in-run pdep_min_delta_ln_k: a below-floor (e.g. measured
+    zero) response never buys QM, and 'every remaining channel below the floor' is a measured
+    terminal outcome, not a fault."""
+
+    def test_a_below_floor_candidate_is_never_queued(self, tmp_path, monkeypatch, config):
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            return {'TS0': (0.0, 0.0), 'TS1': (-3.0e-5, 0.25)}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        queued = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            queued.extend(c.ts_label for c in candidates)
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert 'TS0' not in queued
+        assert 'TS1' in queued
+        reasons = {s.label: s.reason for record in result.rounds for s in record.skipped}
+        assert 'below the min_delta_ln_k floor' in reasons['reaction0']
+
+    def test_all_below_floor_at_round_0_is_no_candidates_not_failed(self, tmp_path, monkeypatch,
+                                                                    config):
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity',
+                            lambda **kwargs: {'TS0': (0.0, 0.0)})
+        runner_calls = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            runner_calls.append(candidates)
+            return frozenset(), frozenset()
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_NO_CANDIDATES
+        assert runner_calls == []
+        assert 'below the min_delta_ln_k floor' in result.rounds[0].skipped[0].reason
+
+    def test_all_below_floor_after_progress_is_converged(self, tmp_path, monkeypatch, config):
+        """Round 0 converges the above-floor channel; round 1's only remaining channel measures
+        below the floor -- a measured 'done', reported as convergence with the skip recorded."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            return {'TS0': (-3.0e-5, 0.25), 'TS1': (0.0, 0.0)}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_CONVERGED
+        assert [record.status for record in result.rounds] == ['continuing', PES_LOOP_CONVERGED]
+        assert sorted(result.rounds[0].queued_ts_labels) == ['TS0']

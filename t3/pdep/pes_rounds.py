@@ -118,7 +118,8 @@ def split_qm_candidates(network: PDepNetwork, computed_ts_labels: frozenset) -> 
 
 
 def attach_sensitivity_evidence(split: CandidateSplit,
-                                evidence_by_ts_label: dict) -> CandidateSplit:
+                                evidence_by_ts_label: dict,
+                                min_delta_ln_k: float = 0.0) -> CandidateSplit:
     """
     Stamp each candidate with the real sensitivity evidence this round's ME SA measured for it.
 
@@ -129,14 +130,26 @@ def attach_sensitivity_evidence(split: CandidateSplit,
     inventing a number instead would violate the standing constraint that no rate-determining
     parameter may be fabricated.
 
+    A candidate whose measured ``delta_ln_k`` is BELOW ``min_delta_ln_k`` is also skipped (with
+    the measured value in its reason): a response below the floor -- including a measured exact
+    zero -- does not justify the QM spend, and folding its coefficient into a capture manifest as
+    "the sensitivity evidence that justified selecting this transition state" would make that
+    sentence false. This mirrors T3's in-run selection, where ``t3.pdep.selector``'s
+    ``_bounded_cutoff`` floors at ``min_delta_ln_k / perturbation > 0`` and such a record is
+    definitionally unreachable. The floor applies under BOTH ``qm.scope`` values -- 'sensitive'
+    ranks and 'all' does not, but neither may queue below it.
+
     Args:
         split (CandidateSplit): The split to stamp, from ``split_qm_candidates``.
         evidence_by_ts_label (dict): Network-local TS label -> ``(coefficient, delta_ln_k)``,
             from ``t3.pdep.pes_sa.run_round_me_sensitivity``.
+        min_delta_ln_k (float, optional): The smallest measured ln(k) response that justifies
+            queueing (``config.qm.min_delta_ln_k``). ``0.0`` disables the floor.
 
     Returns:
         CandidateSplit: The same candidates in the same order, each carrying its evidence, minus
-        the ones with no evidence (appended to ``skipped``, each with its reason).
+        the ones with no evidence or with a response below the floor (appended to ``skipped``,
+        each with its reason).
     """
     candidates, skipped = [], list(split.skipped)
     for candidate in split.candidates:
@@ -151,6 +164,14 @@ def attach_sensitivity_evidence(split: CandidateSplit,
                        f'(t3.pdep.capture); not queueing it rather than inventing a number.'))
             continue
         coefficient, delta_ln_k = pair
+        if delta_ln_k < min_delta_ln_k:
+            skipped.append(SkippedChannel(
+                label=candidate.path_reaction.label,
+                reason=f"'{candidate.path_reaction.label}': transition state "
+                       f'{candidate.ts_label} measured a ln(k) response of {delta_ln_k:.3e}, '
+                       f'below the min_delta_ln_k floor ({min_delta_ln_k:.3e}); its leverage on '
+                       f'the network is too small to justify the QM spend.'))
+            continue
         candidates.append(replace(candidate, coefficient=coefficient, delta_ln_k=delta_ln_k))
     return CandidateSplit(candidates=tuple(candidates), skipped=tuple(skipped))
 

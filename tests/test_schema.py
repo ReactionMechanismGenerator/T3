@@ -1211,3 +1211,17 @@ class TestPESLoopConfig(object):
     def test_reuse_defaults_to_empty(self):
         config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']})
         assert config.reuse.from_t3_projects == []
+
+
+class TestPESQMSectionMinDeltaLnK(object):
+    """qm.min_delta_ln_k mirrors t3.sensitivity.pdep_min_delta_ln_k: same default, same bounds."""
+
+    def test_default_matches_t3s_in_run_floor(self):
+        assert PESQMSection().min_delta_ln_k == 1e-3
+
+    def test_bounds_are_exclusive(self):
+        with pytest.raises(ValidationError):
+            PESQMSection(min_delta_ln_k=0.0)
+        with pytest.raises(ValidationError):
+            PESQMSection(min_delta_ln_k=1.0)
+        assert PESQMSection(min_delta_ln_k=1e-6).min_delta_ln_k == 1e-6

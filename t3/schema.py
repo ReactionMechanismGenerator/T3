@@ -958,6 +958,12 @@ class PESQMSection(BaseModel):
     irc: bool = False
     scope: Literal['all', 'sensitive'] = 'sensitive'
     max_transition_states_per_round: Annotated[int, Field(gt=0, strict=True)] = 10
+    # The smallest measured ln(k) response that justifies spending QM on a transition state,
+    # mirroring T3's in-run ``t3.sensitivity.pdep_min_delta_ln_k`` (same default, same bounds).
+    # Applies under BOTH scopes: 'sensitive' ranks and 'all' does not, but neither may queue a
+    # transition state whose measured leverage is below this floor -- its capture manifest would
+    # then record a coefficient that never justified anything.
+    min_delta_ln_k: Annotated[float, Field(gt=0, lt=1)] = 1e-3
 
     @field_validator('opt_level', 'freq_level', 'sp_level', 'irc_level', 'scan_level')
     @classmethod

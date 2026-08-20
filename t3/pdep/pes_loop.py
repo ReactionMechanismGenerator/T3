@@ -72,9 +72,13 @@ _logger = logging.getLogger(__name__)
 
 # Status values for PESLoopResult.status / RoundRecord.status.
 #
-# - 'converged'      every barriered channel the network declares now has QM (round > 0).
+# - 'converged'      every barriered channel the network declares now has QM, or every channel
+#                     still lacking it measured a ln(k) response below qm.min_delta_ln_k -- a
+#                     measured "not worth the spend", recorded per channel in the round's skipped
+#                     entries (round > 0).
 # - 'no_candidates'  the very first round already had nothing to compute (round == 0): a network
-#                     that is barrierless end to end is not a loop that "converged" after doing
+#                     that is barrierless end to end, or whose every barriered channel measured a
+#                     response below the floor, is not a loop that "converged" after doing
 #                     work, it never had any to do.
 # - 'stalled'        a round ran the QM runner and it returned no newly-converged TS labels, and
 #                     ``config.termination.stop_when_no_new_ts`` says that is a reason to stop now
@@ -409,17 +413,37 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                 return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                      final_network_path=explored_network_path,
                                      final_diagram_path=diagram_path)
-            split = attach_sensitivity_evidence(split, evidence)
+            any_finite_evidence = any(candidate.ts_label in evidence
+                                      for candidate in split.candidates)
+            split = attach_sensitivity_evidence(split, evidence,
+                                                min_delta_ln_k=config.qm.min_delta_ln_k)
             if not split.candidates and not round0_has_adopted:
-                reason = (f'round {round_index}: the master-equation sensitivity analysis for '
-                          f'network {network.network_id!r} measured no finite sensitivity '
-                          f'evidence for any QM candidate, so nothing can be queued (see the '
-                          f"round record's skipped entries for the per-candidate reasons).")
+                if not any_finite_evidence:
+                    # The SA ran but measured nothing finite for ANY candidate -- an operational
+                    # fault in the evidence pipeline, not a legitimate "nothing worth computing".
+                    reason = (f'round {round_index}: the master-equation sensitivity analysis for '
+                              f'network {network.network_id!r} measured no finite sensitivity '
+                              f'evidence for any QM candidate, so nothing can be queued (see the '
+                              f"round record's skipped entries for the per-candidate reasons).")
+                    rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
+                                              diagram_path=diagram_path, queued_ts_labels=(),
+                                              skipped=split.skipped, status=PES_LOOP_FAILED,
+                                              reason=reason))
+                    return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED,
+                                         reason=reason,
+                                         final_network_path=explored_network_path,
+                                         final_diagram_path=diagram_path)
+                # Every remaining candidate measured a real response BELOW the floor: a measured
+                # "nothing here is worth the QM spend", which is the same honest terminal outcome
+                # as having no candidates at all -- each skip carries its measured value in the
+                # round record. Never 'failed' (nothing malfunctioned) and never a queue of
+                # below-floor transition states (their manifests would record a coefficient that
+                # justified nothing).
+                status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
                 rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
                                           diagram_path=diagram_path, queued_ts_labels=(),
-                                          skipped=split.skipped, status=PES_LOOP_FAILED,
-                                          reason=reason))
-                return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+                                          skipped=split.skipped, status=status))
+                return PESLoopResult(rounds=tuple(rounds), status=status, reason='',
                                      final_network_path=explored_network_path,
                                      final_diagram_path=diagram_path)
 

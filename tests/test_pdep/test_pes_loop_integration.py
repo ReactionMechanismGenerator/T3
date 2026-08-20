@@ -355,19 +355,19 @@ def _fixture_explorer(monkeypatch, project_directory, network_id):
 
 
 def test_real_loop_real_capture_carries_cumulative_qm_across_rounds(tmp_path, monkeypatch):
-    """The reviewer's exact scenario, against the REAL capture_ts_artifacts: round 0 adopts TS1
-    from a real prior capture and converges TS2; round 1 converges TS3. Before this fix round the
-    loop could not complete a single such round (defect 1), and when it did complete, round N+1's
-    hybrid dropped round N's QM back to Arrhenius lines (defect 3)."""
-    prior_project_dir = os.path.join(str(tmp_path), 'prior_project')
-    _build_prior_capture(prior_project_dir, ts_labels=('TS1',))
+    """Against the REAL capture_ts_artifacts: round 0 queues the two above-floor channels and
+    converges TS1's; round 1 converges TS2's; TS3's channel measures a ln(k) response of exactly
+    0.0 in the live ME SA -- below qm.min_delta_ln_k -- so it is never queued, and the loop
+    reports a measured convergence at round 2 with that skip on the record. Before this fix round
+    the loop could not complete a single such round (defect 1), and when it did complete, round
+    N+1's hybrid dropped round N's QM back to Arrhenius lines (defect 3)."""
     project_directory = os.path.join(str(tmp_path), 'loop_project')
     os.makedirs(project_directory)
     seed_path = os.path.join(str(tmp_path), 'network0_full.py')
     shutil.copyfile(_FIXTURE_NETWORK_PATH, seed_path)
 
     _fixture_explorer(monkeypatch, project_directory, 'network0_full')
-    _ArtifactWritingFakeARC.converge_plan = ({'TS2'}, {'TS3'})
+    _ArtifactWritingFakeARC.converge_plan = ({'TS1'}, {'TS2'})
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
     monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
@@ -376,30 +376,35 @@ def test_real_loop_real_capture_carries_cumulative_qm_across_rounds(tmp_path, mo
         pes={'network': seed_path, 'source': ['O-2(13598)', 'CO2(11)'],
              'bath_gas': {'Ar': 1.0}, 'method': 'MSC'},
         termination={'max_rounds': 4},
-        reuse={'from_t3_projects': [prior_project_dir]},
     )
     result = run_pes_loop(config, project_directory=project_directory, qm_runner=arc_qm_runner)
 
     assert result.status == 'converged', f'{result.status}: {result.reason}'
     assert [record.status for record in result.rounds] == ['continuing', 'continuing', 'converged']
-    assert sorted(result.rounds[0].queued_ts_labels) == ['TS2', 'TS3']
-    assert sorted(result.rounds[1].queued_ts_labels) == ['TS3']
+    assert sorted(result.rounds[0].queued_ts_labels) == ['TS1', 'TS2']
+    assert sorted(result.rounds[1].queued_ts_labels) == ['TS2']
+    # TS3's channel was gated by its own measured (zero) response, every round, on the record.
+    for record in result.rounds:
+        floor_skips = [s for s in record.skipped if 'below the min_delta_ln_k floor' in s.reason]
+        assert [s.label for s in floor_skips] == ['reaction3']
 
     round0_hybrid = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
     round1_hybrid = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
-    # Round 0: the adopted TS1 and the freshly converged TS2 are QM; TS3 is still ILT.
-    assert _hybrid_qm_ilt(round0_hybrid) == (['TS1', 'TS2'], ['TS3'])
+    assert _hybrid_qm_ilt(round0_hybrid) == (['TS1'], ['TS2', 'TS3'])
     # Round 1 -- THE defect-3 pin: the hybrid carries the CUMULATIVE QM, not just this round's.
-    # The defective loop wrote QM=['TS3'], ILT=['TS1', 'TS2'] here.
-    assert _hybrid_qm_ilt(round1_hybrid) == (['TS1', 'TS2', 'TS3'], [])
+    # The defective loop dropped round 0's QM back to an Arrhenius line here.
+    assert _hybrid_qm_ilt(round1_hybrid) == (['TS1', 'TS2'], ['TS3'])
 
     # Both rounds' captures are REAL and re-verify cleanly, sensitivity evidence included --
     # exactly what defect 1 made impossible.
+    verified_artifacts = 0
     for round_index in (0, 1):
         verified = verify_capture(round_paths(project_directory, round_index).capture)
         for record in verified.ts_records:
             if record.artifact_path is not None:
+                verified_artifacts += 1
                 assert record.coefficient is not None and record.delta_ln_k is not None
+    assert verified_artifacts == 2
 
 
 def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path, monkeypatch):

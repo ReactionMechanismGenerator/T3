@@ -153,3 +153,26 @@ class TestAttachSensitivityEvidence(object):
         paths = round_paths('/proj', 1)
         assert paths.sa == os.path.join('/proj', 'round_1', 'SA')
         assert paths.sa.startswith(paths.root + os.sep)
+
+    def test_a_measured_response_below_the_floor_is_skipped_with_its_value(self):
+        """A measured zero (or any below-floor response) is real data saying 'not worth the
+        spend' -- the candidate is skipped with the measured value in its reason, never queued
+        and never defaulted past the floor."""
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO'),
+                            _rxn('r2', 'family: 1,3_Insertion_CO2')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        stamped = attach_sensitivity_evidence(
+            split, {'TS_r1': (0.0, 0.0), 'TS_r2': (-2.0e-5, 0.17)}, min_delta_ln_k=1e-3)
+        assert [c.ts_label for c in stamped.candidates] == ['TS_r2']
+        assert len(stamped.skipped) == 1
+        assert stamped.skipped[0].label == 'r1'
+        assert 'below the min_delta_ln_k floor' in stamped.skipped[0].reason
+        assert '0.000e+00' in stamped.skipped[0].reason
+
+    def test_the_floor_defaults_off_and_an_at_floor_response_passes(self):
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        assert attach_sensitivity_evidence(split, {'TS_r1': (0.0, 0.0)}).candidates
+        at_floor = attach_sensitivity_evidence(split, {'TS_r1': (1.2e-7, 1e-3)},
+                                               min_delta_ln_k=1e-3)
+        assert [c.ts_label for c in at_floor.candidates] == ['TS_r1']
