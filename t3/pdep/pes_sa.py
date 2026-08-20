@@ -32,9 +32,10 @@ own entry point), exactly as T3's in-iteration ME SA does.
 """
 
 import logging
+import math
 import os
 
-from t3.pdep.selector import E0_PERTURBATION_J_PER_MOL, STRUCTURES_KEY, TS_ENTRY_PREFIX, _is_finite
+from t3.pdep.selector import E0_PERTURBATION_J_PER_MOL, STRUCTURES_KEY, TS_ENTRY_PREFIX
 from t3.pdep.yaml_safe import read_sa_yaml_file
 from t3.runners.rmg_runner import run_arkane_job
 from t3.utils.writer import write_arkane_network_input_file
@@ -44,6 +45,24 @@ _logger = logging.getLogger(__name__)
 # Where Arkane writes the ME SA coefficients, relative to the SA run's output directory -- the
 # same artifact ``run_arkane_job`` itself requires (its ``required_artifact`` default).
 SA_COEFFICIENTS_RELPATH = os.path.join('sensitivity', 'sa_coefficients.yml')
+
+
+def _is_finite(coefficient) -> bool:
+    """
+    Whether ``coefficient`` is a usable finite real number.
+
+    Mirrors ``t3.pdep.selector._is_finite`` (kept private there) rather than importing it:
+    ``bool`` is deliberately excluded even though it is an ``int`` subtype, so a stray
+    ``True``/``False`` SA row is never silently read as ``1``/``0``.
+
+    Args:
+        coefficient: The value to check.
+
+    Returns:
+        bool: Whether the value is a finite, non-bool real number.
+    """
+    return isinstance(coefficient, (int, float)) and not isinstance(coefficient, bool) \
+        and math.isfinite(coefficient)
 
 
 def ts_sensitivity_evidence(sa_dict: dict,

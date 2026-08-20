@@ -897,8 +897,8 @@ class TestArcQmRunnerWithNothingQueued(object):
     the previous behaviour crashed a fully-adopted round 0 out of run_pes_loop -- and go straight
     to vendoring the adopted artifacts and writing the hybrid."""
 
-    def test_all_adopted_round_skips_arc_and_capture_and_still_writes_the_hybrid(self, tmp_path,
-                                                                                 monkeypatch):
+    def test_all_adopted_round_skips_arc_and_capture_and_still_calls_the_hybrid_writer(
+            self, tmp_path, monkeypatch):
         # A REAL prior capture (built by capture_ts_artifacts itself), adopted through the real
         # adopt_prior_qm, so the vendoring below and _adopted_energy_settings both run against the
         # exact artifact and manifest formats production writes -- no hand-rolled shapes.

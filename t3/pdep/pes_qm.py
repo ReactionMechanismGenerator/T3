@@ -39,7 +39,9 @@ from arc.level import Level, assign_frequency_scale_factor
 from arc.main import ARC
 from arc.statmech.arkane import get_arkane_model_chemistry
 
-from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, capture_ts_artifacts, verify_capture
+from t3.pdep.capture import (CAPTURE_MANIFEST_FILE_NAME,
+                             SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS,
+                             capture_ts_artifacts, verify_capture)
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import (QMEnergySettings, _read_qm_artifact, _vendor_qm_artifacts,
@@ -444,6 +446,10 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
             # (rightly) refuses the staged capture.
             sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)
                                for record in join_records},
+            # This loop's evidence is an ungated max over ALL direction keys (t3.pdep.pes_sa),
+            # NOT T3's in-run observable-gated convention -- mark the manifest so the two can
+            # never be silently compared on the shared coefficient/delta_ln_k field names.
+            sensitivity_aggregation=SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS,
         )
     else:
         # Defect-2 fix: a round with nothing to queue (every candidate satisfied by adoption, or

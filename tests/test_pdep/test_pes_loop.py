@@ -631,27 +631,32 @@ class TestRoundMeSensitivityWiring(object):
     def test_scope_sensitive_ranks_by_the_sas_own_evidence_not_file_order(self, tmp_path,
                                                                           monkeypatch):
         """Before this fix, scope='sensitive' degraded to file order with a warning because the
-        standalone loop had no SA to rank by. It has one now, so the budget must go to the most
-        sensitive transition state, not the first one in the file."""
+        standalone loop had no SA to rank by. It has one now: with four candidates and a budget
+        of two, the runner must receive the two largest-|coefficient| ones, ordered by descending
+        |coefficient| -- a full ranking, not a two-candidate argmax, and nothing like file order
+        (which would have offered TS0 then TS1)."""
         config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
                                     'bath_gas': {'He': 1.0}},
-                               qm={'scope': 'sensitive', 'max_transition_states_per_round': 1},
+                               qm={'scope': 'sensitive', 'max_transition_states_per_round': 2},
                                termination={'max_rounds': 1, 'stop_when_no_new_ts': False})
-        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+        _stub_explorer(monkeypatch, tmp_path,
+                       families=['1,2_Insertion_CO'] * 4)
 
         def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
-            return {'TS0': (1.0e-6, 0.008), 'TS1': (-9.0e-5, 0.75)}
+            # Signs deliberately mixed: the ranking is by |coefficient|, not by signed value.
+            return {'TS0': (1.0e-6, 0.008), 'TS1': (-9.0e-5, 0.75),
+                    'TS2': (5.0e-5, 0.42), 'TS3': (-2.0e-6, 0.017)}
 
         monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
-        queued = []
+        offered = []
 
         def _runner(candidates, paths, cfg, network_id, adopted=None):
-            queued.extend(c.ts_label for c in candidates)
+            offered.append(tuple(c.ts_label for c in candidates))
             _touch_hybrid_file(paths, network_id)
             return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
         run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
-        assert queued == ['TS1']
+        assert offered == [('TS1', 'TS2')]
 
     def test_diagram_only_runs_no_sa_at_all(self, tmp_path, monkeypatch, config):
         """qm_runner=None spends no QM and captures nothing, so there is no evidence to justify
@@ -669,11 +674,12 @@ class TestRoundMeSensitivityWiring(object):
         assert sa_calls == []
 
 
-class TestQMSurvivesTheRoundBoundary(object):
-    """Defect 3: a TS converged in round N must reach round N+1's qm_runner as an adopted
-    artifact, so every round's hybrid carries the CUMULATIVE QM -- observed on this branch as
-    round 0 writing QM=[TS1,TS2]/ILT=[TS3] and round 1 writing QM=[TS3]/ILT=[TS1,TS2], with the
-    round-0 QM silently reverting to Arrhenius lines."""
+class TestCumulativeAdoptedPlumbing(object):
+    """Defect 3's LOOP-SIDE plumbing, pinned against runner doubles: what run_pes_loop passes as
+    `adopted` each round, and that a runner cannot corrupt the loop's own record. Whether the
+    artifacts actually survive into a later round's hybrid is deliberately NOT claimed here --
+    that end-to-end fact is pinned against the real capture and hybrid writer in
+    test_pes_loop_integration.py."""
 
     def test_every_round_receives_the_cumulative_artifacts_as_adopted(self, tmp_path, monkeypatch):
         """Three TSs: TS0 adopted from a prior project, TS1 converges in round 0, TS2 in round 1.

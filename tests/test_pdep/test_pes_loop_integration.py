@@ -137,7 +137,7 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
     write_hybrid_calls = []
 
     def _fake_capture_ts_artifacts(*, join_records, arc_project_directory, capture_dir, networks,
-                                   sensitivity_by_ts):
+                                   sensitivity_by_ts, sensitivity_aggregation):
         # Defect 1: the real capture_ts_artifacts refuses (via its verify_capture self-check) any
         # captured artifact whose join record carries no finite sensitivity evidence -- so even
         # this double must insist the runner actually passed it, keyed and finite, or the pairing
@@ -503,6 +503,9 @@ def test_real_loop_real_capture_keeps_qm_on_the_right_channel_across_a_renumber(
     verified_artifacts = 0
     for round_index in (0, 1):
         verified = verify_capture(round_paths(project_directory, round_index).capture)
+        # Loop-written manifests carry the aggregation marker, so their ungated all-directions
+        # evidence can never be silently compared against T3's in-run (observable-gated) values.
+        assert verified.sensitivity_aggregation == 'all_directions_max_abs'
         for record in verified.ts_records:
             if record.artifact_path is not None:
                 verified_artifacts += 1

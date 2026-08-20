@@ -121,6 +121,15 @@ def captured_qm_artifact_path(capture_dir: str, arc_ts_label: str) -> str:
     return os.path.join(capture_dir, _CAPTURE_QM_SUBDIR, f'{arc_ts_label}.py')
 
 
+# The value the standalone PES loop records under a manifest's 'sensitivity_aggregation' key:
+# its per-TS evidence is the maximum-|coefficient| row across EVERY network reaction direction
+# key and every condition of the Arkane ME SA output, ungated (see t3.pdep.pes_sa). T3's in-run
+# path records nothing under this key: its evidence is taken from ONE observable-selected
+# direction key and has already passed the selector's relative/absolute gates. The two are NOT
+# comparable numbers, and this marker is what keeps a loop-written manifest from ever being
+# silently compared against a T3-written one on the same field name.
+SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS = 'all_directions_max_abs'
+
 # Sibling-of-capture_dir naming convention for the atomic-swap machinery in
 # _capture_ts_artifacts_locked and its crash-recovery counterpart, _recover_capture_swap_state.
 # Both live in the same parent_dir as capture_dir itself (never inside it), so a fresh capture's
@@ -203,6 +212,12 @@ class VerifyResult:
         energy_settings (dict, optional): The manifest's AUTHORITATIVE ``'energy_settings'`` block
                                           (``None`` only for a verified zero-artifact capture),
                                           surfaced for the same reason as ``networks``.
+        sensitivity_aggregation (str, optional): The manifest's ``'sensitivity_aggregation'``
+                                                 marker, or ``None`` for a manifest written under
+                                                 T3's in-run convention (see
+                                                 ``capture_ts_artifacts``). Surfaced so a consumer
+                                                 comparing sensitivity evidence across captures can
+                                                 refuse to compare incompatible aggregations.
         ts_records (tuple): One ``TSArtifactRecord`` per transition-state manifest entry, built
                             from EXACTLY the fields this function itself just validated (including
                             the status/captured_artifact_path consistency check below) -- never a
@@ -223,6 +238,7 @@ class VerifyResult:
     networks: dict | None = None
     energy_settings: dict | None = None
     ts_records: tuple = ()
+    sensitivity_aggregation: str | None = None
 
 
 def capture_ts_artifacts(join_records: list,
@@ -231,6 +247,7 @@ def capture_ts_artifacts(join_records: list,
                          networks: dict,
                          sensitivity_by_ts: dict | None = None,
                          supersede: bool = False,
+                         sensitivity_aggregation: str | None = None,
                          ) -> CaptureResult:
     """
     Discover, capture and freeze every network transition state's QM statmech artifact, in one
@@ -303,6 +320,20 @@ def capture_ts_artifacts(join_records: list,
                                    inferred from context. Has no effect when the existing
                                    ``capture_dir`` is empty, unowned-but-refused earlier, or itself
                                    fails ``verify_capture`` (nothing valid to protect in that case).
+        sensitivity_aggregation (str, optional): How the per-transition-state
+                                                ``coefficient``/``delta_ln_k`` evidence in
+                                                ``sensitivity_by_ts`` was aggregated, recorded
+                                                verbatim under the manifest's
+                                                ``'sensitivity_aggregation'`` key when given.
+                                                ``None`` (the default, and T3's in-run
+                                                convention) records nothing: that evidence comes
+                                                from one observable-selected direction key and has
+                                                passed the selector's gates. The standalone PES
+                                                loop passes
+                                                ``SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS``
+                                                -- an ungated max over ALL direction keys -- whose
+                                                values are NOT comparable to the in-run ones; the
+                                                marker is what prevents a silent comparison.
 
     Raises:
         RuntimeError: If ``capture_dir``'s interprocess lock is already held by another (live, or
@@ -347,6 +378,7 @@ def capture_ts_artifacts(join_records: list,
             networks=networks,
             sensitivity_by_ts=sensitivity_by_ts,
             supersede=supersede,
+            sensitivity_aggregation=sensitivity_aggregation,
         )
     finally:
         _release_capture_lock(lock_path)
@@ -358,6 +390,7 @@ def _capture_ts_artifacts_locked(join_records: list,
                                  networks: dict,
                                  sensitivity_by_ts: dict | None,
                                  supersede: bool,
+                                 sensitivity_aggregation: str | None,
                                  ) -> CaptureResult:
     """
     The body of ``capture_ts_artifacts``, run only once the caller already holds ``capture_dir``'s
@@ -638,7 +671,8 @@ def _capture_ts_artifacts_locked(join_records: list,
 
         _write_manifest(capture_dir=staging_dir, arc_project_directory=arc_project_directory,
                         manifest_entries=manifest_entries, provenance_entries=provenance_entries,
-                        energy_settings=energy_settings, networks=manifest_networks)
+                        energy_settings=energy_settings, networks=manifest_networks,
+                        sensitivity_aggregation=sensitivity_aggregation)
 
         # Self-check the fully staged capture with the same verifier a downstream consumer would
         # use, BEFORE it is ever swapped into capture_dir's place. This is the natural post-write
@@ -875,7 +909,8 @@ def _manifest_entry(record: TSArtifactRecord, source_hashes: dict | None, captur
 
 def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entries: list,
                     provenance_entries: list | None = None, energy_settings: dict | None = None,
-                    networks: dict | None = None) -> str:
+                    networks: dict | None = None,
+                    sensitivity_aggregation: str | None = None) -> str:
     """
     Write the capture manifest atomically: stage it under a temp name inside ``capture_dir``, then
     ``os.replace`` it onto ``CAPTURE_MANIFEST_FILE_NAME``, so a write failure partway through (e.g.
@@ -932,6 +967,14 @@ def _write_manifest(capture_dir: str, arc_project_directory: str, manifest_entri
         # rely on for each network's vendored source file and frozen ME method.
         'networks': networks or dict(),
     }
+    if sensitivity_aggregation is not None:
+        # How the per-TS coefficient/delta_ln_k evidence in 'transition_states' was aggregated,
+        # when it was NOT T3's in-run convention (one observable-selected, threshold-gated
+        # direction key -- the unmarked default). A manifest carrying
+        # SENSITIVITY_AGGREGATION_ALL_DIRECTIONS_MAX_ABS holds ungated max-|coefficient| values
+        # over ALL direction keys (the standalone PES loop's convention); the two conventions'
+        # admissible ranges are incompatible and must never be compared on the shared field name.
+        content['sensitivity_aggregation'] = sensitivity_aggregation
 
     fd, staged_path = tempfile.mkstemp(prefix='.capture-manifest-', dir=capture_dir)
     os.close(fd)
@@ -1662,7 +1705,8 @@ def verify_capture(capture_dir: str) -> VerifyResult:
     return VerifyResult(capture_dir=capture_dir, manifest_path=manifest_path, record_count=record_count,
                         captured_artifact_count=captured_artifact_count,
                         networks=networks, energy_settings=content.get('energy_settings'),
-                        ts_records=tuple(ts_records))
+                        ts_records=tuple(ts_records),
+                        sensitivity_aggregation=content.get('sensitivity_aggregation'))
 
 
 def _verify_one_captured_file(capture_dir: str, relpath: str, expected_sha256: str | None, ts_label) -> None:
