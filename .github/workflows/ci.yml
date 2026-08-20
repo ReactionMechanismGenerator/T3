@@ -10,9 +10,14 @@ on:
   schedule:
     - cron: '0 0 * * *'
 
+# The group is event-aware on purpose: with a ref-only group, the nightly `schedule` run and a
+# push to `main` share a group (both are refs/heads/main) and cancel each other, which is what
+# killed several nightly runs mid-flight (one at 2 h 25 m). cancel-in-progress is kept for what it
+# is actually for -- a superseded push or PR update on the same ref -- and disabled for the
+# scheduled run, which has nothing to supersede.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   lint:
