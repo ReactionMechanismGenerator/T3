@@ -6,13 +6,20 @@ t3 tests test_rmg_runner module
 """
 
 import os
+import shutil
+import signal
 import subprocess
 import time
 
 import pytest
 
 from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH
-from t3.runners.rmg_runner import rmg_job_converged, run_arkane_job, write_submit_script
+from t3.runners import rmg_runner
+from t3.runners.rmg_runner import (_kill_process_group,
+                                   rmg_job_converged,
+                                   run_arkane_job,
+                                   run_rmg_incore,
+                                   write_submit_script)
 
 
 class TestWriteSubmitScript(object):
@@ -411,3 +418,144 @@ def teardown_module():
     for file_path in file_paths:
         if os.path.isfile(file_path):
             os.remove(file_path)
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Whether a process with the given PID currently exists.
+
+    Args:
+        pid (int): The PID to check.
+
+    Returns:
+        bool: Whether the process exists.
+    """
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The process exists but is not signalable by this user. That is alive, not dead --
+        # reporting it dead here would let _wait_for_death() succeed against a running process,
+        # which is the one way these tests could pass while the bug they guard is present.
+        pass
+    return True
+
+
+def _wait_for_death(pid: int, timeout: float = 20.0) -> bool:
+    """Wait for a PID to disappear.
+
+    Args:
+        pid (int): The PID to wait for.
+        timeout (float, optional): Max seconds to wait.
+
+    Returns:
+        bool: Whether the process is gone.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not _pid_is_alive(pid):
+            return True
+        time.sleep(0.1)
+    return not _pid_is_alive(pid)
+
+
+def _wait_for_pid_file(pid_file: str, timeout: float = 20.0) -> int:
+    """Wait for a spawned grandchild to write its PID to a file, and return that PID.
+
+    Args:
+        pid_file (str): The path of the file the grandchild writes its PID into.
+        timeout (float, optional): Max seconds to wait.
+
+    Returns:
+        int: The grandchild PID.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if os.path.isfile(pid_file):
+            with open(pid_file) as f:
+                content = f.read().strip()
+            if content.isdigit():
+                return int(content)
+        time.sleep(0.05)
+    raise AssertionError(f'The grandchild process never wrote its PID to {pid_file}')
+
+
+# A shell one-liner that backgrounds a long-lived grandchild, records its PID, and then blocks.
+# This mimics the RMG incore command shape (bash -> micromamba run -> python -> tee), where the
+# process that must be killed is not the direct child of the runner.
+_GRANDCHILD_SCRIPT = 'sleep 600 & echo $! > "{pid_file}"; wait'
+
+
+@pytest.mark.skipif(os.name != 'posix' or shutil.which('bash') is None,
+                    reason='needs POSIX process groups, signals and bash')
+class TestKillProcessGroup(object):
+    """Test that a timed-out RMG run is killed rather than orphaned."""
+
+    def test_kill_process_group_kills_the_grandchild(self, tmp_path):
+        """The whole process group dies, not just the direct child.
+
+        Killing only the direct child (the old ``subprocess.run`` behavior) leaves the real RMG
+        process running, which is what showed up in CI logs as
+        ``Terminate orphan process: pid (20994) (python3.14)``.
+        """
+        pid_file = str(tmp_path / 'grandchild.pid')
+        process = subprocess.Popen(_GRANDCHILD_SCRIPT.format(pid_file=pid_file),
+                                   shell=True, executable='/bin/bash', start_new_session=True)
+        try:
+            grandchild_pid = _wait_for_pid_file(pid_file)
+            assert _pid_is_alive(grandchild_pid)
+            _kill_process_group(process)
+            assert _wait_for_death(process.pid), 'the direct child survived'
+            assert _wait_for_death(grandchild_pid), 'the grandchild was orphaned instead of killed'
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+    def test_process_group_is_alive_tracks_the_group_not_the_child(self):
+        """The SIGKILL guard reports a group alive while any member remains, and dead after.
+
+        ``_kill_process_group()`` escalates to SIGKILL only when this returns True, so that it
+        never signals a PGID that has already been recycled. It deliberately probes the whole
+        group rather than the direct child: the child is a shell wrapper and can exit while the
+        process that matters is still running, which is the orphan this module exists to prevent.
+        """
+        process = subprocess.Popen('sleep 600', shell=True, executable='/bin/bash',
+                                   start_new_session=True)
+        pgid = os.getpgid(process.pid)
+        try:
+            assert rmg_runner._process_group_is_alive(pgid)
+        finally:
+            os.killpg(pgid, signal.SIGKILL)
+            process.wait()
+        assert not rmg_runner._process_group_is_alive(pgid), 'an empty group reported alive'
+
+    def test_run_rmg_incore_timeout_kills_the_grandchild(self, tmp_path, monkeypatch):
+        """``run_rmg_incore()``'s timeout path kills the whole process tree it spawned.
+
+        The command is replaced with a stand-in that backgrounds a grandchild, but every
+        ``Popen`` keyword argument the production code passes is preserved, so this exercises the
+        real timeout handling rather than a re-implementation of it.
+        """
+        pid_file = str(tmp_path / 'grandchild.pid')
+        recorded_kwargs, spawned = {}, []
+        real_popen = subprocess.Popen
+
+        def fake_popen(cmd, **kwargs):
+            recorded_kwargs.update(kwargs)
+            process = real_popen(_GRANDCHILD_SCRIPT.format(pid_file=pid_file), **kwargs)
+            spawned.append(process)
+            return process
+
+        monkeypatch.setattr(subprocess, 'Popen', fake_popen)
+        # '00:00:00:02' is a 2 second walltime, so the timeout fires while the grandchild lives.
+        exception_raised = run_rmg_incore(rmg_input_file_path=str(tmp_path / 'input.py'),
+                                          walltime='00:00:00:02')
+        monkeypatch.undo()
+
+        assert exception_raised is True
+        assert recorded_kwargs.get('start_new_session') is True, \
+            'the child must lead its own process group for os.killpg() to reach the whole tree'
+        grandchild_pid = _wait_for_pid_file(pid_file)
+        assert _wait_for_death(spawned[0].pid), 'the direct child survived the timeout'
+        assert _wait_for_death(grandchild_pid), 'the grandchild was orphaned instead of killed'

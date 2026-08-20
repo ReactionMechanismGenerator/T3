@@ -3,6 +3,7 @@ A "keep alive" runner tool for RMG on a server.
 Should be executed locally on the head node using the t3 environment.
 """
 
+import contextlib
 import datetime
 import logging
 import math
@@ -169,8 +170,65 @@ def rmg_job_converged(project_directory: str) -> tuple[bool, str | None]:
 
 
 _DEFAULT_RMG_TIMEOUT_S = 6 * 3600  # 6 hours
+_KILL_GRACE_PERIOD_S = 10  # seconds to wait after SIGTERM before sending SIGKILL
 
 logger = logging.getLogger(__name__)
+
+
+def _kill_process_group(process: 'subprocess.Popen') -> None:
+    """Kill a process and every descendant it spawned.
+
+    The RMG incore command is a shell pipeline (``bash`` -> ``micromamba run`` -> ``python`` ->
+    ``tee``), so killing only the direct child leaves the actual RMG process orphaned and still
+    running. The child is started with ``start_new_session=True``, which makes it the leader of
+    its own process group, so signalling that group reaches the whole tree.
+
+    Args:
+        process (subprocess.Popen): The process to kill, started with ``start_new_session=True``.
+    """
+    try:
+        pgid = os.getpgid(process.pid)
+    except ProcessLookupError:
+        # The child is already gone. Reap it anyway: without a wait() it stays a zombie until
+        # the Popen object is collected, and there is nothing left to signal.
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=_KILL_GRACE_PERIOD_S)
+        return
+    except PermissionError:
+        return
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pgid, signal.SIGTERM)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        # The grace period expiring is the normal path to SIGKILL below, not an error.
+        process.wait(timeout=_KILL_GRACE_PERIOD_S)
+    if _process_group_is_alive(pgid):
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(pgid, signal.SIGKILL)
+
+
+def _process_group_is_alive(pgid: int) -> bool:
+    """Whether any process remains in the given process group.
+
+    Signal 0 performs the permission and existence checks without delivering anything. This is
+    checked against the whole *group* rather than against the direct child, because the child is
+    a shell wrapper: it can exit while the RMG process it spawned is still running, which is the
+    orphan this module exists to prevent. Escalating to ``SIGKILL`` unconditionally would instead
+    risk signalling an unrelated group, should the PGID have been recycled in the meantime.
+
+    Args:
+        pgid (int): The process group id to probe.
+
+    Returns:
+        bool: Whether the group still has at least one member.
+    """
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The group exists but is not ours to signal -- alive, and SIGKILL will fail harmlessly.
+        return True
+    return True
 
 
 def _parse_walltime_to_seconds(walltime: str) -> int:
@@ -221,15 +279,20 @@ else
     echo "Micromamba/Mamba/Conda required" >&2
     exit 1
 fi' '''
+    process = subprocess.Popen(shell_script, shell=True, executable='/bin/bash',
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               start_new_session=True)
     try:
-        result = subprocess.run(shell_script, shell=True, executable='/bin/bash',
-                                capture_output=True, text=True, timeout=timeout_s)
-        stderr_text = result.stderr or ''
+        _, stderr_text = process.communicate(timeout=timeout_s)
+        stderr_text = stderr_text or ''
     except subprocess.TimeoutExpired:
+        _kill_process_group(process)
+        with contextlib.suppress(Exception):
+            process.communicate(timeout=_KILL_GRACE_PERIOD_S)
         logger.error(f'RMG incore timed out after {timeout_s}s')
         return True
-    if result.returncode != 0:
-        logger.error(f'RMG incore exited with code {result.returncode}')
+    if process.returncode != 0:
+        logger.error(f'RMG incore exited with code {process.returncode}')
         return True
     if 'RMG threw an exception and did not converge.' in stderr_text:
         return True
