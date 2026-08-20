@@ -127,7 +127,10 @@ def test_select_pdep_network_matches_t3_in_run_decision(tmp_path, monkeypatch):
     run on the same inputs -- not merely with select_from_sa_dict() called directly (that would
     only prove api.py calls the core function, not that it produces the same decision T3's actual
     in-run path produces for a live run, which is the guarantee this module exists to provide)."""
-    t3 = _build_t3(tmp_path)
+    # use_cache=False deliberately: the other ~100 callers of build_t3() share a memoised parse of
+    # chem_annotated.yaml, so this parity test is kept on the real end-to-end parse, ensuring at
+    # least one test still exercises the actual Cantera model loading path.
+    t3 = _build_t3(tmp_path, use_cache=False)
     pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
     sa_dict_value = _build_sa_dict(t3)
     sa_path = _candidate_sa_path(t3, method='CSE')

@@ -16,7 +16,9 @@ apart and stop actually testing the same thing.
 Not itself a test module (no ``test_*`` functions), so pytest does not collect it directly.
 """
 
+import copy
 import os
+import shutil
 
 from t3.chem import T3Reaction
 from t3.common import TEST_DATA_BASE_PATH
@@ -50,15 +52,41 @@ TS2_COEFFICIENT = 0.05
 TS1_COEFFICIENT = 0.04
 
 
-def build_t3(tmp_path):
+# The parsed model, memoised across ``build_t3()`` calls. Parsing the 1.55 MB chem_annotated.yaml
+# and building its 1461 reactions takes ~30 s and is the single dominant cost of the pdep test
+# suite (~100 calls, ~50 min); the fixture tree is byte-identical on every call, so the parse is
+# done once and each caller is handed a deepcopy (~0.06 s). Keyed on the size and mtime of the
+# two fixture files that determine the result, so editing a fixture invalidates the cache.
+_MODEL_CACHE: dict[tuple, tuple[list, list]] = {}
+
+
+def _fixture_model_stamp() -> tuple:
+    """Identify the fixture files whose content determines the parsed model.
+
+    Returns:
+        tuple: (path, size, mtime) triplets for the Cantera model and the species dictionary.
+    """
+    paths = (os.path.join(FIXTURE_ITERATION_1, 'RMG', 'cantera_from_ck', 'chem_annotated.yaml'),
+             os.path.join(FIXTURE_ITERATION_1, 'RMG', 'chemkin', 'species_dictionary.txt'))
+    return tuple((path, os.path.getsize(path), os.path.getmtime(path)) for path in paths)
+
+
+def build_t3(tmp_path, use_cache: bool = True):
     """Build a real T3 instance against a tmp_path copy of the iteration_1 fixture tree.
 
     Also stages the network4_2/MSC sensitivity sidecar fixture (which lives outside
     pdep_network/, see ``SA_FIXTURE_PATH`` above) into the tmp_path copy, at the exact
     location it would occupy in a real run.
-    """
-    import shutil
 
+    Args:
+        tmp_path: The pytest tmp_path to build the project in.
+        use_cache (bool, optional): Whether to reuse a memoised parse of the Cantera model
+                                    (handing out a deepcopy) instead of re-parsing it. Pass
+                                    ``False`` to exercise the real end-to-end parse.
+
+    Returns:
+        T3: A T3 instance with ``rmg_species`` and ``rmg_reactions`` loaded.
+    """
     project_directory = str(tmp_path)
     shutil.copytree(FIXTURE_ITERATION_1, os.path.join(project_directory, 'iteration_1'))
     msc_sensitivity_dir = os.path.join(project_directory, 'iteration_1', 'PDep_SA', 'network4_2',
@@ -66,7 +94,14 @@ def build_t3(tmp_path):
     os.makedirs(msc_sensitivity_dir, exist_ok=True)
     shutil.copy(SA_FIXTURE_PATH, os.path.join(msc_sensitivity_dir, 'sa_coefficients.yml'))
     t3 = run_minimal(project_directory=project_directory, iteration=1, set_paths=True)
-    t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_yaml_file()
+    if not use_cache:
+        t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_yaml_file()
+        return t3
+    key = _fixture_model_stamp()
+    if key not in _MODEL_CACHE:
+        _MODEL_CACHE.clear()
+        _MODEL_CACHE[key] = t3.load_species_and_reactions_from_yaml_file()
+    t3.rmg_species, t3.rmg_reactions = copy.deepcopy(_MODEL_CACHE[key])
     return t3
 
 
