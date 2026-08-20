@@ -28,7 +28,11 @@ module only corroborates that the loop and the real runner agree with each other
 import os
 import re
 import shutil
+import sys
 
+import yaml
+
+import PES
 from t3.pdep.capture import (CaptureResult, capture_ts_artifacts, captured_qm_artifact_path,
                              verify_capture)
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE, TSArtifactRecord
@@ -563,3 +567,65 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
     # _adopted_energy_settings path a capture-less round is forced through.
     with open(round0_hybrid_path) as f:
         assert 'wb97xd2023' in f.read()
+
+
+def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
+    """``PES.main()`` for real, from a real input file: the only things faked are the two external
+    engines (Arkane's explorer and ARC). The real ``run_pes_loop``, the real ``arc_qm_runner`` and
+    the real ``capture_ts_artifacts`` all execute, and every assertion below is about what landed
+    on disk under the input file's own directory -- which is what proves the CLI's
+    ``project_directory`` default reached ``round_paths``, that its relative ``pes.network`` was
+    resolved against the input file, and that ``termination.max_rounds`` parsed out of the YAML
+    (2) governed the run rather than the schema default (5)."""
+    project_directory = str(tmp_path)
+    input_path = os.path.join(project_directory, 'input.yml')
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(project_directory, 'network0_full.py'))
+    with open(input_path, 'w') as f:
+        # 'network' is deliberately RELATIVE: the CLI must resolve it against the input file's
+        # directory, or the explorer never sees a readable seed.
+        yaml.dump({'pes': {'network': 'network0_full.py',
+                           'source': ['O-2(13598)', 'CO2(11)'],
+                           'bath_gas': {'Ar': 1.0},
+                           'method': 'MSC'},
+                   'termination': {'max_rounds': 2}}, f)
+
+    explore_calls = _fixture_explorer(monkeypatch, project_directory, 'network0_full')
+    _ArtifactWritingFakeARC.converge_plan = ({_CH1_MARKER}, {_CH2_MARKER})
+    _ArtifactWritingFakeARC.constructions = []
+    _ArtifactWritingFakeARC.executions = 0
+    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr(sys, 'argv', ['PES.py', input_path])
+
+    result = PES.main()
+
+    # What the explorer was actually HANDED for round 0: the relative 'network0_full.py' of the
+    # input file, resolved to an absolute path against that file's own directory. Asserted on the
+    # engine's argument rather than on the run's success, because the fake explorer would have
+    # succeeded on an unresolved path too -- and the real one would not.
+    assert explore_calls[0] == os.path.join(project_directory, 'network0_full.py')
+
+    # max_rounds: 2 from the input file, not the schema's default of 5.
+    assert result.status == 'max_rounds', f'{result.status}: {result.reason}'
+    assert len(result.rounds) == 2
+    assert _ArtifactWritingFakeARC.executions == 2
+    assert PES.exit_code_for(result.status) == 0
+
+    # The round directories landed under the INPUT FILE's own directory: the project_directory
+    # default is what the loop actually ran with, not merely what main() computed.
+    assert os.path.isdir(os.path.join(project_directory, 'round_0'))
+    assert os.path.isdir(os.path.join(project_directory, 'round_1'))
+    assert not os.path.isdir(os.path.join(project_directory, 'round_2'))
+    # Ruling 3: the run left a real log behind.
+    assert os.path.isfile(os.path.join(project_directory, 't3.log'))
+
+    round1_hybrid_path = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
+    assert os.path.isfile(round1_hybrid_path)
+    round1 = _hybrid_channels(round1_hybrid_path)
+    # Round 1 explored the RENUMBERED network, so channel 1 -- QM'd in round 0 -- carries the new
+    # label 'TS2' here, and this round's channel 2 carries 'TS1'.
+    assert round1[_CH1] == ('TS2', True)
+    assert round1[_CH2] == ('TS1', True)
+    assert round1[_CH3] == ('TS3', False)
+    # The bytes prove which barrier landed on which channel through the CLI's own run.
+    assert _hybrid_marker(round1_hybrid_path, 'TS2') == _CH1_MARKER
+    assert _hybrid_marker(round1_hybrid_path, 'TS1') == _CH2_MARKER
