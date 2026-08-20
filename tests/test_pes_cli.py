@@ -17,7 +17,8 @@ class TestReadPESInput(object):
 
     def test_reads_a_valid_input_file(self, tmp_path):
         path = tmp_path / 'input.yml'
-        path.write_text(yaml.dump({'pes': {'network': '/abs/n.py', 'source': ['HOCHO']}}))
+        path.write_text(yaml.dump({'pes': {'network': '/abs/n.py', 'source': ['HOCHO'],
+                                          'bath_gas': {'N2': 1.0}}}))
         config = read_pes_input(str(path))
         assert config.pes.source == ['HOCHO']
 
@@ -25,7 +26,7 @@ class TestReadPESInput(object):
         """extra='forbid': a typo'd key must fail loudly, not be silently ignored, or a user
         thinks they configured something they did not."""
         path = tmp_path / 'input.yml'
-        path.write_text(yaml.dump({'pes': {'network': '/abs/n.py', 'source': ['A']},
+        path.write_text(yaml.dump({'pes': {'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                                    'termnation': {'max_rounds': 2}}))
         with pytest.raises(Exception):
             read_pes_input(str(path))
@@ -96,7 +97,8 @@ class TestVerbosity(object):
         network_path = tmp_path / 'n.py'
         network_path.write_text('# a stand-in network file\n')
         input_path.write_text(yaml.dump({'pes': {'network': str(network_path),
-                                                 'source': ['HOCHO']}}))
+                                                 'source': ['HOCHO'],
+                                                 'bath_gas': {'N2': 1.0}}}))
         _RecordingLogger.instances = []
         monkeypatch.setattr(PES, 'Logger', _RecordingLogger)
         # The loop itself is out of scope here -- it is driven for real, end to end, by
@@ -153,7 +155,8 @@ class TestNetworkPreflight(object):
     def test_a_missing_network_file_names_the_resolved_path(self, tmp_path, monkeypatch):
         input_path = tmp_path / 'input.yml'
         input_path.write_text(yaml.dump({'pes': {'network': 'no_such_network.py',
-                                                 'source': ['HOCHO']}}))
+                                                 'source': ['HOCHO'],
+                                                 'bath_gas': {'N2': 1.0}}}))
         monkeypatch.setattr(sys, 'argv', ['PES.py', str(input_path)])
 
         with pytest.raises(FileNotFoundError) as exc_info:
@@ -168,7 +171,8 @@ class TestNetworkPreflight(object):
         input_path = tmp_path / 'runs' / 'input.yml'
         input_path.parent.mkdir()
         input_path.write_text(yaml.dump({'pes': {'network': 'no_such_network.py',
-                                                 'source': ['HOCHO']}}))
+                                                 'source': ['HOCHO'],
+                                                 'bath_gas': {'N2': 1.0}}}))
         project_directory = tmp_path / 'elsewhere'
         monkeypatch.setattr(sys, 'argv',
                             ['PES.py', str(input_path), '-p', str(project_directory)])

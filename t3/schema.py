@@ -906,7 +906,12 @@ class PESSection(BaseModel):
     network: Annotated[str, Field(min_length=1)]
     source: list[str]
     method: str = 'MSC'
-    bath_gas: dict | None = None
+    # Required, and required to be non-empty. There is no bath gas that is right by default for an
+    # arbitrary network, and PDepExplorerConfig refuses a config without one -- but it refuses it
+    # from inside run_pes_loop, by which time the CLI has already created the project directory,
+    # the log file and round_0/. Refusing it here turns the likeliest first-run mistake on this
+    # input file into an immediate, actionable validation error.
+    bath_gas: dict
     explore_tol: Annotated[float, Field(gt=0)] | None = None
     energy_tol: Annotated[float, Field(gt=0)] | None = None
     flux_tol: Annotated[float, Field(gt=0)] | None = None
@@ -929,6 +934,21 @@ class PESSection(BaseModel):
                 f"The PES 'source' must name 1 or 2 species -- 1 for a unimolecular well, 2 for a "
                 f"bimolecular entry channel (A + B). Arkane's explorer accepts nothing else. "
                 f"Got {len(value)}: {value}.")
+        return value
+
+    @field_validator('bath_gas')
+    @classmethod
+    def check_bath_gas(cls, value):
+        """PESSection.bath_gas validator.
+
+        An empty mapping passes the ``dict`` type check but is exactly as useless as a missing one:
+        ``t3.pdep.explorer.config.PDepExplorerConfig`` raises on both, deep inside the loop.
+        """
+        if not value:
+            raise ValueError(
+                "The PES 'bath_gas' must be a non-empty mapping of species labels to mole "
+                "fractions (e.g. {'N2': 1.0}). An Arkane explorer input file cannot be written "
+                "without one, and there is no default that is right for an arbitrary network.")
         return value
 
     @field_validator('method')

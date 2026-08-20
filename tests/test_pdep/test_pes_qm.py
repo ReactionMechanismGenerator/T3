@@ -23,7 +23,7 @@ from t3.schema import PESLoopConfig
 
 
 def _config(**qm) -> PESLoopConfig:
-    return PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']}, **({'qm': qm} if qm else {}))
+    return PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}, **({'qm': qm} if qm else {}))
 
 
 def _candidate(ts_label='TS1', family='1,2_Insertion_CO', reactants=('A',), products=('B',),

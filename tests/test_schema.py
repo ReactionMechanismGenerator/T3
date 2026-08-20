@@ -1126,7 +1126,8 @@ class TestPESLoopConfig(object):
 
     def test_minimal_valid_config(self):
         """Only pes.network and pes.source are required; everything else has a default."""
-        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO']})
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                'bath_gas': {'N2': 1.0}})
         assert config.pes.method == 'MSC'
         assert config.qm.opt_level == 'wb97xd/def2tzvp'
         assert config.termination.max_rounds == 5
@@ -1134,82 +1135,101 @@ class TestPESLoopConfig(object):
 
     def test_bimolecular_entry_channel_is_accepted(self):
         """An entry channel A + B, not just an isomer source. Arkane's explorer takes both."""
-        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['HO', 'CHO']})
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['HO', 'CHO'], 'bath_gas': {'N2': 1.0}})
         assert config.pes.source == ['HO', 'CHO']
 
     def test_three_source_species_refused(self):
         """Arkane's explorer accepts a unimolecular or bimolecular source and nothing more, so
         this is refused at validation rather than deep inside Arkane."""
         with pytest.raises(ValidationError, match='1 or 2'):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A', 'B', 'C']})
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A', 'B', 'C'], 'bath_gas': {'N2': 1.0}})
 
     def test_zero_source_species_refused(self):
         with pytest.raises(ValidationError, match='1 or 2'):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': []})
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': [], 'bath_gas': {'N2': 1.0}})
+
+    def test_a_missing_bath_gas_is_refused(self):
+        """There is no bath gas that is right by default. Left optional, a missing one surfaces
+        only when PDepExplorerConfig refuses it -- inside run_pes_loop, after the project
+        directory, the log file and round_0/ have already been created."""
+        with pytest.raises(ValidationError, match='bath_gas'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']})
+
+    def test_an_empty_bath_gas_is_refused(self):
+        """An empty mapping passes the type check and is exactly as useless as a missing one."""
+        with pytest.raises(ValidationError, match='non-empty'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {}})
 
     def test_dashed_level_of_theory_refused(self):
         """A dashed level makes ARC miss the cached frequency scale factor and makes Gaussian
         reject the route line. Refuse it here rather than debug it on a cluster."""
         with pytest.raises(ValidationError, match='undashed'):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                           qm={'opt_level': 'wb97x-d/def2-tzvp', 'freq_level': 'wb97x-d/def2-tzvp'})
 
     def test_genuine_dunning_dashes_are_allowed(self):
         """cc-pvtz-f12 keeps its dashes -- only def2 and wb97xd must be hyphen-free."""
-        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                                qm={'sp_level': 'dlpno-ccsd(t)-f12/cc-pvtz-f12'})
         assert config.qm.sp_level == 'dlpno-ccsd(t)-f12/cc-pvtz-f12'
 
     def test_freq_level_must_equal_opt_level(self):
-        """Frequencies must be evaluated at a real minimum of the same surface."""
-        with pytest.raises(ValidationError, match='freq_level'):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
-                          qm={'opt_level': 'wb97xd/def2tzvp', 'freq_level': 'wb97xd/def2svp'})
+        """Frequencies must be evaluated at a real minimum of the same surface.
+
+        ``scan_level`` is moved WITH ``freq_level`` deliberately: left at its default it disagrees
+        with the mutated ``freq_level``, so the SCAN guard fires instead -- and that message
+        contains the substring 'freq_level=', which satisfied a ``match='freq_level'`` even with
+        the freq/opt guard deleted. Hence the exact phrase matched below.
+        """
+        with pytest.raises(ValidationError, match="'freq_level' must equal 'opt_level'"):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                          qm={'opt_level': 'wb97xd/def2tzvp', 'freq_level': 'wb97xd/def2svp',
+                              'scan_level': 'wb97xd/def2svp'})
 
     def test_scan_level_must_equal_freq_level(self):
         """So rotors project out correctly."""
-        with pytest.raises(ValidationError, match='scan_level'):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
+        with pytest.raises(ValidationError, match="'scan_level' must equal 'freq_level'"):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                           qm={'freq_level': 'wb97xd/def2tzvp', 'scan_level': 'wb97xd/def2svp'})
 
     def test_irc_level_must_equal_opt_level(self):
         """#10: irc must be evaluated at the same level as opt -- had zero coverage."""
-        with pytest.raises(ValidationError, match='irc_level'):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
+        with pytest.raises(ValidationError, match="'irc_level' must equal 'opt_level'"):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                           qm={'opt_level': 'wb97xd/def2tzvp', 'irc_level': 'wb97xd/def2svp'})
 
     def test_scope_must_be_all_or_sensitive(self):
         with pytest.raises(ValidationError):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']}, qm={'scope': 'some'})
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}, qm={'scope': 'some'})
 
     def test_scope_all_is_accepted(self):
-        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']}, qm={'scope': 'all'})
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}, qm={'scope': 'all'})
         assert config.qm.scope == 'all'
 
     def test_max_rounds_must_be_positive(self):
         with pytest.raises(ValidationError):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                           termination={'max_rounds': 0})
 
     def test_max_rounds_rejects_bool(self):
         """bool is a subclass of int, so without strict=True `max_rounds: true` silently means 1."""
         with pytest.raises(ValidationError):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']},
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                           termination={'max_rounds': True})
 
     def test_timeout_is_required_to_be_positive(self):
         """Explorer runtime is unbounded; the timeout is load-bearing, not decorative."""
         with pytest.raises(ValidationError):
-            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'timeout': -1})
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}, 'timeout': -1})
 
     def test_rotors_and_irc_default_off(self):
         """Cost knobs, off by default, turned on per campaign."""
-        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']})
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}})
         assert config.qm.rotors is False
         assert config.qm.irc is False
 
     def test_reuse_defaults_to_empty(self):
-        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']})
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}})
         assert config.reuse.from_t3_projects == []
 
 
