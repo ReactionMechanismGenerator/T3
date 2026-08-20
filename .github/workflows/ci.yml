@@ -101,12 +101,44 @@ jobs:
             python=3.11
             --channel-priority strict
 
+      # 8a. Cache key for the compiled RMG-Py Cython extensions.
+      # The build is only valid for the exact RMG-Py source it was built from AND the exact
+      # rmg_env it was built against (the extensions link against that env's Python, numpy and
+      # Cython ABIs), so the key is the RMG-Py commit SHA plus a hash of the resolved package
+      # list of rmg_env (name + version + build string of every package), not just
+      # environment.yml -- environment.yml is not a lock file and can re-solve to a different
+      # numpy while hashing the same.
+      - name: Compute RMG-Py build cache key
+        id: rmg-build-key
+        shell: bash -el {0}
+        run: |
+          rmg_sha="$(git -C RMG-Py rev-parse HEAD)"
+          env_hash="$(micromamba list -n rmg_env | sort | sha256sum | cut -c1-16)"
+          echo "key=rmgpy-build-${{ runner.os }}-${{ runner.arch }}-${rmg_sha}-${env_hash}" >> "$GITHUB_OUTPUT"
+
+      # 8b. Restore the compiled extensions if this exact (source, environment) pair was built
+      # before. There are deliberately no restore-keys: a partial match would serve a build made
+      # from different sources or against a different ABI, which is the stale-cache failure mode
+      # nobody can reproduce locally. A miss just means the build runs, as it does today.
+      - name: Cache RMG-Py Cython build
+        id: rmg-build-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            RMG-Py/**/*.so
+            RMG-Py/build
+          key: ${{ steps.rmg-build-key.outputs.key }}
+
       # 8. Compile RMG-Py (Cython extensions, in rmg_env)
       - name: Compile RMG-Py
         shell: bash -el {0}
         working-directory: RMG-Py
         run: |
-          micromamba run -n rmg_env make
+          if [ "${{ steps.rmg-build-cache.outputs.cache-hit }}" == "true" ]; then
+            echo "Reusing the cached RMG-Py Cython build (${{ steps.rmg-build-key.outputs.key }})."
+          else
+            micromamba run -n rmg_env make
+          fi
           echo "PYTHONPATH=${{ github.workspace }}/RMG-Py" >> $GITHUB_ENV
 
       # 9. Install & Compile ARC (Dependency, into t3_env)
