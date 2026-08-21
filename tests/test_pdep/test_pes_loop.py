@@ -334,7 +334,77 @@ class TestRunPESLoop(object):
                                                                              monkeypatch, config):
         """C1: TS labels adopted from an earlier T3 project must be treated as already computed
         before round 0 ever runs, not just before some later round -- there was previously zero
-        coverage of this ruling at all."""
+        coverage of this ruling at all. The artifact comes with the label: without one there is
+        nothing to fold into any hybrid, so the claim cannot be honoured (see below)."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+        artifact_path = str(tmp_path / 'prior' / 'capture' / 'qm' / 'TS0.py')
+        os.makedirs(os.path.dirname(artifact_path))
+        open(artifact_path, 'w').close()
+        queued, adopted_per_round = [], []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            queued.extend(c.ts_label for c in candidates)
+            adopted_per_round.append(dict(adopted))
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner,
+                    adopted_ts_labels={'TS0': artifact_path})
+        assert 'TS0' not in queued
+        assert 'TS1' in queued
+        # The artifact actually reaches the runner, so the hybrid can carry it. A label marked
+        # computed with nothing behind it is the defect this asserts against.
+        assert adopted_per_round[0] == {'TS0': artifact_path}
+
+    def test_a_bare_adopted_label_with_no_artifact_is_not_claimed_as_computed(self, tmp_path,
+                                                                             monkeypatch, config,
+                                                                             caplog):
+        """Fail closed: a label with no artifact cannot be folded into any hybrid, so the channel
+        would keep its RMG/ILT rate line and the final diagram would show an ESTIMATED barrier
+        while the run reported quantum chemistry for it. It must be queued normally instead."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+        queued, adopted_per_round = [], []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            queued.extend(c.ts_label for c in candidates)
+            adopted_per_round.append(dict(adopted))
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
+
+        with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_loop'):
+            run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner,
+                         adopted_ts_labels=frozenset({'TS0'}))
+        assert 'TS0' in queued, 'a channel with no artifact must be computed, not claimed'
+        assert adopted_per_round[0] == {}
+        assert 'no artifact path' in caplog.text
+
+    def test_a_lone_artifactless_adopted_label_does_not_short_circuit_the_round(self, tmp_path,
+                                                                               monkeypatch):
+        """The sharp edge of the same defect: when the artifactless label is the ONLY candidate,
+        marking it computed made round 0 return 'no_candidates' before qm_runner was ever called,
+        leaving the final network and diagram on the RMG estimate while reporting the channel as
+        having QM."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               termination={'max_rounds': 1, 'stop_when_no_new_ts': False})
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        runner_calls = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            runner_calls.append(tuple(c.ts_label for c in candidates))
+            _touch_hybrid_file(paths, network_id)
+            return (frozenset(c.ts_label for c in candidates),
+                    frozenset(c.ts_label for c in candidates))
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner,
+                              adopted_ts_labels=frozenset({'TS0'}))
+        assert result.status != PES_LOOP_NO_CANDIDATES
+        assert runner_calls == [('TS0',)]
+
+    def test_an_adopted_label_whose_artifact_is_missing_is_not_claimed_either(self, tmp_path,
+                                                                             monkeypatch, config,
+                                                                             caplog):
+        """A path that does not exist is the same claim as no path at all."""
         _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
         queued = []
 
@@ -343,10 +413,11 @@ class TestRunPESLoop(object):
             _touch_hybrid_file(paths, network_id)
             return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label for c in candidates)
 
-        run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner,
-                    adopted_ts_labels=frozenset({'TS0'}))
-        assert 'TS0' not in queued
-        assert 'TS1' in queued
+        with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_loop'):
+            run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner,
+                         adopted_ts_labels={'TS0': str(tmp_path / 'gone' / 'TS0.py')})
+        assert 'TS0' in queued
+        assert 'does not exist' in caplog.text
 
     def test_reuse_config_calls_adopt_prior_qm_and_seeds_round_0(self, tmp_path, monkeypatch,
                                                                   config):

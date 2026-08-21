@@ -270,13 +270,21 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             means "no QM this run" -- explore and draw the first round's
             diagram only, which is the honest behaviour when no QM runner is configured, not a
             crash.
-        adopted_ts_labels (frozenset, optional): TS labels of the SEED network
+        adopted_ts_labels (dict | frozenset, optional): TS labels of the SEED network
             (``config.pes.network``) already computed before this loop started (e.g. reused from
-            an earlier T3 project). Each is translated to its structural channel key through the
-            seed network (labels are positional and do not survive re-exploration -- see the
-            keying comment at the top of this function's body) and seeded as computed before
-            round 0; a label with no unambiguous structural identity is warned about and
-            re-decided each round instead. This is unioned with -- not replaced by -- whatever
+            an earlier T3 project), preferably as a MAPPING of TS label -> QM artifact path --
+            the same shape ``config.reuse.from_t3_projects`` resolves to. Each label is
+            translated to its structural channel key through the seed network (labels are
+            positional and do not survive re-exploration -- see the keying comment at the top of
+            this function's body) and seeded as computed before round 0; a label with no
+            unambiguous structural identity is warned about and re-decided each round instead.
+            A label whose artifact is missing (a bare set of labels, or a path that does not
+            exist) is NOT marked computed: without an artifact there is nothing to fold into any
+            round's hybrid network, so the channel would keep its RMG/ILT rate line and the final
+            diagram would show an ESTIMATED barrier while the run reported quantum chemistry for
+            it -- and if such a label were the only candidate, round 0 would return
+            ``'no_candidates'`` before ``qm_runner`` was ever called. It is warned about and
+            queued normally instead. This is unioned with -- not replaced by -- whatever
             ``config.reuse.from_t3_projects`` itself resolves to (see below); passing this
             explicitly is for callers (e.g. tests) that already have the adopted set in hand and
             want to skip re-discovering it.
@@ -331,7 +339,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         seed_network = parse_pdep_network_file(path=config.pes.network)
         seed_channel_keys = channel_keys_by_ts_label(seed_network)
     if adopted_ts_labels:
-        for ts_label in sorted(adopted_ts_labels):
+        # A mapping supplies the artifact for each label; a bare iterable supplies none, and every
+        # label in it therefore resolves to None below and is refused (see the fail-closed check).
+        adopted_artifacts = (dict(adopted_ts_labels) if isinstance(adopted_ts_labels, dict)
+                             else {ts_label: None for ts_label in adopted_ts_labels})
+        for ts_label, artifact_path in sorted(adopted_artifacts.items()):
             key = seed_channel_keys.get(ts_label)
             if key is None:
                 message = (f'PES loop: adopted_ts_labels names {ts_label!r}, but that transition '
@@ -342,7 +354,34 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                 if logger is not None:
                     logger.warning(message)
                 continue
+            # Fail closed. Marking a channel computed WITHOUT an artifact to fold is a claim the
+            # loop cannot honour: qm_runner is never handed anything for it, so the hybrid network
+            # keeps that channel's RMG/ILT rate line and the final diagram shows an ESTIMATED
+            # barrier -- while the run reports the channel as having quantum chemistry. Worse, if
+            # such a label is the only candidate, the round returns 'no_candidates' before the
+            # runner is even called. Refusing to mark it costs a re-computation; accepting it
+            # costs the correctness of the number this whole loop exists to produce.
+            if not artifact_path:
+                message = (f'PES loop: adopted_ts_labels names {ts_label!r} with no artifact path, '
+                           f'so there is nothing to fold into this run\'s hybrid network. Marking '
+                           f'it computed would leave that channel on its RMG estimate while '
+                           f'reporting it as computed, so it is NOT marked computed and will be '
+                           f'queued normally. Pass a mapping of TS label -> artifact path (the '
+                           f'way config.reuse.from_t3_projects resolves one) to actually reuse it.')
+                _logger.warning(message)
+                if logger is not None:
+                    logger.warning(message)
+                continue
+            if not os.path.isfile(artifact_path):
+                message = (f'PES loop: adopted_ts_labels gives {ts_label!r} the artifact '
+                           f'{artifact_path!r}, which does not exist; it is NOT marked computed '
+                           f'and will be queued normally.')
+                _logger.warning(message)
+                if logger is not None:
+                    logger.warning(message)
+                continue
             computed_channels.add(key)
+            qm_artifacts_by_channel[key] = artifact_path
     if config.reuse.from_t3_projects:
         network_id = Path(config.pes.network).stem
         # Adoption is matched on the FAMILY-QUALIFIED key, never the endpoints-only one the
