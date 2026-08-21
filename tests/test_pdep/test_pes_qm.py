@@ -17,8 +17,8 @@ from t3.pdep.hybrid import HybridNetworkResult
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label, expected_ts_artifact_path
 from t3.pdep.parser import PDepPathReaction, parse_pdep_network_file
 from t3.pdep.pes_qm import (ARC_INPUT_FILE_NAME, _adopted_energy_settings,
-                            _normalized_model_chemistry, adopt_prior_qm, arc_qm_runner,
-                            build_arc_input)
+                            _normalized_model_chemistries, _normalized_model_chemistry,
+                            adopt_prior_qm, arc_qm_runner, build_arc_input)
 from t3.pdep.pes_rounds import (QMCandidate, channel_keys_by_ts_label, hybrid_network_path,
                                 round_paths)
 from t3.schema import PESLoopConfig
@@ -725,20 +725,33 @@ class TestArcQmRunner(object):
 # whatever that chain currently does, so a real bug in it could never be caught by a test built
 # from it. A stored manifest written by an older ARC version is exactly the case a fixture that
 # re-derives its own expectation at test time cannot represent.
+# The composite entry is likewise copied verbatim from real ARC output vendored in this
+# repository -- tests/data/pdep_energy_settings/composite_level_project/calcs/statmech/thermo/
+# input.py:9-12, whose exact text tests/test_pdep/test_energy_settings.py already pins as what
+# t3.pdep.energy_settings freezes into a manifest. It is keyed by the (sp_level, freq_level) pair
+# it was written for.
 _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL = {
     'wb97xd/def2tzvp': "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')",
     'b3lyp/def2tzvp': "LevelOfTheory(method='b3lyp2023',basis='def2tzvp',software='gaussian')",
+    ('dlpno-ccsd(t)-f12/cc-pvtz-f12', 'wb97xd/def2tzvp'): (
+        "CompositeLevelOfTheory(\n"
+        "    freq=LevelOfTheory(method='wb97xd',basis='def2tzvp',software='gaussian'),\n"
+        "    energy=LevelOfTheory(method='dlpnoccsd(t)f122023',basis='ccpvtzf12',software='orca')\n"
+        ")"
+    ),
 }
 
 
-def _arc_model_chemistry_text(sp_level: str) -> str:
-    """The exact ``modelChemistry`` source text a real ARC project writes for ``sp_level`` -- a
-    fixed, pre-captured literal (see ``_ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL`` above), not one
-    recomputed via the same normalization chain the code under test uses."""
+def _arc_model_chemistry_text(sp_level: str, freq_level: str | None = None) -> str:
+    """The exact ``modelChemistry`` source text a real ARC project writes for this level (or
+    sp/freq pair) -- a fixed, pre-captured literal (see ``_ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL``
+    above), not one recomputed via the same normalization chain the code under test uses."""
+    if freq_level is not None and (sp_level, freq_level) in _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL:
+        return _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL[(sp_level, freq_level)]
     return _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL[sp_level]
 
 
-def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
+def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp', freq_level=None,
                             network_id='network1_1', network_source_text=None) -> None:
     """Build a real capture manifest under ``tmp_path`` by calling ``capture_ts_artifacts`` itself
     (mirrors ``tests/test_pdep/test_capture.py``'s own fixture-building style), so
@@ -779,7 +792,7 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
     statmech_dir = os.path.join(arc_dir, 'calcs', 'statmech', 'kinetics')
     os.makedirs(statmech_dir, exist_ok=True)
     with open(os.path.join(statmech_dir, 'input.py'), 'w') as f:
-        f.write(f"modelChemistry = {_arc_model_chemistry_text(level)}\n\nuseHinderedRotors = True\n\n"
+        f.write(f"modelChemistry = {_arc_model_chemistry_text(level, freq_level)}\n\nuseHinderedRotors = True\n\n"
                 "useAtomCorrections = True\n\n"
                 "atomEnergies = {'C': -37.844411, 'H': -0.499818, 'N': -54.581501, 'O': -75.062219}\n\n"
                 "useBondCorrections = False\n")
@@ -928,33 +941,76 @@ class TestAdoptPriorQM(object):
 
 
 class TestNormalizedModelChemistry(object):
-    """Direct coverage for _normalized_model_chemistry, which previously had none -- and whose
-    raise-instead-of-None defect (a ValueError out of ARC's get_arkane_model_chemistry for a level
-    with no tabulated frequency scale factor) killed the loop before round 0."""
+    """Direct coverage for _normalized_model_chemistry. Its job is to reproduce, byte for byte,
+    the model_chemistry string ARC itself wrote into the capture manifest -- anything less and
+    every prior capture is refused on a mismatch that does not exist."""
 
     def test_resolvable_level_returns_arcs_own_literal(self):
         assert _normalized_model_chemistry('wb97xd/def2tzvp') \
             == _arc_model_chemistry_text('wb97xd/def2tzvp')
 
-    def test_year_suffixed_level_with_no_tabulated_scale_factor_returns_none_not_raise(self, caplog):
+    def test_a_composite_sp_freq_pair_resolves_instead_of_going_dead(self):
+        """The schema permits sp_level != freq_level. ARC settles its frequency scale factor from
+        the FREQUENCY level (ARC.check_freq_scaling_factor) before the Arkane adapter runs, so the
+        manifest carries the plain LevelOfTheory repr of the SP level. Deriving the factor from the
+        SP level instead yields None for an SP level with no tabulated factor of its own,
+        get_arkane_model_chemistry then raises, this function reported 'unresolvable', and reuse
+        was silently dead for the entire composite configuration."""
+        normalized = _normalized_model_chemistry('dlpno-ccsd(t)-f12/cc-pvtz-f12',
+                                                 'wb97xd/def2tzvp')
+        assert normalized is not None, 'reuse is dead for every composite sp/freq configuration'
+        assert normalized.startswith('LevelOfTheory('), \
+            "ARC writes the SP level's plain repr once its own freq scale factor is settled"
+        # The energy half is the SP level, spelled the way the vendored real ARC output spells it.
+        assert "method='dlpnoccsd(t)f122023',basis='ccpvtzf12',software='orca'" in normalized
+        # The OTHER spelling -- what an ARC that had not settled a scale factor wrote, vendored
+        # verbatim in this repository -- must be accepted too: it is the same pair of levels, and
+        # refusing it would refuse reuse from every capture written on that side of the change.
+        assert _arc_model_chemistry_text('dlpno-ccsd(t)-f12/cc-pvtz-f12', 'wb97xd/def2tzvp') \
+            in _normalized_model_chemistries('dlpno-ccsd(t)-f12/cc-pvtz-f12', 'wb97xd/def2tzvp')
+
+    def test_arcs_own_year_suffixed_spelling_resolves_to_the_same_level(self):
         """'wb97xd2023/def2tzvp' is ARC's OWN normalized form -- exactly what a user copying a
-        level out of a prior capture manifest would write. ARC has no tabulated frequency scale
-        factor for the year-suffixed spelling, so get_arkane_model_chemistry raises 'freq_level
-        required when freq_scale_factor isn't provided'; this function must convert that raise
-        into its documented None answer rather than letting it kill the run."""
+        level out of a prior capture manifest writes back into their config. It has no tabulated
+        frequency scale factor under that spelling, which used to make it unresolvable; it must
+        normalize to the very level it was copied from."""
+        assert _normalized_model_chemistry('wb97xd2023/def2tzvp') \
+            == _normalized_model_chemistry('wb97xd/def2tzvp')
+
+    def test_a_level_arc_cannot_resolve_at_all_returns_none_not_raise(self, caplog):
+        """The documented degradation: a level with no AEC entry anywhere yields None with a
+        warning, so adopt_prior_qm reports 'nothing will be adopted' rather than the run dying
+        before round 0."""
         with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
-            assert _normalized_model_chemistry('wb97xd2023/def2tzvp') is None
-        assert 'could not normalize' in caplog.text
+            assert _normalized_model_chemistry('notamethod/notabasis') is None
 
     def test_adopt_prior_qm_survives_an_unresolvable_level(self, tmp_path, caplog):
         """End to end through adopt_prior_qm: an unresolvable requested level must degrade to
         'nothing adopted' with a warning, never to a crash before round 0."""
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
         with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
-            adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd2023/def2tzvp',
+            adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'notamethod/notabasis',
                                      _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
         assert 'nothing will be adopted' in caplog.text
+
+    def test_adopt_prior_qm_reuses_a_composite_level_capture(self, tmp_path):
+        """The end-to-end shape of the dead-reuse defect: a prior capture made under a composite
+        sp/freq pair must actually be adopted when this run asks for the same pair."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='dlpno-ccsd(t)-f12/cc-pvtz-f12',
+                                freq_level='wb97xd/def2tzvp')
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'dlpno-ccsd(t)-f12/cc-pvtz-f12',
+                                 _FIXTURE_CHANNEL_KEYS, freq_level='wb97xd/def2tzvp')
+        assert 'TS1' in adopted
+
+    def test_a_composite_capture_is_refused_without_the_frequency_level(self, tmp_path):
+        """The negative half, and the reason freq_level had to be threaded through the API at all:
+        a caller that does not supply it cannot reconstruct the spelling ARC wrote, so the same
+        capture is refused. This is what the fix moves -- not a match that was loosened."""
+        _write_capture_manifest(tmp_path, ts_label='TS1', level='dlpno-ccsd(t)-f12/cc-pvtz-f12',
+                                freq_level='wb97xd/def2tzvp')
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'dlpno-ccsd(t)-f12/cc-pvtz-f12',
+                              _FIXTURE_CHANNEL_KEYS) == {}
 
 
 class TestAdoptPriorQMRefusesRecordsWithoutStructuralEvidence(object):

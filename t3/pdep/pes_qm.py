@@ -581,9 +581,9 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
     return converged_labels, queued_ts_labels
 
 
-def _normalized_model_chemistry(sp_level: str) -> str | None:
+def _normalized_model_chemistry(sp_level: str, freq_level: str | None = None) -> str | None:
     """
-    Normalize a T3 ``sp_level`` string into ARC's own ``model_chemistry`` text.
+    Normalize a T3 ``sp_level``/``freq_level`` pair into ARC's own ``model_chemistry`` text.
 
     A capture manifest's ``model_chemistry`` is ARC's byte-for-byte ``LevelOfTheory(...)`` repr,
     written via ``arc.statmech.arkane.get_arkane_model_chemistry`` -- including year-suffix
@@ -593,35 +593,104 @@ def _normalized_model_chemistry(sp_level: str) -> str | None:
     normalization chain ARC itself used to write the manifest, so the comparison is apples to
     apples.
 
-    ``None`` -- never an exception -- is the answer whenever ARC cannot resolve one. In
-    particular, ``get_arkane_model_chemistry`` itself RAISES (``ValueError: freq_level required
-    when freq_scale_factor isn't provided``) for a non-composite level with no tabulated
-    frequency scale factor -- e.g. ``'wb97xd2023/def2tzvp'``, ARC's own normalized form, exactly
-    what a user copying a level out of a prior capture manifest would write. This function only
-    ever has the single ``sp_level`` string, no frequency level to hand ARC in that case, so the
-    raise is converted to the documented "could not resolve" answer: the caller
-    (``adopt_prior_qm``) then warns that nothing will match, rather than the whole run dying
-    before round 0.
+    The frequency level is what makes that chain reproducible, and it is why this takes two
+    arguments rather than one. ARC settles its own frequency scale factor BEFORE the Arkane
+    adapter runs, in ``ARC.check_freq_scaling_factor`` (``arc/main.py``), and it settles it from
+    the FREQUENCY level -- ``assign_frequency_scale_factor(freq_level)``, falling back to ``1``
+    when the database has no entry. That factor is therefore never ``None`` for any input T3 can
+    build (``build_arc_input`` always sets ``freq_level``), so ``get_arkane_model_chemistry``
+    always takes its ``freq_scale_factor is not None`` branch and writes the plain
+    ``LevelOfTheory`` repr of the SP level.
+
+    Deriving the factor from the SP level instead -- as this function used to -- silently breaks
+    the whole of ``config.reuse`` for every configuration where ``sp_level != freq_level``: an SP
+    level with no tabulated scale factor of its OWN (e.g. ``'dlpno-ccsd(t)-f12/cc-pvtz-f12'``,
+    which the schema explicitly permits) yields ``None``, ARC then RAISES ``ValueError:
+    freq_level required when freq_scale_factor isn't provided``, this function reports
+    "unresolvable", and every prior capture is refused on a ``model_chemistry`` mismatch that
+    never existed. Reuse looked implemented and was dead.
+
+    Only whether the factor is ``None`` reaches ARC's branch decision, never its value, so a
+    fallback of ``1`` reproduces ARC's own string exactly even when ARC reached its value by
+    Truhlar's method rather than by the database.
+
+    ``None`` -- never an exception -- remains the answer whenever ARC genuinely cannot resolve
+    one: the caller (``adopt_prior_qm``) then warns that nothing will match, rather than the whole
+    run dying before round 0.
 
     Args:
-        sp_level (str): A T3 level-of-theory string, e.g. ``config.qm.sp_level``, undashed.
+        sp_level (str): A T3 single-point level-of-theory string, e.g. ``config.qm.sp_level``,
+                        undashed.
+        freq_level (str, optional): The frequency level the same run used, e.g.
+                                    ``config.qm.freq_level``. ``None`` falls back to ``sp_level``,
+                                    the only honest guess when a caller has no separate frequency
+                                    level to offer.
 
     Returns:
         str | None: The normalized ``model_chemistry`` text, or ``None`` if ARC could not
         resolve one.
     """
+    normalized = _normalized_model_chemistries(sp_level, freq_level)
+    return normalized[0] if normalized else None
+
+
+def _normalized_model_chemistries(sp_level: str, freq_level: str | None = None) -> tuple[str, ...]:
+    """
+    Every ``model_chemistry`` spelling a capture made at this ``sp_level``/``freq_level`` pair may
+    legitimately carry.
+
+    There are two, and both are real ARC output, because ARC's own answer depends on whether it
+    had settled a frequency scale factor by the time the Arkane adapter ran:
+
+    - the plain ``LevelOfTheory(...)`` repr of the SP level, which
+      ``get_arkane_model_chemistry`` returns once ``freq_scale_factor`` is not ``None`` -- what
+      ARC writes today, since ``ARC.check_freq_scaling_factor`` always settles one from the
+      frequency level (falling back to ``1``) before the adapter is built;
+    - the multi-line ``CompositeLevelOfTheory(freq=..., energy=...)`` form it returns when no
+      scale factor was settled. A capture carrying exactly this is vendored in this repository:
+      ``tests/data/pdep_energy_settings/composite_level_project/calcs/statmech/thermo/input.py``,
+      which ``t3.pdep.energy_settings`` preserves verbatim into the manifest.
+
+    They describe the SAME pair of levels, so accepting either is not a loosened match -- it is
+    the match. Refusing one of them would refuse reuse from every capture written by an ARC on
+    the other side of that behaviour change, which is not a level-of-theory conflict at all.
+
+    Args:
+        sp_level (str): The single-point level-of-theory string, undashed.
+        freq_level (str, optional): The frequency level, defaulting to ``sp_level``.
+
+    Returns:
+        tuple[str, ...]: The accepted spellings, most-likely first; empty if ARC could not resolve
+        any.
+    """
     level = Level(repr=sp_level)
-    scale = assign_frequency_scale_factor(level)
-    try:
-        return get_arkane_model_chemistry(level, freq_scale_factor=scale)
-    except ValueError as e:
+    frequency_level = Level(repr=freq_level) if freq_level else level
+    # Mirrors ARC.check_freq_scaling_factor: the factor comes from the FREQUENCY level, and is
+    # never left as None once a frequency level exists.
+    scale = assign_frequency_scale_factor(frequency_level)
+    if scale is None:
+        scale = 1
+    spellings = []
+    for freq_scale_factor in (scale, None):
+        try:
+            resolved = get_arkane_model_chemistry(level, freq_level=frequency_level,
+                                                  freq_scale_factor=freq_scale_factor)
+        except ValueError as e:
+            _logger.debug(f'PES loop: ARC could not normalize the level of theory {sp_level!r} '
+                          f'(frequencies at {freq_level or sp_level!r}) with '
+                          f'freq_scale_factor={freq_scale_factor!r}: {e}')
+            continue
+        if resolved is not None and resolved not in spellings:
+            spellings.append(resolved)
+    if not spellings:
         _logger.warning(f'PES loop: ARC could not normalize the level of theory {sp_level!r} '
-                        f'into a model_chemistry ({e}); treating it as unresolvable.')
-        return None
+                        f'(frequencies at {freq_level or sp_level!r}) into a model_chemistry; '
+                        f'treating it as unresolvable.')
+    return tuple(spellings)
 
 
 def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str,
-                   channel_key_by_ts_label: dict) -> dict[str, str]:
+                   channel_key_by_ts_label: dict, freq_level: str | None = None) -> dict[str, str]:
     """
     Reuse transition states a previous T3 (or standalone PES loop) run already computed.
 
@@ -675,8 +744,14 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                                  reusable prior QM, e.g. ``config.reuse.from_t3_projects``.
         network_id (str): This run's network id. Logged for traceability only -- never a gate
                           (see above).
-        level_of_theory (str): The level of theory ``model_chemistry`` must match to be adopted
-                               (e.g. ``config.qm.sp_level``), undashed.
+        level_of_theory (str): The SINGLE-POINT level of theory ``model_chemistry`` must match to
+                               be adopted (e.g. ``config.qm.sp_level``), undashed.
+        freq_level (str, optional): The frequency level of the same run (e.g.
+                                    ``config.qm.freq_level``). Required to reproduce ARC's own
+                                    ``model_chemistry`` string whenever it differs from
+                                    ``level_of_theory`` -- without it every prior capture made
+                                    under a composite SP/frequency pair is refused on a mismatch
+                                    that does not exist (see ``_normalized_model_chemistry``).
         channel_key_by_ts_label (dict): THIS run's own network-local TS label -> structural
                                         channel key, from
                                         ``t3.pdep.pes_rounds.channel_keys_by_ts_label`` over the
@@ -687,8 +762,12 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
         dict[str, str]: Network-local TS label -> the adopted artifact path (already resolved,
         by ``verify_capture``, to an absolute path inside its capture directory).
     """
-    normalized_requested = _normalized_model_chemistry(level_of_theory)
-    if normalized_requested is None:
+    # Every spelling ARC may have written for this sp/freq pair -- see
+    # _normalized_model_chemistries: the plain SP LevelOfTheory repr and the
+    # CompositeLevelOfTheory(freq=..., energy=...) form are the same pair of levels, and captures
+    # carrying each exist.
+    normalized_requested = _normalized_model_chemistries(level_of_theory, freq_level)
+    if not normalized_requested:
         _logger.warning(
             f"PES loop: ARC could not resolve a model_chemistry for the requested level of "
             f"theory {level_of_theory!r}; every prior capture's model_chemistry will therefore "
@@ -727,11 +806,12 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                 continue
             energy_settings = verified.energy_settings or {}
             manifest_model_chemistry = energy_settings.get('model_chemistry')
-            if manifest_model_chemistry != normalized_requested:
+            if manifest_model_chemistry not in normalized_requested:
                 _logger.info(
                     f"PES loop: refusing prior QM at {manifest_path!r} -- its model_chemistry "
                     f"{manifest_model_chemistry!r} does not match the requested level of theory "
-                    f"{level_of_theory!r} (normalized: {normalized_requested!r}).")
+                    f"{level_of_theory!r} (accepted spellings: "
+                    f"{list(normalized_requested)}).")
                 continue
             # The capture's own VENDORED network copy is the authoritative structural record of
             # what each of its transition states connects (verified.networks -- see

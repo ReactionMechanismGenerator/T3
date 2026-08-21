@@ -357,9 +357,10 @@ class TestRunPESLoop(object):
         _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
         adopt_calls = []
 
-        def _fake_adopt(from_t3_projects, network_id, level_of_theory, path_reaction_labels_by_ts_label):
+        def _fake_adopt(from_t3_projects, network_id, level_of_theory,
+                        path_reaction_labels_by_ts_label, freq_level=None):
             adopt_calls.append((tuple(from_t3_projects), network_id, level_of_theory,
-                                path_reaction_labels_by_ts_label))
+                                path_reaction_labels_by_ts_label, freq_level))
             return {'TS0': '/fake/prior/TS0.py'}
 
         monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm', _fake_adopt)
@@ -379,7 +380,7 @@ class TestRunPESLoop(object):
 
         run_pes_loop(reuse_config, project_directory=str(tmp_path), qm_runner=_runner)
         assert len(adopt_calls) == 1
-        call_projects, call_network_id, call_level, call_labels = adopt_calls[0]
+        call_projects, call_network_id, call_level, call_labels, call_freq = adopt_calls[0]
         assert call_projects == ('/prior/project',)
         assert call_network_id == 'network1_1'
         assert call_level == reuse_config.qm.sp_level == 'ccsd(t)-f12/cc-pvtz-f12'
@@ -387,6 +388,10 @@ class TestRunPESLoop(object):
         # structures, direction-insensitive), never a positional-label map -- reaction and TS
         # labels are both positional in Arkane-written files and cannot identify a channel.
         assert call_labels == {'TS0': (('CC|m1',), ('C|m1',)), 'TS1': (('CCCC|m1',), ('CCC|m1',))}
+        # The frequency level must reach adoption too: ARC settles its model_chemistry string
+        # from the FREQUENCY level's scale factor, so without it every prior capture made under a
+        # composite sp/freq pair is refused on a mismatch that does not exist.
+        assert call_freq == reuse_config.qm.freq_level
         assert 'TS0' not in queued
         assert 'TS1' in queued
 
@@ -519,7 +524,8 @@ class TestRunPESLoop(object):
         fold the adopted artifact into a hybrid network."""
         _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
 
-        def _fake_adopt(from_t3_projects, network_id, level_of_theory, path_reaction_labels_by_ts_label):
+        def _fake_adopt(from_t3_projects, network_id, level_of_theory,
+                        path_reaction_labels_by_ts_label, freq_level=None):
             return {'TS0': '/fake/prior/TS0.py'}
 
         monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm', _fake_adopt)
@@ -549,7 +555,8 @@ class TestRunPESLoop(object):
         ignore the hybrid this round demonstrably wrote."""
         calls, _drawn = _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
 
-        def _fake_adopt(from_t3_projects, network_id, level_of_theory, path_reaction_labels_by_ts_label):
+        def _fake_adopt(from_t3_projects, network_id, level_of_theory,
+                        path_reaction_labels_by_ts_label, freq_level=None):
             return {'TS0': '/fake/prior/TS0.py'}
 
         monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm', _fake_adopt)
@@ -735,7 +742,7 @@ class TestCumulativeAdoptedPlumbing(object):
         _stub_explorer(monkeypatch, tmp_path,
                        families=['1,2_Insertion_CO', '1,2_Insertion_CO', '1,2_Insertion_CO'])
         monkeypatch.setattr('t3.pdep.pes_loop.adopt_prior_qm',
-                            lambda *args: {'TS0': '/prior/capture/qm/TS0.py'})
+                            lambda *args, **kwargs: {'TS0': '/prior/capture/qm/TS0.py'})
         adopted_per_round = []
 
         def _runner(candidates, paths, cfg, network_id, adopted=None):
