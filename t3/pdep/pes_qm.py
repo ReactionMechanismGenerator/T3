@@ -48,7 +48,8 @@ from t3.pdep.hybrid import (QMEnergySettings, _read_qm_artifact, _vendor_qm_arti
                             write_hybrid_network_input_file)
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label
 from t3.pdep.parser import parse_pdep_network_file
-from t3.pdep.pes_rounds import RoundPaths, channel_keys_by_ts_label, hybrid_network_path
+from t3.pdep.pes_rounds import (RoundPaths, adoption_channel_keys_by_ts_label,
+                                hybrid_network_path)
 from t3.schema import PESLoopConfig
 
 _logger = logging.getLogger(__name__)
@@ -752,11 +753,18 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                                     ``level_of_theory`` -- without it every prior capture made
                                     under a composite SP/frequency pair is refused on a mismatch
                                     that does not exist (see ``_normalized_model_chemistry``).
-        channel_key_by_ts_label (dict): THIS run's own network-local TS label -> structural
-                                        channel key, from
-                                        ``t3.pdep.pes_rounds.channel_keys_by_ts_label`` over the
-                                        run's own (seed) network. The identity adoption is
-                                        matched against.
+        channel_key_by_ts_label (dict): THIS run's own network-local TS label -> ADOPTION channel
+                                        key, from
+                                        ``t3.pdep.pes_rounds.adoption_channel_keys_by_ts_label``
+                                        over the run's own (seed) network -- the structural
+                                        channel key qualified by the path reaction's RMG family.
+                                        The endpoints-only key is deliberately NOT what adoption
+                                        matches on: the two networks compared here are unrelated,
+                                        so a different pathway between the same endpoints would
+                                        key identically and this function would attach a prior
+                                        artifact to a saddle point it was never computed for. A
+                                        channel that names no family is refused rather than
+                                        matched on endpoints alone (see that function).
 
     Returns:
         dict[str, str]: Network-local TS label -> the adopted artifact path (already resolved,
@@ -830,8 +838,9 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                     continue
                 vendored_network_path = os.path.join(root, captured_path)
                 try:
-                    capture_keys_by_network_id[capture_network_id] = channel_keys_by_ts_label(
-                        parse_pdep_network_file(path=vendored_network_path))
+                    capture_keys_by_network_id[capture_network_id] = \
+                        adoption_channel_keys_by_ts_label(
+                            parse_pdep_network_file(path=vendored_network_path))
                 except (OSError, ValueError) as e:
                     _logger.warning(
                         f"PES loop: could not parse the vendored network copy "

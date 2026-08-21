@@ -8,7 +8,8 @@ import pytest
 from arc.molecule.molecule import Molecule
 
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
-from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME, attach_sensitivity_evidence,
+from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME,
+                                adoption_channel_keys_by_ts_label, attach_sensitivity_evidence,
                                 channel_keys_by_ts_label, round_paths, split_qm_candidates,
                                 structural_channel_key)
 
@@ -280,3 +281,57 @@ class TestStructuralChannelKeys(object):
             rxn_singlet, {'CH2(S)': ch2_singlet, 'CO': co, 'CH2CO': ch2co})
         assert key_triplet is not None and key_singlet is not None
         assert key_triplet != key_singlet
+
+
+class TestAdoptionChannelKeysAreNotEndpointsOnly(object):
+    """The endpoints-only structural key identifies reactants and products, not a saddle point.
+    channel_keys_by_ts_label's duplicate guard covers two A<=>B pathways sitting in ONE file, but
+    cannot reach across two files: a prior capture holding one A<=>B pathway and this run holding
+    a DIFFERENT one key identically, no duplicate is present anywhere, and the prior artifact is
+    attached to a saddle point it was never computed for."""
+
+    @staticmethod
+    def _network(comments, network_id='network1_1'):
+        adjlists = {'A': Molecule().from_smiles('CC').to_adjacency_list(),
+                    'B': Molecule().from_smiles('C').to_adjacency_list()}
+        path_reactions = tuple(
+            PDepPathReaction(label=f'reaction{i}', reactants=('A',), products=('B',),
+                             transition_state=f'TS{i}', kinetics_type='Arrhenius',
+                             kinetics_comment=comment)
+            for i, comment in enumerate(comments))
+        return PDepNetwork(network_id=network_id, path=f'/abs/{network_id}.py', label=None,
+                           species_labels=('A', 'B'),
+                           transition_state_labels=tuple(f'TS{i}' for i in range(len(comments))),
+                           path_reactions=path_reactions, isomers=(), reactant_channels=(),
+                           product_channels=(), species_structures=adjlists)
+
+    def test_two_different_pathways_between_the_same_endpoints_key_differently(self):
+        """The whole defect in one assertion: endpoints-only, these two are indistinguishable."""
+        prior = self._network(['family: H_Abstraction'])
+        current = self._network(['family: Disproportionation'])
+        assert channel_keys_by_ts_label(prior)['TS0'] == channel_keys_by_ts_label(current)['TS0'], \
+            'the endpoints-only key cannot tell these apart -- that is why it is not what ' \
+            'adoption matches on'
+        assert adoption_channel_keys_by_ts_label(prior)['TS0'] \
+            != adoption_channel_keys_by_ts_label(current)['TS0']
+
+    def test_a_channel_naming_no_family_is_refused_not_matched_on_endpoints(self):
+        """A refused match costs quantum chemistry that was already paid for once; a false one
+        costs the correctness of the barrier. No discriminator, no adoption."""
+        network = self._network(["Reaction library: 'primaryNitrogenLibrary'"])
+        assert 'TS0' in channel_keys_by_ts_label(network)
+        assert adoption_channel_keys_by_ts_label(network) == {}
+
+    def test_the_same_pathway_still_matches_across_files(self):
+        """The refusal must not be so broad that reuse can never fire at all."""
+        prior = self._network(['family: H_Abstraction'], network_id='network9_9')
+        current = self._network(['family: H_Abstraction'])
+        assert adoption_channel_keys_by_ts_label(prior)['TS0'] \
+            == adoption_channel_keys_by_ts_label(current)['TS0']
+
+    def test_a_structurally_unkeyable_channel_is_still_refused(self):
+        """The family is an ADDITIONAL discriminator, never a replacement: a channel with no
+        parseable structure must not become adoptable just because it names a family."""
+        network = self._network(['family: H_Abstraction'])
+        network = dataclasses.replace(network, species_structures={'A': 'not an adjacency list'})
+        assert adoption_channel_keys_by_ts_label(network) == {}

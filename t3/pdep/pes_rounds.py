@@ -28,7 +28,7 @@ from dataclasses import dataclass, replace
 
 from arc.molecule.molecule import Molecule
 
-from t3.pdep.barrierless import classify_barrierless
+from t3.pdep.barrierless import classify_barrierless, rmg_family
 from t3.pdep.parser import PDepNetwork, PDepPathReaction, canonical_channel_pair
 
 _logger = logging.getLogger(__name__)
@@ -315,6 +315,66 @@ def channel_keys_by_ts_label(network: PDepNetwork) -> dict:
                             f'none of them can be carried across rounds unambiguously.')
             for ts_label in ts_labels:
                 del keys[ts_label]
+    return keys
+
+
+def adoption_channel_keys_by_ts_label(network: PDepNetwork) -> dict:
+    """
+    Map each transition state to the identity CROSS-CAPTURE adoption may be matched on: its
+    structural channel key PLUS the RMG family of the path reaction that produced it.
+
+    Why the endpoints alone are not enough here. ``structural_channel_key`` identifies the
+    reactants and products a channel connects -- not a saddle point. ``channel_keys_by_ts_label``
+    covers the case where two pathways between the same endpoints sit in ONE file (both are
+    dropped as structurally duplicated), but that guard cannot reach across files: if a prior
+    capture's network holds one A<=>B pathway and this run's network holds a DIFFERENT A<=>B
+    pathway, each file holds a single, identical key, no duplicate is present, and the prior
+    artifact is attached to a saddle point it was never computed for -- silently, as a computed
+    barrier. That is the precise misattribution this whole keying exists to prevent.
+
+    What actually discriminates a pathway, established empirically against the vendored real
+    networks rather than assumed:
+
+    - The RMG family, parsed out of the path reaction's kinetics comment
+      (``t3.pdep.barrierless.rmg_family``), is the ONE such field, and it is present only
+      sometimes: 1 of 3 path reactions in ``tests/data/pdep_real_networks/network799_1``, and 0 of
+      3 in ``network21_1``, whose kinetics come from a reaction library and name no family at all.
+    - No other field survives. The kinetics comment is the only carrier of pathway provenance, and
+      ``t3.pdep.hybrid`` DELIBERATELY drops the whole ``kinetics = ...`` entry of every QM'd path
+      reaction (its invariant 2, ``t3/pdep/hybrid.py:18``) -- so any comment-derived discriminator
+      is null on exactly the channels whose identity has to be carried. The transition state's
+      ``E0`` goes the same way, replaced by a statmech ``Log(...)`` reference.
+
+    So the discriminator exists for cross-capture adoption -- where both sides are RMG-estimated
+    networks that still carry their kinetics comments -- and a channel that does not carry one is
+    REFUSED (omitted from this map, logged) rather than matched on its endpoints. A refused match
+    costs quantum chemistry that was already paid for once; a false match costs correctness of the
+    barrier the whole loop exists to compute, presented as if it had been computed. That asymmetry
+    decides it.
+
+    This is NOT what the within-run, round-to-round carry uses -- see ``channel_keys_by_ts_label``,
+    which stays endpoints-only precisely because the family cannot survive the hybrid write this
+    loop itself performs between one round and the next.
+
+    Args:
+        network (PDepNetwork): The parsed network.
+
+    Returns:
+        dict: Network-local TS label -> ``(structural key, RMG family)``, for every transition
+        state that has both an unambiguous structural identity and a named family.
+    """
+    path_reactions_by_ts = network.path_reactions_by_ts()
+    keys = dict()
+    for ts_label, key in channel_keys_by_ts_label(network).items():
+        family = rmg_family(path_reactions_by_ts[ts_label][0])
+        if family is None:
+            _logger.info(
+                f'Transition state {ts_label!r} of network {network.network_id!r} names no RMG '
+                f'family, so its channel is identified by its endpoints alone. A different '
+                f'pathway between the same endpoints would key identically across captures, so '
+                f'prior QM will not be adopted for it -- it will be recomputed instead.')
+            continue
+        keys[ts_label] = (key, family)
     return keys
 
 

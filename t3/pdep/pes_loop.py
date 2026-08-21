@@ -62,7 +62,8 @@ from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED
 from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.pes_qm import adopt_prior_qm
-from t3.pdep.pes_rounds import (RoundPaths, attach_sensitivity_evidence,
+from t3.pdep.pes_rounds import (RoundPaths, adoption_channel_keys_by_ts_label,
+                                attach_sensitivity_evidence,
                                 channel_keys_by_ts_label, hybrid_network_path, round_paths,
                                 split_qm_candidates)
 from t3.pdep.pes_sa import run_round_me_sensitivity
@@ -344,8 +345,15 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             computed_channels.add(key)
     if config.reuse.from_t3_projects:
         network_id = Path(config.pes.network).stem
+        # Adoption is matched on the FAMILY-QUALIFIED key, never the endpoints-only one the
+        # within-run carry uses: the two files compared here are unrelated, so a different pathway
+        # between the same endpoints would key identically and the prior artifact would land on a
+        # saddle point it was never computed for. See
+        # t3.pdep.pes_rounds.adoption_channel_keys_by_ts_label. freq_level goes with sp_level
+        # because ARC's own model_chemistry string depends on both.
         adopted = adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level,
-                                 seed_channel_keys)
+                                 adoption_channel_keys_by_ts_label(seed_network),
+                                 freq_level=config.qm.freq_level)
         if adopted:
             message = (f"PES loop: reusing {len(adopted)} prior QM result(s) for network "
                       f"{network_id!r}: {sorted(adopted)}.")

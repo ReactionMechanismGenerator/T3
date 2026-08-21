@@ -384,10 +384,13 @@ class TestRunPESLoop(object):
         assert call_projects == ('/prior/project',)
         assert call_network_id == 'network1_1'
         assert call_level == reuse_config.qm.sp_level == 'ccsd(t)-f12/cc-pvtz-f12'
-        # The 4th argument is the seed network's STRUCTURAL channel-key map (canonical species
-        # structures, direction-insensitive), never a positional-label map -- reaction and TS
-        # labels are both positional in Arkane-written files and cannot identify a channel.
-        assert call_labels == {'TS0': (('CC|m1',), ('C|m1',)), 'TS1': (('CCCC|m1',), ('CCC|m1',))}
+        # The 4th argument is the seed network's ADOPTION channel-key map: the structural channel
+        # key (canonical species structures, direction-insensitive) QUALIFIED BY THE RMG FAMILY,
+        # never a positional-label map -- reaction and TS labels are both positional in
+        # Arkane-written files and cannot identify a channel, and the endpoints alone cannot
+        # identify a PATHWAY across two unrelated files.
+        assert call_labels == {'TS0': ((('CC|m1',), ('C|m1',)), '1,2_Insertion_CO'),
+                               'TS1': ((('CCCC|m1',), ('CCC|m1',)), '1,2_Insertion_CO')}
         # The frequency level must reach adoption too: ARC settles its model_chemistry string
         # from the FREQUENCY level's scale factor, so without it every prior capture made under a
         # composite sp/freq pair is refused on a mismatch that does not exist.

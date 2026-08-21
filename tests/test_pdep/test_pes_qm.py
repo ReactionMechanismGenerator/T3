@@ -1,5 +1,6 @@
 """Tests for t3.pdep.pes_qm."""
 
+import glob
 import logging
 import os
 import shutil
@@ -19,8 +20,8 @@ from t3.pdep.parser import PDepPathReaction, parse_pdep_network_file
 from t3.pdep.pes_qm import (ARC_INPUT_FILE_NAME, _adopted_energy_settings,
                             _normalized_model_chemistries, _normalized_model_chemistry,
                             adopt_prior_qm, arc_qm_runner, build_arc_input)
-from t3.pdep.pes_rounds import (QMCandidate, channel_keys_by_ts_label, hybrid_network_path,
-                                round_paths)
+from t3.pdep.pes_rounds import (QMCandidate, adoption_channel_keys_by_ts_label,
+                                hybrid_network_path, round_paths)
 from t3.schema import PESLoopConfig
 
 
@@ -813,10 +814,14 @@ def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp', f
                          sensitivity_by_ts={record.key: (record.coefficient, record.delta_ln_k)})
 
 
-# THIS run's own structural channel-key map, computed over the same real fixture the prior
-# captures vendor -- what run_pes_loop itself hands adopt_prior_qm (via channel_keys_by_ts_label
-# over the seed network).
-_FIXTURE_CHANNEL_KEYS = channel_keys_by_ts_label(parse_pdep_network_file(path=_FIXTURE_NETWORK_PATH))
+# THIS run's own ADOPTION channel-key map, computed over the same real fixture the prior captures
+# vendor -- what run_pes_loop itself hands adopt_prior_qm. Family-qualified, not endpoints-only:
+# adoption compares two unrelated files, where a different pathway between the same endpoints
+# would key identically. Of network799_1's three path reactions only reaction1 (TS1) names a
+# family, so this map holds TS1 alone -- TS2 and TS3 are refused rather than matched on their
+# endpoints, which is the point.
+_FIXTURE_CHANNEL_KEYS = adoption_channel_keys_by_ts_label(
+    parse_pdep_network_file(path=_FIXTURE_NETWORK_PATH))
 
 
 class TestAdoptPriorQM(object):
@@ -1052,8 +1057,13 @@ class TestAdoptedEnergySettings(object):
         _write_capture_manifest(tmp_path / 'proj_b', ts_label='TS2', level='b3lyp/def2tzvp')
         adopted_a = adopt_prior_qm([str(tmp_path / 'proj_a')], 'network1_1', 'wb97xd/def2tzvp',
                                    _FIXTURE_CHANNEL_KEYS)
-        adopted_b = adopt_prior_qm([str(tmp_path / 'proj_b')], 'network1_1', 'b3lyp/def2tzvp',
-                                   {'TS2': _FIXTURE_CHANNEL_KEYS['TS2']})
+        # proj_b's TS2 is deliberately NOT reached through adopt_prior_qm: reaction2 of the
+        # fixture network names no RMG family, so its channel is identified by its endpoints
+        # alone and adoption now refuses it outright (see adoption_channel_keys_by_ts_label).
+        # _adopted_energy_settings is the unit under test here, and it takes a label -> artifact
+        # map, so proj_b's captured artifact is taken straight off disk.
+        adopted_b = {'TS2': glob.glob(os.path.join(str(tmp_path), 'proj_b', '**', 'qm', '*TS2.py'),
+                                      recursive=True)[0]}
         with pytest.raises(ValueError, match='conflicting'):
             _adopted_energy_settings(adopted_a | adopted_b)
 
