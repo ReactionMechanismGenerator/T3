@@ -612,11 +612,17 @@ def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
 
     # The fake explorer makes its own round directories under this same path, so these two say
     # only that the run got as far as two rounds -- what proves the CLI's project_directory
-    # default reached round_paths is the hybrid below, which production alone writes. The absence
-    # of round_2 does reflect production: it is the round budget, via the explorer call count.
+    # default reached round_paths is the hybrid below, which production alone writes.
     assert os.path.isdir(os.path.join(project_directory, 'round_0'))
     assert os.path.isdir(os.path.join(project_directory, 'round_1'))
-    assert not os.path.isdir(os.path.join(project_directory, 'round_2'))
+    # round_2 is the final draw pass over round 1's hybrid -- the whole point of the branch, since
+    # round 1's own diagram predates round 1's own quantum chemistry. It is a draw, not a round:
+    # the budget stayed at 2 (rounds, and ARC executions, both asserted above) and it has no ARC
+    # project directory at all.
+    assert os.path.isdir(os.path.join(project_directory, 'round_2'))
+    assert not os.path.isdir(round_paths(project_directory, 2).arc_project)
+    assert result.final_diagram_path == round_paths(project_directory, 2).diagram
+    assert os.path.isfile(result.final_diagram_path)
 
     # Ruling 6: the final status, its reason, and the diagram reached the log, and the run was
     # closed out -- not merely returned to a caller who might never print it.

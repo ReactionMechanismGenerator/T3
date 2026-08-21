@@ -244,6 +244,35 @@ def _vendor_adopted_artifacts(adopted: dict, capture_dir: str) -> dict[str, str]
     return {ts_label: os.path.join(adopted_dir, f'{ts_label}.py') for ts_label in adopted}
 
 
+# Keys of a frozen ``energy_settings`` block that record WHERE the settings were read from rather
+# than WHAT energy reference they describe. Two captures made under byte-identical atom energies,
+# scale factor and rotor treatment always disagree on these -- each round's ARC project directory
+# is its own, by construction (``t3.pdep.pes_rounds.round_paths``) -- so comparing raw dicts would
+# refuse every legitimate cross-round adoption while catching no real energy-reference conflict.
+_ENERGY_SETTINGS_PROVENANCE_KEYS = frozenset({'source_paths'})
+
+
+def _energy_reference(energy_settings: dict | None) -> dict | None:
+    """
+    The part of a frozen ``energy_settings`` block that can actually move a computed barrier.
+
+    Everything Arkane applies to a statmech artifact -- the model chemistry, atom energies, bond
+    additivity corrections, frequency scale factor, rotor treatment -- is kept; the provenance
+    fields (``_ENERGY_SETTINGS_PROVENANCE_KEYS``) are dropped. This is the view two settings blocks
+    must agree on before their artifacts may share one hybrid network's single header.
+
+    Args:
+        energy_settings (dict, optional): A frozen ``energy_settings`` block, or ``None``.
+
+    Returns:
+        dict, optional: The comparable view, or ``None`` if ``energy_settings`` is ``None``.
+    """
+    if energy_settings is None:
+        return None
+    return {key: value for key, value in energy_settings.items()
+            if key not in _ENERGY_SETTINGS_PROVENANCE_KEYS}
+
+
 def _adopted_energy_settings(adopted: dict) -> dict | None:
     """
     Recover the frozen energy-reference settings adopted artifacts were computed under, from their
@@ -283,7 +312,7 @@ def _adopted_energy_settings(adopted: dict) -> dict | None:
     settings_values = list(settings_by_capture_dir.values())
     first = settings_values[0]
     for capture_dir, other in list(settings_by_capture_dir.items())[1:]:
-        if other != first:
+        if _energy_reference(other) != _energy_reference(first):
             raise ValueError(
                 f"PES loop: adopted artifacts come from prior captures with conflicting "
                 f"energy_settings ({first!r} vs {other!r} at {capture_dir!r}); refusing to guess "
@@ -495,9 +524,28 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
     # would otherwise crash QMEnergySettings.from_frozen. The adopted artifacts were computed
     # under settings recorded in their OWN prior manifest -- and those, not a guess, are the
     # correct provenance for them.
-    energy_settings_frozen = capture_result.energy_settings if capture_result is not None else None
-    if energy_settings_frozen is None:
-        energy_settings_frozen = _adopted_energy_settings(adopted or dict())
+    #
+    # C4 (fail closed): the adopted settings are loaded UNCONDITIONALLY, never only as a fallback
+    # for "this round captured nothing". A hybrid network carries ONE energy_settings header --
+    # atom energies, bond corrections, frequency scale factor, rotor treatment -- and Arkane
+    # applies it to every statmech artifact the file references, adopted ones included. So when a
+    # round both captures new QM and folds in adopted artifacts, letting this round's capture
+    # settings win silently re-references the adopted artifacts against a DIFFERENT energy
+    # reference than the one they were computed under, shifting their barriers by however much the
+    # two headers disagree -- a wrong number, presented as a computed one. There is no correct
+    # combined header, so the two must agree or the round must refuse.
+    captured_settings = capture_result.energy_settings if capture_result is not None else None
+    adopted_settings = _adopted_energy_settings(adopted or dict())
+    if (captured_settings is not None and adopted_settings is not None
+            and _energy_reference(captured_settings) != _energy_reference(adopted_settings)):
+        raise ValueError(
+            f"Refusing to write a hybrid network for {network_id!r}: this round's own capture was "
+            f"made under energy settings {captured_settings!r}, but the adopted artifacts "
+            f"{sorted(adopted or dict())} were computed under {adopted_settings!r}. A hybrid "
+            f"network carries a single energy_settings header that Arkane applies to every "
+            f"artifact it references, so combining these would render the adopted barriers "
+            f"against an energy reference they were never computed under.")
+    energy_settings_frozen = captured_settings if captured_settings is not None else adopted_settings
     energy_settings = QMEnergySettings.from_frozen(energy_settings_frozen)
     if capture_result is not None:
         # I1: the hybrid network is built from the CAPTURE's own vendored network copy and

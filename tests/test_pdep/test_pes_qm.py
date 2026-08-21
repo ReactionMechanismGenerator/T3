@@ -205,6 +205,38 @@ _FROZEN_ENERGY_SETTINGS = {
 }
 
 
+def _write_prior_adopted_artifact(tmp_path, ts_label: str, subdir: str = 'prior_capture') -> str:
+    """
+    Write an adopted artifact where a real one lives: ``<capture_dir>/qm/<label>.py``, with the
+    log file its ``Log(...)`` argument references beside it.
+
+    The layout is not cosmetic. ``arc_qm_runner`` derives the artifact's originating capture
+    directory as two levels up from the artifact path -- that is a documented layout invariant of
+    ``t3.pdep.capture`` -- both to confine the vendoring and to read the energy settings the
+    artifact was computed under.
+
+    Returns:
+        str: The artifact path.
+    """
+    qm_dir = os.path.join(str(tmp_path), subdir, 'qm')
+    os.makedirs(qm_dir, exist_ok=True)
+    artifact_path = os.path.join(qm_dir, f'{ts_label}.py')
+    with open(artifact_path, 'w') as f:
+        f.write("geometry = Log('output.out')\n")
+    with open(os.path.join(qm_dir, 'output.out'), 'w') as f:
+        f.write('# stub ARC log output\n')
+    return artifact_path
+
+
+def _prior_verify_result(capture_dir: str, energy_settings: dict) -> VerifyResult:
+    """A verified prior capture carrying exactly ``energy_settings`` -- what ``verify_capture``
+    returns for the capture an adopted artifact came out of."""
+    return VerifyResult(capture_dir=capture_dir,
+                        manifest_path=os.path.join(capture_dir, CAPTURE_MANIFEST_FILE_NAME),
+                        record_count=1, captured_artifact_count=1, networks=dict(),
+                        energy_settings=energy_settings, ts_records=())
+
+
 class _FakeARC(object):
     """Records every construction's kwargs and every .execute()/.as_dict() call, class-wide."""
 
@@ -555,13 +587,14 @@ class TestArcQmRunner(object):
         # its OWN directory (SPs/), the same way a real captured artifact's is (see
         # t3.pdep.hybrid.write_hybrid_network_input_file's docstring) -- so the referenced log file
         # actually has to exist next to it for a real (non-mocked) vendoring pass to succeed.
-        prior_artifact_dir = str(tmp_path / 'prior_project' / 'output' / 'SPs')
-        os.makedirs(prior_artifact_dir)
-        prior_artifact_path = os.path.join(prior_artifact_dir, 'TS1.py')
-        with open(prior_artifact_path, 'w') as f:
-            f.write("geometry = Log('output.out')\n")
-        with open(os.path.join(prior_artifact_dir, 'output.out'), 'w') as f:
-            f.write('# stub ARC log output\n')
+        #
+        # The adopted artifact is placed at <prior capture>/qm/TS1.py, exactly where
+        # capture_ts_artifacts puts one, because arc_qm_runner now reads the prior capture's own
+        # manifest for the settings it was computed under (C4) and derives that capture directory
+        # as two levels up from the artifact.
+        prior_artifact_path = _write_prior_adopted_artifact(tmp_path, 'TS1')
+        monkeypatch.setattr('t3.pdep.pes_qm.verify_capture',
+                            lambda root: _prior_verify_result(root, _FROZEN_ENERGY_SETTINGS))
 
         converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
                                           adopted={'TS1': prior_artifact_path})
@@ -583,6 +616,81 @@ class TestArcQmRunner(object):
         vendored_log_path = os.path.join(capture_dir, 'adopted', 'logs', 'TS1', 'output.out')
         assert os.path.isfile(vendored_log_path)
         assert call['qm_artifacts_root'] == capture_dir
+
+    def test_adopted_settings_are_consulted_even_when_this_round_captured_new_qm(self, tmp_path,
+                                                                                  monkeypatch):
+        """C4: a hybrid network carries ONE energy_settings header, and Arkane applies it to every
+        artifact the file references -- adopted ones included. When a round both captures new QM
+        and folds in adopted artifacts, letting this round's capture settings win unexamined
+        renders the adopted barriers against an energy reference they were never computed under.
+        The adopted settings must therefore be loaded every time, not only as a fallback for a
+        round that captured nothing."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        os.makedirs(os.path.join(capture_dir, 'networks'))
+        shutil.copyfile(_FIXTURE_NETWORK_PATH,
+                        os.path.join(capture_dir, 'networks', f'{_NETWORK_ID}.py'))
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, _usable_capture_result(None, capture_dir, network_path=''))
+        recorder.hybrid_result = HybridNetworkResult(
+            dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1', 'TS2'),
+            ilt_ts_labels=(), vendored_files=(), warnings=())
+        prior_artifact_path = _write_prior_adopted_artifact(tmp_path, 'TS2')
+        verified = []
+
+        def _fake_verify_capture(root):
+            verified.append(root)
+            return _prior_verify_result(root, _FROZEN_ENERGY_SETTINGS)
+
+        monkeypatch.setattr('t3.pdep.pes_qm.verify_capture', _fake_verify_capture)
+        arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
+                      adopted={'TS2': prior_artifact_path})
+        assert verified == [os.path.join(str(tmp_path), 'prior_capture')], \
+            "the adopted artifact's own prior capture must be read for its energy settings"
+
+    def test_adopted_settings_that_disagree_on_the_energy_reference_are_refused(self, tmp_path,
+                                                                               monkeypatch):
+        """Fail closed: there is no correct combined header, so a mismatch must refuse the round
+        rather than silently shift the adopted barriers."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        os.makedirs(os.path.join(capture_dir, 'networks'))
+        shutil.copyfile(_FIXTURE_NETWORK_PATH,
+                        os.path.join(capture_dir, 'networks', f'{_NETWORK_ID}.py'))
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, _usable_capture_result(None, capture_dir, network_path=''))
+        prior_artifact_path = _write_prior_adopted_artifact(tmp_path, 'TS2')
+        # Same level of theory, DIFFERENT atom energies: an artifact rendered under the wrong one
+        # comes out with a wrong, silently plausible barrier.
+        other_settings = dict(_FROZEN_ENERGY_SETTINGS,
+                              atom_energies={'C': -37.8, 'H': -0.5, 'O': -75.0})
+        monkeypatch.setattr('t3.pdep.pes_qm.verify_capture',
+                            lambda root: _prior_verify_result(root, other_settings))
+        with pytest.raises(ValueError, match='energy reference'):
+            arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
+                          adopted={'TS2': prior_artifact_path})
+        assert recorder.write_hybrid_calls == [], \
+            'the hybrid must not be written under a settings header the adopted artifacts refuse'
+
+    def test_settings_differing_only_in_provenance_are_not_a_conflict(self, tmp_path, monkeypatch):
+        """Every round has its own ARC project directory by construction, so source_paths ALWAYS
+        differs between this round's capture and any adopted artifact's. Comparing raw dicts would
+        refuse every legitimate adoption while catching no real energy-reference conflict."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        os.makedirs(os.path.join(capture_dir, 'networks'))
+        shutil.copyfile(_FIXTURE_NETWORK_PATH,
+                        os.path.join(capture_dir, 'networks', f'{_NETWORK_ID}.py'))
+        paths, candidates, recorder, network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, _usable_capture_result(None, capture_dir, network_path=''))
+        recorder.hybrid_result = HybridNetworkResult(
+            dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1', 'TS2'),
+            ilt_ts_labels=(), vendored_files=(), warnings=())
+        prior_artifact_path = _write_prior_adopted_artifact(tmp_path, 'TS2')
+        prior_settings = dict(_FROZEN_ENERGY_SETTINGS,
+                              source_paths={'input_py': '/round_0/ARC/input.py'})
+        monkeypatch.setattr('t3.pdep.pes_qm.verify_capture',
+                            lambda root: _prior_verify_result(root, prior_settings))
+        arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
+                      adopted={'TS2': prior_artifact_path})
+        assert len(recorder.write_hybrid_calls) == 1
 
     def test_mutant_adopted_artifact_path_is_not_silently_accepted(self, tmp_path, monkeypatch):
         """Deliverable mutation: substituting an adopted artifact's path with a nonexistent path
