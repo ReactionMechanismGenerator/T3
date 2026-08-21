@@ -55,6 +55,7 @@ from t3.common import (DATA_BASE_PATH,
 from t3.logger import Logger
 from t3.pdep.api import save_pdep_budget_record, save_pdep_network_assessments
 from t3.pdep.assessment import PDepNetworkAssessment, assessments_record_path
+from t3.pdep.barrierless import classify_barrierless
 from t3.pdep.budget import apply_pdep_qm_budget, budget_record_path, build_pdep_budget_record
 from t3.pdep.cache import (read_arkane_log_rmg_py_commit,
                            read_t_grid_clamp_record,
@@ -2773,6 +2774,21 @@ class T3:
                 continue
 
             path_reaction = path_reactions[0]
+            verdict = classify_barrierless(path_reaction)
+            if verdict.is_barrierless:
+                # A barrierless channel has no saddle point, so no TS search for it can converge --
+                # and this path used to queue one anyway, which failed and took the whole iteration
+                # down with it. The verdict comes from `t3.pdep.barrierless`, the same classifier
+                # the PES exploration loop consults in `split_qm_candidates`, so the two paths
+                # cannot drift apart on what 'barrierless' means. Its fail-OPEN asymmetry (an
+                # unrecognized family is reported as not barrierless and still gets queued) is
+                # deliberate and is inherited here untouched.
+                self.logger.info(f'Not queueing transition state {ts_label} of network '
+                                 f'{network_name}: {verdict.reason}')
+                records.append(TSJoinRecord(status=JOIN_STATUS_NOT_QUEUED,
+                                            reason=verdict.reason,
+                                            **record_kwargs))
+                continue
             reaction = self.build_pdep_path_reaction(path_reaction=path_reaction,
                                                      structures=structures,
                                                      arc_ts_label_=label)

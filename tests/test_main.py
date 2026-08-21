@@ -10,12 +10,23 @@ import shutil
 import re
 from unittest import mock
 
+import numpy as np
 
-from arc.common import read_yaml_file
+from arc.common import read_yaml_file, save_yaml_file
+from arc.molecule.molecule import Molecule
 
 from t3.chem import T3Reaction, T3Species, T3Status
 from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
+from t3.pdep.cache import write_sa_cache_metadata
+from t3.pdep.join import JOIN_STATUS_NOT_QUEUED, JOIN_STATUS_QUEUED
 from tests.common import run_minimal
+from tests.test_pdep._wiring_helpers import (NETWORK_NAME,
+                                             build_pdep_rxns_to_explore,
+                                             build_sa_dict,
+                                             build_t3,
+                                             candidate_sa_path,
+                                             network_path,
+                                             )
 from t3.main import (T3,
                      auto_complete_rmg_libraries,
                      legalize_species_label,
@@ -1086,6 +1097,75 @@ def test_determine_species_from_pdep_network():
         assert len(species_keys) == 1
     finally:
         shutil.rmtree(t3.paths['PDep SA'], ignore_errors=True)
+
+
+def test_determine_species_and_reactions_to_calculate_refuses_a_barrierless_channel(tmp_path, monkeypatch):
+    """A barrierless channel must not be queued for a TS search by the legacy iteration path.
+
+    The PES exploration loop asks ``t3.pdep.barrierless.classify_barrierless`` before queueing
+    anything; the iteration path reached through ``determine_species_and_reactions_to_calculate``
+    did not, queued the channel, and the whole iteration aborted when the TS search inevitably
+    failed. This drives that entry point for real -- through ``determine_species_based_on_sa``,
+    ``determine_species_from_pdep_network`` and ``queue_pdep_transition_states`` -- and asserts the
+    channel is refused with the classifier's own reason, and that the call returns rather than
+    aborting.
+    """
+    t3 = build_t3(tmp_path)
+    network_file = network_path(t3)
+    with open(network_file, 'r') as f:
+        network_text = f.read()
+    # reaction1/TS1 (CH2(S)(53) + C3rad(4) <=> C4rad(5)) is the channel this fixture's sensitivity
+    # data selects and queues. Its family is relabelled to R_Recombination in the tmp_path copy so
+    # that the queued channel is one the classifier recognizes: only the family string is
+    # fixture-made, a carbene recombining with a radical genuinely has no saddle point. The
+    # fixture's other 1,2_Insertion_carbene entry (TS6) is deliberately left alone.
+    assert network_text.count('family: 1,2_Insertion_carbene') == 2
+    network_text = network_text.replace('family: 1,2_Insertion_carbene', 'family: R_Recombination', 1)
+    with open(network_file, 'w') as f:
+        f.write(network_text)
+
+    # The sensitivity fixture does not carry TS1's two reactant structures; they are built here from
+    # the SMILES network4_2.py itself declares for them, so that WITHOUT the gate this channel is
+    # fully queueable and the test can only pass because of the gate.
+    sa_dict = build_sa_dict(t3)
+    sa_dict['structures'] = {**sa_dict['structures'],
+                             'CH2(S)(53)': Molecule(smiles='[CH2]').to_adjacency_list(),
+                             'C3rad(4)': Molecule(smiles='[CH2]CC').to_adjacency_list(),
+                             }
+    sa_path = candidate_sa_path(t3, method='CSE')
+    os.makedirs(os.path.dirname(sa_path), exist_ok=True)
+    save_yaml_file(sa_path, sa_dict)
+    write_sa_cache_metadata(sa_path=sa_path,
+                            network_path=network_file,
+                            network_id=NETWORK_NAME,
+                            method='CSE',
+                            )
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError('run_arkane_job must not be invoked: a valid cached SA is present.')
+
+    monkeypatch.setattr('t3.main.run_arkane_job', _fail_if_called)
+
+    # The fixture's Chemkin model carries no pressure-dependent reaction, and this test is about
+    # what the queueing decision does with the network rather than about how the model is loaded,
+    # so the loader hands back the real fixture species plus the P-dep reaction pointing at
+    # network 4. Everything downstream of it runs for real.
+    pdep_reaction = build_pdep_rxns_to_explore(t3)[0][0]
+    pdep_reaction.index = 0
+    monkeypatch.setattr(t3, 'load_species_and_reactions_from_yaml_file',
+                        lambda *args, **kwargs: (t3.rmg_species, [pdep_reaction]))
+    t3.sa_dict = {'kinetics': [{'H': {1: np.array([0.5, 0.6])}}], 'thermo': [{'H': dict()}]}
+
+    additional_calcs_required = t3.determine_species_and_reactions_to_calculate()
+
+    assert isinstance(additional_calcs_required, bool), 'the iteration did not complete'
+    records = {record.network_ts_label: record for record in t3.pdep_ts_join_records}
+    assert 'TS1' in records, 'the barrierless channel never reached the queueing decision'
+    assert records['TS1'].status == JOIN_STATUS_NOT_QUEUED
+    assert records['TS1'].t3_reaction_key is None
+    assert 'R_Recombination' in records['TS1'].reason
+    assert 'barrierless' in records['TS1'].reason
+    assert not any(record.status == JOIN_STATUS_QUEUED for record in t3.pdep_ts_join_records)
 
 
 def test_determine_species_based_on_collision_violators():
