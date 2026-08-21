@@ -137,15 +137,42 @@ class TestBuildARCInput(object):
         assert all(spc['compute_thermo'] is False for spc in arc_input['species'])
 
     def test_candidate_with_no_structure_is_dropped_not_crashed(self, caplog):
+        """The warning IS the evidence that the candidate was dropped rather than crashed on, so
+        this must not select records on ``levelname``: ``arc.common.initialize_log`` (and
+        ``arc.species.conformers``) call ``logging.addLevelName(logging.WARNING, 'Warning: ')``,
+        a PROCESS-GLOBAL rename that outlives the test that triggered it. Every WARNING record
+        emitted afterwards carries ``levelname == 'Warning: '``, so a levelname filter silently
+        selects nothing -- passing whenever this file runs alone and failing in CI's whole-suite
+        run purely on which test ran first. ``levelno`` is the numeric level, which no ARC entry
+        point can move."""
         candidate = _candidate(reactants=('A',), products=('unknown_species',))
-        with caplog.at_level('WARNING', logger='t3.pdep.pes_qm'):
+        with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
             arc_input = build_arc_input((candidate,), round_paths('/proj', 0), _config(),
                                         'network1_1', _STRUCTURES)
         assert arc_input['reactions'] == []
         assert arc_input['species'] == []
-        warnings = [r.message for r in caplog.records if r.levelname == 'WARNING']
+        warnings = [record.getMessage() for record in caplog.records
+                    if record.levelno == logging.WARNING]
         assert any('unknown_species' in message for message in warnings), \
             f'expected a WARNING naming the missing species, got: {warnings}'
+
+    def test_the_missing_structure_warning_survives_an_arc_level_name_rename(self, caplog):
+        """The regression guard for the test above: with ARC's global level rename in force, the
+        drop-not-crash evidence must still be visible. Without this, that whole assertion can
+        evaporate into an empty list that proves nothing, and only CI's test ORDER decides
+        whether it does."""
+        logging.addLevelName(logging.WARNING, 'Warning: ')
+        try:
+            candidate = _candidate(reactants=('A',), products=('unknown_species',))
+            with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
+                build_arc_input((candidate,), round_paths('/proj', 0), _config(),
+                                'network1_1', _STRUCTURES)
+            warnings = [record.getMessage() for record in caplog.records
+                        if record.levelno == logging.WARNING]
+            assert any('unknown_species' in message for message in warnings), \
+                f'expected a WARNING naming the missing species, got: {warnings}'
+        finally:
+            logging.addLevelName(logging.WARNING, 'WARNING')
 
     def test_dead_network_ts_label_key_is_not_emitted(self):
         candidate = _candidate()

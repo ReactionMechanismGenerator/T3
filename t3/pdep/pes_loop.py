@@ -284,6 +284,12 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     # exists to prevent).
     computed_channels = set()
     qm_artifacts_by_channel = dict()
+    # Initialised unconditionally, not only inside the branch that needs it: the two consumers
+    # below are guarded by exactly the same condition, so an uninitialised read is unreachable --
+    # but a reader (and a static analyser: CodeQL flagged this) cannot see that without checking
+    # three conditions against each other. The seed network is still parsed only when something
+    # actually needs its keys; an empty map is the truthful value when nothing does.
+    seed_channel_keys = dict()
     if adopted_ts_labels or config.reuse.from_t3_projects:
         seed_network = parse_pdep_network_file(path=config.pes.network)
         seed_channel_keys = channel_keys_by_ts_label(seed_network)
