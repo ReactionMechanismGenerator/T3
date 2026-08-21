@@ -1011,3 +1011,133 @@ class TestUnkeyableNetworks(object):
         assert set(adopted_per_round[1]) == {'TS0'}
         assert "'TS1'" in caplog.text
         assert 'cannot be carried across rounds' in caplog.text
+
+
+class TestTheFinalRoundsQMReachesTheOutput(object):
+    """The whole branch exists to make the emitted PES diagram carry barriers that were actually
+    computed. The last permitted round's hybrid network -- the one carrying that round's QM -- is
+    written AFTER that round's own diagram was drawn from its pre-QM explored network, so
+    returning the last RoundRecord's paths silently reverts the headline output to RMG estimates
+    whenever the final round is productive. With max_rounds: 1 -- the first thing a user runs --
+    that is EVERY run."""
+
+    def test_max_rounds_1_returns_the_qm_informed_network_not_the_pre_qm_one(self, tmp_path,
+                                                                            monkeypatch):
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               termination={'max_rounds': 1, 'stop_when_no_new_ts': False})
+        calls, drawn = _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        hybrid_paths = []
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            hybrid_paths.append(_touch_hybrid_file(paths, network_id))
+            return (frozenset(c.ts_label for c in candidates),
+                    frozenset(c.ts_label for c in candidates))
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+
+        assert result.status == PES_LOOP_MAX_ROUNDS
+        # One QM round only -- the final pass must not charge another.
+        assert len(result.rounds) == 1
+        assert len(hybrid_paths) == 1
+        # The final pass explored the hybrid the single round wrote...
+        assert calls == ['/abs/network1_1.py', hybrid_paths[0]]
+        # ...and the returned network/diagram are that re-exploration's, not the round's own.
+        assert result.final_network_path != result.rounds[0].network_path
+        assert result.final_diagram_path != result.rounds[0].diagram_path
+        assert drawn[-1] == result.final_network_path
+        assert os.path.isfile(result.final_diagram_path)
+
+    def test_the_final_draw_pass_launches_no_further_quantum_chemistry(self, tmp_path,
+                                                                       monkeypatch):
+        """The final exploration is a draw, not a round: no ME SA, no qm_runner call, and no ARC
+        project directory for the pass's own round index."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               termination={'max_rounds': 2, 'stop_when_no_new_ts': False})
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'] * 3)
+        sa_calls, runner_calls = [], []
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity',
+                            lambda **kwargs: sa_calls.append(kwargs['network_path'])
+                            or {f'TS{i}': (0.05 - 0.001 * i, 400.0) for i in range(10)})
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            # Converges one TS per round, so neither round exhausts the candidates and the loop
+            # really does stop on the budget rather than on convergence.
+            runner_calls.append(network_id)
+            _touch_hybrid_file(paths, network_id)
+            return (frozenset(c.ts_label for c in candidates[:1]),
+                    frozenset(c.ts_label for c in candidates))
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+
+        assert result.status == PES_LOOP_MAX_ROUNDS
+        assert len(runner_calls) == 2, 'the final draw pass must not call the QM runner'
+        assert len(sa_calls) == 2, 'the final draw pass must not run a master-equation SA'
+        assert not os.path.isdir(round_paths(str(tmp_path), 2).arc_project)
+
+    def test_a_final_round_that_converged_nothing_is_not_re_explored(self, tmp_path, monkeypatch):
+        """No hybrid was written, so there is nothing QM-informed to draw from and the extra
+        exploration would be pure waste (and would blame qm_runner for a file it correctly never
+        wrote)."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               termination={'max_rounds': 2, 'stop_when_no_new_ts': False})
+        calls, _ = _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        result = run_pes_loop(
+            config, project_directory=str(tmp_path),
+            qm_runner=lambda candidates, paths, cfg, network_id, adopted=None:
+            (frozenset(), frozenset(c.ts_label for c in candidates)))
+        assert result.status == PES_LOOP_MAX_ROUNDS
+        assert len(calls) == 2, 'no final draw pass without a hybrid network to draw from'
+        assert result.final_network_path == result.rounds[-1].network_path
+
+    def test_a_failed_final_re_exploration_keeps_the_last_rounds_own_result(self, tmp_path,
+                                                                           monkeypatch):
+        """Fail open, loudly: the bonus pass must never turn a run whose rounds all worked into a
+        run that reports nothing."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               termination={'max_rounds': 1, 'stop_when_no_new_ts': False})
+        # fail_from=1: round 0 explores fine, the final draw pass (the 2nd explore call) fails.
+        calls, _ = _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'],
+                                  fail_from=1)
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            _touch_hybrid_file(paths, network_id)
+            return (frozenset(c.ts_label for c in candidates),
+                    frozenset(c.ts_label for c in candidates))
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+
+        assert result.status == PES_LOOP_MAX_ROUNDS
+        assert len(calls) == 2
+        assert result.final_network_path == result.rounds[-1].network_path
+        assert result.final_diagram_path == result.rounds[-1].diagram_path
+        assert 'predate' in result.reason
+
+
+class TestDiagramFailuresAreNeverFatal(object):
+    """t3.pdep.explorer.arkane._draw_pes_diagram treats diagram generation as strictly
+    best-effort: the diagram describes the result, it is not part of it. The loop must hold the
+    same contract -- a matplotlib backend fault or a read-only output directory has nothing to do
+    with whether the exploration succeeded."""
+
+    @pytest.mark.parametrize('error', [RuntimeError('no matplotlib backend'),
+                                       OSError('read-only file system'),
+                                       ValueError('a species carries no E0')])
+    def test_a_non_valueerror_diagram_failure_does_not_abort_the_loop(self, tmp_path, monkeypatch,
+                                                                     config, error):
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+
+        def _explode(network_path, output_path):
+            raise error
+
+        monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram', _explode)
+        result = run_pes_loop(config, project_directory=str(tmp_path))
+
+        assert result.status == PES_LOOP_DIAGRAM_ONLY
+        assert result.rounds[0].diagram_path is None
+        assert result.final_diagram_path is None
+        assert result.final_network_path is not None, \
+            'the exploration succeeded; only the drawing failed'

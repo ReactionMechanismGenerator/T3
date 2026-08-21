@@ -146,9 +146,14 @@ class PESLoopResult:
         reason (str): Why the loop stopped, when ``status`` alone does not say (chiefly
             ``'failed'``). ``''`` otherwise.
         final_network_path (str | None): The last successfully explored network file, or ``None``
-            if the very first round failed to explore.
-        final_diagram_path (str | None): The last round's PES diagram, or ``None`` if no round ever
-            managed to draw one.
+            if the very first round failed to explore. On ``'max_rounds'`` with the last round
+            having converged (or adopted) anything, this is the re-exploration of THAT round's
+            hybrid network -- the surface carrying the barriers that round computed -- not the
+            pre-QM network its own ``RoundRecord`` carries.
+        final_diagram_path (str | None): The PES diagram drawn from ``final_network_path``, or
+            ``None`` if no diagram could be drawn. Same rule as above: on ``'max_rounds'`` after a
+            productive final round this is the QM-informed diagram, drawn after that round's
+            quantum chemistry was folded in, never the last ``RoundRecord``'s pre-QM one.
     """
     rounds: tuple
     status: str
@@ -209,6 +214,37 @@ def _trim_candidates(candidates: tuple, config: PESLoopConfig, logger) -> tuple:
         if logger is not None:
             logger.info(message)
     return candidates[:limit]
+
+
+def _draw_round_diagram(explored_network_path: str, diagram_path: str, logger) -> str | None:
+    """
+    Draw one round's PES diagram -- strictly best-effort, exactly as
+    ``t3.pdep.explorer.arkane.ArkaneExplorer._draw_pes_diagram`` already treats it.
+
+    Every exception is swallowed and logged, not only the ``ValueError`` a parser/data refusal
+    raises: a matplotlib backend problem, a full disk, or a read-only output directory has nothing
+    to do with whether the exploration this diagram describes succeeded, and must never flip a
+    round that genuinely explored into an aborted loop. The diagram describes the result; it is
+    not part of it.
+
+    Args:
+        explored_network_path (str): The freshly explored network to draw from.
+        diagram_path (str): Where to write the diagram.
+        logger: A T3 ``Logger``, or ``None``.
+
+    Returns:
+        str | None: ``diagram_path`` if the diagram was drawn, ``None`` if drawing failed.
+    """
+    try:
+        draw_pes_diagram(network_path=explored_network_path, output_path=diagram_path)
+    except Exception as e:
+        message = (f'PES loop: could not draw the diagram for {explored_network_path} '
+                   f'({type(e).__name__}): {e}')
+        _logger.warning(message)
+        if logger is not None:
+            logger.warning(message)
+        return None
+    return diagram_path
 
 
 def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
@@ -326,6 +362,9 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     prior_adopted_artifacts = bool(qm_artifacts_by_channel)
     current_network_path = config.pes.network
     max_rounds = config.termination.max_rounds
+    # Whether the round that ran last folded QM into a hybrid network -- read only by the
+    # final-draw pass below, which is reachable only after at least one round ran.
+    last_round_made_progress = False
 
     for round_index in range(max_rounds):
         paths = round_paths(project_directory, round_index)
@@ -377,17 +416,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         explored_network_path = result.network_paths[0]
         network = parse_pdep_network_file(explored_network_path)
 
-        diagram_path = None
-        try:
-            draw_pes_diagram(network_path=explored_network_path, output_path=paths.diagram)
-            diagram_path = paths.diagram
-        except ValueError as e:
-            # A legitimate refusal (a species with no E0), not a bug -- record it and keep going
-            # rather than let a diagram problem kill an otherwise-working exploration round.
-            message = f'PES loop: could not draw the diagram for {explored_network_path}: {e}'
-            _logger.warning(message)
-            if logger is not None:
-                logger.warning(message)
+        diagram_path = _draw_round_diagram(explored_network_path, paths.diagram, logger)
 
         # Translate the structural cross-round memory into THIS round's own labels through the
         # freshly explored network -- the only labels this round's file, runner, and hybrid speak.
@@ -603,8 +632,52 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         # to trust -- see no_progress_reason.
         current_network_path = (hybrid_network_path(paths, network.network_id) if made_progress
                                 else explored_network_path)
+        last_round_made_progress = made_progress
 
     reason = f'the round budget ({max_rounds}) was exhausted without converging.'
+    final_network_path = rounds[-1].network_path
+    final_diagram_path = rounds[-1].diagram_path
+
+    # THE defect this whole loop exists to eliminate, re-entering by the back door. The last
+    # permitted round's hybrid network -- the one carrying every barrier ARC just converged -- is
+    # written AFTER that round's own diagram was already drawn from its pre-QM explored network.
+    # Returning rounds[-1] here therefore hands the caller (PES.py logs both paths, and a campaign
+    # reads the diagram) the RMG-estimate surface, silently, in exactly the configuration a user is
+    # most likely to run first (max_rounds: 1). So the loop completes one final
+    # exploration-and-draw from that hybrid before returning. This charges NO further QM: no
+    # candidate split, no ME SA, no qm_runner call, no ARC project directory -- only the explore
+    # and the draw. It gets round_paths(max_rounds) as its own directory so its explorer output and
+    # diagram never overwrite the last real round's, and it appends no RoundRecord: no round of QM
+    # happened, and claiming one would misreport the budget that was actually spent.
+    if last_round_made_progress and os.path.isfile(current_network_path):
+        final_paths = round_paths(project_directory, max_rounds)
+        os.makedirs(final_paths.root, exist_ok=True)
+        final_result = explore_pdep_network(
+            network_path=current_network_path,
+            config=_build_explorer_config(config, project_directory, final_paths), logger=logger)
+        if final_result.status == EXPLORATION_STATUS_SUCCEEDED and final_result.network_paths:
+            final_network_path = final_result.network_paths[0]
+            final_diagram_path = _draw_round_diagram(final_network_path, final_paths.diagram,
+                                                     logger)
+            reason = (f'{reason} The final network and diagram are the QM-informed re-exploration '
+                      f'of round {max_rounds - 1}\'s hybrid network {current_network_path!r}, '
+                      f'drawn after that round\'s quantum chemistry was folded in.')
+        else:
+            # Fail OPEN, loudly: the last round's own explored network and diagram remain the best
+            # result this run has, and reporting them is truthful -- they simply predate this
+            # round's QM. Turning a bonus re-exploration into PES_LOOP_FAILED would throw away
+            # every round that did work.
+            failure = ('; '.join(final_result.reasons) if final_result.reasons
+                       else f'status {final_result.status!r}')
+            message = (f'PES loop: could not re-explore the final round\'s hybrid network '
+                       f'{current_network_path!r} to draw a QM-informed diagram ({failure}); '
+                       f'reporting round {max_rounds - 1}\'s own explored network and diagram, '
+                       f'which predate that round\'s quantum chemistry.')
+            _logger.warning(message)
+            if logger is not None:
+                logger.warning(message)
+            reason = f'{reason} {message}'
+
     return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_MAX_ROUNDS, reason=reason,
-                         final_network_path=rounds[-1].network_path,
-                         final_diagram_path=rounds[-1].diagram_path)
+                         final_network_path=final_network_path,
+                         final_diagram_path=final_diagram_path)
