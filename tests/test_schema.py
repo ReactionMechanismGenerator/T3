@@ -28,6 +28,9 @@ from t3.schema import (IDTCriterionEnum,
                        RMGSpeciesConstraints,
                        QM,
                        InputBase,
+                       PESLoopConfig,
+                       PESSection,
+                       PESQMSection,
                        )
 
 # define a long quote of length 444 characters to test constraints on string length
@@ -1114,3 +1117,193 @@ def test_qm_schema():
     qm = QM(**qm)
     assert qm.adapter == 'ARC'
     assert qm.species == qm.reactions == list()
+
+
+class TestPESLoopConfig(object):
+    """The standalone PES exploration loop's input schema."""
+
+    def test_minimal_valid_config(self):
+        """Only pes.network and pes.source are required; everything else has a default."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                'bath_gas': {'N2': 1.0}})
+        assert config.pes.method == 'MSC'
+        assert config.qm.opt_level == 'wb97xd/def2tzvp'
+        assert config.termination.max_rounds == 5
+        assert config.qm.scope == 'sensitive'
+
+    def test_bimolecular_entry_channel_is_accepted(self):
+        """An entry channel A + B, not just an isomer source. Arkane's explorer takes both."""
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['HO', 'CHO'], 'bath_gas': {'N2': 1.0}})
+        assert config.pes.source == ['HO', 'CHO']
+
+    def test_three_source_species_refused(self):
+        """Arkane's explorer accepts a unimolecular or bimolecular source and nothing more, so
+        this is refused at validation rather than deep inside Arkane."""
+        with pytest.raises(ValidationError, match='1 or 2'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A', 'B', 'C'], 'bath_gas': {'N2': 1.0}})
+
+    def test_zero_source_species_refused(self):
+        with pytest.raises(ValidationError, match='1 or 2'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': [], 'bath_gas': {'N2': 1.0}})
+
+    def test_a_missing_bath_gas_is_refused(self):
+        """There is no bath gas that is right by default. Left optional, a missing one surfaces
+        only when PDepExplorerConfig refuses it -- inside run_pes_loop, after the project
+        directory, the log file and round_0/ have already been created."""
+        with pytest.raises(ValidationError, match='bath_gas'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A']})
+
+    def test_an_empty_bath_gas_is_refused(self):
+        """An empty mapping passes the type check and is exactly as useless as a missing one."""
+        with pytest.raises(ValidationError, match='non-empty'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {}})
+
+    def test_dashed_level_of_theory_refused(self):
+        """A dashed level makes ARC miss the cached frequency scale factor and makes Gaussian
+        reject the route line. Refuse it here rather than debug it on a cluster."""
+        with pytest.raises(ValidationError, match='undashed'):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                          qm={'opt_level': 'wb97x-d/def2-tzvp', 'freq_level': 'wb97x-d/def2-tzvp'})
+
+    def test_genuine_dunning_dashes_are_allowed(self):
+        """cc-pvtz-f12 keeps its dashes -- only def2 and wb97xd must be hyphen-free."""
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                               qm={'sp_level': 'dlpno-ccsd(t)-f12/cc-pvtz-f12'})
+        assert config.qm.sp_level == 'dlpno-ccsd(t)-f12/cc-pvtz-f12'
+
+    def test_freq_level_must_equal_opt_level(self):
+        """Frequencies must be evaluated at a real minimum of the same surface.
+
+        ``scan_level`` is moved WITH ``freq_level`` deliberately: left at its default it disagrees
+        with the mutated ``freq_level``, so the SCAN guard fires instead -- and that message
+        contains the substring 'freq_level=', which satisfied a ``match='freq_level'`` even with
+        the freq/opt guard deleted. Hence the exact phrase matched below.
+        """
+        with pytest.raises(ValidationError, match="'freq_level' must equal 'opt_level'"):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                          qm={'opt_level': 'wb97xd/def2tzvp', 'freq_level': 'wb97xd/def2svp',
+                              'scan_level': 'wb97xd/def2svp'})
+
+    def test_scan_level_must_equal_freq_level(self):
+        """So rotors project out correctly."""
+        with pytest.raises(ValidationError, match="'scan_level' must equal 'freq_level'"):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                          qm={'freq_level': 'wb97xd/def2tzvp', 'scan_level': 'wb97xd/def2svp'})
+
+    def test_irc_level_must_equal_opt_level(self):
+        """#10: irc must be evaluated at the same level as opt -- had zero coverage."""
+        with pytest.raises(ValidationError, match="'irc_level' must equal 'opt_level'"):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                          qm={'opt_level': 'wb97xd/def2tzvp', 'irc_level': 'wb97xd/def2svp'})
+
+    def test_scope_must_be_all_or_sensitive(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}, qm={'scope': 'some'})
+
+    def test_scope_all_is_accepted(self):
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}, qm={'scope': 'all'})
+        assert config.qm.scope == 'all'
+
+    def test_max_rounds_must_be_positive(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                          termination={'max_rounds': 0})
+
+    def test_max_rounds_rejects_bool(self):
+        """bool is a subclass of int, so without strict=True `max_rounds: true` silently means 1."""
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                          termination={'max_rounds': True})
+
+    def test_timeout_is_required_to_be_positive(self):
+        """Explorer runtime is unbounded; the timeout is load-bearing, not decorative."""
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}, 'timeout': -1})
+
+    def test_rotors_and_irc_default_off(self):
+        """Cost knobs, off by default, turned on per campaign."""
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}})
+        assert config.qm.rotors is False
+        assert config.qm.irc is False
+
+    def test_reuse_defaults_to_empty(self):
+        config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}})
+        assert config.reuse.from_t3_projects == []
+
+
+class TestPESQMSectionMinDeltaLnK(object):
+    """qm.min_delta_ln_k mirrors t3.sensitivity.pdep_min_delta_ln_k: same default, same bounds."""
+
+    def test_default_matches_t3s_in_run_floor(self):
+        assert PESQMSection().min_delta_ln_k == 1e-3
+
+    def test_bounds_are_exclusive(self):
+        with pytest.raises(ValidationError):
+            PESQMSection(min_delta_ln_k=0.0)
+        with pytest.raises(ValidationError):
+            PESQMSection(min_delta_ln_k=1.0)
+        assert PESQMSection(min_delta_ln_k=1e-6).min_delta_ln_k == 1e-6
+
+
+class TestPESSectionsForbidExtras(object):
+    """``extra = "forbid"`` on PESLoopConfig alone only rejects an unknown TOP-LEVEL key --
+    pydantic does not propagate a model's config into the nested models its fields declare. A typo
+    inside a section was silently discarded and the run proceeded on the schema default, so a user
+    who wrote ``qm.max_transition_state_per_round`` (singular) got 10 transition states per round
+    and was never told their setting did nothing."""
+
+    _PES = {'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}
+
+    def test_the_singular_typo_that_motivated_this_is_refused(self):
+        with pytest.raises(ValidationError, match='max_transition_state_per_round'):
+            PESLoopConfig(pes=self._PES, qm={'max_transition_state_per_round': 3})
+
+    def test_an_unknown_pes_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=dict(self._PES, bath_gass={'N2': 1.0}))
+
+    def test_an_unknown_qm_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=self._PES, qm={'sp_levl': 'wb97xd/def2tzvp'})
+
+    def test_an_unknown_termination_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=self._PES, termination={'max_round': 2})
+
+    def test_an_unknown_reuse_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=self._PES, reuse={'from_t3_project': ['/p']})
+
+    def test_a_valid_config_is_still_accepted(self):
+        """The refusal must not be so broad that a correct input file stops validating."""
+        config = PESLoopConfig(pes=self._PES, qm={'max_transition_states_per_round': 3},
+                               termination={'max_rounds': 2},
+                               reuse={'from_t3_projects': ['/p']})
+        assert config.qm.max_transition_states_per_round == 3
+
+
+class TestPESTimeoutIsStrictAndFinite(object):
+    """PDepExplorerConfig refuses a bool or a non-finite timeout explicitly -- but only from
+    INSIDE run_pes_loop, after the CLI has created the project directory, the log file and
+    round_0/. max_rounds already uses strict=True for exactly this reason."""
+
+    _PES = {'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}
+
+    def test_true_is_not_a_one_second_budget(self):
+        """bool is a subclass of int: ``timeout: true`` otherwise validates as 1.0, a one-second
+        explorer budget that fails every network, arrived at by a typo."""
+        with pytest.raises(ValidationError):
+            PESSection(**dict(self._PES, timeout=True))
+
+    def test_positive_infinity_is_refused(self):
+        """+inf passes gt=0 and reinstates exactly the unbounded runtime this field bounds."""
+        with pytest.raises(ValidationError):
+            PESSection(**dict(self._PES, timeout=float('inf')))
+
+    def test_nan_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESSection(**dict(self._PES, timeout=float('nan')))
+
+    def test_a_plain_yaml_integer_is_still_accepted(self):
+        """``timeout: 3600`` is what a user actually writes; strictness must not refuse it."""
+        assert PESSection(**dict(self._PES, timeout=3600)).timeout == 3600.0

@@ -13,7 +13,7 @@ import ast
 import io
 import tokenize
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -244,6 +244,17 @@ class PDepNetwork:
                                      what lets a decision made about one revision be refused as a
                                      gate for a run against another (see
                                      ``t3.pdep.api.explore_pdep_network``).
+        species_structures (dict): Species label -> the RMG adjacency-list text from that
+                                   species' ``structure = adjacencyList('''...''')`` keyword, for
+                                   every ``species(...)`` call that declares one. A label with no
+                                   ``structure`` keyword (or one that is not a bare
+                                   ``adjacencyList("<literal string>")`` call) is simply absent from
+                                   this dict rather than raising: most callers (net reaction
+                                   counting, join bookkeeping) never need structures at all, and
+                                   only a species actually queued for QM (``t3.pdep.pes_qm``) needs
+                                   one to hand ARC a real molecule. Default ``{}`` so every existing
+                                   ``PDepNetwork(...)`` construction site (which never passes this
+                                   keyword) keeps working unchanged.
     """
     network_id: str
     path: str
@@ -256,6 +267,7 @@ class PDepNetwork:
     product_channels: tuple
     product_channels_declared: bool = False
     source_hash: str | None = None
+    species_structures: dict = field(default_factory=dict)
 
     def expected_net_reaction_count(self) -> int:
         """
@@ -764,6 +776,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
         raise ValueError(f"Could not parse the pdep network file at '{path}' as Python: {e}")
 
     species_labels = list()
+    species_structures = dict()
     transition_state_labels = list()
     path_reactions = list()
     network_label = None
@@ -786,6 +799,9 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
                                       action="omit it from the species labels")
             if label is not None:
                 species_labels.append(label)
+                structure = _species_structure(kwargs.get('structure'))
+                if structure is not None:
+                    species_structures[label] = structure
 
         elif call_name == 'transitionState':
             label = _literal_or_raise(kwargs.get('label'), path=path, keyword='label',
@@ -848,6 +864,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
         product_channels=product_channels,
         product_channels_declared=product_channels_declared,
         source_hash=source_hash,
+        species_structures=species_structures,
     )
 
 
@@ -1270,6 +1287,38 @@ def _call_keywords(call: ast.Call, path: str = '', call_name: Optional[str] = No
                              f"would actually supply.")
         keywords[kw.arg] = kw.value
     return keywords
+
+
+def _species_structure(node) -> str | None:
+    """
+    Extract the adjacency-list text from a species' ``structure`` keyword value node, if possible.
+
+    A ``species(...)`` call's ``structure`` keyword is written as
+    ``structure = adjacencyList('''...''')`` -- an ``ast.Call`` node, not a literal, so neither
+    ``_literal_or_none`` nor ``_literal_or_raise`` can read it (``ast.literal_eval`` always refuses
+    a ``Call`` node), and ``_call_keywords`` cannot be reused on the nested ``adjacencyList(...)``
+    call either, since it refuses ANY positional argument and ``adjacencyList('''...''')`` is called
+    with exactly one. This fails open (returns ``None``) rather than raising for any shape other
+    than the exact one RMG writes: unlike the top-level DSL calls this module otherwise refuses to
+    guess about, an unreadable ``structure`` keyword only costs the QM path a species it cannot
+    build a molecule for (see ``PDepNetwork.species_structures``) -- it does not change what network
+    topology gets reported, so there is nothing here worth failing the whole parse over.
+
+    Args:
+        node: The AST value node bound to a ``structure`` keyword (or ``None``).
+
+    Returns:
+        str: The adjacency-list text, or ``None`` if ``node`` is ``None`` or is not a bare
+            ``adjacencyList("<literal string>")`` call.
+    """
+    if node is None:
+        return None
+    if not (isinstance(node, ast.Call) and _get_call_name(node) == 'adjacencyList' and len(node.args) == 1):
+        return None
+    arg = node.args[0]
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value
+    return None
 
 
 def _literal_or_none(node):

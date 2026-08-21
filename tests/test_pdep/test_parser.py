@@ -61,6 +61,23 @@ def test_network_id_equals_file_stem(stem, _num_species, _num_ts, _num_reactions
     assert network.path == path
 
 
+def test_species_structures_real_fixture_network799_1():
+    """
+    Test that ``PDepNetwork.species_structures`` captures each species' adjacency-list text,
+    keyed by the same label used in ``species_labels`` -- the field ``t3.pdep.pes_qm`` needs to
+    build real ARC ``ARCSpecies``/``ARCReaction`` dicts (ruling C2), rather than the bare
+    ``{'ts_label', 'family'}`` reaction dicts that cannot construct a valid ``ARCReaction``.
+    """
+    path = os.path.join(TEST_DATA_BASE_PATH, 'pdep_real_networks', 'network799_1', 'network799_1.py')
+    network = parse_pdep_network_file(path=path)
+    assert set(network.species_structures.keys()) == set(network.species_labels)
+    co3 = network.species_structures['O=C1OO1(21648)']
+    assert '1 O u0 p2 c0 {2,S} {4,S}' in co3
+    assert '4 C u0 p0 c0 {1,S} {2,S} {3,D}' in co3
+    o_atom = network.species_structures['O-2(13598)']
+    assert o_atom.strip() == '1 O u0 p3 c0'
+
+
 def test_network4_2_reaction1():
     """Test a specific known reaction (reaction1) from network4_2.py."""
     path = os.path.join(PDEP_NETWORK_DIR, 'network4_2.py')
