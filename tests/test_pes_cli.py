@@ -9,6 +9,7 @@ import yaml
 
 import PES
 from PES import exit_code_for, parse_command_line_arguments, read_pes_input
+from t3.pdep.parser import parse_pdep_network_file
 from t3.pdep.pes_loop import (PES_LOOP_CONVERGED, PES_LOOP_DIAGRAM_ONLY, PES_LOOP_FAILED,
                               PES_LOOP_MAX_ROUNDS, PES_LOOP_NO_CANDIDATES, PES_LOOP_STALLED)
 
@@ -138,6 +139,34 @@ class TestShippedExample(object):
         assert len(config.pes.source) == 2, 'the example demonstrates a bimolecular entry channel'
         assert config.qm.scope == 'sensitive'
         assert config.termination.max_rounds == 5
+
+    def test_the_example_names_a_network_file_that_exists(self):
+        """The header of the example says `python PES.py examples/pes_loop/input.yml`. It named
+        network1_full.py, which does not exist anywhere in this repository, so the command in the
+        example's own header failed at the CLI's pre-flight. Validating the schema alone cannot
+        catch that -- pes.network is just a non-empty string to pydantic."""
+        config = read_pes_input(self.EXAMPLE_PATH)
+        network_path = config.pes.network
+        if not os.path.isabs(network_path):
+            # Exactly how PES.main resolves it: against the input file's own directory.
+            network_path = os.path.join(os.path.dirname(self.EXAMPLE_PATH), network_path)
+        assert os.path.isfile(network_path), \
+            f'the example names a network file that does not exist: {network_path}'
+
+    def test_the_examples_source_and_bath_gas_appear_in_its_network(self):
+        """A network file that exists is not enough: Arkane's explorer resolves `source` and the
+        bath gas out of the network's own species dictionary, spelled exactly as that file spells
+        them (RMG labels carry their index). A mismatch fails deep inside an Arkane run, long
+        after the project directory and log file have been created."""
+        config = read_pes_input(self.EXAMPLE_PATH)
+        network_path = config.pes.network
+        if not os.path.isabs(network_path):
+            network_path = os.path.join(os.path.dirname(self.EXAMPLE_PATH), network_path)
+        species_labels = set(parse_pdep_network_file(path=network_path).species_labels)
+        assert set(config.pes.source) <= species_labels, \
+            f'{sorted(set(config.pes.source) - species_labels)} are not species of the network'
+        assert set(config.pes.bath_gas) <= species_labels, \
+            f'{sorted(set(config.pes.bath_gas) - species_labels)} are not species of the network'
 
     def test_the_shipped_example_writes_levels_undashed(self):
         """A dashed level makes ARC miss the cached frequency scale factor and makes Gaussian

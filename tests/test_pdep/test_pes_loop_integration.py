@@ -33,8 +33,8 @@ import sys
 import yaml
 
 import PES
-from t3.pdep.capture import (CaptureResult, capture_ts_artifacts, captured_qm_artifact_path,
-                             verify_capture)
+from t3.pdep.capture import (CAPTURE_MANIFEST_FILE_NAME, CaptureResult, VerifyResult,
+                             capture_ts_artifacts, captured_qm_artifact_path, verify_capture)
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED, PDepExplorationResult
 from t3.pdep.hashing import hash_file
@@ -194,7 +194,21 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
         return HybridNetworkResult(dest_path=dest_path, qm_ts_labels=tuple(qm_transition_states),
                                    ilt_ts_labels=(), vendored_files=(), warnings=())
 
+    def _fake_verify_capture(root):
+        # arc_qm_runner reads the energy settings an ADOPTED artifact was computed under from that
+        # artifact's own prior capture manifest, so that a round which both captures new QM and
+        # folds in adopted artifacts can refuse a mismatch instead of silently rendering the
+        # adopted barriers under this round's header. The capture double above writes no manifest,
+        # so this double supplies what verify_capture would have read from one -- the same settings
+        # it reports as this round's own, which is the truth here: every round of this run computes
+        # at one level of theory.
+        return VerifyResult(capture_dir=root,
+                            manifest_path=os.path.join(root, CAPTURE_MANIFEST_FILE_NAME),
+                            record_count=1, captured_artifact_count=1, networks=dict(),
+                            energy_settings=_ENERGY_SETTINGS, ts_records=())
+
     monkeypatch.setattr('t3.pdep.pes_qm.capture_ts_artifacts', _fake_capture_ts_artifacts)
+    monkeypatch.setattr('t3.pdep.pes_qm.verify_capture', _fake_verify_capture)
     monkeypatch.setattr('t3.pdep.pes_qm.write_hybrid_network_input_file',
                         _fake_write_hybrid_network_input_file)
 

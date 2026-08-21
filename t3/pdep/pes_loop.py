@@ -335,9 +335,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     # three conditions against each other. The seed network is still parsed only when something
     # actually needs its keys; an empty map is the truthful value when nothing does.
     seed_channel_keys = dict()
+    seed_adoption_keys = dict()
     if adopted_ts_labels or config.reuse.from_t3_projects:
         seed_network = parse_pdep_network_file(path=config.pes.network)
         seed_channel_keys = channel_keys_by_ts_label(seed_network)
+        seed_adoption_keys = adoption_channel_keys_by_ts_label(seed_network)
     if adopted_ts_labels:
         # A mapping supplies the artifact for each label; a bare iterable supplies none, and every
         # label in it therefore resolves to None below and is refused (see the fail-closed check).
@@ -391,7 +393,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         # t3.pdep.pes_rounds.adoption_channel_keys_by_ts_label. freq_level goes with sp_level
         # because ARC's own model_chemistry string depends on both.
         adopted = adopt_prior_qm(config.reuse.from_t3_projects, network_id, config.qm.sp_level,
-                                 adoption_channel_keys_by_ts_label(seed_network),
+                                 seed_adoption_keys,
                                  freq_level=config.qm.freq_level)
         if adopted:
             message = (f"PES loop: reusing {len(adopted)} prior QM result(s) for network "

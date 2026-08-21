@@ -321,7 +321,8 @@ def channel_keys_by_ts_label(network: PDepNetwork) -> dict:
 def adoption_channel_keys_by_ts_label(network: PDepNetwork) -> dict:
     """
     Map each transition state to the identity CROSS-CAPTURE adoption may be matched on: its
-    structural channel key PLUS the RMG family of the path reaction that produced it.
+    structural channel key PLUS a discriminator for the PATHWAY that produced it -- the RMG family
+    when the kinetics comment names one, the comment itself otherwise.
 
     Why the endpoints alone are not enough here. ``structural_channel_key`` identifies the
     reactants and products a channel connects -- not a saddle point. ``channel_keys_by_ts_label``
@@ -335,46 +336,58 @@ def adoption_channel_keys_by_ts_label(network: PDepNetwork) -> dict:
     What actually discriminates a pathway, established empirically against the vendored real
     networks rather than assumed:
 
-    - The RMG family, parsed out of the path reaction's kinetics comment
-      (``t3.pdep.barrierless.rmg_family``), is the ONE such field, and it is present only
-      sometimes: 1 of 3 path reactions in ``tests/data/pdep_real_networks/network799_1``, and 0 of
-      3 in ``network21_1``, whose kinetics come from a reaction library and name no family at all.
-    - No other field survives. The kinetics comment is the only carrier of pathway provenance, and
-      ``t3.pdep.hybrid`` DELIBERATELY drops the whole ``kinetics = ...`` entry of every QM'd path
-      reaction (its invariant 2, ``t3/pdep/hybrid.py:18``) -- so any comment-derived discriminator
-      is null on exactly the channels whose identity has to be carried. The transition state's
-      ``E0`` goes the same way, replaced by a statmech ``Log(...)`` reference.
+    - The RMG family (``t3.pdep.barrierless.rmg_family``) is the obvious candidate, and on its own
+      it is not enough: it is present in only 1 of 3 path reactions in
+      ``tests/data/pdep_real_networks/network799_1`` and 0 of 3 in ``network21_1``, whose kinetics
+      come from a reaction library and name no family at all.
+    - The kinetics comment the family is parsed OUT of is present in all six, and discriminates
+      just as well -- ``'Estimated from node Root_N-1R!H->C'`` and
+      ``"Reaction library: 'primaryNitrogenLibrary'"`` each name the specific rate rule or library
+      a pathway came from. It is the fallback here.
+    - Nothing else exists. The kinetics comment is the ONLY carrier of pathway provenance in a
+      network file, and ``t3.pdep.hybrid`` DELIBERATELY drops the whole ``kinetics = ...`` entry
+      of every QM'd path reaction (its invariant 2, ``t3/pdep/hybrid.py:18``), so a comment-derived
+      discriminator is null on exactly the channels a WITHIN-RUN carry would need it for. The
+      transition state's ``E0`` goes the same way, replaced by a statmech ``Log(...)`` reference.
 
     So the discriminator exists for cross-capture adoption -- where both sides are RMG-estimated
-    networks that still carry their kinetics comments -- and a channel that does not carry one is
+    networks that still carry their kinetics comments -- and a channel that carries neither is
     REFUSED (omitted from this map, logged) rather than matched on its endpoints. A refused match
     costs quantum chemistry that was already paid for once; a false match costs correctness of the
     barrier the whole loop exists to compute, presented as if it had been computed. That asymmetry
     decides it.
 
     This is NOT what the within-run, round-to-round carry uses -- see ``channel_keys_by_ts_label``,
-    which stays endpoints-only precisely because the family cannot survive the hybrid write this
+    which stays endpoints-only precisely because no discriminator survives the hybrid write this
     loop itself performs between one round and the next.
 
     Args:
         network (PDepNetwork): The parsed network.
 
     Returns:
-        dict: Network-local TS label -> ``(structural key, RMG family)``, for every transition
-        state that has both an unambiguous structural identity and a named family.
+        dict: Network-local TS label -> ``(structural key, pathway discriminator)``, for every
+        transition state that has both an unambiguous structural identity and a discriminator.
     """
     path_reactions_by_ts = network.path_reactions_by_ts()
     keys = dict()
     for ts_label, key in channel_keys_by_ts_label(network).items():
-        family = rmg_family(path_reactions_by_ts[ts_label][0])
-        if family is None:
+        path_reaction = path_reactions_by_ts[ts_label][0]
+        # Family first, comment second. The family is the coarser and more stable of the two: it
+        # survives rate-rule retraining and degeneracy changes that reword a comment, so preferring
+        # it keeps a family-bearing channel adoptable across RMG database versions. The comment is
+        # the fallback, not a second-class one -- 'Estimated from node Root_N-1R!H->C' and
+        # "Reaction library: 'primaryNitrogenLibrary'" each name the specific rate rule or library
+        # a pathway came from, which is exactly the pathway identity the endpoints cannot supply.
+        discriminator = rmg_family(path_reaction) or (path_reaction.kinetics_comment or '').strip()
+        if not discriminator:
             _logger.info(
-                f'Transition state {ts_label!r} of network {network.network_id!r} names no RMG '
-                f'family, so its channel is identified by its endpoints alone. A different '
-                f'pathway between the same endpoints would key identically across captures, so '
-                f'prior QM will not be adopted for it -- it will be recomputed instead.')
+                f'Transition state {ts_label!r} of network {network.network_id!r} names neither an '
+                f'RMG family nor any kinetics comment, so its channel is identified by its '
+                f'endpoints alone. A different pathway between the same endpoints would key '
+                f'identically across captures, so prior QM will not be adopted for it -- it will '
+                f'be recomputed instead.')
             continue
-        keys[ts_label] = (key, family)
+        keys[ts_label] = (key, discriminator)
     return keys
 
 

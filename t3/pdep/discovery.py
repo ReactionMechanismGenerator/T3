@@ -444,12 +444,18 @@ class TSArtifactRecord:
             sensitivity evidence was supplied for this transition state.
         path_reaction_labels (tuple): The labels of the path reactions this transition state owns,
             carried through from the ``t3.pdep.join.TSJoinRecord`` this record was resolved from.
-            This is the structural identity of the transition state -- unlike ``network_ts_label``
-            (positional: Arkane numbers ``TS1``, ``TS2``, ... by path-reaction index, so pruning a
-            reaction shifts every later label) or ``network_id`` (Arkane's final network artifact is
-            named by explorer run index, e.g. ``network0_full``, not by any stem a caller controls),
-            this tuple identifies the actual saddle point and is what any cross-capture matching
-            (e.g. reusing a prior capture's QM for a differently-named network) must key on.
+            Provenance and diagnostics only -- NEVER an identity, and never what a cross-capture
+            match may key on. These labels are exactly as positional as ``network_ts_label``:
+            Arkane names path reactions ``reaction1``, ``reaction2``, ... by index
+            (``arkane/pdep.py``), a remove-then-append can even leave two blocks labelled
+            ``reaction3`` in one file, and neither label survives a re-exploration that prunes or
+            renumbers. ``TSJoinRecord`` documents the same thing about them, and
+            ``t3.pdep.pes_qm.adopt_prior_qm`` deliberately ignores them, resolving each record's
+            transition state through the capture's own VENDORED network copy instead and matching
+            on the structural channel key
+            (``t3.pdep.pes_rounds.adoption_channel_keys_by_ts_label``: canonical species
+            structures, direction-insensitive, qualified by the RMG family). That is what any
+            cross-capture matching must key on.
     """
 
     def __init__(self,

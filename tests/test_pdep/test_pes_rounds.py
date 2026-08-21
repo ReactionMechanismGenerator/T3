@@ -315,12 +315,35 @@ class TestAdoptionChannelKeysAreNotEndpointsOnly(object):
         assert adoption_channel_keys_by_ts_label(prior)['TS0'] \
             != adoption_channel_keys_by_ts_label(current)['TS0']
 
-    def test_a_channel_naming_no_family_is_refused_not_matched_on_endpoints(self):
+    def test_a_channel_with_no_discriminator_at_all_is_refused(self):
         """A refused match costs quantum chemistry that was already paid for once; a false one
         costs the correctness of the barrier. No discriminator, no adoption."""
-        network = self._network(["Reaction library: 'primaryNitrogenLibrary'"])
+        network = self._network([''])
         assert 'TS0' in channel_keys_by_ts_label(network)
         assert adoption_channel_keys_by_ts_label(network) == {}
+
+    def test_a_library_sourced_channel_falls_back_to_its_kinetics_comment(self):
+        """network21_1's three path reactions all come from a reaction library and name no family
+        at all. Refusing them outright would make reuse dead for a whole class of real network --
+        the comment names the library, which is a pathway identity the endpoints are not."""
+        library = self._network(["Reaction library: 'primaryNitrogenLibrary'"])
+        node = self._network(['Estimated from node Root_N-1R!H->C'])
+        assert 'TS0' in adoption_channel_keys_by_ts_label(library)
+        assert adoption_channel_keys_by_ts_label(library)['TS0'] \
+            != adoption_channel_keys_by_ts_label(node)['TS0']
+
+    def test_the_family_wins_over_the_comment_when_one_is_named(self):
+        """The family is the coarser and more stable of the two -- it survives a degeneracy
+        multiplier or rate-rule retraining that rewords the comment around it, so a family-bearing
+        channel stays adoptable across RMG database versions."""
+        a = self._network(['Estimated using template [x] for rate rule [y]\n'
+                           'Multiplied by reaction path degeneracy 2.0\n'
+                           'family: H_Abstraction'])
+        b = self._network(['Estimated using template [x] for rate rule [y]\n'
+                           'Multiplied by reaction path degeneracy 3.0\n'
+                           'family: H_Abstraction'])
+        assert adoption_channel_keys_by_ts_label(a)['TS0'] \
+            == adoption_channel_keys_by_ts_label(b)['TS0']
 
     def test_the_same_pathway_still_matches_across_files(self):
         """The refusal must not be so broad that reuse can never fire at all."""
