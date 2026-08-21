@@ -29,6 +29,7 @@ from t3.schema import (IDTCriterionEnum,
                        QM,
                        InputBase,
                        PESLoopConfig,
+                       PESSection,
                        PESQMSection,
                        )
 
@@ -1242,3 +1243,67 @@ class TestPESQMSectionMinDeltaLnK(object):
         with pytest.raises(ValidationError):
             PESQMSection(min_delta_ln_k=1.0)
         assert PESQMSection(min_delta_ln_k=1e-6).min_delta_ln_k == 1e-6
+
+
+class TestPESSectionsForbidExtras(object):
+    """``extra = "forbid"`` on PESLoopConfig alone only rejects an unknown TOP-LEVEL key --
+    pydantic does not propagate a model's config into the nested models its fields declare. A typo
+    inside a section was silently discarded and the run proceeded on the schema default, so a user
+    who wrote ``qm.max_transition_state_per_round`` (singular) got 10 transition states per round
+    and was never told their setting did nothing."""
+
+    _PES = {'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}
+
+    def test_the_singular_typo_that_motivated_this_is_refused(self):
+        with pytest.raises(ValidationError, match='max_transition_state_per_round'):
+            PESLoopConfig(pes=self._PES, qm={'max_transition_state_per_round': 3})
+
+    def test_an_unknown_pes_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=dict(self._PES, bath_gass={'N2': 1.0}))
+
+    def test_an_unknown_qm_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=self._PES, qm={'sp_levl': 'wb97xd/def2tzvp'})
+
+    def test_an_unknown_termination_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=self._PES, termination={'max_round': 2})
+
+    def test_an_unknown_reuse_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESLoopConfig(pes=self._PES, reuse={'from_t3_project': ['/p']})
+
+    def test_a_valid_config_is_still_accepted(self):
+        """The refusal must not be so broad that a correct input file stops validating."""
+        config = PESLoopConfig(pes=self._PES, qm={'max_transition_states_per_round': 3},
+                               termination={'max_rounds': 2},
+                               reuse={'from_t3_projects': ['/p']})
+        assert config.qm.max_transition_states_per_round == 3
+
+
+class TestPESTimeoutIsStrictAndFinite(object):
+    """PDepExplorerConfig refuses a bool or a non-finite timeout explicitly -- but only from
+    INSIDE run_pes_loop, after the CLI has created the project directory, the log file and
+    round_0/. max_rounds already uses strict=True for exactly this reason."""
+
+    _PES = {'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}}
+
+    def test_true_is_not_a_one_second_budget(self):
+        """bool is a subclass of int: ``timeout: true`` otherwise validates as 1.0, a one-second
+        explorer budget that fails every network, arrived at by a typo."""
+        with pytest.raises(ValidationError):
+            PESSection(**dict(self._PES, timeout=True))
+
+    def test_positive_infinity_is_refused(self):
+        """+inf passes gt=0 and reinstates exactly the unbounded runtime this field bounds."""
+        with pytest.raises(ValidationError):
+            PESSection(**dict(self._PES, timeout=float('inf')))
+
+    def test_nan_is_refused(self):
+        with pytest.raises(ValidationError):
+            PESSection(**dict(self._PES, timeout=float('nan')))
+
+    def test_a_plain_yaml_integer_is_still_accepted(self):
+        """``timeout: 3600`` is what a user actually writes; strictness must not refuse it."""
+        assert PESSection(**dict(self._PES, timeout=3600)).timeout == 3600.0

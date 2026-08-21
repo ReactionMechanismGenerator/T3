@@ -899,7 +899,24 @@ def _refuse_dashed_level(value: str, field_name: str) -> str:
     return value
 
 
-class PESSection(BaseModel):
+class PESStrictSection(BaseModel):
+    """
+    Base for every section of the standalone PES exploration loop's input file.
+
+    ``extra = "forbid"`` on ``PESLoopConfig`` alone only rejects an unknown TOP-LEVEL key: pydantic
+    does not propagate a model's config into the nested models its fields declare. Without this
+    base, a typo inside a section -- ``qm.max_transition_state_per_round`` for
+    ``max_transition_states_per_round`` -- is silently discarded, the run proceeds on the schema
+    default, and the user is never told their setting did nothing. Every section forbids extras
+    here rather than repeating the class-level config four times, so a section added later cannot
+    forget to.
+    """
+
+    class Config:
+        extra = "forbid"
+
+
+class PESSection(PESStrictSection):
     """
     A class for validating input.pes arguments of the standalone PES exploration loop.
     """
@@ -918,7 +935,14 @@ class PESSection(BaseModel):
     maximum_radical_electrons: Annotated[int, Field(gt=0, strict=True)] | None = None
     # Explorer runtime is unbounded, so this is load-bearing rather than decorative: without it a
     # single pathological network parks the loop forever.
-    timeout: Annotated[float, Field(gt=0)] = 7200.0
+    #
+    # strict=True for the same reason max_rounds uses it: bool is a subclass of int, so
+    # `timeout: true` in a YAML input otherwise validates as 1.0 -- a one-second explorer budget
+    # that fails every network, arrived at by a typo. allow_inf_nan=False because +inf passes
+    # `gt=0` and reinstates exactly the unbounded runtime this field exists to bound. Both are
+    # refused by PDepExplorerConfig too, but only from INSIDE run_pes_loop, after the CLI has
+    # created the project directory, the log file and round_0/.
+    timeout: Annotated[float, Field(gt=0, strict=True, allow_inf_nan=False)] = 7200.0
 
     @field_validator('source')
     @classmethod
@@ -960,7 +984,7 @@ class PESSection(BaseModel):
         return value
 
 
-class PESQMSection(BaseModel):
+class PESQMSection(PESStrictSection):
     """
     A class for validating input.qm arguments of the standalone PES exploration loop.
 
@@ -1013,7 +1037,7 @@ class PESQMSection(BaseModel):
         return self
 
 
-class PESTerminationSection(BaseModel):
+class PESTerminationSection(PESStrictSection):
     """
     A class for validating input.termination arguments of the standalone PES exploration loop.
     """
@@ -1023,14 +1047,14 @@ class PESTerminationSection(BaseModel):
     stop_when_no_new_ts: bool = True
 
 
-class PESReuseSection(BaseModel):
+class PESReuseSection(PESStrictSection):
     """
     A class for validating input.reuse arguments of the standalone PES exploration loop.
     """
     from_t3_projects: list[str] = Field(default_factory=list)
 
 
-class PESLoopConfig(BaseModel):
+class PESLoopConfig(PESStrictSection):
     """
     A class for validating the standalone PES exploration loop's input file.
     """
@@ -1038,9 +1062,6 @@ class PESLoopConfig(BaseModel):
     qm: PESQMSection = Field(default_factory=PESQMSection)
     termination: PESTerminationSection = Field(default_factory=PESTerminationSection)
     reuse: PESReuseSection = Field(default_factory=PESReuseSection)
-
-    class Config:
-        extra = "forbid"
 
 
 class InputBase(BaseModel):
