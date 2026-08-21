@@ -42,7 +42,6 @@ from t3.pdep.hybrid import HybridNetworkResult
 from t3.pdep.join import (JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label,
                           expected_ts_artifact_path)
 from t3.pdep.parser import parse_pdep_network_file
-import t3.pdep.pes_qm as pes_qm
 from t3.pdep.pes_loop import run_pes_loop
 from t3.pdep.pes_qm import _explored_network_path, arc_qm_runner
 from t3.pdep.pes_rounds import hybrid_network_path, round_paths, split_qm_candidates
@@ -136,7 +135,7 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
 
     _FakeARC.constructions = []
     _FakeARC.execute_calls = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _FakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _FakeARC)
 
     write_hybrid_calls = []
 
@@ -195,8 +194,8 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
         return HybridNetworkResult(dest_path=dest_path, qm_ts_labels=tuple(qm_transition_states),
                                    ilt_ts_labels=(), vendored_files=(), warnings=())
 
-    monkeypatch.setattr(pes_qm, 'capture_ts_artifacts', _fake_capture_ts_artifacts)
-    monkeypatch.setattr(pes_qm, 'write_hybrid_network_input_file',
+    monkeypatch.setattr('t3.pdep.pes_qm.capture_ts_artifacts', _fake_capture_ts_artifacts)
+    monkeypatch.setattr('t3.pdep.pes_qm.write_hybrid_network_input_file',
                         _fake_write_hybrid_network_input_file)
 
     config = _config(fixture_network_path, max_rounds=3)
@@ -464,7 +463,7 @@ def test_real_loop_real_capture_keeps_qm_on_the_right_channel_across_a_renumber(
     _ArtifactWritingFakeARC.converge_plan = ({_CH1_MARKER}, {_CH2_MARKER})
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _ArtifactWritingFakeARC)
 
     config = PESLoopConfig(
         pes={'network': seed_path, 'source': ['O-2(13598)', 'CO2(11)'],
@@ -535,7 +534,7 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
     _ArtifactWritingFakeARC.converge_plan = ()
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _ArtifactWritingFakeARC)
 
     config = PESLoopConfig(
         pes={'network': seed_path, 'source': ['O-2(13598)', 'CO2(11)'],
@@ -594,7 +593,7 @@ def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
     _ArtifactWritingFakeARC.converge_plan = ({_CH1_MARKER}, {_CH2_MARKER})
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _ArtifactWritingFakeARC)
     monkeypatch.setattr(sys, 'argv', ['PES.py', input_path])
 
     result = PES.main()
@@ -663,7 +662,7 @@ def test_pes_cli_project_directory_flag_moves_the_whole_run(tmp_path, monkeypatc
     _ArtifactWritingFakeARC.converge_plan = ({_CH1_MARKER},)
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _ArtifactWritingFakeARC)
     monkeypatch.setattr(sys, 'argv', ['PES.py', input_path, '-p', run_directory])
 
     result = PES.main()
@@ -704,7 +703,7 @@ def test_pes_cli_resolves_a_relative_reuse_path_against_the_input_file(tmp_path,
     _ArtifactWritingFakeARC.converge_plan = ()
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _ArtifactWritingFakeARC)
     monkeypatch.setattr(sys, 'argv', ['PES.py', input_path])
 
     result = PES.main()
@@ -740,7 +739,7 @@ def test_pes_cli_diagram_only_explores_and_draws_without_touching_arc(tmp_path, 
     _ArtifactWritingFakeARC.converge_plan = ()
     _ArtifactWritingFakeARC.constructions = []
     _ArtifactWritingFakeARC.executions = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _ArtifactWritingFakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _ArtifactWritingFakeARC)
     monkeypatch.setattr(sys, 'argv', ['PES.py', input_path, '--diagram-only'])
 
     result = PES.main()

@@ -8,8 +8,7 @@ import pytest
 from arc.molecule.molecule import Molecule
 
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
-from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME, QMCandidate,
-                                SkippedChannel, attach_sensitivity_evidence,
+from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME, attach_sensitivity_evidence,
                                 channel_keys_by_ts_label, round_paths, split_qm_candidates,
                                 structural_channel_key)
 

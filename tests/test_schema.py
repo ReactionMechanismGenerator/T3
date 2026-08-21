@@ -29,10 +29,7 @@ from t3.schema import (IDTCriterionEnum,
                        QM,
                        InputBase,
                        PESLoopConfig,
-                       PESSection,
                        PESQMSection,
-                       PESTerminationSection,
-                       PESReuseSection,
                        )
 
 # define a long quote of length 444 characters to test constraints on string length

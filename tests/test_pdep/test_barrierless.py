@@ -2,7 +2,7 @@
 
 import pytest
 
-from t3.pdep.barrierless import (BARRIERLESS_FAMILIES, BarrierlessVerdict, classify_barrierless,
+from t3.pdep.barrierless import (BARRIERLESS_FAMILIES, classify_barrierless,
                                  rmg_family)
 from t3.pdep.parser import PDepPathReaction
 

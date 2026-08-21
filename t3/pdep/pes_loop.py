@@ -513,10 +513,9 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                      final_diagram_path=diagram_path)
 
         candidates = _trim_candidates(split.candidates, config, logger)
-        # Offered, not yet queued. A real qm_runner's own reported queued_ts_labels (below)
-        # supersedes this once it runs, because build_arc_input can silently drop a candidate the
-        # loop offered (N3).
-        offered_ts_labels = tuple(candidate.ts_label for candidate in candidates)
+        # The candidates are OFFERED, not yet queued: the round record's queued_ts_labels comes
+        # from qm_runner's own reported queued half (below), never from this list, because
+        # build_arc_input can silently drop a candidate the loop offered (N3).
 
         # Defect-3 fix: EVERY round's qm_runner call carries every previously computed artifact
         # (adopted from prior projects at round 0, converged by any earlier round of this loop),

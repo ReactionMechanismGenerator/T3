@@ -15,7 +15,7 @@ from t3.pdep.join import arc_ts_label
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
 from t3.pdep.pes_loop import (PES_LOOP_CONVERGED, PES_LOOP_DIAGRAM_ONLY, PES_LOOP_FAILED,
                               PES_LOOP_MAX_ROUNDS, PES_LOOP_NO_CANDIDATES, PES_LOOP_STALLED,
-                              PESLoopResult, RoundRecord, _build_explorer_config,
+                              _build_explorer_config,
                               hybrid_network_path, run_pes_loop)
 from t3.pdep.pes_rounds import round_paths
 from t3.schema import PESLoopConfig

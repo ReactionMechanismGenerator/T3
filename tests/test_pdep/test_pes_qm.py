@@ -9,14 +9,16 @@ import pytest
 from arc.reaction.reaction import ARCReaction
 from arc.species.species import ARCSpecies
 
-import t3.pdep.pes_qm as pes_qm
-from t3.pdep.capture import CaptureResult, VerifyResult, capture_ts_artifacts
+from t3.pdep.capture import (CAPTURE_MANIFEST_FILE_NAME, CaptureResult, VerifyResult,
+                             capture_ts_artifacts)
 from t3.pdep.discovery import ARTIFACT_STATUS_UNVERIFIED, ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import HybridNetworkResult
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label, expected_ts_artifact_path
 from t3.pdep.parser import PDepPathReaction, parse_pdep_network_file
-from t3.pdep.pes_qm import ARC_INPUT_FILE_NAME, adopt_prior_qm, arc_qm_runner, build_arc_input
+from t3.pdep.pes_qm import (ARC_INPUT_FILE_NAME, _adopted_energy_settings,
+                            _normalized_model_chemistry, adopt_prior_qm, arc_qm_runner,
+                            build_arc_input)
 from t3.pdep.pes_rounds import (QMCandidate, channel_keys_by_ts_label, hybrid_network_path,
                                 round_paths)
 from t3.schema import PESLoopConfig
@@ -239,14 +241,14 @@ def _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result):
 
     _FakeARC.constructions = []
     _FakeARC.execute_calls = 0
-    monkeypatch.setattr(pes_qm, 'ARC', _FakeARC)
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _FakeARC)
 
     recorder = _FakeCalls()
     recorder.capture_result = capture_result
-    monkeypatch.setattr(pes_qm, 'capture_ts_artifacts', recorder.fake_capture_ts_artifacts)
-    monkeypatch.setattr(pes_qm, 'write_hybrid_network_input_file',
+    monkeypatch.setattr('t3.pdep.pes_qm.capture_ts_artifacts', recorder.fake_capture_ts_artifacts)
+    monkeypatch.setattr('t3.pdep.pes_qm.write_hybrid_network_input_file',
                         recorder.fake_write_hybrid_network_input_file)
-    monkeypatch.setattr(pes_qm, 'save_yaml_file', recorder.fake_save_yaml_file)
+    monkeypatch.setattr('t3.pdep.pes_qm.save_yaml_file', recorder.fake_save_yaml_file)
 
     return paths, (candidate,), recorder, dest_network_path
 
@@ -731,7 +733,7 @@ class TestAdoptPriorQM(object):
         non-usable (e.g. UNVERIFIED) record be adopted."""
         manifest_dir = tmp_path / 'proj' / 'capture'
         manifest_dir.mkdir(parents=True)
-        (manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
+        (manifest_dir / CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
         networks_dir = manifest_dir / 'networks'
         networks_dir.mkdir()
         shutil.copyfile(_FIXTURE_NETWORK_PATH, str(networks_dir / 'network1_1.py'))
@@ -741,12 +743,12 @@ class TestAdoptPriorQM(object):
                                   path_reaction_labels=('reaction1',))
         verify_result = VerifyResult(
             capture_dir=str(manifest_dir),
-            manifest_path=str(manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME),
+            manifest_path=str(manifest_dir / CAPTURE_MANIFEST_FILE_NAME),
             record_count=1, captured_artifact_count=1,
             networks={'network1_1': {'captured_path': os.path.join('networks', 'network1_1.py')}},
             energy_settings={'model_chemistry': _arc_model_chemistry_text('wb97xd/def2tzvp')},
             ts_records=(record,))
-        monkeypatch.setattr(pes_qm, 'verify_capture', lambda root: verify_result)
+        monkeypatch.setattr('t3.pdep.pes_qm.verify_capture', lambda root: verify_result)
         adopted = adopt_prior_qm([str(tmp_path / 'proj')], 'network1_1', 'wb97xd/def2tzvp',
                                  _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
@@ -769,7 +771,7 @@ class TestAdoptPriorQM(object):
         for name, record in (('proj_a', record_a), ('proj_b', record_b)):
             manifest_dir = tmp_path / name / 'capture'
             manifest_dir.mkdir(parents=True)
-            (manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
+            (manifest_dir / CAPTURE_MANIFEST_FILE_NAME).write_text('stub')
             # Each fake capture must vendor a REAL, parseable network copy: adoption resolves the
             # record's transition state to its structural channel in that copy, and a capture
             # without one offers nothing adoptable (so the conflict logic under test would never
@@ -779,12 +781,12 @@ class TestAdoptPriorQM(object):
             shutil.copyfile(_FIXTURE_NETWORK_PATH, str(networks_dir / 'network1_1.py'))
             results_by_root[str(manifest_dir)] = VerifyResult(
                 capture_dir=str(manifest_dir),
-                manifest_path=str(manifest_dir / pes_qm.CAPTURE_MANIFEST_FILE_NAME),
+                manifest_path=str(manifest_dir / CAPTURE_MANIFEST_FILE_NAME),
                 record_count=1, captured_artifact_count=1,
                 networks={'network1_1': {'captured_path': os.path.join('networks', 'network1_1.py')}},
                 energy_settings=energy_settings, ts_records=(record,))
 
-        monkeypatch.setattr(pes_qm, 'verify_capture', _fake_verify_capture)
+        monkeypatch.setattr('t3.pdep.pes_qm.verify_capture', _fake_verify_capture)
         adopted = adopt_prior_qm([str(tmp_path / 'proj_a'), str(tmp_path / 'proj_b')],
                                  'network1_1', 'wb97xd/def2tzvp', _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
@@ -796,7 +798,7 @@ class TestNormalizedModelChemistry(object):
     with no tabulated frequency scale factor) killed the loop before round 0."""
 
     def test_resolvable_level_returns_arcs_own_literal(self):
-        assert pes_qm._normalized_model_chemistry('wb97xd/def2tzvp') \
+        assert _normalized_model_chemistry('wb97xd/def2tzvp') \
             == _arc_model_chemistry_text('wb97xd/def2tzvp')
 
     def test_year_suffixed_level_with_no_tabulated_scale_factor_returns_none_not_raise(self, caplog):
@@ -806,7 +808,7 @@ class TestNormalizedModelChemistry(object):
         required when freq_scale_factor isn't provided'; this function must convert that raise
         into its documented None answer rather than letting it kill the run."""
         with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
-            assert pes_qm._normalized_model_chemistry('wb97xd2023/def2tzvp') is None
+            assert _normalized_model_chemistry('wb97xd2023/def2tzvp') is None
         assert 'could not normalize' in caplog.text
 
     def test_adopt_prior_qm_survives_an_unresolvable_level(self, tmp_path, caplog):
@@ -844,13 +846,13 @@ class TestAdoptedEnergySettings(object):
     its whole fallback left the suite green."""
 
     def test_empty_adopted_returns_none(self):
-        assert pes_qm._adopted_energy_settings(dict()) is None
+        assert _adopted_energy_settings(dict()) is None
 
     def test_settings_come_from_the_adopted_artifacts_own_prior_manifest(self, tmp_path):
         _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
         adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
                                  _FIXTURE_CHANNEL_KEYS)
-        settings = pes_qm._adopted_energy_settings(adopted)
+        settings = _adopted_energy_settings(adopted)
         assert settings['model_chemistry'] == _arc_model_chemistry_text('wb97xd/def2tzvp')
         assert settings['use_hindered_rotors'] is True
 
@@ -862,7 +864,7 @@ class TestAdoptedEnergySettings(object):
         adopted_b = adopt_prior_qm([str(tmp_path / 'proj_b')], 'network1_1', 'b3lyp/def2tzvp',
                                    {'TS2': _FIXTURE_CHANNEL_KEYS['TS2']})
         with pytest.raises(ValueError, match='conflicting'):
-            pes_qm._adopted_energy_settings(adopted_a | adopted_b)
+            _adopted_energy_settings(adopted_a | adopted_b)
 
 
 class TestArcQmRunnerSensitivityEvidence(object):
