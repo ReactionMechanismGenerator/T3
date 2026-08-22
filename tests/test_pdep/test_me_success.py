@@ -16,10 +16,45 @@ import math
 import os
 
 from t3.common import TEST_DATA_BASE_PATH
-from t3.pdep.me_success import MESuccessResult, check_arkane_me_success
+from t3.pdep.me_success import MESuccessResult, check_arkane_me_success, real_stderr_lines
 from t3.pdep.parser import parse_pdep_network_file
 
 PDEP_ME_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_me')
+
+
+# A verbatim excerpt of the stderr a real explorer ME solve prints on a run that otherwise succeeds
+# and writes a valid, count-consistent output.py: scipy and RMG numerical-conditioning warnings,
+# each followed by the warnings module's echo of the offending source line.
+_EXPLORER_WARNING_STDERR = (
+    "/home/x/envs/rmg_env/lib/python3.9/site-packages/scipy/optimize/_optimize.py:2322: "
+    "LinAlgWarning: Ill-conditioned matrix (rcond=9.78829e-18): result may not be accurate.\n"
+    "  fu = func(x, *args)\n"
+    "/home/x/Code/RMG-Py/rmgpy/thermo/thermoengine.py:100: LinAlgWarning: Ill-conditioned matrix "
+    "(rcond=3.18757e-21): result may not be accurate.\n"
+    "  thermo = wilhoit.to_nasa(Tmin=100.0, Tmax=5000.0, Tint=1000.0)\n"
+)
+
+
+def test_real_stderr_lines_drops_python_warnings_and_their_source_echo():
+    """A run that only printed scipy/RMG LinAlgWarnings to stderr succeeded; the warnings module's
+    output (the warning line AND the indented source-echo after it) is non-fatal by construction and
+    must not be read as failure evidence."""
+    assert real_stderr_lines(_EXPLORER_WARNING_STDERR) == []
+
+
+def test_real_stderr_lines_keeps_a_traceback():
+    """A genuine error is not a warning: a traceback and its exception line are kept, even when they
+    sit beside ignorable warnings, so filtering noise never blinds the guard to a real failure."""
+    text = (_EXPLORER_WARNING_STDERR
+            + "Traceback (most recent call last):\n"
+            + "  File \"arkane/main.py\", line 286, in execute\n"
+            + "ValueError: Impossible multiplicity for molecule\n")
+    real = real_stderr_lines(text)
+    assert 'Traceback (most recent call last):' in real
+    assert 'ValueError: Impossible multiplicity for molecule' in real
+    # The indented file-location line inside the traceback is kept too: it only drops when it
+    # directly follows a warning line, not when it follows a traceback header.
+    assert any('File "arkane/main.py"' in line for line in real)
 SUCCESS_OUTPUT = os.path.join(PDEP_ME_DIR, 'success', 'output.py')
 SOFT_FAILURE_CSE_OUTPUT = os.path.join(PDEP_ME_DIR, 'soft_failure_cse', 'output.py')
 HARD_FAILURE_OUTPUT = os.path.join(PDEP_ME_DIR, 'hard_failure', 'output.py')

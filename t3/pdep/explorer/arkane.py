@@ -25,8 +25,8 @@ from t3.pdep.diagram import T3_PES_DIAGRAM_FILENAME, draw_pes_diagram
 from t3.pdep.explorer.adapter import PESExplorerAdapter
 from t3.pdep.explorer.factory import register_explorer_adapter
 from t3.pdep.explorer.input_file import write_arkane_explorer_input_file
-from t3.pdep.me_success import IGNORABLE_STDERR_PHRASES, check_arkane_me_success
-from t3.pdep.parser import canonical_channel_pair, parse_pdep_network_file
+from t3.pdep.me_success import check_arkane_me_success, real_stderr_lines
+from t3.pdep.parser import canonical_channel_pair, parse_pdep_network_file, strip_rmg_index_suffix
 from t3.runners.rmg_runner import run_arkane_job
 
 if TYPE_CHECKING:
@@ -440,12 +440,9 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
             with open(stderr_path, 'r') as f:
                 stderr_text = f.read()
         if stderr_text:
-            real_stderr_lines = [
-                line.strip() for line in stderr_text.splitlines()
-                if line.strip() and not any(phrase in line for phrase in IGNORABLE_STDERR_PHRASES)
-            ]
-            if real_stderr_lines:
-                reasons.append('Arkane reported stderr output: ' + ' | '.join(real_stderr_lines))
+            real_lines = real_stderr_lines(stderr_text)
+            if real_lines:
+                reasons.append('Arkane reported stderr output: ' + ' | '.join(real_lines))
 
         # Failure signal 3 of 4: a fatal marker in stdout OR Arkane's own log. This is the ONLY
         # signal that catches Arkane's soft-CSE-failure archetype at the process level: exit 0,
@@ -595,12 +592,19 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
                     f"(arkane/pdep.py:741-755); its absence means the file is truncated, or is "
                     f"not a network file at all.",)
 
-        declared = set(network.species_labels)
+        # Compare on the INDEX-STRIPPED base label, never the raw one: RMG names the same species
+        # differently in the two artifacts it writes from one in-memory network -- output.py by base
+        # label ('[O]C=O'), the network file by base + a per-file disambiguation index ('[O]C=O(1)').
+        # A raw-label containment test reports every species as "undeclared" and discards a
+        # genuinely single-run exploration (this is the defect this normalization fixes). Stripping
+        # the index is safe: distinct species have distinct base labels, so it never merges two real
+        # species. See t3.pdep.parser.strip_rmg_index_suffix.
+        declared = {strip_rmg_index_suffix(label) for label in network.species_labels}
         undeclared = set()
         for result in me_success_results:
             for reaction in result.reactions:
-                undeclared.update(set(reaction.reactants) - declared)
-                undeclared.update(set(reaction.products) - declared)
+                undeclared.update({strip_rmg_index_suffix(s) for s in reaction.reactants} - declared)
+                undeclared.update({strip_rmg_index_suffix(s) for s in reaction.products} - declared)
         if undeclared:
             return (f"The output file(s) and the final network file '{file_name}' do not describe "
                     f"the same network: the output names species {sorted(undeclared)} which the "
@@ -641,8 +645,19 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
         # Compared as MULTISETS, so that a repeated pair is reported as a surplus rather than
         # silently collapsing into the expected set: Arkane's duplicate suppression never writes the
         # same pair live twice, so a repeat is evidence in its own right.
-        expected_pairs = Counter(network.expected_net_reaction_channel_pairs())
-        actual_pairs = Counter(canonical_channel_pair(reaction.reactants, reaction.products)
+        # Both sides are keyed on index-stripped base labels, for the same reason the species
+        # containment check above is: the two artifacts label the same channel differently, so a
+        # raw comparison reports every pair as mismatched. Each side is re-canonicalized AFTER
+        # stripping (canonical_channel_pair sorts, and stripping can change sort order), so the two
+        # multisets are built the same shape and only genuine topology differences survive.
+        def _strip_pair(pair):
+            return canonical_channel_pair([strip_rmg_index_suffix(s) for s in pair[0]],
+                                          [strip_rmg_index_suffix(s) for s in pair[1]])
+        expected_pairs = Counter(_strip_pair(pair)
+                                 for pair in network.expected_net_reaction_channel_pairs())
+        actual_pairs = Counter(canonical_channel_pair(
+                                   [strip_rmg_index_suffix(s) for s in reaction.reactants],
+                                   [strip_rmg_index_suffix(s) for s in reaction.products])
                                for reaction in parsed_reactions)
         missing_pairs = sorted((expected_pairs - actual_pairs).elements())
         surplus_pairs = sorted((actual_pairs - expected_pairs).elements())
@@ -695,9 +710,13 @@ class ArkaneExplorerAdapter(PESExplorerAdapter):
             # Detection (network_indices, above) happens regardless -- refusal rides atop
             # resolution, it does not replace it.
             reasons.append(f"Arkane explored {len(network_indices)} distinct networks "
-                           f"(indices {network_indices}) from seed {self.seed_species}; "
-                           f"multi-network exploration is refused in this increment, since there is "
-                           f"no single unambiguous result to resolve.")
+                           f"(indices {network_indices}) from seed {self.seed_species}, so there is "
+                           f"no single unambiguous network to resolve, and this increment does not "
+                           f"pick one. This happens when the source is a BIMOLECULAR channel "
+                           f"(A + B): the explorer grows a separate network per reachable well. To "
+                           f"run the loop on this surface, seed from a single UNIMOLECULAR well "
+                           f"instead (one of the isomers this run found), which explores one "
+                           f"connected network the loop can resolve and draw.")
             return tuple(reasons), tuple(), tuple()
 
         index = network_indices[0]

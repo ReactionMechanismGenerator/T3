@@ -20,6 +20,7 @@ import io
 import keyword
 import math
 import os
+import re
 import tempfile
 import tokenize
 import warnings
@@ -165,6 +166,13 @@ class ExplorerInputSummary:
                                         the source's behalf).
         warnings (tuple): Human-readable warnings (e.g. that a multi-species bath gas's fractions
                           are recorded here but will not be honored by Arkane; see P16).
+        spin_multiplicity_corrected (tuple): One ``(label, old, new)`` per species whose
+                          ``spinMultiplicity`` contradicted its own adjacency-list ``multiplicity``
+                          header and was rewritten to match it (see the correction block below).
+                          RMG's explorer emits ``spinMultiplicity = 1`` for triplet atomic O
+                          (adjacency ``multiplicity 3``, u2, thermo label ``O(T)``); re-feeding that
+                          file makes Arkane round-trip an inconsistent species and crash, so any
+                          RMG-explored network carrying O(3P) is otherwise un-re-feedable.
     """
     dest_path: str
     seed_species: tuple
@@ -172,6 +180,7 @@ class ExplorerInputSummary:
     kinetics_labels_emitted: tuple = field(default_factory=tuple)
     reactive_false_injected: tuple = field(default_factory=tuple)
     warnings: tuple = field(default_factory=tuple)
+    spin_multiplicity_corrected: tuple = field(default_factory=tuple)
 
 
 def write_arkane_explorer_input_file(source_path: str,
@@ -300,6 +309,8 @@ def write_arkane_explorer_input_file(source_path: str,
 
     species_nodes = dict()
     species_reactive = dict()
+    species_structure_nodes = dict()
+    species_spin_mult_nodes = dict()
     ts_nodes = dict()
     network_nodes = list()
     pdep_nodes = list()
@@ -322,6 +333,8 @@ def write_arkane_explorer_input_file(source_path: str,
                 reactive_node = kwargs.get('reactive')
                 species_reactive[label] = _REACTIVE_ABSENT if reactive_node is None \
                     else _literal_or_none(reactive_node)
+                species_structure_nodes[label] = kwargs.get('structure')
+                species_spin_mult_nodes[label] = kwargs.get('spinMultiplicity')
 
         elif call_name == 'transitionState':
             label = _literal_or_none(kwargs.get('label'))
@@ -388,6 +401,40 @@ def write_arkane_explorer_input_file(source_path: str,
         first_kw = species_call.keywords[0]
         insert_pos = _pos(text, line_starts, first_kw.lineno, first_kw.col_offset)
         edits.append((insert_pos, insert_pos, f"reactive = False,\n{' ' * first_kw.col_offset}"))
+
+    # Correct any spinMultiplicity that contradicts its species' own adjacency-list multiplicity.
+    # RMG's explorer writes triplet atomic O ('[O]', thermo label "O(T)") with spinMultiplicity = 1
+    # while its adjacency-list header says 'multiplicity 3' (u2, two unpaired electrons). Splicing
+    # that block verbatim into the next round's explorer input makes Arkane re-read an
+    # internally-inconsistent species and crash on Hund's rule -- so any RMG-explored network
+    # carrying O(3P) is un-re-feedable until this is fixed. This is a CONSISTENCY correction, not
+    # invented statmech: the adjacency list is the species' authoritative electronic structure, so
+    # when an explicit 'multiplicity N' header disagrees with spinMultiplicity, the header wins and
+    # spinMultiplicity is rewritten to N (energies/frequencies untouched). SMILES-only structures
+    # carry no explicit header and are left alone (Arkane derives their multiplicity itself). Placed
+    # in T3 rather than in RMG-Py deliberately: T3 must be robust to the network files stock RMG
+    # already writes, and cannot assume a patched RMG on every box -- see the ticket's placement
+    # argument. The correction is recorded (and warned) so it is never silent.
+    spin_multiplicity_corrected = list()
+    for label, structure_node in species_structure_nodes.items():
+        adj_multiplicity = _adjacency_list_multiplicity(structure_node)
+        if adj_multiplicity is None:
+            continue
+        spin_mult_node = species_spin_mult_nodes.get(label)
+        spin_mult_value = _literal_or_none(spin_mult_node) if spin_mult_node is not None else None
+        if not isinstance(spin_mult_value, int) or isinstance(spin_mult_value, bool):
+            continue
+        if spin_mult_value == adj_multiplicity:
+            continue
+        start = _pos(text, line_starts, spin_mult_node.lineno, spin_mult_node.col_offset)
+        end = _pos(text, line_starts, spin_mult_node.end_lineno, spin_mult_node.end_col_offset)
+        edits.append((start, end, str(adj_multiplicity)))
+        spin_multiplicity_corrected.append((label, spin_mult_value, adj_multiplicity))
+        message = (f"Species {label!r}: spinMultiplicity {spin_mult_value} contradicts its "
+                   f"adjacency-list 'multiplicity {adj_multiplicity}' header; corrected to "
+                   f"{adj_multiplicity} so Arkane can re-read the species (RMG's explorer writes "
+                   f"triplet atomic O as a singlet). Energies and frequencies are untouched.")
+        warnings_list.append(message)
 
     # Remove every network(...) block: Arkane's explorer input parser does not recognize it, and
     # keeping it would (at best) be dead text and (at worst) confuse a human re-reading the file.
@@ -500,6 +547,7 @@ def write_arkane_explorer_input_file(source_path: str,
         kinetics_labels_emitted=tuple(kinetics_labels_emitted),
         reactive_false_injected=tuple(reactive_injection_labels),
         warnings=tuple(warnings_list),
+        spin_multiplicity_corrected=tuple(spin_multiplicity_corrected),
     )
 
 
@@ -1603,3 +1651,37 @@ def _literal_or_none(node):
         return ast.literal_eval(node)
     except (ValueError, TypeError):
         return None
+
+
+# The 'multiplicity N' header a species' adjacencyList string carries, e.g. the first line of
+# 'multiplicity 3\n1 O u2 p2 c0\n'. Anchored to a line start so it never matches the word inside a
+# comment or a species label.
+_ADJ_MULTIPLICITY_RE = re.compile(r'^\s*multiplicity\s+(\d+)\s*$', re.MULTILINE)
+
+
+def _adjacency_list_multiplicity(structure_node) -> int | None:
+    """
+    The explicit ``multiplicity`` a species' ``adjacencyList(...)`` structure declares.
+
+    Returns ``None`` -- meaning "no correction to make here" -- when the structure is not an
+    ``adjacencyList(...)`` call (e.g. ``SMILES(...)``, whose multiplicity Arkane derives itself),
+    when its argument is not a plain string literal, or when the adjacency string carries no
+    explicit ``multiplicity`` header (a closed-shell species omits it, defaulting to 1, which needs
+    no correction).
+
+    Args:
+        structure_node: The AST node of the species' ``structure`` keyword value, or ``None``.
+
+    Returns:
+        Optional[int]: The declared multiplicity, or ``None`` if there is nothing to correct.
+    """
+    if not isinstance(structure_node, ast.Call) or _get_call_name(structure_node) != 'adjacencyList':
+        return None
+    if not structure_node.args:
+        return None
+    arg = structure_node.args[0]
+    adj_text = arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
+    if adj_text is None:
+        return None
+    match = _ADJ_MULTIPLICITY_RE.search(adj_text)
+    return int(match.group(1)) if match else None

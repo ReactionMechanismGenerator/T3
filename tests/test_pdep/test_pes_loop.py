@@ -135,7 +135,7 @@ def _stub_explorer(monkeypatch, tmp_path, families, fail=False, fail_from=None):
                                      status=EXPLORATION_STATUS_SUCCEEDED,
                                      network_paths=(output_path,))
 
-    def _fake_parse(path):
+    def _fake_parse(path, require_reactions=True):
         network_id = os.path.splitext(os.path.basename(path))[0]
         return dataclasses.replace(base_network, network_id=network_id, path=path)
 
@@ -560,7 +560,7 @@ class TestRunPESLoop(object):
                                          status=EXPLORATION_STATUS_SUCCEEDED,
                                          network_paths=(output_path,))
 
-        def _fake_parse(path):
+        def _fake_parse(path, require_reactions=True):
             network_id = os.path.splitext(os.path.basename(path))[0]
             return dataclasses.replace(base_network, network_id=network_id, path=path)
 
@@ -954,7 +954,7 @@ class TestRenumberedNetworksKeepQMOnTheRightChannel(object):
                                          status=EXPLORATION_STATUS_SUCCEEDED,
                                          network_paths=(output_path,))
 
-        def _fake_parse(path):
+        def _fake_parse(path, require_reactions=True):
             # The loop parses each round's freshly explored network right after exploring it, so
             # the round currently being parsed is simply the latest explore call.
             network = networks[min(len(calls) - 1, 2)] if calls else networks[0]
@@ -1023,7 +1023,7 @@ class TestUnkeyableNetworks(object):
 
         monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
         monkeypatch.setattr('t3.pdep.pes_loop.parse_pdep_network_file',
-                            lambda path: dataclasses.replace(base_network, path=path))
+                            lambda path, require_reactions=True: dataclasses.replace(base_network, path=path))
         monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram',
                             lambda network_path, output_path: open(output_path, 'w').close())
         runner_calls = []
@@ -1074,7 +1074,7 @@ class TestUnkeyableNetworks(object):
 
         monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
         monkeypatch.setattr('t3.pdep.pes_loop.parse_pdep_network_file',
-                            lambda path: dataclasses.replace(base_network, path=path))
+                            lambda path, require_reactions=True: dataclasses.replace(base_network, path=path))
         monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram',
                             lambda network_path, output_path: open(output_path, 'w').close())
         adopted_per_round = []
