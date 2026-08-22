@@ -9,7 +9,9 @@ import datetime
 import os
 import shutil
 
-from t3.common import TEST_DATA_BASE_PATH
+import arc
+
+from t3.common import TEST_DATA_BASE_PATH, t3_path
 import t3.logger as logger
 
 
@@ -111,6 +113,75 @@ def test_log():
                  ]:
         assert line not in lines
     shutil.rmtree(log_project_directory, ignore_errors=True)
+
+
+def test_log_header(monkeypatch):
+    """The header must report ARC's provenance in the ARC block and T3's in the T3 block.
+
+    The provenance helpers are stubbed to return values keyed on the ``path`` they are called with,
+    so the test pins that the ARC block is derived from the imported ARC's path (arc.__file__ and up)
+    and the T3 block from T3's path, and that the two cannot be silently swapped. This holds
+    regardless of the machine's checkout state, so it survives CI where ARC is a fresh clone.
+    """
+    arc_path = os.path.dirname(os.path.dirname(os.path.abspath(arc.__file__)))
+    commit_by_path = {arc_path: ('arc_head_sha', 'arc_commit_date'),
+                      t3_path: ('t3_head_sha', 't3_commit_date')}
+    branch_by_path = {arc_path: 'arc_branch', t3_path: 't3_branch'}
+
+    def fake_get_git_commit(path=None):
+        return commit_by_path.get(path, ('', ''))
+
+    def fake_get_git_branch(path=None):
+        return branch_by_path.get(path, '')
+
+    monkeypatch.setattr(logger, 'get_git_commit', fake_get_git_commit)
+    monkeypatch.setattr(logger, 'get_git_branch', fake_get_git_branch)
+
+    try:
+        # Logger.__init__ writes the header, so the stubs above must already be in place.
+        init_logger(verbose=10)
+        with open(os.path.join(log_project_directory, 't3.log')) as f:
+            content = f.read()
+        # Both blocks are present, in order (T3 first, then ARC).
+        assert 'The current git HEAD for T3 is:' in content
+        assert 'The current git HEAD for ARC is:' in content
+        t3_start = content.index('The current git HEAD for T3 is:')
+        arc_start = content.index('The current git HEAD for ARC is:')
+        block_end = content.index('Starting project', arc_start)
+        t3_block = content[t3_start:arc_start]
+        arc_block = content[arc_start:block_end]
+        # Each block carries all three of its own fields and none of the other's. Asserting the
+        # whole triple both ways is the point: checking only the SHAs would still pass a partial
+        # mix-up that got the SHA right and the date or branch wrong.
+        for field in ('t3_head_sha', 't3_commit_date', 't3_branch'):
+            assert field in t3_block
+            assert field not in arc_block
+        for field in ('arc_head_sha', 'arc_commit_date', 'arc_branch'):
+            assert field in arc_block
+            assert field not in t3_block
+    finally:
+        shutil.rmtree(log_project_directory, ignore_errors=True)
+
+
+def test_log_header_survives_an_arc_without_a_file(monkeypatch):
+    """A missing ``arc.__file__`` must degrade to a note, never abort the run.
+
+    ARC imported as a namespace package has ``__file__`` set to None, and ``os.path.abspath(None)``
+    raises a TypeError. Raising it from inside the header would kill a multi-hour run over a log
+    line, so the header must fall through to its "could not determine" branch instead.
+    """
+    monkeypatch.setattr(logger.arc, '__file__', None)
+
+    try:
+        init_logger(verbose=10)
+        with open(os.path.join(log_project_directory, 't3.log')) as f:
+            content = f.read()
+        assert 'Could not determine the git provenance of ARC' in content
+        assert 'arc.__file__ is not set' in content
+        # The run carried on: the header still reached its final line.
+        assert 'Starting project' in content
+    finally:
+        shutil.rmtree(log_project_directory, ignore_errors=True)
 
 
 def test_log_max_time_reached():
