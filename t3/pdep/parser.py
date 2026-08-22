@@ -11,6 +11,7 @@ This module therefore parses the file into a syntax tree with ``ast.parse`` only
 
 import ast
 import io
+import re
 import tokenize
 import warnings
 from dataclasses import dataclass, field
@@ -54,6 +55,7 @@ __all__ = [
     'parse_pdep_network_e0_text',
     'parse_pdep_network_file',
     'parse_pdep_network_text',
+    'strip_rmg_index_suffix',
     'to_json_safe',
 ]
 
@@ -173,6 +175,34 @@ def canonical_channel_pair(reactant_labels, product_labels) -> tuple:
         tuple: A 2-tuple of canonical channels, itself in a canonical order.
     """
     return tuple(sorted((_canonical_channel(reactant_labels), _canonical_channel(product_labels))))
+
+
+# A trailing ``(<int>)`` is RMG's per-file disambiguation index, appended to a species' base
+# (SMILES-derived) label to keep labels unique within one file. It is NOT part of the species'
+# identity, and RMG does NOT write it consistently across the two artifacts of one explorer run:
+# the ME ``output.py`` names species by their base label (``[O]C=O``, ``O=C=O``) while the final
+# ``network<i>_(full|reduced).py`` names the SAME species with the index (``[O]C=O(1)``,
+# ``O=C=O(5)``). Any cross-artifact label comparison must strip the index first or it reports a
+# genuinely single-run pairing as "did not come from one run". Distinct species have distinct base
+# labels (the base is the SMILES), so stripping never merges two real species -- the index only
+# ever disambiguates a base from itself.
+_RMG_INDEX_SUFFIX_RE = re.compile(r'\(\d+\)$')
+
+
+def strip_rmg_index_suffix(label: str) -> str:
+    """
+    Strip RMG's trailing ``(<int>)`` disambiguation index from a species label.
+
+    ``'[O]C=O(1)' -> '[O]C=O'``; ``'O=C=O(5)' -> 'O=C=O'``; a label with no such suffix
+    (``'[C-]#[O+]'``, ``'[O]C=O'``) is returned unchanged.
+
+    Args:
+        label (str): A species label as written in an RMG network or Arkane output file.
+
+    Returns:
+        str: The label with a single trailing ``(<int>)`` index removed, if present.
+    """
+    return _RMG_INDEX_SUFFIX_RE.sub('', label)
 
 
 def _derive_product_channels(path_reactions: tuple,
@@ -709,15 +739,23 @@ def _extract_numeric_leaves(value) -> list:
     return leaves
 
 
-def parse_pdep_network_file(path: str) -> PDepNetwork:
+def parse_pdep_network_file(path: str, require_reactions: bool = True) -> PDepNetwork:
     """
     Parse an RMG pdep network file from disk.
 
     Args:
         path (str): The path to the RMG pdep network file (e.g., ``.../pdep/network4_2.py``).
+        require_reactions (bool): Whether a file declaring no ``reaction(...)`` entry is refused
+            (the default) or accepted as a valid reaction-less network. Explored/hybrid network
+            files and the explorer's own artifact validation require reactions -- their absence
+            means a truncated or wrong file. A SEED network handed to the explorer, by contrast,
+            legitimately carries source species and a bath gas with NO reactions (the explorer is
+            what creates them), so its callers pass ``require_reactions=False``. See
+            ``parse_pdep_network_text`` for the full rationale.
 
     Raises:
-        ValueError: If the file cannot be parsed as Python, or contains no path reactions.
+        ValueError: If the file cannot be parsed as Python, or (when ``require_reactions``)
+            contains no path reactions.
 
     Returns:
         PDepNetwork: The parsed network, with ``source_hash`` set to the content hash of the exact
@@ -740,11 +778,12 @@ def parse_pdep_network_file(path: str) -> PDepNetwork:
     text = data.decode(encoding)
     network_id = Path(path).stem
     return parse_pdep_network_text(text=text, network_id=network_id, path=path,
-                                   source_hash=hash_bytes(data))
+                                   source_hash=hash_bytes(data), require_reactions=require_reactions)
 
 
 def parse_pdep_network_text(text: str, network_id: str, path: str = '',
-                            source_hash: str | None = None) -> PDepNetwork:
+                            source_hash: str | None = None,
+                            require_reactions: bool = True) -> PDepNetwork:
     """
     Parse RMG pdep network file text into a ``PDepNetwork``.
 
@@ -758,9 +797,17 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
             whose bytes differ from its decoded form (CRLF line endings, a BOM, a non-UTF-8 encoding
             cookie), and a provenance hash that silently disagrees with the one the SA cache sidecar
             records is worse than no hash at all. Callers with no file leave it ``None``.
+        require_reactions (bool): Whether a text declaring no ``reaction(...)`` entry is refused
+            (the default) or accepted as a valid reaction-less network. A SEED handed to the
+            explorer legitimately has no reactions -- the explorer creates them -- so the
+            explore path parses it with ``require_reactions=False``. Everywhere the file is
+            supposed to already carry a solved surface (an explored/hybrid network, the explorer's
+            own final-artifact validation) keeps the default, so a truncated or wrong file is still
+            refused loudly.
 
     Raises:
-        ValueError: If the text cannot be parsed as Python, or contains no path reactions.
+        ValueError: If the text cannot be parsed as Python, or (when ``require_reactions``)
+            contains no path reactions.
 
     Returns:
         PDepNetwork: The parsed network.
@@ -845,7 +892,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
         # ``pressureDependence(...)`` data is not part of the public API here; it is
         # recognized (so it is not silently ignored as "unrecognized") but otherwise unused.
 
-    if not path_reactions:
+    if require_reactions and not path_reactions:
         raise ValueError(f"The pdep network file at '{path}' contains no reaction(...) entries; nothing to parse.")
 
     if not product_channels_declared:

@@ -13,6 +13,7 @@ reasons documented in ``t3/pdep/parser.py``.
 
 import math
 import os
+import re
 from dataclasses import dataclass
 
 from t3.pdep.parser import parse_arkane_pdep_output_file
@@ -26,6 +27,56 @@ IGNORABLE_STDERR_PHRASES = (
     '==============================',
     'pjrt_executable.cc',
 )
+
+# A Python ``warnings``-module emission looks like ``<file>:<lineno>: SomeWarning: <message>``,
+# optionally followed by an indented echo of the offending source line. The explorer's ME solve
+# routinely prints scipy ``LinAlgWarning: Ill-conditioned matrix`` and RMG ``thermoengine``
+# ``LinAlgWarning`` this way on a run that otherwise succeeds and writes a valid, count-consistent
+# ``output.py``. A warning is non-fatal BY CONSTRUCTION (the warnings module never raises), so it is
+# not evidence a run failed -- and the real failure signals remain untouched: a non-zero exit, a
+# missing required artifact, a fatal ``Error:``/``Critical:`` log marker, and the payload checks. A
+# traceback line (``Traceback (most recent call last):``, ``ValueError: ...``) does NOT match this
+# pattern and still fails the run, so this filters noise without deleting the guard.
+_WARNING_LINE_RE = re.compile(r':\d+:\s+\w*Warning:\s')
+
+
+def real_stderr_lines(stderr_text: str) -> list:
+    """
+    Return the stderr lines that are genuine failure evidence, dropping ignorable noise.
+
+    Drops blank lines, every ``IGNORABLE_STDERR_PHRASES`` line, and Python ``warnings``-module
+    output -- both the ``file:line: SomeWarning: message`` line and the single indented source-echo
+    line the warnings module prints after it. Everything else (tracebacks, error text) is kept,
+    stripped, in order.
+
+    Args:
+        stderr_text (str): The raw stderr content.
+
+    Returns:
+        list: The real (non-ignorable) stderr lines, each stripped of surrounding whitespace.
+    """
+    real = []
+    prev_was_warning = False
+    for line in stderr_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            prev_was_warning = False
+            continue
+        if any(phrase in line for phrase in IGNORABLE_STDERR_PHRASES):
+            prev_was_warning = False
+            continue
+        if _WARNING_LINE_RE.search(line):
+            prev_was_warning = True
+            continue
+        # The warnings module echoes the offending source line, indented, immediately after the
+        # warning itself. Drop that echo, but only when it directly follows a warning line -- an
+        # indented line elsewhere (e.g. inside a traceback) is left as real evidence.
+        if prev_was_warning and line[:1].isspace():
+            prev_was_warning = False
+            continue
+        prev_was_warning = False
+        real.append(stripped)
+    return real
 
 
 @dataclass(frozen=True)
@@ -100,10 +151,7 @@ def check_arkane_me_success(output_path: str,
     if exit_code is not None and exit_code != 0:
         reasons.append(f'Arkane exited with a non-zero status ({exit_code}).')
     if stderr:
-        real_errors = [
-            line.strip() for line in stderr.splitlines()
-            if line.strip() and not any(phrase in line for phrase in IGNORABLE_STDERR_PHRASES)
-        ]
+        real_errors = real_stderr_lines(stderr)
         if real_errors:
             reasons.append('Arkane reported stderr output: ' + ' | '.join(real_errors))
 

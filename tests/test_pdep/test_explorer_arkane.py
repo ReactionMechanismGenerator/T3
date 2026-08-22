@@ -991,6 +991,21 @@ class TestArkaneExplorerAdapterFinalNetworkPayload:
         assert adapter.explore() is True, adapter.reasons
         assert adapter.get_networks()[0].endswith('network0_full.py')
 
+    def test_index_suffixed_network_labels_still_match_base_labelled_output(self, tmp_path, monkeypatch):
+        """Defect 5: RMG names the same species by base label in output.py ('CH2O') and by
+        base + index in the network file ('CH2O(1)'). The payload check must compare on the stripped
+        base label, or it discards a genuinely single-run exploration as "not from one run". This is
+        the real divergence that stopped the loop; without the normalization this assertion fails."""
+        indexed_network = (VALID_NETWORK_PY
+                           .replace("'methoxy'", "'methoxy(3)'")
+                           .replace("'CH2O'", "'CH2O(1)'")
+                           .replace("'H'", "'H(2)'"))
+        # Sanity: the fixture really did diverge (indexed on the network side, base on the output).
+        assert "'CH2O(1)'" in indexed_network and "'CH2O'" in VALID_OUTPUT_PY
+        adapter = self._explore_with_final(tmp_path, monkeypatch, final_content=indexed_network,
+                                           output_content=VALID_OUTPUT_PY)
+        assert adapter.explore() is True, adapter.reasons
+
     def test_output_and_final_network_must_describe_the_same_network(self, tmp_path, monkeypatch):
         """
         Codex's P2, which is this same gap seen from the other side.
@@ -1285,6 +1300,23 @@ class TestArkaneExplorerAdapterReductionPredicate:
         assert any('methoxy' in reason for reason in adapter.reasons), \
             'The refusal reason must name the seed.'
         assert any('multi' in reason.lower() or '2' in reason for reason in adapter.reasons)
+
+    def test_multi_network_refusal_tells_the_user_to_seed_from_a_well(self, tmp_path, monkeypatch):
+        """Defect 4: refusing a bimolecular-source multi-network run is acceptable, but the message
+        must not be a dead end -- it must tell the user what to do (seed from a unimolecular well)."""
+        adapter = _build_adapter(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            't3.pdep.explorer.arkane.run_arkane_job',
+            _make_fake_run_arkane_job(
+                success=True,
+                output_files={'output.py': VALID_OUTPUT_PY, 'output0.py': VALID_OUTPUT_PY,
+                             'output1.py': VALID_OUTPUT_PY},
+                final_files={'network0_full.py': VALID_NETWORK_PY,
+                            'network1_full.py': VALID_NETWORK_PY},
+            ))
+        assert adapter.explore() is False
+        reasons = ' '.join(adapter.reasons).lower()
+        assert 'unimolecular' in reasons and 'well' in reasons, adapter.reasons
 
 
 class TestArkaneExplorerAdapterFailureSignals:

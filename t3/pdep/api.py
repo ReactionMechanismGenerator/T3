@@ -421,7 +421,12 @@ def explore_pdep_network(network_path: str,
     # claim, and precisely the one an auditor of an expensive QM run would lean on.
     recorded_admission_policy = admission_policy if selection is not None else ADMISSION_POLICY_UNGATED
 
-    parsed_network = parse_pdep_network_file(path=network_path)
+    # require_reactions=False: this is the network to be EXPLORED. On round 0 it is the seed, which
+    # is legitimately source-only (species + bath gas, no reaction(...) -- the explorer is what
+    # creates the reactions), so refusing a reaction-less file here would invert the data flow and
+    # demand the reactions before the run that produces them. A round-N hybrid network does carry
+    # reactions; passing False there simply does not re-assert what is already true.
+    parsed_network = parse_pdep_network_file(path=network_path, require_reactions=False)
 
     if selection is not None:
         # method, network_id, the hash diagnosis (no-hash vs. hash-mismatch), and the evaluation-

@@ -221,6 +221,34 @@ def test_empty_network_raises_value_error():
         parse_pdep_network_text(text=text, network_id='synthetic_empty')
 
 
+def test_reaction_less_seed_is_accepted_when_reactions_not_required():
+    """A source-only seed (species + bath gas, no reaction()) is legitimate input to the explorer,
+    which is what CREATES the reactions -- so require_reactions=False must accept it rather than
+    invert the data flow by demanding the reactions before the run that produces them."""
+    text = ("species(label = '[O]C=O', structure = SMILES('[O]C=O'))\n"
+            "species(label = 'Ar', structure = SMILES('[Ar]'))\n")
+    network = parse_pdep_network_text(text=text, network_id='cho2_seed', require_reactions=False)
+    assert network.species_labels == ('[O]C=O', 'Ar')
+    assert network.path_reactions == ()
+    # The default still refuses it -- the strictness is right for explored/hybrid networks and the
+    # explorer's own artifact validation, only wrong for a seed.
+    with pytest.raises(ValueError):
+        parse_pdep_network_text(text=text, network_id='cho2_seed')
+
+
+@pytest.mark.parametrize('label, expected', [
+    ('[O]C=O(1)', '[O]C=O'),
+    ('O=C=O(5)', 'O=C=O'),
+    ('H(2)', 'H'),
+    ('[C-]#[O+]', '[C-]#[O+]'),   # no suffix -> unchanged
+    ('[O]C=O', '[O]C=O'),         # no suffix -> unchanged
+    ('Ar', 'Ar'),
+])
+def test_strip_rmg_index_suffix(label, expected):
+    from t3.pdep.parser import strip_rmg_index_suffix
+    assert strip_rmg_index_suffix(label) == expected
+
+
 # FIX5: no in-repo fixture (network1_1/network4_1/network4_2) contains a MultiArrhenius
 # (or other composite) kinetics call, so this case is necessarily covered with a synthetic,
 # hand-written fixture rather than a real one.

@@ -301,6 +301,98 @@ def test_rewrites_method_line_for_msc(tmp_path):
     assert 'modified strong collision' not in text
 
 
+# A source whose atomic-O species is written the way RMG's explorer writes triplet O(3P):
+# spinMultiplicity=1 contradicting its own 'multiplicity 3' adjacency header. [OH] beside it is
+# self-consistent (multiplicity 2 / spinMultiplicity 2) and must be left untouched. Outer ''' with
+# inner """ so the adjacency-list triple-quoted strings nest cleanly.
+SOURCE_TRIPLET_O_INCONSISTENT = '''species(
+    label='[O]',
+    structure=adjacencyList("""multiplicity 3
+1 O u2 p2 c0
+"""),
+    E0=(243.034, 'kJ/mol'),
+    spinMultiplicity=1,
+)
+species(
+    label='[OH]',
+    structure=adjacencyList("""multiplicity 2
+1 O u1 p2 c0 {2,S}
+2 H u0 p0 c0 {1,S}
+"""),
+    E0=(28.0, 'kJ/mol'),
+    spinMultiplicity=2,
+)
+species(
+    label='He',
+    structure=SMILES('[He]'),
+    E0=(0, 'kJ/mol'),
+    reactive=False,
+)
+pressureDependence(
+    label='PDepNetwork #1',
+    Tmin=(300, 'K'),
+    Tmax=(2000, 'K'),
+    Tcount=8,
+    Pmin=(0.01, 'bar'),
+    Pmax=(100, 'bar'),
+    Pcount=5,
+    maximumGrainSize=(0.5, 'kcal/mol'),
+    maximumGrainCount=250,
+    method = 'modified strong collision',
+    activeKRotor=True,
+    activeJRotor=True,
+    rmgmode=False,
+)
+'''
+
+
+def _species_spin_multiplicity(text, label):
+    """The spinMultiplicity literal written for ``label`` in a generated explorer input file."""
+    tree = ast.parse(text)
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call) \
+                or not isinstance(node.value.func, ast.Name) or node.value.func.id != 'species':
+            continue
+        kwargs = {kw.arg: kw.value for kw in node.value.keywords if kw.arg is not None}
+        if 'label' in kwargs and ast.literal_eval(kwargs['label']) == label:
+            return ast.literal_eval(kwargs['spinMultiplicity'])
+    raise AssertionError(f'no species {label!r} with a spinMultiplicity in the generated file')
+
+
+def test_corrects_triplet_o_spin_multiplicity_that_contradicts_its_adjacency_header(tmp_path):
+    """Defect 3: RMG's explorer writes triplet atomic O with spinMultiplicity=1 while its adjacency
+    header says 'multiplicity 3'. Splicing that verbatim makes the next round's Arkane crash, so the
+    writer rewrites spinMultiplicity to match the (authoritative) adjacency list. The self-consistent
+    [OH] beside it is left untouched -- this corrects a contradiction, it does not rewrite spins."""
+    source_path = _write_source(tmp_path, SOURCE_TRIPLET_O_INCONSISTENT)
+    dest_path = str(tmp_path / 'input.py')
+
+    result = write_arkane_explorer_input_file(
+        source_path=source_path, dest_path=dest_path,
+        **{**DEFAULT_KWARGS, 'seed_species': ('[O]',), 'maximum_radical_electrons': 2})
+
+    assert result.spin_multiplicity_corrected == (('[O]', 1, 3),)
+    with open(dest_path) as f:
+        text = f.read()
+    assert _species_spin_multiplicity(text, '[O]') == 3      # corrected
+    assert _species_spin_multiplicity(text, '[OH]') == 2     # consistent -> untouched
+    # The correction is surfaced, never silent.
+    assert any('[O]' in w and 'spinMultiplicity' in w for w in result.warnings)
+
+
+def test_does_not_touch_a_consistent_spin_multiplicity(tmp_path):
+    """A source whose spinMultiplicity already matches its adjacency header triggers no correction --
+    the over-correction guard, so the fix cannot start rewriting good files."""
+    consistent = SOURCE_TRIPLET_O_INCONSISTENT.replace('    spinMultiplicity=1,\n',
+                                                       '    spinMultiplicity=3,\n')
+    source_path = _write_source(tmp_path, consistent)
+    dest_path = str(tmp_path / 'input.py')
+    result = write_arkane_explorer_input_file(
+        source_path=source_path, dest_path=dest_path,
+        **{**DEFAULT_KWARGS, 'seed_species': ('[O]',), 'maximum_radical_electrons': 2})
+    assert result.spin_multiplicity_corrected == ()
+
+
 def test_does_not_emit_kinetics_directive_when_reaction_has_explicit_kinetics(tmp_path):
     """Behavior: a reaction() with an explicit kinetics= keyword gets no kinetics(...) directive."""
     source_path = _write_source(tmp_path, SOURCE_WITH_KINETICS)

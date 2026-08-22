@@ -167,7 +167,7 @@ def _build_explorer_config(config: PESLoopConfig, project_directory: str,
                            paths: RoundPaths) -> PDepExplorerConfig:
     """Build this round's ``PDepExplorerConfig`` from ``config.pes``."""
     return PDepExplorerConfig(
-        explorer='arkane',
+        explorer='Arkane',
         trusted_output_root=project_directory,
         output_directory=paths.explorer_output,
         seed_species=tuple(config.pes.source),
@@ -337,7 +337,10 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     seed_channel_keys = dict()
     seed_adoption_keys = dict()
     if adopted_ts_labels or config.reuse.from_t3_projects:
-        seed_network = parse_pdep_network_file(path=config.pes.network)
+        # require_reactions=False: config.pes.network is the seed, which is legitimately
+        # source-only on round 0 (no reaction(...) yet -- the explorer creates them). This parse
+        # only needs the seed's species/channel keys for adoption matching, never its reactions.
+        seed_network = parse_pdep_network_file(path=config.pes.network, require_reactions=False)
         seed_channel_keys = channel_keys_by_ts_label(seed_network)
         seed_adoption_keys = adoption_channel_keys_by_ts_label(seed_network)
     if adopted_ts_labels:

@@ -47,3 +47,8 @@ filterwarnings = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # unused imports in __init__.py are re-exports
 "t3/runners/rmg_incore_sa.py" = ["E701"]  # subprocess script, compact one-liners are fine
+# RMG/Arkane network files are data in Python syntax: `species()`, `network()` and
+# `pressureDependence()` are injected by the parser's exec namespace, never imported, so every
+# call site reads as an undefined name. The copies under tests/data are covered by `exclude`
+# above; these are the ones that ship as runnable examples.
+"examples/**/network_*.py" = ["F821"]

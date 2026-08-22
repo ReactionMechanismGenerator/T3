@@ -1,0 +1,5 @@
+# PES.py run outputs (Arkane explorer artifacts, logs, diagrams) are reproducible from the seed
+# and input.yml here; do not track them.
+run/
+run2/
+run*/

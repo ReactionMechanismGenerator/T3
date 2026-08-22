@@ -1,0 +1,46 @@
+# SOURCE-ONLY CHO2 PES exploration loop input.
+#
+# This drives the standalone PES loop from a source-only seed -- the [O]C=O well, a bath gas, and
+# no hand-written reactions (network_cho2_source.py). The loop runs Arkane's own explorer to grow
+# the surface, then draws its diagram. Run it as a no-QM smoke test with:
+#
+#     python PES.py examples/pes_loop_cho2/input.yml --diagram-only \
+#         --project-directory examples/pes_loop_cho2/run
+#
+# A UNIMOLECULAR source ([O]C=O) is used on purpose: a bimolecular source makes Arkane discover
+# more than one network, which the adapter refuses (seed from a well instead).
+
+pes:
+  network: network_cho2_source.py
+  source:
+    - '[O]C=O'
+  method: MSC
+  bath_gas:
+    Ar: 1.0
+  explore_tol: 0.01
+  energy_tol: 1.0e+01
+  flux_tol: 1.0e-06
+  maximum_radical_electrons: 2
+  timeout: 7200.0
+
+qm:
+  opt_level: wb97xd/def2tzvp
+  freq_level: wb97xd/def2tzvp
+  sp_level: dlpno-ccsd(t)-f12/cc-pvtz-f12
+  irc_level: wb97xd/def2tzvp
+  scan_level: wb97xd/def2tzvp
+  ts_adapters:
+    - heuristics
+    - linear
+  rotors: false
+  irc: false
+  scope: sensitive
+  max_transition_states_per_round: 10
+  min_delta_ln_k: 1.0e-03
+
+termination:
+  max_rounds: 5
+  stop_when_no_new_ts: true
+
+reuse:
+  from_t3_projects: []
