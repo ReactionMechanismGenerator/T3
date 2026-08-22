@@ -1,0 +1,97 @@
+# Request a Copilot code review the first time CI passes on a PR to main.
+#
+# Why workflow_run rather than a `copilot_code_review` branch ruleset: a ruleset can only fire on
+# PR open or on every push, never "once CI is green". Gating on CI keeps Copilot off red PRs and
+# off the quota until the branch actually builds, and the dedup below keeps it to a single pass.
+name: Copilot review on green
+
+on:
+  workflow_run:
+    workflows: ["T3 CI"]     # must match the `name:` of ci.yml
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  request-copilot:
+    # Only for a PR whose CI run went green.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    # Serialize per branch. Two green CI runs finishing close together (a rerun, or a push that
+    # lands while the previous run is finishing) would otherwise both pass the dedup check below
+    # before either had requested the reviewer. cancel-in-progress stays false: the second run
+    # should still get to look and no-op, not be killed mid-check.
+    concurrency:
+      group: copilot-review-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    steps:
+      - name: Request Copilot review (once, on first green)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PRS_JSON: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          # Resolve the PR: the workflow_run payload carries it for same-repo PRs; for fork PRs the
+          # array is empty, so fall back to a lookup by the run's head SHA. Filter the array on the
+          # base ref rather than taking .[0]: one branch can carry several open PRs (say one to main
+          # and one stacked onto another feature branch), and if .[0] were the non-main one, the
+          # base check below would exit 0 and the main-targeting PR would never be reviewed.
+          pr=$(jq -r '[.[] | select(.base.ref == "main")][0].number // empty' <<<"$PRS_JSON")
+          if [ -z "$pr" ]; then
+            pr=$(gh pr list --repo "$REPO" --state open --search "$HEAD_SHA" \
+                   --json number,baseRefName --jq '.[] | select(.baseRefName=="main") | .number' | head -1)
+          fi
+          if [ -z "$pr" ]; then
+            echo "No open PR to main for $HEAD_SHA — nothing to do."
+            exit 0
+          fi
+
+          # Only PRs targeting main (CI already scopes to this, but be explicit).
+          base=$(gh pr view "$pr" --repo "$REPO" --json baseRefName --jq .baseRefName)
+          if [ "$base" != "main" ]; then
+            echo "PR #$pr targets '$base', not main — skip."
+            exit 0
+          fi
+
+          # Dedup: skip if Copilot is already a requested reviewer or has already reviewed. This is
+          # what makes it "first green only" — later green runs find Copilot engaged and no-op.
+          #
+          # Match whole logins, not the substring "copilot", so a human whose username merely
+          # contains it cannot suppress the request. Match a SET, though, because this one bot
+          # answers to three spellings and they are not interchangeable:
+          #   copilot-pull-request-reviewer[bot]  what the requested_reviewers API expects below
+          #   copilot-pull-request-reviewer       what `gh pr view --json reviews` reports (gh
+          #                                       strips the [bot] suffix from .author.login)
+          #   Copilot                             what the REST review-comments API reports
+          # Pinning only the [bot] spelling would silently never match what gh actually returns
+          # here, so dedup would fail open and re-request on every green run. Strip a trailing
+          # [bot] and compare against the known logins instead.
+          engaged=$(gh pr view "$pr" --repo "$REPO" --json reviewRequests,reviews \
+            --jq '[(.reviewRequests[].login), (.reviews[].author.login)]
+                   | map(ascii_downcase | sub("\\[bot\\]$"; ""))
+                   | map(. == "copilot" or . == "copilot-pull-request-reviewer") | any')
+          if [ "$engaged" = "true" ]; then
+            echo "Copilot already engaged on #$pr — skip."
+            exit 0
+          fi
+
+          # The reviewer login the request API expects (distinct from the review author's slug).
+          # Non-fatal on purpose: the request can still lose a race with a concurrent run, or be
+          # refused (422) because the reviewer is already requested. Failing the job there would
+          # paint a red check on a PR whose CI is green, over a convenience that either already
+          # happened or can be clicked by hand. Report what the API said and exit 0.
+          if ! response=$(gh api --method POST "repos/$REPO/pulls/$pr/requested_reviewers" \
+                            -f 'reviewers[]=copilot-pull-request-reviewer[bot]' 2>&1); then
+            echo "Could not request a Copilot review on #$pr. The API said:"
+            echo "$response"
+            echo "Not failing the run — Copilot is likely already requested."
+            exit 0
+          fi
+          echo "Requested Copilot review on #$pr."
