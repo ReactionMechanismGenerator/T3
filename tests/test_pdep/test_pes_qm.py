@@ -11,7 +11,7 @@ from arc.reaction.reaction import ARCReaction
 from arc.species.species import ARCSpecies
 
 from t3.pdep.capture import (CAPTURE_MANIFEST_FILE_NAME, CaptureResult, VerifyResult,
-                             capture_ts_artifacts)
+                             capture_ts_artifacts, captured_qm_artifact_path)
 from t3.pdep.discovery import ARTIFACT_STATUS_UNVERIFIED, ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import HybridNetworkResult
@@ -1152,3 +1152,208 @@ class TestArcQmRunnerWithNothingQueued(object):
         assert _FakeARC.execute_calls == 0
         assert recorder.capture_ts_artifacts_calls == []
         assert recorder.write_hybrid_calls == []
+
+
+# --- Real capture + real hybrid write: the pilot's own post-submission path --------------------
+#
+# TestArcQmRunner above mocks BOTH capture_ts_artifacts and write_hybrid_network_input_file, so the
+# real capture-to-hybrid path -- the half of arc_qm_runner that has never run against a real ARC
+# project -- was left entirely un-driven, exactly the fully-mocked seam this project's standing rule
+# forbids. These tests drive it for real, stubbing ONLY ARC's cluster gateway (construction and
+# .execute()), against a fabricated *completed* ARC project shaped from what ARC actually writes.
+#
+# They specifically cover the atom-energy path the PILOT's own level (wb97xd/def2tzvp) takes: a real
+# ARC input.py sets useAtomCorrections=True with NO inline atomEnergies (verified against a real ARC
+# project on disk, /home/alon/Projects/linear/xl1001), and the numeric corrections are sourced from
+# output.yml's atom_energy_corrections block. The inline-atomEnergies fixtures elsewhere in this
+# file never exercise that path -- and write_hybrid_network_input_file refuses use_atom_corrections
+# with atom_energies=None, so a break in the output.yml sourcing turns the pilot's first captured
+# round into a post-QM-spend crash.
+
+# The real wb97xd2023/def2tzvp atom-energy corrections, as an ARC output.yml records them (copied
+# from /home/alon/Projects/linear/xl1001/output/output.yml, restricted to CHONS).
+_OUTPUT_YML_ATOM_ENERGY_CORRECTIONS = {
+    'C': -37.84706210301937, 'H': -0.5006557872395249,
+    'N': -54.584995947182875, 'O': -75.07252406126821,
+}
+
+
+def _fabricate_completed_arc_project(arc_project, network_id, network_ts_label,
+                                     level='wb97xd/def2tzvp'):
+    """Populate ``arc_project`` as a completed ARC run that converged ``network_ts_label``.
+
+    Shaped from what ARC actually writes for the pilot's level: ``useAtomCorrections = True`` with
+    NO inline ``atomEnergies`` in ``calcs/statmech/kinetics/input.py``, the numeric corrections in
+    ``output/output.yml``'s ``atom_energy_corrections`` block. Returns the ARC TS label.
+    """
+    arc_label = arc_ts_label(network_id, network_ts_label)
+    artifact_path = expected_ts_artifact_path(arc_project, arc_label)
+    os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
+    # Log(...) argument is resolved against the artifact's own directory and confined to the ARC
+    # project, so the referenced log sits beside the artifact.
+    with open(os.path.join(os.path.dirname(artifact_path), 'output.out'), 'w') as f:
+        f.write('stub quantum chemistry log\n')
+    with open(artifact_path, 'w') as f:
+        f.write("linear = False\n\nspinMultiplicity = 2\n\nenergy = Log('output.out')\n\n"
+                "geometry = Log('output.out')\n\nfrequencies = Log('output.out')\n")
+    statmech_dir = os.path.join(arc_project, 'calcs', 'statmech', 'kinetics')
+    os.makedirs(statmech_dir, exist_ok=True)
+    with open(os.path.join(statmech_dir, 'input.py'), 'w') as f:
+        # No atomEnergies line -- exactly what ARC writes for a level whose AEC live in its own
+        # database (the pilot's wb97xd/def2tzvp), which ARC reports as "AEC matched".
+        f.write(f"modelChemistry = {_arc_model_chemistry_text(level)}\n\n"
+                "frequencyScaleFactor = 0.988\n\nuseHinderedRotors = True\n\n"
+                "useAtomCorrections = True\n\nuseBondCorrections = False\n")
+    output_dir = os.path.join(arc_project, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, 'status.yml'), 'w') as f:
+        f.write(f"{arc_label}:\n  convergence: true\n  errors: ''\n  info: ''\n")
+    with open(os.path.join(output_dir, 'output.yml'), 'w') as f:
+        f.write(f"{arc_label}:\n  converged: true\n")
+        f.write("atom_energy_corrections:\n")
+        for element, value in _OUTPUT_YML_ATOM_ENERGY_CORRECTIONS.items():
+            f.write(f"  {element}: {value!r}\n")
+        f.write("freq_scale_factor: 0.988\n")
+    return arc_label
+
+
+def _real_drive_setup(tmp_path, monkeypatch, round_index=0):
+    """Drive arc_qm_runner with the REAL capture + REAL hybrid write, stubbing only ARC.
+
+    Returns ``(paths, candidate, arc_label, project_directory)``. The explored network is the real
+    network799_1 fixture; the ARC project is a fabricated *completed* run that converged TS1.
+    """
+    project_directory = str(tmp_path)
+    paths = round_paths(project_directory, round_index)
+    final_dir = os.path.join(paths.explorer_output, 'pdep', 'final')
+    os.makedirs(final_dir)
+    shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(final_dir, f'{_NETWORK_ID}.py'))
+    os.makedirs(paths.arc_project)
+    arc_label = _fabricate_completed_arc_project(paths.arc_project, _NETWORK_ID, 'TS1')
+
+    candidate = _candidate(ts_label='TS1', family='1+2_Cycloaddition',
+                           reactants=('O-2(13598)', 'CO2(11)'), products=('O=C1OO1(21648)',),
+                           label='reaction1', coefficient=0.05, delta_ln_k=0.02)
+
+    _FakeARC.constructions = []
+    _FakeARC.execute_calls = 0
+    monkeypatch.setattr('t3.pdep.pes_qm.ARC', _FakeARC)  # the ONLY cluster-touching seam stubbed
+    return paths, candidate, arc_label, project_directory
+
+
+def _hybrid_atom_energies(hybrid_path):
+    """Recover the ``atomEnergies`` dict the hybrid network file carries (ast, no exec)."""
+    import ast
+    with open(hybrid_path) as f:
+        tree = ast.parse(f.read())
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == 'atomEnergies'):
+            return ast.literal_eval(node.value)
+    return None
+
+
+class TestArcQmRunnerRealCaptureHybrid(object):
+    """arc_qm_runner's post-submission path (capture + hybrid write) driven for real, with only
+    ARC stubbed -- the seam TestArcQmRunner mocks and the pilot has never run."""
+
+    def test_converged_ts_is_captured_and_folded_into_a_self_contained_hybrid(self, tmp_path, monkeypatch):
+        paths, candidate, arc_label, _ = _real_drive_setup(tmp_path, monkeypatch)
+        converged, queued = arc_qm_runner((candidate,), paths, _config(), _NETWORK_ID)
+        assert converged == frozenset({'TS1'})
+        assert queued == frozenset({'TS1'})
+        # The artifact was really vendored into this round's capture directory.
+        assert os.path.isfile(captured_qm_artifact_path(paths.capture, arc_label))
+        # A real hybrid network was written where the loop looks for it next round.
+        hybrid_path = hybrid_network_path(paths, _NETWORK_ID)
+        assert os.path.isfile(hybrid_path)
+        with open(hybrid_path) as f:
+            hybrid_text = f.read()
+        # The converged TS is folded in as a QM statmech reference, not an RMG/ILT estimate.
+        assert "transitionState('TS1', 'qm/TS1.py')" in hybrid_text
+        # ...and the hybrid is self-contained: the referenced artifact and the log IT references
+        # both sit beside the hybrid, so Arkane can read it with no path escaping the round.
+        vendored = os.path.join(os.path.dirname(hybrid_path), 'qm', 'TS1.py')
+        assert os.path.isfile(vendored)
+        with open(vendored) as f:
+            assert 'Log(' in f.read()
+
+    def test_the_real_arc_class_accepts_the_kwargs_and_serializes_them(self, tmp_path, monkeypatch):
+        """Drive the REAL ``arc.main.ARC``, stubbing only ``execute`` -- the one cluster-touching call.
+
+        Every other test here replaces the whole class with ``_FakeARC``, which accepts any kwargs
+        and returns whatever ``as_dict`` is written to return. That validates this module's WIRING
+        but asserts nothing about the real constructor: a kwarg ARC has renamed, dropped, or made
+        stricter would sail through all of them and only fail in a pilot run, after the quantum
+        chemistry has been paid for. Constructing ARC is inert -- it resolves levels of theory and
+        builds a dict, touching no cluster -- so the real seam is cheap to exercise exactly once.
+        """
+        from arc.common import read_yaml_file
+        from arc.main import ARC
+
+        executed = []
+        monkeypatch.setattr(ARC, 'execute', lambda self: executed.append(True), raising=True)
+        monkeypatch.setattr('t3.pdep.pes_qm.ARC', ARC)
+
+        paths, candidate, _arc_label, _ = _real_drive_setup(tmp_path, monkeypatch)
+        # _real_drive_setup installs the fake; put the real class back after it.
+        monkeypatch.setattr('t3.pdep.pes_qm.ARC', ARC)
+
+        arc_qm_runner((candidate,), paths, _config(), _NETWORK_ID)
+
+        assert executed == [True], 'the real ARC.execute seam was not reached'
+        arc_input_path = os.path.join(paths.arc_project, ARC_INPUT_FILE_NAME)
+        assert os.path.isfile(arc_input_path), 'the real ARC.as_dict() output was never persisted'
+        persisted = read_yaml_file(arc_input_path)
+        # The real as_dict() round-trips the project name this module sets, which is the one field
+        # pes_qm itself injects (arc_kwargs.setdefault('project', network_id)).
+        assert persisted['project'] == _NETWORK_ID
+
+    def test_atom_energies_sourced_from_output_yml_reach_the_hybrid(self, tmp_path, monkeypatch):
+        """The pilot's own atom-energy path: input.py sets useAtomCorrections=True with NO inline
+        atomEnergies, so the numeric corrections must be sourced from output.yml and written into
+        the hybrid's atomEnergies. If that sourcing breaks, write_hybrid refuses (atom_energies is
+        None with use_atom_corrections True) and the pilot's first captured round crashes AFTER the
+        QM spend -- this test is the guard for that."""
+        paths, candidate, _arc_label, _ = _real_drive_setup(tmp_path, monkeypatch)
+        arc_qm_runner((candidate,), paths, _config(), _NETWORK_ID)
+        hybrid_path = hybrid_network_path(paths, _NETWORK_ID)
+        atom_energies = _hybrid_atom_energies(hybrid_path)
+        assert atom_energies == _OUTPUT_YML_ATOM_ENERGY_CORRECTIONS
+
+    def test_round_two_read_back_adopts_the_prior_capture(self, tmp_path, monkeypatch):
+        """The round-two read-back: a later run (or round) pointed at this project rediscovers the
+        captured artifact by structural channel key + model-chemistry match -- the config.reuse
+        path run_pes_loop drives before round 0."""
+        paths, candidate, _arc_label, project_directory = _real_drive_setup(tmp_path, monkeypatch)
+        arc_qm_runner((candidate,), paths, _config(), _NETWORK_ID)
+        network = parse_pdep_network_file(_FIXTURE_NETWORK_PATH)
+        adopted = adopt_prior_qm([project_directory], _NETWORK_ID, 'wb97xd/def2tzvp',
+                                 adoption_channel_keys_by_ts_label(network),
+                                 freq_level='wb97xd/def2tzvp')
+        assert set(adopted) == {'TS1'}
+        assert os.path.isfile(adopted['TS1'])
+
+    def test_cross_round_adopted_artifact_is_re_folded_into_a_self_contained_hybrid(self, tmp_path, monkeypatch):
+        """The other read-back facet: run_pes_loop re-offers every prior artifact as ``adopted``
+        each subsequent round. A round with no NEW candidates but an adopted artifact must still
+        write a hybrid that carries it (never letting a computed TS revert to an RMG/ILT line)."""
+        paths, candidate, arc_label, _ = _real_drive_setup(tmp_path, monkeypatch)
+        arc_qm_runner((candidate,), paths, _config(), _NETWORK_ID)
+        adopted_artifact = captured_qm_artifact_path(paths.capture, arc_label)
+
+        # A fresh round: no new candidates, but the prior artifact folded back in.
+        paths1 = round_paths(str(tmp_path), 1)
+        final_dir = os.path.join(paths1.explorer_output, 'pdep', 'final')
+        os.makedirs(final_dir)
+        shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(final_dir, f'{_NETWORK_ID}.py'))
+        converged, queued = arc_qm_runner((), paths1, _config(), _NETWORK_ID,
+                                          adopted={'TS1': adopted_artifact})
+        # No new convergence (nothing queued), but the hybrid still carries the adopted TS.
+        assert converged == frozenset()
+        hybrid_path = hybrid_network_path(paths1, _NETWORK_ID)
+        assert os.path.isfile(hybrid_path)
+        with open(hybrid_path) as f:
+            assert "transitionState('TS1', 'qm/TS1.py')" in f.read()
+        assert os.path.isfile(os.path.join(os.path.dirname(hybrid_path), 'qm', 'TS1.py'))
