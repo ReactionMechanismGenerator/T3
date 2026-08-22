@@ -39,10 +39,15 @@ from dataclasses import dataclass
 from t3.pdep.parser import PDepPathReaction
 
 # RMG families whose reactions proceed without a saddle point. Additions belong here rather than
-# at a call site, so that every consumer of this module agrees on the set.
+# at a call site, so that every consumer of this module agrees on the set. Note that
+# 'Birad_recombination' and 'Birad_R_Recombination' are two SEPARATE RMG families (both ship as
+# distinct directories in RMG-database/input/kinetics/families/), not a duplicate -- real explored
+# CHO2 surfaces produce 'Birad_R_Recombination' channels, and omitting it leaked them into the TS
+# queue.
 BARRIERLESS_FAMILIES = frozenset({
     'R_Recombination',
     'Birad_recombination',
+    'Birad_R_Recombination',
     'Diradical_formation',
 })
 

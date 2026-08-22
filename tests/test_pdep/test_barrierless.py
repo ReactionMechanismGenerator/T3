@@ -60,6 +60,22 @@ class TestClassifyBarrierless(object):
         assert verdict.family == 'R_Recombination'
         assert 'R_Recombination' in verdict.reason
 
+    def test_birad_r_recombination_is_barrierless(self):
+        """A real explored CHO2 surface produces Birad_R_Recombination channels; each is
+        barrierless and must stay out of the TS queue (I-008)."""
+        comment = 'Estimated from node Root in family Birad_R_Recombination.'
+        verdict = classify_barrierless(_rxn(comment))
+        assert verdict.is_barrierless is True
+        assert verdict.family == 'Birad_R_Recombination'
+        assert 'Birad_R_Recombination' in verdict.reason
+
+    def test_birad_r_recombination_and_birad_recombination_are_both_listed_and_distinct(self):
+        """The two are SEPARATE RMG families, not a duplicate: both classify as barrierless."""
+        assert 'Birad_recombination' in BARRIERLESS_FAMILIES
+        assert 'Birad_R_Recombination' in BARRIERLESS_FAMILIES
+        assert classify_barrierless(_rxn('family: Birad_recombination')).is_barrierless is True
+        assert classify_barrierless(_rxn('family: Birad_R_Recombination')).is_barrierless is True
+
     def test_insertion_family_is_not_barrierless(self):
         """1,2_Insertion_CO has a real saddle point -- this campaign converged one at -632.77 cm^-1."""
         verdict = classify_barrierless(_rxn('family: 1,2_Insertion_CO'))
