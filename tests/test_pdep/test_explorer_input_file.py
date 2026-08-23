@@ -29,6 +29,7 @@ from t3.pdep.explorer.input_file import (
     _ARKANE_VALUE_NAMES,
     _get_call_name,
     _render_literal,
+    _resolve_seed_labels,
     _TOP_LEVEL_CALL_NAMES,
     _validate_source_statements,
     ExplorerInputSummary,
@@ -2137,3 +2138,180 @@ class TestASeedGivenAsABareStringIsRefused:
         """Over-refusal guard: the shape every caller is supposed to use."""
         self._write(tmp_path, ('methoxy',))
         assert os.path.isfile(str(tmp_path / 'input.py'))
+
+
+# ---------------------------------------------------------------------------------------------------
+# I-019: resolving a configured seed to the label the round's actual (re-explored/hybrid) network uses.
+#
+# The PES loop configures its seed once, against the source network, where it is a literal species()
+# label ('[O]C=O'). From round 1 on the loop re-explores a HYBRID network whose species Arkane
+# relabelled with network indices ('[O]C=O(1)'), so the configured label is no longer literal there
+# and _validate_seed_species (by-label, like Arkane's own source resolution) refuses it. These tests
+# drive the REAL round-0 hybrid of the r001_m1-cho2-pilot run (copied verbatim into tests/data),
+# because every defect on this handoff was invisible to synthetic fixtures -- including a hand-built
+# one.
+# ---------------------------------------------------------------------------------------------------
+
+REAL_HYBRID_PATH = os.path.join(
+    TEST_DATA_BASE_PATH, 'pdep_hybrid', 'cho2_round0', 'network0_reduced.py')
+
+
+def _collect_species_nodes(text):
+    """``(species_nodes, species_structure_nodes)`` from a network source, mirroring the collection
+    loop in ``write_arkane_explorer_input_file`` (label -> species() node, label -> structure node)."""
+    tree = ast.parse(text)
+    species_nodes, species_structure_nodes = dict(), dict()
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if _get_call_name(call) != 'species':
+            continue
+        kwargs = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
+        if 'label' not in kwargs:
+            continue
+        label = ast.literal_eval(kwargs['label'])
+        species_nodes[label] = node
+        species_structure_nodes[label] = kwargs.get('structure')
+    return species_nodes, species_structure_nodes
+
+
+def test_real_hybrid_seed_smiles_resolves_to_the_networks_indexed_label():
+    """The configured SMILES seed '[O]C=O' is not a literal label in the round-0 hybrid (whose species
+    Arkane relabelled '[O]C=O(1)'); resolution matches it by structure to that label, and says so."""
+    with open(REAL_HYBRID_PATH) as f:
+        species_nodes, species_structure_nodes = _collect_species_nodes(f.read())
+    # Precondition: the bare seed really is absent as a literal label here, so this exercises
+    # structural resolution, not the literal-match shortcut.
+    assert '[O]C=O' not in species_nodes
+    assert '[O]C=O(1)' in species_nodes
+
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('[O]C=O',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path=REAL_HYBRID_PATH)
+
+    assert resolved == ('[O]C=O(1)',)
+    assert len(warnings) == 1
+    assert '[O]C=O(1)' in warnings[0]
+
+
+def test_a_seed_whose_parse_raises_an_unexpected_type_still_fails_closed(monkeypatch):
+    """Seed resolution must fail CLOSED for any parser failure, not only ValueError/KeyError.
+
+    The whole point of returning ``None`` here is that an unresolvable seed is passed through
+    untouched, so ``_validate_seed_species`` can refuse it by name and list the labels the network
+    really defines. If a parser exception escapes instead, that diagnostic is replaced by a raw
+    backend error -- and the backend is third-party code whose exception set is not ours to
+    enumerate (a non-str label already surfaces as TypeError, not ValueError).
+    """
+    import t3.pdep.explorer.input_file as input_file_module
+
+    class _ExplodingMolecule:
+        def from_smiles(self, label):
+            raise RuntimeError('backend blew up in a way this module never anticipated')
+
+    monkeypatch.setattr(input_file_module, 'Molecule', _ExplodingMolecule)
+
+    # Must not propagate: None is the fail-closed answer the caller is built on.
+    assert input_file_module._seed_structure_identity('[O]C=O') is None
+
+
+def test_real_hybrid_gets_past_seed_validation_through_the_full_writer(tmp_path):
+    """End to end on the real seam: with resolution in place, driving the real hybrid through the
+    writer no longer raises the seed-label refusal. It currently stops one step further on, at the
+    generated-side modelChemistry guard (a defect carried forward -- see the xfail test below and
+    Remaining Work); this test pins that the SEED barrier itself is cleared."""
+    dest_path = str(tmp_path / 'input.py')
+    kwargs = dict(DEFAULT_KWARGS)
+    kwargs['seed_species'] = ('[O]C=O',)
+    kwargs['bath_gas'] = {'Ar': 1.0}  # the real hybrid's bath gas, so bath-gas validation is reached
+    with pytest.raises(Exception) as exc_info:
+        write_arkane_explorer_input_file(source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
+    # The seed barrier is cleared: whatever stops the write now, it is NOT the seed-label refusal.
+    assert 'Seed species label' not in str(exc_info.value)
+    # And the concrete thing that stops it today is the generated-side modelChemistry guard.
+    assert isinstance(exc_info.value, RuntimeError)
+    assert 'modelChemistry' in str(exc_info.value)
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Defect carried forward from the branch below (i018-modelchem): _validate_generated_statements "
+    "rejects the 'modelChemistry = LevelOfTheory(...)' assignment that _validate_source_statements "
+    "now accepts, so the real hybrid does not yet survive the full writer. The modelChemistry "
+    "acceptance was only taught to the source-side guard, never the symmetric generated-side one. "
+    "Remove this marker when that generated-side guard learns the same acceptance."))
+def test_real_hybrid_survives_the_full_writer_and_emits_the_resolved_source(tmp_path):
+    """The intended end state: the real hybrid writes a valid explorer input whose source is the
+    resolved label and which carries the modelChemistry directive. Pinned xfail(strict) until the
+    generated-side modelChemistry guard is fixed; it XPASSes (forcing this marker's removal) then."""
+    dest_path = str(tmp_path / 'input.py')
+    kwargs = dict(DEFAULT_KWARGS)
+    kwargs['seed_species'] = ('[O]C=O',)
+    kwargs['bath_gas'] = {'Ar': 1.0}
+    summary = write_arkane_explorer_input_file(
+        source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
+    assert summary.seed_species == ('[O]C=O(1)',)
+    with open(dest_path) as f:
+        text = f.read()
+    assert "'[O]C=O(1)'" in text
+    assert 'modelChemistry' in text
+
+
+def test_source_guard_accepts_the_real_hybrids_model_chemistry_line():
+    """Pins the branch-below (i018-modelchem) fix against real data: _validate_source_statements
+    accepts the real hybrid's bare ``modelChemistry = LevelOfTheory(...)`` directive. All prior
+    coverage of that acceptance was synthetic."""
+    with open(REAL_HYBRID_PATH) as f:
+        text = f.read()
+    tree = ast.parse(text)
+    # Must not raise: the real hybrid opens with modelChemistry = LevelOfTheory(...).
+    _validate_source_statements(tree=tree, text=text, source_path=REAL_HYBRID_PATH)
+
+
+def test_a_literal_seed_label_is_returned_unchanged_without_structural_work():
+    """Round-0 correctness: when the seed IS a literal species() label (the real source network), it
+    is returned as-is with no warning -- structural resolution never runs for it."""
+    species_nodes, species_structure_nodes = _collect_species_nodes(SOURCE_NO_KINETICS)
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('methoxy',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path='x')
+    assert resolved == ('methoxy',)
+    assert warnings == []
+
+
+def test_seed_with_no_structural_match_is_left_unchanged_for_the_validator():
+    """Zero-match cost: a seed that is neither a literal label nor structurally present is returned
+    unchanged, so _validate_seed_species raises its own clear 'not defined' error rather than this
+    resolver inventing one. Here the radical seed '[O]C=O' is matched against a CO2-only network."""
+    text = "species(label='O=C=O(5)', structure=SMILES('O=C=O'), E0=(0, 'kJ/mol'))\n"
+    species_nodes, species_structure_nodes = _collect_species_nodes(text)
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('[O]C=O',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path='x')
+    assert resolved == ('[O]C=O',)
+    assert warnings == []
+
+
+def test_a_non_smiles_seed_label_is_left_unchanged_for_the_validator():
+    """A seed label that is not a parseable SMILES (an index-suffixed 'O=C=O(5)') yields no structure
+    to match on, so it is returned unchanged for _validate_seed_species to judge by string."""
+    text = "species(label='O=C=O(1)', structure=SMILES('O=C=O'), E0=(0, 'kJ/mol'))\n"
+    species_nodes, species_structure_nodes = _collect_species_nodes(text)
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('O=C=O(5)',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path='x')
+    assert resolved == ('O=C=O(5)',)
+    assert warnings == []
+
+
+def test_a_seed_matching_more_than_one_species_by_structure_is_refused():
+    """Multiple-match cost: a source configuration must name exactly one physical species; two
+    structurally identical species make the seed ambiguous, and seeding from an arbitrary one could
+    explore the wrong copy, so resolution refuses rather than picking one."""
+    text = ("species(label='A', structure=SMILES('[O]C=O'), E0=(0, 'kJ/mol'))\n"
+            "species(label='B', structure=SMILES('[O]C=O'), E0=(0, 'kJ/mol'))\n")
+    species_nodes, species_structure_nodes = _collect_species_nodes(text)
+    with pytest.raises(ValueError, match='matches 2 species'):
+        _resolve_seed_labels(
+            seed_species=('[O]C=O',), species_nodes=species_nodes,
+            species_structure_nodes=species_structure_nodes, source_path='x')
