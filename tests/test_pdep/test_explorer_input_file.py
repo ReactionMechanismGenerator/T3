@@ -1407,6 +1407,36 @@ class TestGeneratedFileCannotBeInjectedThrough:
                 'network(isomers=["a"])\npressureDependence(method="MSC")\nexplorer(source=["a"])\n')
         _validate_generated_statements(tree=ast.parse(text), text=text, dest_path='/nonexistent/input.py')
 
+    @pytest.mark.parametrize('line', [
+        "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp')",
+        "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp', software='qchem')",
+        "modelChemistry = CompositeLevelOfTheory("
+        "freq=LevelOfTheory(method='wb97xd'), energy=LevelOfTheory(method='dlpno'))",
+    ])
+    def test_the_self_check_accepts_the_model_chemistry_line_the_source_guard_accepts(self, line):
+        """
+        The symmetric-guard fix: the ``modelChemistry = LevelOfTheory(...)`` directive is spliced
+        verbatim from an already-validated source, so the outbound self-check must re-admit exactly
+        what the inbound source guard admits. Before the fix this line failed its own self-check even
+        though the source guard accepted it, so the file was never written. Mirrors the source-side
+        acceptance test so a future divergence between the two fails here.
+        """
+        text = f'{line}\ndatabase(thermoLibraries=[])\nexplorer(source=["a"])\n'
+        _validate_generated_statements(tree=ast.parse(text), text=text, dest_path='/nonexistent/input.py')
+
+    @pytest.mark.parametrize('line', [
+        "modelChemistry = compute_level()",              # a call, but not a known LevelOfTheory name
+        "modelChemistry = LevelOfTheory(method=().__class__)",  # known name, non-literal argument
+        "notModelChemistry = LevelOfTheory(method='wb97xd')",   # right shape, wrong target name
+    ])
+    def test_the_self_check_still_refuses_a_non_model_chemistry_call_assignment(self, line):
+        """Accept exactly what the source guard accepts, no more: a call assignment that is not a
+        structurally valid ``modelChemistry`` directive stays refused by the self-check, so the
+        modelChemistry exception cannot be a hole for arbitrary computed assignments."""
+        text = f'{line}\ndatabase(thermoLibraries=[])\nexplorer(source=["a"])\n'
+        with pytest.raises(RuntimeError, match='failed its own self-check'):
+            _validate_generated_statements(tree=ast.parse(text), text=text, dest_path='/nonexistent/input.py')
+
     @pytest.mark.parametrize('target', ['explorer', 'database', 'species', 'kinetics', 'network',
                                         'Arrhenius', 'NASA', 'range'])
     def test_a_source_may_not_shadow_a_name_arkane_defines(self, target):
@@ -2185,32 +2215,25 @@ def test_real_hybrid_seed_smiles_resolves_to_the_networks_indexed_label():
 
 def test_real_hybrid_gets_past_seed_validation_through_the_full_writer(tmp_path):
     """End to end on the real seam: with resolution in place, driving the real hybrid through the
-    writer no longer raises the seed-label refusal. It currently stops one step further on, at the
-    generated-side modelChemistry guard (a defect carried forward -- see the xfail test below and
-    Remaining Work); this test pins that the SEED barrier itself is cleared."""
+    writer no longer raises the seed-label refusal. The write now completes (the generated-side
+    modelChemistry guard has been brought back into step with the source-side one -- see the full
+    end-to-end test below); this test pins specifically that the SEED barrier is cleared, i.e. the
+    resolved label reaches the summary rather than a seed-label refusal."""
     dest_path = str(tmp_path / 'input.py')
     kwargs = dict(DEFAULT_KWARGS)
     kwargs['seed_species'] = ('[O]C=O',)
     kwargs['bath_gas'] = {'Ar': 1.0}  # the real hybrid's bath gas, so bath-gas validation is reached
-    with pytest.raises(Exception) as exc_info:
-        write_arkane_explorer_input_file(source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
-    # The seed barrier is cleared: whatever stops the write now, it is NOT the seed-label refusal.
-    assert 'Seed species label' not in str(exc_info.value)
-    # And the concrete thing that stops it today is the generated-side modelChemistry guard.
-    assert isinstance(exc_info.value, RuntimeError)
-    assert 'modelChemistry' in str(exc_info.value)
+    summary = write_arkane_explorer_input_file(source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
+    # The seed barrier is cleared: the configured SMILES seed resolved to the network's indexed label
+    # rather than being refused as a non-literal label.
+    assert summary.seed_species == ('[O]C=O(1)',)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Defect carried forward from the branch below (i018-modelchem): _validate_generated_statements "
-    "rejects the 'modelChemistry = LevelOfTheory(...)' assignment that _validate_source_statements "
-    "now accepts, so the real hybrid does not yet survive the full writer. The modelChemistry "
-    "acceptance was only taught to the source-side guard, never the symmetric generated-side one. "
-    "Remove this marker when that generated-side guard learns the same acceptance."))
 def test_real_hybrid_survives_the_full_writer_and_emits_the_resolved_source(tmp_path):
     """The intended end state: the real hybrid writes a valid explorer input whose source is the
-    resolved label and which carries the modelChemistry directive. Pinned xfail(strict) until the
-    generated-side modelChemistry guard is fixed; it XPASSes (forcing this marker's removal) then."""
+    resolved label and which carries the modelChemistry directive. This is the symmetric-guard fix:
+    the generated-side self-check now accepts the ``modelChemistry = LevelOfTheory(...)`` line that
+    the source-side guard accepts, so the line survives the verbatim splice on the way out."""
     dest_path = str(tmp_path / 'input.py')
     kwargs = dict(DEFAULT_KWARGS)
     kwargs['seed_species'] = ('[O]C=O',)
