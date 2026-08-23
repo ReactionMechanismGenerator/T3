@@ -26,6 +26,8 @@ import tokenize
 import warnings
 from dataclasses import dataclass, field
 
+from arc.molecule.molecule import Molecule
+
 from t3.pdep.hashing import hash_bytes
 from t3.pdep.hybrid import _MODEL_CHEMISTRY_CALL_NAMES, _validate_model_chemistry_expression
 from t3.utils.writer import METHOD_LINE_CANDIDATE_RE, METHOD_MAP, rewrite_arkane_method_line
@@ -368,6 +370,16 @@ def write_arkane_explorer_input_file(source_path: str,
                          f"or ambiguous (more than one) pressureDependence block.")
     pdep_node = pdep_nodes[0]
 
+    # Resolve the configured seed(s) to the label THIS network actually uses BEFORE validating them.
+    # The seed is configured once, against the original source network, where it is a literal
+    # species() label ('[O]C=O'). From round 1 on the loop re-explores a HYBRID network whose species
+    # Arkane relabelled with network indices ('[O]C=O(1)'), so the configured label is no longer a
+    # literal label here and _validate_seed_species (by-label, like Arkane's own source resolution)
+    # would refuse it. Resolution is by structure, never by loosening that validator -- a seed that
+    # cannot be resolved is passed through unchanged, so the validator still raises its clear error.
+    seed_species, seed_resolution_warnings = _resolve_seed_labels(
+        seed_species=seed_species, species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path=source_path)
     _validate_seed_species(seed_species=seed_species, species_nodes=species_nodes, ts_nodes=ts_nodes)
     # Rebound from the return value, not merely called for its side effect: an integer-only field
     # coerces an integral float (2.0 -> 2), and rendering the un-coerced argument would write a count
@@ -389,6 +401,9 @@ def write_arkane_explorer_input_file(source_path: str,
     warnings_list, reactive_injection_labels = _validate_bath_gas(
         bath_gas=bath_gas, species_nodes=species_nodes,
         species_reactive=species_reactive, source_path=source_path)
+    # Seed resolution runs before warnings_list exists, so fold its notes in now; they belong in the
+    # same ExplorerInputSummary.warnings the caller surfaces.
+    warnings_list = list(seed_resolution_warnings) + warnings_list
 
     # Inject 'reactive = False,' into each declared bath-gas species() block that carries no
     # 'reactive' keyword in the source -- see _validate_bath_gas's docstring for why this is a
@@ -582,6 +597,164 @@ def _validate_seed_species(seed_species: tuple, species_nodes: dict, ts_nodes: d
         if not is_species:
             raise ValueError(f"Seed species label '{label}' is not defined as a species() block anywhere in the "
                              f"source. Known species labels are {sorted(species_nodes)}.")
+
+
+def _molecule_identity(molecule) -> str:
+    """
+    The canonical structural identity of an ARC ``Molecule``: its canonical SMILES joined to its spin
+    multiplicity.
+
+    Mirrors ``t3.pdep.pes_rounds._canonical_structure`` so a seed built from a SMILES and a network
+    species built from an ``adjacencyList`` that are the same physical structure (same connectivity,
+    same multiplicity) produce the same string here.
+    """
+    return f'{molecule.to_smiles()}|m{molecule.multiplicity}'
+
+
+def _seed_structure_identity(label: str) -> str | None:
+    """
+    The canonical structure identity of a configured seed LABEL read as a SMILES.
+
+    T3's PES seeds are SMILES labels (e.g. ``'[O]C=O'``), so a seed that is no longer a literal
+    ``species()`` label in a re-explored (hybrid) network can still be matched to the label that
+    network uses, by structure. Returns ``None`` when the label is not a parseable SMILES -- an
+    index-suffixed label such as ``'O=C=O(5)'`` or any non-structural name -- in which case
+    ``_resolve_seed_labels`` leaves the seed untouched for ``_validate_seed_species`` to judge by
+    string.
+
+    Args:
+        label (str): The configured seed (source) label.
+
+    Returns:
+        Optional[str]: The canonical structure identity, or ``None`` if the label is not a SMILES.
+    """
+    try:
+        molecule = Molecule().from_smiles(label)
+    except Exception:
+        # Deliberately broad, and the breadth is the point. This function's contract is "None when
+        # the label is not a parseable SMILES", and every caller depends on that failing CLOSED --
+        # an unresolved seed is passed through untouched so `_validate_seed_species` can refuse it
+        # by name, with a message naming the labels the network actually defines. A parser
+        # exception escaping here would replace that diagnostic with a raw backend error from
+        # somewhere inside openbabel. The backend raises more than ValueError/KeyError in practice
+        # (a non-str label surfaces as TypeError), and it is third-party code whose exception set
+        # is not ours to enumerate. `pes_rounds._canonical_structure` guards its own parse the same
+        # way, for the same reason.
+        return None
+    return _molecule_identity(molecule)
+
+
+def _species_structure_identity(structure_node) -> str | None:
+    """
+    The canonical structure identity of a ``species()`` block's ``structure`` keyword value.
+
+    Mirrors ``_adjacency_list_multiplicity``'s extraction -- the same two ``structure`` call forms
+    real network files use, ``adjacencyList(...)`` and ``SMILES(...)`` -- but resolves the whole
+    structure to the identity seed resolution compares against, not merely its multiplicity.
+
+    Args:
+        structure_node: The AST node of the species' ``structure`` keyword value, or ``None``.
+
+    Returns:
+        Optional[str]: The canonical structure identity, or ``None`` when the structure is absent or
+        is not a parseable ``adjacencyList(...)``/``SMILES(...)`` string literal.
+    """
+    if not isinstance(structure_node, ast.Call) or not structure_node.args:
+        return None
+    call_name = _get_call_name(structure_node)
+    arg = structure_node.args[0]
+    text = arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
+    if text is None:
+        return None
+    try:
+        if call_name == 'adjacencyList':
+            molecule = Molecule().from_adjacency_list(text)
+        elif call_name == 'SMILES':
+            molecule = Molecule().from_smiles(text)
+        else:
+            return None
+    except Exception:
+        # Broad for the same reason as `_seed_structure_identity`: an unparseable `structure`
+        # keyword must leave this species unmatched rather than abort the whole write.
+        return None
+    return _molecule_identity(molecule)
+
+
+def _resolve_seed_labels(seed_species: tuple, species_nodes: dict, species_structure_nodes: dict,
+                         source_path: str) -> tuple:
+    """
+    Resolve each configured seed (source) label to the label THIS network actually uses, matching by
+    molecular structure whenever the configured label is not itself a ``species()`` label here.
+
+    T3's PES loop configures its seed once, against the original source network, where the seed is a
+    literal ``species()`` label (``'[O]C=O'``). From round 1 on, the loop re-explores a HYBRID network
+    whose species Arkane's explorer relabelled with network indices (``'[O]C=O(1)'``), so the
+    configured label is no longer a literal label in the file and Arkane's by-label ``source``
+    resolution -- which ``_validate_seed_species`` refuses first, with a clearer message -- would
+    raise. The information to bridge the two labels is in the file: every species carries
+    ``structure = adjacencyList(...)``, so the configured seed can be matched to the round's actual
+    label by canonical structure rather than by string.
+
+    Resolution is per label, and never loosens ``_validate_seed_species``:
+
+    * **Literal match** -- the label is already a ``species()`` label here (round 0 against the real
+      source): keep it, with no structural work at all, so round-0 behaviour is byte-for-byte
+      unchanged.
+    * **Structural match** -- otherwise, if the configured label parses as a species structure (a
+      SMILES; the campaign's seeds are SMILES labels), match its identity against every
+      ``species()`` block's structure. Exactly one match resolves to that label. **Zero** matches
+      leave the configured label unchanged, so ``_validate_seed_species`` raises its own clear
+      "not defined ... known labels are [...]" error rather than this function inventing one.
+      **More than one** match is refused (ambiguous): a source configuration must name exactly one
+      physical species, and seeding from an arbitrary one of several structurally identical species
+      could explore from the wrong copy.
+    * A label that neither matches literally nor parses as a structure likewise falls through to
+      ``_validate_seed_species`` unchanged.
+
+    Args:
+        seed_species (tuple): The configured seed (source) labels.
+        species_nodes (dict): ``species()`` label -> AST node, as collected from the source.
+        species_structure_nodes (dict): ``species()`` label -> ``structure`` keyword AST node.
+        source_path (str): The network path the seed is being resolved against (for messages).
+
+    Returns:
+        tuple: ``(resolved_seed_species, warnings)`` -- the resolved labels in input order, and any
+        human-readable notes about labels that were remapped.
+
+    Raises:
+        ValueError: If a seed label matches more than one ``species()`` block by structure.
+    """
+    resolved = list()
+    resolution_warnings = list()
+    network_identities = None  # computed lazily, only if some label actually needs structural work
+    for label in seed_species:
+        if label in species_nodes:
+            resolved.append(label)
+            continue
+        seed_identity = _seed_structure_identity(label)
+        if seed_identity is None:
+            resolved.append(label)
+            continue
+        if network_identities is None:
+            network_identities = {net_label: _species_structure_identity(node)
+                                  for net_label, node in species_structure_nodes.items()}
+        matches = sorted(net_label for net_label, identity in network_identities.items()
+                         if identity is not None and identity == seed_identity)
+        if len(matches) == 1:
+            resolution_warnings.append(
+                f"Seed species label {label!r} is not a species() block in '{source_path}'; resolved "
+                f"it by structure ({seed_identity}) to {matches[0]!r}, the label this network uses for "
+                f"that species.")
+            resolved.append(matches[0])
+        elif len(matches) > 1:
+            raise ValueError(
+                f"Seed species label {label!r} matches {len(matches)} species() blocks in "
+                f"'{source_path}' by structure ({seed_identity}): {matches}. A source configuration "
+                f"must identify exactly one species; refusing to seed the explorer from an arbitrary "
+                f"one of several structurally identical species.")
+        else:
+            resolved.append(label)
+    return tuple(resolved), resolution_warnings
 
 
 def _validate_kinetics_label(label: str, source_path: str) -> None:
