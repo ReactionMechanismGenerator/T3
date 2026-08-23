@@ -176,6 +176,17 @@ class ExplorerInputSummary:
                           (adjacency ``multiplicity 3``, u2, thermo label ``O(T)``); re-feeding that
                           file makes Arkane round-trip an inconsistent species and crash, so any
                           RMG-explored network carrying O(3P) is otherwise un-re-feedable.
+        stat_mech_paths_absolutized (tuple): One ``(label, old_path, new_path)`` per
+                          ``species()``/``transitionState()`` block whose external stat-mech FILE
+                          path (I-021: the hybrid writer emits
+                          ``transitionState('TS2', 'qm/TS2.py')`` with the ``qm/`` tree beside the
+                          hybrid) was relative and was rewritten to an absolute path anchored at the
+                          SOURCE file's directory. Splicing the relative path verbatim into a
+                          generated explorer input under a DIFFERENT directory made Arkane resolve it
+                          against its own working directory, where no ``qm/`` tree exists, and fail
+                          with ``FileNotFoundError`` at ``arkane/statmech.py`` load time. The
+                          hybrid's own relative convention (portable run directories) is left
+                          untouched; only the SPLICED copy is absolutized.
     """
     dest_path: str
     seed_species: tuple
@@ -184,6 +195,30 @@ class ExplorerInputSummary:
     reactive_false_injected: tuple = field(default_factory=tuple)
     warnings: tuple = field(default_factory=tuple)
     spin_multiplicity_corrected: tuple = field(default_factory=tuple)
+    stat_mech_paths_absolutized: tuple = field(default_factory=tuple)
+
+
+def _declared_label(call: ast.Call, kwargs: dict) -> str | None:
+    """
+    The label a ``species(...)``/``transitionState(...)`` call declares, in EITHER of the two forms
+    Arkane accepts: ``species(label='S', ...)`` and the positional ``species('S', 'qm/S.py')``.
+
+    Registration used to read ``kwargs['label']`` only, while the stat-mech path rewrite already
+    understood the positional form -- so a source containing ``species('S', 'qm/S.py')`` had its
+    path absolutized but its label never registered, and any ``seed_species=('S',)`` or
+    ``bath_gas={'S': 1.0}`` naming it was then refused with "Known species labels are []". One
+    reader for both, so the two cannot drift apart again.
+
+    Args:
+        call (ast.Call): The ``species(...)``/``transitionState(...)`` call node.
+        kwargs (dict): That call's keyword nodes, by name.
+
+    Returns:
+        str | None: The declared label, or ``None`` when it is not a literal string.
+    """
+    if 'label' in kwargs:
+        return _literal_or_none(kwargs['label'])
+    return _literal_or_none(call.args[0]) if call.args else None
 
 
 def write_arkane_explorer_input_file(source_path: str,
@@ -310,6 +345,13 @@ def write_arkane_explorer_input_file(source_path: str,
     _validate_source_statements(tree=tree, text=text, source_path=source_path)
     line_starts = _line_start_offsets(text)
 
+    # The directory the source file lives in, resolved absolutely. Every RELATIVE stat-mech FILE path
+    # spliced out of the source (``transitionState('TS2', 'qm/TS2.py')`` and the species-from-file
+    # form) is relative to THIS directory -- the hybrid writer vendors the ``qm/`` tree right beside
+    # the source it writes (see t3.pdep.hybrid, lines ~649/700-715). Anchoring the rewrite here is
+    # what lets the generated file, which lands in an unrelated directory, still reach that tree.
+    source_dir = os.path.dirname(os.path.abspath(source_path))
+
     species_nodes = dict()
     species_reactive = dict()
     species_structure_nodes = dict()
@@ -318,6 +360,7 @@ def write_arkane_explorer_input_file(source_path: str,
     network_nodes = list()
     pdep_nodes = list()
     kinetics_labels_emitted = list()
+    stat_mech_paths_absolutized = list()
     edits = list()
 
     for node in tree.body:
@@ -329,8 +372,32 @@ def write_arkane_explorer_input_file(source_path: str,
             continue
         kwargs = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
 
+        # I-021: rewrite a RELATIVE external stat-mech file path to absolute, anchored at the source
+        # file's own directory, BEFORE the block is spliced verbatim into the generated file. The
+        # hybrid writer emits ``transitionState('TS2', 'qm/TS2.py')`` -- a path relative to the
+        # hybrid, whose ``qm/`` tree sits right beside it. That is deliberately portable for the
+        # hybrid, but the generated explorer input this module writes lands in a DIFFERENT directory
+        # with no ``qm/`` sibling, and Arkane resolves the raw path against its own working directory
+        # (arkane/statmech.py bare ``open(path)``, after arkane/input.py rebases it only onto the
+        # generated input's own dir) -- so the verbatim splice made Arkane fail with FileNotFoundError
+        # at load time. An ABSOLUTE path is passed through by Arkane's ``os.path.join`` rebase
+        # unchanged and resolves from anywhere; the hybrid's relative convention is left untouched
+        # (only the spliced copy is edited). Refuses nothing new: a string literal stays a string
+        # literal, so both the inbound source guard and the outbound self-check still accept it.
+        if call_name in ('species', 'transitionState'):
+            path_node = _stat_mech_file_path_node(call)
+            if path_node is not None and not os.path.isabs(path_node.value):
+                absolute_path = os.path.join(source_dir, path_node.value)
+                start = _pos(text, line_starts, path_node.lineno, path_node.col_offset)
+                end = _pos(text, line_starts, path_node.end_lineno, path_node.end_col_offset)
+                # Rendered with repr(), never interpolated into a quoted literal, so any path is a
+                # well-formed Python string literal in the generated file.
+                edits.append((start, end, repr(absolute_path)))
+                path_label = _declared_label(call, kwargs)
+                stat_mech_paths_absolutized.append((path_label, path_node.value, absolute_path))
+
         if call_name == 'species':
-            label = _literal_or_none(kwargs.get('label'))
+            label = _declared_label(call, kwargs)
             if label is not None:
                 species_nodes[label] = node
                 reactive_node = kwargs.get('reactive')
@@ -340,7 +407,7 @@ def write_arkane_explorer_input_file(source_path: str,
                 species_spin_mult_nodes[label] = kwargs.get('spinMultiplicity')
 
         elif call_name == 'transitionState':
-            label = _literal_or_none(kwargs.get('label'))
+            label = _declared_label(call, kwargs)
             if label is not None:
                 ts_nodes[label] = node
 
@@ -414,9 +481,19 @@ def write_arkane_explorer_input_file(source_path: str,
     # here, never by text-scanning for a species block.
     for label in reactive_injection_labels:
         species_call = species_nodes[label].value
-        first_kw = species_call.keywords[0]
-        insert_pos = _pos(text, line_starts, first_kw.lineno, first_kw.col_offset)
-        edits.append((insert_pos, insert_pos, f"reactive = False,\n{' ' * first_kw.col_offset}"))
+        if species_call.keywords:
+            first_kw = species_call.keywords[0]
+            insert_pos = _pos(text, line_starts, first_kw.lineno, first_kw.col_offset)
+            edits.append((insert_pos, insert_pos, f"reactive = False,\n{' ' * first_kw.col_offset}"))
+        else:
+            # A wholly positional block -- ``species('S', 'qm/S.py')`` -- has no keyword to anchor
+            # to, and indexing keywords[0] here used to raise IndexError. Append the keyword after
+            # the last positional argument instead: trailing keywords are legal after positionals,
+            # so this is the same faithful translation, computed from the AST just like the branch
+            # above rather than by text-scanning.
+            last_arg = species_call.args[-1]
+            insert_pos = _pos(text, line_starts, last_arg.end_lineno, last_arg.end_col_offset)
+            edits.append((insert_pos, insert_pos, ", reactive = False"))
 
     # Correct any spinMultiplicity that contradicts its species' own adjacency-list multiplicity.
     # RMG's explorer writes triplet atomic O ('[O]', thermo label "O(T)") with spinMultiplicity = 1
@@ -564,7 +641,53 @@ def write_arkane_explorer_input_file(source_path: str,
         reactive_false_injected=tuple(reactive_injection_labels),
         warnings=tuple(warnings_list),
         spin_multiplicity_corrected=tuple(spin_multiplicity_corrected),
+        stat_mech_paths_absolutized=tuple(stat_mech_paths_absolutized),
     )
+
+
+def _stat_mech_file_path_node(call: ast.Call):
+    """
+    Return the ``ast.Constant`` node of a ``species()``/``transitionState()`` call's external
+    stat-mech FILE PATH argument, or ``None`` if the call is not Arkane's "path to a conformer input
+    file" form.
+
+    Arkane's ``species(label, *args, **kwargs)`` and ``transitionState(label, *args, **kwargs)``
+    (RMG-Py ``arkane/input.py:130,241``) treat a call of shape ``<name>(label, path)`` -- EXACTLY one
+    positional argument beyond the label, and NO keyword arguments other than the label -- as a
+    reference to an external stat-mech file (``StatMechJob(species=..., path=path)``). Every other
+    shape is an inline definition carrying its parameters as keywords (``E0=``, ``structure=``, ...),
+    which has no file path to rewrite. The path is always POSITIONAL: Arkane has no ``path=`` keyword;
+    a ``path`` passed by keyword lands in ``**kwargs`` and Arkane rejects the call outright
+    (``arkane/input.py:280-284``), so a keyword there never denotes a file to reach.
+
+    Returns the node only when the path is a plain string literal, so its exact source span can be
+    replaced. A non-literal path expression (which the inbound source guard refuses upstream anyway)
+    returns ``None`` and is left untouched rather than silently rewritten.
+
+    Args:
+        call (ast.Call): A top-level ``species()``/``transitionState()`` call node from the source.
+
+    Returns:
+        Optional[ast.Constant]: The path string-literal node, or ``None``.
+    """
+    keyword_names = {kw.arg for kw in call.keywords}
+    if 'label' in keyword_names:
+        # The label was passed by keyword, so every positional argument is a candidate path slot.
+        positional_path_args = call.args
+        other_keywords = [kw for kw in call.keywords if kw.arg != 'label']
+    else:
+        # The first positional argument is the label; the rest are Arkane's ``*args``.
+        positional_path_args = call.args[1:]
+        other_keywords = list(call.keywords)
+    if len(positional_path_args) != 1 or other_keywords:
+        # Not Arkane's ``len(args) == 1 and len(kwargs) == 0`` file-path form (an inline definition,
+        # a bare label, or something with extra keywords -- ``**kwargs`` unpacking lands here too and
+        # is conservatively left alone). No external path to absolutize.
+        return None
+    path_node = positional_path_args[0]
+    if isinstance(path_node, ast.Constant) and isinstance(path_node.value, str):
+        return path_node
+    return None
 
 
 def _validate_seed_species(seed_species: tuple, species_nodes: dict, ts_nodes: dict) -> None:
