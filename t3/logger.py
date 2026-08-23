@@ -9,6 +9,7 @@ import os
 import shutil
 import time
 
+import arc
 from arc.common import get_git_branch, get_git_commit
 
 from t3.common import dict_to_str, t3_path, time_lapse
@@ -143,6 +144,32 @@ class Logger(object):
                      level='always')
         else:
             self.log('\n', level='always')
+
+        # Extract HEAD git commit from ARC, derived from the ARC package actually imported
+        # (arc.__file__ and up), so the log records the ARC that ran. Every step here is
+        # non-fatal by construction: the helpers return empty strings and never raise, so an ARC
+        # installed as a wheel, a missing .git, or an absent git binary logs a note and lets the
+        # run continue rather than aborting it. ``__file__`` is read with getattr because a
+        # namespace package leaves it None, and os.path.abspath(None) raises a TypeError that
+        # would abort the whole run from inside a logging line.
+        arc_file = getattr(arc, '__file__', None)
+        arc_path = os.path.dirname(os.path.dirname(os.path.abspath(arc_file))) if arc_file else ''
+        arc_head, arc_date = get_git_commit(path=arc_path) if arc_path else ('', '')
+        arc_branch = get_git_branch(path=arc_path) if arc_path else ''
+        if arc_head != '' and arc_date != '':
+            self.log(f'The current git HEAD for ARC is:\n'
+                     f'    {arc_head}\n    {arc_date}',
+                     level='always')
+            if arc_branch and arc_branch != 'main':
+                self.log(f'    (running on the {arc_branch} branch)\n',
+                         level='always')
+            else:
+                self.log('\n', level='always')
+        else:
+            self.log(f'Could not determine the git provenance of ARC at '
+                     f'{arc_path or "an undeterminable path (arc.__file__ is not set)"}\n',
+                     level='always')
+
         self.log(f'Starting project {self.project}', level='always')
 
     def log_max_time_reached(self, max_time: str):
