@@ -11,6 +11,7 @@ import re
 from unittest import mock
 
 import numpy as np
+import pytest
 
 from arc.common import read_yaml_file, save_yaml_file
 from arc.molecule.molecule import Molecule
@@ -1099,7 +1100,8 @@ def test_determine_species_from_pdep_network():
         shutil.rmtree(t3.paths['PDep SA'], ignore_errors=True)
 
 
-def test_determine_species_and_reactions_to_calculate_refuses_a_barrierless_channel(tmp_path, monkeypatch):
+@pytest.mark.parametrize('family_name', ['R_Recombination', 'Birad_R_Recombination'])
+def test_determine_species_and_reactions_to_calculate_refuses_a_barrierless_channel(tmp_path, monkeypatch, family_name):
     """A barrierless channel must not be queued for a TS search by the legacy iteration path.
 
     The PES exploration loop asks ``t3.pdep.barrierless.classify_barrierless`` before queueing
@@ -1109,18 +1111,23 @@ def test_determine_species_and_reactions_to_calculate_refuses_a_barrierless_chan
     ``determine_species_from_pdep_network`` and ``queue_pdep_transition_states`` -- and asserts the
     channel is refused with the classifier's own reason, and that the call returns rather than
     aborting.
+
+    Parametrized over the family so this seam is asserted for both ``R_Recombination`` and
+    ``Birad_R_Recombination`` (I-008): the fix to ``BARRIERLESS_FAMILIES`` protects two call sites
+    -- this one and ``split_qm_candidates`` -- and a classifier fix exercised through only one seam
+    would leave the other's behaviour unasserted.
     """
     t3 = build_t3(tmp_path)
     network_file = network_path(t3)
     with open(network_file, 'r') as f:
         network_text = f.read()
     # reaction1/TS1 (CH2(S)(53) + C3rad(4) <=> C4rad(5)) is the channel this fixture's sensitivity
-    # data selects and queues. Its family is relabelled to R_Recombination in the tmp_path copy so
+    # data selects and queues. Its family is relabelled to a barrierless one in the tmp_path copy so
     # that the queued channel is one the classifier recognizes: only the family string is
     # fixture-made, a carbene recombining with a radical genuinely has no saddle point. The
     # fixture's other 1,2_Insertion_carbene entry (TS6) is deliberately left alone.
     assert network_text.count('family: 1,2_Insertion_carbene') == 2
-    network_text = network_text.replace('family: 1,2_Insertion_carbene', 'family: R_Recombination', 1)
+    network_text = network_text.replace('family: 1,2_Insertion_carbene', f'family: {family_name}', 1)
     with open(network_file, 'w') as f:
         f.write(network_text)
 
@@ -1163,7 +1170,7 @@ def test_determine_species_and_reactions_to_calculate_refuses_a_barrierless_chan
     assert 'TS1' in records, 'the barrierless channel never reached the queueing decision'
     assert records['TS1'].status == JOIN_STATUS_NOT_QUEUED
     assert records['TS1'].t3_reaction_key is None
-    assert 'R_Recombination' in records['TS1'].reason
+    assert family_name in records['TS1'].reason
     assert 'barrierless' in records['TS1'].reason
     assert not any(record.status == JOIN_STATUS_QUEUED for record in t3.pdep_ts_join_records)
 

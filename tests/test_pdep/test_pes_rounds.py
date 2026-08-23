@@ -1,5 +1,6 @@
 """Tests for t3.pdep.pes_rounds."""
 
+import collections
 import dataclasses
 import os
 
@@ -7,7 +8,9 @@ import pytest
 
 from arc.molecule.molecule import Molecule
 
-from t3.pdep.parser import PDepNetwork, PDepPathReaction
+from t3.common import TEST_DATA_BASE_PATH
+from t3.pdep import barrierless
+from t3.pdep.parser import PDepNetwork, PDepPathReaction, parse_pdep_network_file
 from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME,
                                 adoption_channel_keys_by_ts_label, attach_sensitivity_evidence,
                                 channel_keys_by_ts_label, round_paths, split_qm_candidates,
@@ -83,6 +86,80 @@ class TestSplitQMCandidates(object):
         first = split_qm_candidates(_network(rxns), computed_ts_labels=frozenset())
         second = split_qm_candidates(_network(list(rxns)), computed_ts_labels=frozenset())
         assert [c.ts_label for c in first.candidates] == [c.ts_label for c in second.candidates]
+
+
+REAL_CHO2_NETWORK_PATH = os.path.join(TEST_DATA_BASE_PATH, 'pdep_barrierless_real',
+                                      'network0_full_cho2.py')
+
+
+class TestSplitQMCandidatesRealCHO2Network(object):
+    """The barrierless gate, driven from a real explored CHO2 surface rather than a hand-built
+    double. The fixture and the reason it is frozen are documented in
+    ``tests/data/pdep_barrierless_real/README.md``. This is the real-data seam for the gate: a
+    fully-mocked classifier is what let the ``Birad_R_Recombination`` family go unnoticed until a
+    real surface produced it."""
+
+    def _network(self):
+        return parse_pdep_network_file(path=REAL_CHO2_NETWORK_PATH)
+
+    def test_real_network_shape_is_the_one_this_fixture_was_frozen_at(self):
+        """Nine TS-bearing path reactions across six families. Asserted so a silent regeneration of
+        the fixture that changed the surface can never make the counts below pass vacuously."""
+        network = self._network()
+        assert len(network.path_reactions) == 9
+        families = collections.Counter(barrierless.rmg_family(pr)
+                                       for pr in network.path_reactions)
+        assert families == collections.Counter({'R_Addition_MultipleBond': 2,
+                                                'R_Recombination': 2,
+                                                'Birad_R_Recombination': 2,
+                                                'R_Addition_COm': 1,
+                                                'intra_H_migration': 1,
+                                                'Intra_R_Add_Endocyclic': 1})
+
+    def test_both_birad_r_recombination_channels_are_excluded_from_qm(self):
+        """The fix, stated as the outcome on real data: the two ``Birad_R_Recombination`` channels
+        are kept out of the TS queue and recorded as barrierless, leaving 5 candidates."""
+        split = split_qm_candidates(self._network(), computed_ts_labels=frozenset())
+        assert len(split.candidates) == 5
+
+        # No candidate is barrierless-by-family.
+        candidate_families = {c.family for c in split.candidates}
+        assert 'Birad_R_Recombination' not in candidate_families
+        assert 'R_Recombination' not in candidate_families
+
+        # The four skipped are exactly the two barrierless families, each with the saddle-point
+        # reason -- never silently dropped.
+        assert len(split.skipped) == 4
+        birad_skips = [s for s in split.skipped if 'Birad_R_Recombination' in s.reason]
+        assert len(birad_skips) == 2
+        for skip in birad_skips:
+            assert 'no saddle point' in skip.reason
+
+    def test_the_excluded_birad_channels_are_the_two_named_recombinations(self):
+        """Identify the excluded channels by their chemistry, not just their count: the two that
+        left the queue are ``[O] + [CH]=O -> [O]C=O`` and ``H + [C]1OO1 -> [CH]1OO1``."""
+        network = self._network()
+        birad = {pr.transition_state: (pr.reactants, pr.products)
+                 for pr in network.path_reactions
+                 if barrierless.rmg_family(pr) == 'Birad_R_Recombination'}
+        assert birad == {'TS5': (('[O](10)', '[CH]=O(9)'), ('[O]C=O(4)',)),
+                         'TS9': (('H(34)(1)', '[C]1OO1(13)'), ('[CH]1OO1(11)',))}
+
+        # Neither Birad TS label survives into the candidate set.
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        assert {'TS5', 'TS9'}.isdisjoint({c.ts_label for c in split.candidates})
+
+    def test_without_the_family_the_two_channels_leak_back_into_the_queue(self, monkeypatch):
+        """The regression guard: drop ``Birad_R_Recombination`` from the allowlist and the two
+        channels reappear as candidates, taking the count from 5 back to 7. This is the exact gap
+        this ticket closed, pinned so a future edit to the set cannot silently reopen it."""
+        monkeypatch.setattr(barrierless, 'BARRIERLESS_FAMILIES',
+                            frozenset(barrierless.BARRIERLESS_FAMILIES
+                                      - {'Birad_R_Recombination'}))
+        split = split_qm_candidates(self._network(), computed_ts_labels=frozenset())
+        assert len(split.candidates) == 7
+        leaked = [c for c in split.candidates if c.family == 'Birad_R_Recombination']
+        assert len(leaked) == 2
 
 
 class TestRoundLayout(object):
