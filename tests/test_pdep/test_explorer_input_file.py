@@ -2258,6 +2258,75 @@ def test_source_guard_accepts_the_real_hybrids_model_chemistry_line():
     _validate_source_statements(tree=tree, text=text, source_path=REAL_HYBRID_PATH)
 
 
+# ---------------------------------------------------------------------------------------------------
+# I-021: a relative stat-mech FILE path spliced verbatim into a file in another directory.
+#
+# The real round-0 hybrid references its QM transition state by a path RELATIVE to the hybrid --
+# ``transitionState('TS2', 'qm/TS2.py')`` -- with the ``qm/`` tree vendored right beside it (portable
+# run directories, a convention the hybrid writer keeps deliberately). But the explorer writer splices
+# that block into a generated Arkane input in an UNRELATED directory; Arkane then resolves the raw
+# 'qm/TS2.py' against its own working directory (bare open at arkane/statmech.py) and dies with
+# FileNotFoundError at load time. The writer now rewrites the spliced copy to an absolute path
+# anchored at the source's own directory. The committed fixture carries the real qm/ tree beside the
+# hybrid so the emitted path can be asserted to resolve to a file that EXISTS.
+# ---------------------------------------------------------------------------------------------------
+
+def _emitted_transition_state_file_paths(text):
+    """``{label: path}`` for every ``transitionState(label, path)`` FILE-path block (Arkane's two-
+    positional-string form) in a generated explorer input, read back via AST. Inline transition
+    states (``transitionState(label='TS1', E0=..., ...)``) carry no external path and are excluded."""
+    tree = ast.parse(text)
+    paths = dict()
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if _get_call_name(call) != 'transitionState':
+            continue
+        if len(call.args) == 2 and not call.keywords \
+                and all(isinstance(a, ast.Constant) and isinstance(a.value, str) for a in call.args):
+            paths[call.args[0].value] = call.args[1].value
+    return paths
+
+
+def test_real_hybrid_transition_state_path_is_absolutized_to_an_existing_file(tmp_path):
+    """I-021 regression on the real seam: driving the committed round-0 hybrid through the writer
+    into an unrelated directory (``tmp_path``) must emit a ``transitionState`` path that resolves to
+    a file that EXISTS -- the assertion is ``os.path.isfile``, not merely 'is absolute' and not
+    merely 'the writer did not raise'. Before the fix the spliced path was the verbatim relative
+    'qm/TS2.py', which Arkane opens against its own cwd and cannot find."""
+    # Precondition: the committed hybrid's own line really is RELATIVE, and the vendored qm/ tree it
+    # points at really sits beside it -- so this exercises the rewrite, not a path that was already
+    # absolute in the source.
+    with open(REAL_HYBRID_PATH) as f:
+        assert "transitionState('TS2', 'qm/TS2.py')" in f.read()
+    assert os.path.isfile(os.path.join(os.path.dirname(REAL_HYBRID_PATH), 'qm', 'TS2.py')), \
+        'fixture precondition: the real qm/TS2.py artifact must sit beside the committed hybrid'
+
+    dest_path = str(tmp_path / 'input.py')
+    kwargs = dict(DEFAULT_KWARGS)
+    kwargs['seed_species'] = ('[O]C=O',)
+    kwargs['bath_gas'] = {'Ar': 1.0}  # the real hybrid's bath gas, so the full writer runs
+    summary = write_arkane_explorer_input_file(source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
+
+    with open(dest_path) as f:
+        emitted = _emitted_transition_state_file_paths(f.read())
+    assert 'TS2' in emitted, 'the QM transition state block must survive the splice'
+    emitted_path = emitted['TS2']
+
+    # THE core assertion: the spliced path resolves to a real file, from tmp_path, with no chdir.
+    assert os.path.isabs(emitted_path)
+    assert os.path.isfile(emitted_path), \
+        f'Arkane would FileNotFoundError on {emitted_path!r}: it does not resolve to an existing file.'
+    # And it is the SOURCE hybrid's own vendored artifact, anchored at the source's directory, not
+    # the generated file's directory (tmp_path, which has no qm/ tree).
+    expected_path = os.path.join(os.path.dirname(os.path.abspath(REAL_HYBRID_PATH)), 'qm', 'TS2.py')
+    assert emitted_path == expected_path
+
+    # The rewrite is recorded, never silent; the inline TS1/TS3 blocks (no external path) are untouched.
+    assert summary.stat_mech_paths_absolutized == (('TS2', 'qm/TS2.py', expected_path),)
+
+
 def test_a_literal_seed_label_is_returned_unchanged_without_structural_work():
     """Round-0 correctness: when the seed IS a literal species() label (the real source network), it
     is returned as-is with no warning -- structural resolution never runs for it."""
