@@ -1094,6 +1094,59 @@ class TestSourceExpressionWhitelistRefusesBareGadgetNodes:
         _validate_source_statements(ast.parse(source), source, '/nonexistent/source.py')
 
 
+class TestModelChemistryCallFormIsAccepted:
+    """
+    A real ARC/hybrid network source expresses ``modelChemistry`` as a bare
+    ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)`` call, which Arkane exec's at load time.
+    That is not ``ast.literal_eval``-able, so the literal-assignment rule refused it. This branch is
+    now bridged to ``t3.pdep.hybrid._validate_model_chemistry_expression`` -- the exact checker T3
+    uses when it EMITS this directive -- so the two paths agree and no second allowlist is grown.
+    The exception is keyed strictly to the ``modelChemistry`` target and to a genuine call node; any
+    other target, and any non-call value, still falls through to the existing refusal.
+    """
+
+    @staticmethod
+    def _refuses(source: str) -> str:
+        with pytest.raises(ValueError) as exc_info:
+            _validate_source_statements(ast.parse(source), source, '/nonexistent/source.py')
+        return str(exc_info.value)
+
+    @pytest.mark.parametrize('source', [
+        "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp')",
+        "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp', software='qchem')",
+        "modelChemistry = CompositeLevelOfTheory("
+        "freq=LevelOfTheory(method='wb97xd', basis='def2tzvp'), "
+        "energy=LevelOfTheory(method='dlpno-ccsd(t)', basis='cc-pvtz'))",
+    ])
+    def test_the_call_form_for_model_chemistry_is_accepted(self, source):
+        """The bare-call form real ARC/hybrid sources use must load, not be refused as non-literal."""
+        _validate_source_statements(ast.parse(source), source, '/nonexistent/source.py')
+
+    @pytest.mark.parametrize('source', [
+        # A positional arg -- the checker refuses these; the refusal must surface as a source refusal.
+        "modelChemistry = LevelOfTheory('wb97xd')",
+        # An unknown keyword.
+        "modelChemistry = LevelOfTheory(method='wb97xd', bogus='x')",
+        # A CompositeLevelOfTheory missing a required field.
+        "modelChemistry = CompositeLevelOfTheory(freq=LevelOfTheory(method='wb97xd'))",
+        # A non-literal keyword value smuggled into the call.
+        "modelChemistry = LevelOfTheory(method=().__class__)",
+    ])
+    def test_a_malformed_call_form_for_model_chemistry_is_still_refused(self, source):
+        assert 'source.py' in self._refuses(source)
+
+    @pytest.mark.parametrize('target', ['title', 'basis', 'level_of_theory'])
+    def test_the_call_form_under_any_other_target_is_still_refused(self, target):
+        """The exception is keyed to ``modelChemistry`` alone; the call form elsewhere is non-literal."""
+        assert 'source.py' in self._refuses(f"{target} = LevelOfTheory(method='wb97xd')")
+
+    @pytest.mark.parametrize('value', ['1 + 2', '().__class__', 'foo("x")'])
+    def test_a_computed_non_call_model_chemistry_value_is_still_refused(self, value):
+        """Guards the trap: the checker treats any non-call string as a plain label, so the branch
+        must gate on a real call node -- a computed ``modelChemistry`` value stays refused."""
+        assert 'source.py' in self._refuses(f'modelChemistry = {value}')
+
+
 class TestSourceIsNarrowedToNetworkSourceSyntax:
     """
     Codex's round-29 P1 B and P1/P2 D: being a name Arkane defines is not a reason to splice a call
