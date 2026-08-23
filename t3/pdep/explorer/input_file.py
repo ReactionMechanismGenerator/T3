@@ -1577,6 +1577,47 @@ def _validate_source_expression(node: ast.AST, text: str, source_path: str) -> N
 _GENERATED_CALL_NAMES = tuple(_TOP_LEVEL_CALL_NAMES) + ('database', 'explorer', 'kinetics')
 
 
+def _is_model_chemistry_call_assignment(target: str, value: ast.expr) -> bool:
+    """
+    Decide whether a single-target assignment is the one non-literal shape both guards accept:
+    ``modelChemistry = LevelOfTheory(...)`` / ``CompositeLevelOfTheory(...)``, whose real ARC/hybrid
+    value is a bare call Arkane execs at load time rather than an ``ast.literal_eval``-able literal.
+
+    This is the SHARED accept-test for that one directive, called from BOTH the inbound source guard
+    (``_validate_source_statements``) and the outbound self-check (``_validate_generated_statements``).
+    The line is spliced verbatim from source to generated file, so what the inbound guard admits the
+    outbound guard must re-admit; keeping the decision in one place is what stops the two from drifting
+    apart again -- the drift that let this exact line pass on the way in and fail on the way out.
+
+    The call is routed through the SAME structural checker T3 uses when it EMITS this directive
+    (``t3.pdep.hybrid._validate_model_chemistry_expression``): validating the ``ast.unparse``
+    round-tripped node -- which that string-taking checker re-parses -- is equivalent to validating
+    the spliced text, because the AST is what decides exec semantics and the verbatim splice
+    reproduces it. The gate is deliberately on a genuine call node to one of the two known names: a
+    ``modelChemistry`` bound to some OTHER value returns False and falls through to the caller's
+    literal test, so a computed value stays refused.
+
+    Args:
+        target (str): The single assignment target's name.
+        value (ast.expr): The assignment's value node.
+
+    Returns:
+        bool: True if this is a structurally valid ``modelChemistry`` call assignment; False if the
+              value is not a ``modelChemistry`` call at all (leave it to the caller's literal test).
+
+    Raises:
+        ValueError: If it IS a ``modelChemistry`` call to a known name but fails structural
+                    validation. Each caller wraps this in its own error (a source ValueError inbound,
+                    a self-check RuntimeError outbound).
+    """
+    if not (target == 'modelChemistry' and isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id in _MODEL_CHEMISTRY_CALL_NAMES):
+        return False
+    _validate_model_chemistry_expression(target, ast.unparse(value))
+    return True
+
+
 def _validate_generated_statements(tree: ast.Module, text: str, dest_path: str) -> None:
     """
     Self-check the top-level statement list of the file this module is about to WRITE.
@@ -1609,7 +1650,15 @@ def _validate_generated_statements(tree: ast.Module, text: str, dest_path: str) 
                 and _get_call_name(node.value) in _GENERATED_CALL_NAMES):
             continue
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target = node.targets[0].id
+            # Accept exactly what the inbound guard accepts for an assignment, via the shared helper:
+            # the one non-literal shape is ``modelChemistry = LevelOfTheory(...)``, spliced verbatim
+            # from an already-validated source. A malformed such call (helper raises) cannot reach here
+            # -- the inbound guard refuses it with the same checker -- so it correctly falls through to
+            # the RuntimeError below, which is the right response to this module emitting a bad one.
             try:
+                if _is_model_chemistry_call_assignment(target, node.value):
+                    continue
                 ast.literal_eval(node.value)
             except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
                 pass
@@ -1619,10 +1668,11 @@ def _validate_generated_statements(tree: ast.Module, text: str, dest_path: str) 
             f"Refusing to write '{dest_path}': the generated explorer input file text failed its own "
             f"self-check. Line {node.lineno} is a top-level {type(node).__name__} statement "
             f"({_source_snippet(node, text)!r}) that this module never emits and no validated source "
-            f"statement can become -- only calls to {sorted(_GENERATED_CALL_NAMES)}, bare literals and "
-            f"literal assignments belong here. Something spliced or rendered a statement into this file, "
-            f"which is a defect in this module (or an injection through one of its arguments), not a "
-            f"problem with the source file.")
+            f"statement can become -- only calls to {sorted(_GENERATED_CALL_NAMES)}, bare literals, "
+            f"literal assignments, and a validated 'modelChemistry = "
+            f"{'/'.join(_MODEL_CHEMISTRY_CALL_NAMES)}(...)' directive belong here. Something spliced or "
+            f"rendered a statement into this file, which is a defect in this module (or an injection "
+            f"through one of its arguments), not a problem with the source file.")
 
 
 def _validate_source_statements(tree: ast.Module, text: str, source_path: str) -> None:
@@ -1709,27 +1759,21 @@ def _validate_source_statements(tree: ast.Module, text: str, source_path: str) -
                     f"generates and appends -- so a source may not assign to it, however harmless the value.")
             # ``modelChemistry`` is the one directive whose real ARC/hybrid value is a bare
             # ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)`` call (which Arkane execs at load
-            # time), not an ``ast.literal_eval``-able literal. Rather than grow a second model-chemistry
-            # allowlist here, route it through the SAME structural checker T3 uses when it EMITS this
-            # directive (``t3.pdep.hybrid._validate_model_chemistry_expression``); the AST is what
-            # decides exec semantics and the verbatim splice reproduces it, so validating the
-            # ``ast.unparse``-round-tripped node -- which that string-taking checker re-parses -- is
-            # equivalent to validating the spliced text. The gate is deliberately on a genuine call
-            # node to one of the two known names: the checker accepts any NON-call string as a plain
-            # label (injection-char check only), so a computed ``modelChemistry`` value must keep
-            # falling through to the refusal below rather than being handed over as a bare label.
-            if (target == 'modelChemistry' and isinstance(node.value, ast.Call)
-                    and isinstance(node.value.func, ast.Name)
-                    and node.value.func.id in _MODEL_CHEMISTRY_CALL_NAMES):
-                try:
-                    _validate_model_chemistry_expression(target, ast.unparse(node.value))
-                except ValueError as e:
-                    raise ValueError(
-                        f"Refusing to use '{source_path}' as an Arkane explorer/network source: line "
-                        f"{node.lineno} assigns a 'modelChemistry' value that fails structural validation "
-                        f"({_source_snippet(node, text)!r}): {e}. This source's text is spliced verbatim into "
-                        f"a NEW file Arkane will exec, so a malformed model-chemistry call is refused.") from e
-                continue
+            # time), not an ``ast.literal_eval``-able literal. It is accepted via the SAME shared
+            # helper the outbound self-check uses, so the inbound and outbound rules for this one
+            # non-literal shape cannot drift apart (the drift that let a spliced ``modelChemistry``
+            # line pass here and then fail its own self-check on the way out). The helper returns False
+            # for a ``modelChemistry`` bound to some OTHER value, which then keeps falling through to
+            # the literal refusal below rather than being handed over as a bare label.
+            try:
+                if _is_model_chemistry_call_assignment(target, node.value):
+                    continue
+            except ValueError as e:
+                raise ValueError(
+                    f"Refusing to use '{source_path}' as an Arkane explorer/network source: line "
+                    f"{node.lineno} assigns a 'modelChemistry' value that fails structural validation "
+                    f"({_source_snippet(node, text)!r}): {e}. This source's text is spliced verbatim into "
+                    f"a NEW file Arkane will exec, so a malformed model-chemistry call is refused.") from e
             try:
                 ast.literal_eval(node.value)
             except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError) as e:
