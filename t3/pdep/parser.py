@@ -1320,6 +1320,21 @@ def _call_keywords(call: ast.Call, path: str = '', call_name: Optional[str] = No
     # these calls. Mapping positions to names would mean duplicating Arkane's signatures here and
     # keeping them in step with it forever, which is a bigger promise than refusing a spelling nothing
     # writes.
+    #
+    # THE ONE EXCEPTION -- ``transitionState(label, path)``. Arkane's ``transitionState(label, *args,
+    # **kwargs)`` (arkane/input.py:241) loads a stat-mech file from a path ONLY through its
+    # ``len(args) == 1 and len(kwargs) == 0`` branch, i.e. the two-positional-argument spelling
+    # ``transitionState('TS2', 'qm/TS2.py')``; there is NO keyword spelling for it
+    # (``transitionState(label='TS2', path='qm/TS2.py')`` silently stops loading the file). T3's own
+    # hybrid writer (``t3/pdep/hybrid.py``) must therefore emit exactly that positional form when it
+    # vendors a QM-adopted transition state, and this reader -- the same file's other consumer -- has to
+    # read it back, so refusing it crashes T3 on a file T3 itself wrote. Map that single form (label,
+    # path) to keywords and nothing wider: any OTHER positional shape (one, or three-plus, positionals;
+    # positionals mixed with keywords) and this same two-positional form for any OTHER call name still
+    # fall through to the refusal below. The corpus survey the refusal rests on never contained T3's own
+    # writer's output, which is why this producer/consumer disagreement was invisible until a real run.
+    if call_name == 'transitionState' and len(call.args) == 2 and not call.keywords:
+        return {'label': call.args[0], 'path': call.args[1]}
     if call.args:
         raise ValueError(f"The pdep network file at '{path}' calls "
                          f"'{call_name or _get_call_name(call) or '<unnamed>'}(...)' with "
