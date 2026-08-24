@@ -44,6 +44,7 @@ from t3.pdep.capture import (CAPTURE_MANIFEST_FILE_NAME,
                              capture_ts_artifacts, verify_capture)
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.hashing import hash_file
+from t3.pdep.dof_conformers import extract_dof_conformers
 from t3.pdep.hybrid import (QMEnergySettings, _read_qm_artifact, _vendor_qm_artifacts,
                             write_hybrid_network_input_file)
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label
@@ -156,6 +157,38 @@ def build_arc_input(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         'species': species,
         'reactions': reactions,
     }
+
+
+def _locate_well_artifacts(arc_project: str, hybrid_source_path: str) -> dict[str, str]:
+    """Locate the ARC statmech artifact file for each network isomer (well) that has one.
+
+    ARC writes one ``<species.label>.py`` per species under
+    ``<arc_project>/calcs/statmech/kinetics/species/``, and sanitizes an RMG label's parentheses to
+    brackets (network ``[O]C=O(1)`` -> file ``[O]C=O[1].py``). These files -- pointing at the same
+    converged ``opt``/``freq`` logs as the transition state, at the same level -- already exist as a
+    byproduct of ARC's kinetics rate pass, so adopting the wells costs no extra QM. A well with no
+    such file is simply not adopted (it keeps its RMG estimate, which is still vibration-only, so the
+    network stays degrees-of-freedom-consistent); matching by bracket-normalized stem rather than a
+    hard-coded sanitization rule keeps this robust to ARC's exact label mangling.
+
+    The network source is parsed for its isomer labels only when the statmech species directory
+    actually exists (i.e. there is something to adopt) -- so a run with no ARC statmech output does
+    no work here at all.
+    """
+    species_dir = os.path.join(arc_project, 'calcs', 'statmech', 'kinetics', 'species')
+    if not os.path.isdir(species_dir):
+        return dict()
+
+    def _normalize(label: str) -> str:
+        return label.replace('(', '[').replace(')', ']')
+
+    by_normalized_stem = dict()
+    for name in os.listdir(species_dir):
+        if name.endswith('.py'):
+            by_normalized_stem[_normalize(name[:-3])] = os.path.join(species_dir, name)
+    isomer_labels = parse_pdep_network_file(hybrid_source_path).isomers
+    return {label: by_normalized_stem[_normalize(label)]
+            for label in isomer_labels if _normalize(label) in by_normalized_stem}
 
 
 def _explored_network_path(paths: RoundPaths, network_id: str) -> str:
@@ -567,16 +600,25 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
         # network (the file this function parsed above) is the only -- and the truthful -- source.
         hybrid_source_path = source_path
         hybrid_method = config.pes.method
+    # Adopt the QM wells and normalize the whole network to a single degrees-of-freedom treatment.
+    # Every QM conformer -- the transition states AND any isomer whose statmech artifact ARC already
+    # produced -- is extracted through Arkane (under the rmg_env) into vibration-only inline data on
+    # the hybrid header's one energy reference, then spliced in by the writer. Wells without an
+    # artifact keep their RMG estimate (still vibration-only, so the network stays DOF-consistent).
+    well_artifacts = _locate_well_artifacts(paths.arc_project, hybrid_source_path)
+    ts_conformers, well_conformers = extract_dof_conformers(
+        transition_states=qm_transition_states, wells=well_artifacts, energy_settings=energy_settings)
     result = write_hybrid_network_input_file(
         source_path=hybrid_source_path,
         dest_path=hybrid_network_path(paths, network_id),
         method=hybrid_method,
-        qm_transition_states=qm_transition_states,
+        qm_transition_states=ts_conformers,
         energy_settings=energy_settings,
-        qm_artifacts_root=vendor_root,
+        qm_wells=well_conformers,
     )
     _logger.info(f"Wrote a hybrid P-dep network input for {network_id!r} to {result.dest_path}: "
-                f"QM/RRKM for {list(result.qm_ts_labels)}, RMG/ILT for {list(result.ilt_ts_labels)}.")
+                f"QM/RRKM for {list(result.qm_ts_labels)} (wells adopted: {list(result.qm_well_labels)}), "
+                f"RMG/ILT for {list(result.ilt_ts_labels)}.")
     for warning in result.warnings:
         _logger.warning(warning)
     return converged_labels, queued_ts_labels
