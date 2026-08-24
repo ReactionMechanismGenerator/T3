@@ -461,12 +461,10 @@ class HybridNetworkResult:
 
     Args:
         dest_path (str): The path the hybrid Arkane input file was written to.
-        qm_ts_labels (tuple): The transition state labels switched to QM/RRKM.
+        qm_ts_labels (tuple): The transition state labels switched to QM/RRKM (inline, vibration-only).
         ilt_ts_labels (tuple): The transition state labels left as RMG/ILT.
-        vendored_files (tuple): The paths (relative to ``os.path.dirname(dest_path)``) written
-                                under the ``qm/`` subdirectory: one ``qm/<label>.py`` per QM'd TS,
-                                plus one ``qm/logs/<label>/<basename>`` per ``Log(...)`` file it
-                                references.
+        qm_well_labels (tuple): The isomer (well) labels whose E0/modes were replaced with adopted,
+                                DOF-normalized QM values.
         warnings (tuple): Human-readable warnings (e.g. a QM'd path reaction that carried no
                           ``kinetics = ...`` entry to drop in the first place).
         t_grid_clamp (TGridClampRecord): Provenance for whether the T grid written to
@@ -479,9 +477,106 @@ class HybridNetworkResult:
     dest_path: str
     qm_ts_labels: tuple
     ilt_ts_labels: tuple
-    vendored_files: tuple
+    qm_well_labels: tuple = field(default_factory=tuple)
     warnings: tuple = field(default_factory=tuple)
     t_grid_clamp: TGridClampRecord | None = None
+
+
+# The statmech mode classes that carry translation or overall (external) rotation. A
+# DOF-consistent RMG pressure-dependent network species must carry NONE of these: translation and
+# overall rotation are handled by the active-rotor / rmgmode machinery, not enumerated on the
+# conformer. A QM transition state spliced in as Arkane's *full* conformer (which does enumerate
+# them) onto vibration-only estimated wells is exactly the mismatch that makes k(E) explode and the
+# modified-strong-collision matrix go singular; this module normalizes every QM conformer to
+# vibration-only so the network can never present these modes on some conformers and not others.
+_EXTERNAL_DOF_MODE_NAMES = (
+    'IdealGasTranslation', 'LinearRotor', 'NonlinearRotor', 'KRotor', 'SphericalTopRotor',
+)
+
+# Keys a DOF-normalized conformer-data dict (see t3/runners/statmech_conformer_extract.py) must
+# carry. The imaginary frequency is required in addition for a transition state.
+_REQUIRED_CONFORMER_KEYS = ('E0_kJ_mol', 'frequencies_cm_1', 'spin_multiplicity', 'optical_isomers')
+
+
+def _validate_conformer_data(label: str, data, *, is_ts: bool) -> None:
+    """Refuse a conformer-data dict that could not produce a valid inline vibration-only block.
+
+    The data must have been produced by ``t3.runners.statmech_conformer_extract`` (Arkane loads the
+    QM logs, applies the atom-energy corrections, strips translation/rotation). Validating its shape
+    here -- before any text is generated -- keeps a malformed extraction from silently yielding a
+    broken or DOF-inconsistent network file.
+    """
+    if not isinstance(data, dict):
+        raise ValueError(f"Conformer data for '{label}' must be a dict of DOF-normalized statmech "
+                         f"values, got {type(data).__name__}.")
+    missing = [k for k in _REQUIRED_CONFORMER_KEYS if k not in data]
+    if is_ts and 'imaginary_frequency_cm_1' not in data:
+        missing.append('imaginary_frequency_cm_1')
+    if missing:
+        raise ValueError(f"Conformer data for '{label}' is missing required key(s) {sorted(missing)}; "
+                         f"it must be produced by t3.runners.statmech_conformer_extract.")
+    freqs = data['frequencies_cm_1']
+    if not isinstance(freqs, (list, tuple)) or not freqs \
+            or not all(isinstance(f, (int, float)) for f in freqs):
+        raise ValueError(f"Conformer data for '{label}' has a non-numeric or empty "
+                         f"'frequencies_cm_1'; got {freqs!r}.")
+    # A DOF-normalized conformer carries only HarmonicOscillator + HinderedRotor. If the extractor
+    # ever leaked a translational/rotational mode into the data, refuse it: this is the invariant.
+    for hr in data.get('hindered_rotors', ()):
+        if not isinstance(hr, dict) or hr.get('type') not in ('HinderedRotor',):
+            raise ValueError(f"Conformer data for '{label}' carries an unexpected internal-rotor "
+                             f"entry {hr!r}; only HinderedRotor is supported.")
+    if is_ts and not isinstance(data['imaginary_frequency_cm_1'], (int, float)):
+        raise ValueError(f"Transition state '{label}' has a non-numeric "
+                         f"'imaginary_frequency_cm_1' {data['imaginary_frequency_cm_1']!r}.")
+
+
+def _render_frequencies(frequencies) -> str:
+    """Render a HarmonicOscillator(frequencies=([...], 'cm^-1')) mode from cm^-1 values."""
+    inner = ','.join(repr(float(f)) for f in frequencies)
+    return f"HarmonicOscillator(frequencies=([{inner}],'cm^-1'))"
+
+
+def _render_hindered_rotor(hr: dict) -> str:
+    """Render an inline HinderedRotor(...) from a DOF-normalized hindered-rotor dict."""
+    parts = []
+    if 'inertia' in hr:
+        parts.append(f"inertia=({repr(float(hr['inertia']))},'{hr.get('inertia_units', 'amu*angstrom^2')}')")
+    if 'symmetry' in hr:
+        parts.append(f"symmetry={int(hr['symmetry'])}")
+    if 'fourier' in hr:
+        rows = ','.join('[' + ','.join(repr(float(x)) for x in row) + ']' for row in hr['fourier'])
+        parts.append(f"fourier=([{rows}],'J/mol')")
+    elif 'barrier' in hr:
+        parts.append(f"barrier=({repr(float(hr['barrier']))},'{hr.get('barrier_units', 'kJ/mol')}')")
+    parts.append(f"semiclassical={bool(hr.get('semiclassical', False))}")
+    return f"HinderedRotor({', '.join(parts)})"
+
+
+def _render_modes_list(data: dict, indent: str) -> str:
+    """Render the vibration-only ``[...]`` modes list (HarmonicOscillator + any HinderedRotors)."""
+    mode_lines = [_render_frequencies(data['frequencies_cm_1'])]
+    mode_lines.extend(_render_hindered_rotor(hr) for hr in data.get('hindered_rotors', ()))
+    body = ''.join(f"{indent}    {m},\n" for m in mode_lines)
+    return f"[\n{body}{indent}]"
+
+
+def _render_e0(data: dict) -> str:
+    """Render the ``(E0,'kJ/mol')`` tuple a species/transitionState E0 keyword takes."""
+    return f"({repr(float(data['E0_kJ_mol']))},'kJ/mol')"
+
+
+def _render_inline_transition_state(label: str, data: dict) -> str:
+    """Render a full inline, vibration-only ``transitionState(...)`` call for a QM'd TS."""
+    modes = _render_modes_list(data, indent='    ')
+    return (f"transitionState(\n"
+            f"    label = '{label}',\n"
+            f"    E0 = {_render_e0(data)},\n"
+            f"    modes = {modes},\n"
+            f"    spinMultiplicity = {int(data['spin_multiplicity'])},\n"
+            f"    opticalIsomers = {int(data['optical_isomers'])},\n"
+            f"    frequency = ({repr(float(data['imaginary_frequency_cm_1']))},'cm^-1'),\n"
+            f")\n")
 
 
 def write_hybrid_network_input_file(source_path: str,
@@ -489,51 +584,60 @@ def write_hybrid_network_input_file(source_path: str,
                                     method: str,
                                     qm_transition_states: dict,
                                     energy_settings: QMEnergySettings,
+                                    qm_wells: dict | None = None,
                                     sensitivity: bool = False,
-                                    qm_artifacts_root: str | None = None,
                                     ) -> HybridNetworkResult:
     """
     Write a hybrid Arkane P-dep network input file: QM/RRKM for the requested TSs, RMG/ILT for
     the rest.
 
+    Every QM conformer -- transition states AND wells -- is spliced in **inline and vibration-only**
+    (``HarmonicOscillator`` [+ ``HinderedRotor``], plus the imaginary frequency for a TS), never as
+    Arkane's by-reference full conformer. This is the degrees-of-freedom invariant: an RMG p-dep
+    network handles translation and overall rotation via its active-rotor / rmgmode machinery, so a
+    conformer that additionally enumerates ``IdealGasTranslation``/``NonlinearRotor`` (as Arkane
+    builds from a ``Log(...)`` statmech file) sits on a network whose estimated wells do not, and
+    ``Q_TS / Q_reactant`` never cancels those extra partition functions (~1e14) -- k(E) explodes and
+    the modified-strong-collision matrix goes singular. The caller extracts each QM conformer once,
+    on a single self-consistent energy reference, with ``t3.runners.statmech_conformer_extract``.
+
     Args:
         source_path (str): The path to the original RMG P-dep network file to build from.
         dest_path (str): The path to write the resulting hybrid Arkane input file to. The parent
-                         directory is created if it does not already exist. A ``qm/`` subdirectory
-                         next to it is populated with the vendored QM artifacts (see
-                         ``HybridNetworkResult.vendored_files``).
+                         directory is created if it does not already exist. The written network is
+                         self-contained: it references no external ``qm/`` statmech files.
         method (str): 'CSE', 'MSC' or 'RS' (see ``t3.utils.writer.METHOD_MAP``).
-        qm_transition_states (dict): Network transition state label -> path to the ARC-written
-                                    statmech artifact file for that TS (Arkane's
-                                    ``species_input_template`` shape; see
-                                    ``arc/statmech/arkane.py``).
+        qm_transition_states (dict): Network transition state label -> DOF-normalized conformer-data
+                                    dict for that TS (the ``is_ts=True`` shape produced by
+                                    ``t3.runners.statmech_conformer_extract``: ``E0_kJ_mol``,
+                                    ``frequencies_cm_1``, ``imaginary_frequency_cm_1``,
+                                    ``spin_multiplicity``, ``optical_isomers``, ``hindered_rotors``).
         energy_settings (QMEnergySettings): The energy-reference/tunneling settings to inject.
+        qm_wells (dict, optional): Network isomer (well) label -> DOF-normalized conformer-data dict
+                                  for that well (the ``is_ts=False`` shape). Every named species has
+                                  its ``E0`` and ``modes`` replaced in place with the QM values, so
+                                  the well is adopted on the same energy reference as the TS. Wells
+                                  NOT named here keep their estimated vibration-only modes -- which
+                                  is still DOF-consistent, because those modes are already
+                                  vibration-only. Default: ``None`` (no wells adopted).
         sensitivity (bool, optional): Whether to inject a ``sensitivity_conditions`` directive
                                      spanning the network's T/P extrema, mirroring
                                      ``write_arkane_network_input_file``. Default: ``False``.
-        qm_artifacts_root (str, optional): The directory every artifact's resolved ``Log(...)``
-                                          path must live under -- typically the ARC project
-                                          directory the artifacts came from. When ``None``, each
-                                          artifact is confined to its own parent directory (the
-                                          narrowest, fail-closed default). See
-                                          ``_read_qm_artifact`` for why confinement is
-                                          non-negotiable: the vendoring step COPIES these files.
 
     Raises:
         ValueError: If ``energy_settings.model_chemistry`` is missing/blank or fails validation; if
                    ``energy_settings.use_atom_corrections`` is ``False``; if
                    ``energy_settings.use_atom_corrections`` is ``True`` and ``atom_energies`` is
                    ``None``; if ``energy_settings.use_bond_corrections`` is ``True``; if
-                   ``qm_transition_states`` is empty; if a key of ``qm_transition_states`` is not
-                   a transition state label in the source network; if a QM artifact file (or a
-                   ``Log(...)`` file it references) does not exist; if a ``Log(...)`` path
-                   resolves outside the allowed root, or its argument is not a literal string;
-                   or if the source network cannot be parsed.
-        RuntimeError: If the generated network file text, or any vendored QM artifact's text,
-                     fails its own ``ast.parse(...)`` self-check. This should never happen in
-                     practice (every edit is computed structurally from the AST), but a failure
-                     here is caught loudly, before anything is written to ``dest_path``, rather
-                     than silently handing back a broken hybrid network.
+                   ``qm_transition_states`` is empty; if a key of ``qm_transition_states`` is not a
+                   transition state label, or a key of ``qm_wells`` is not an isomer (species)
+                   label, in the source network; if any conformer-data dict is malformed; or if the
+                   source network cannot be parsed.
+        RuntimeError: If the generated network file text fails its own ``ast.parse(...)`` self-check,
+                     or still carries a translational/rotational mode after normalization. This
+                     should never happen (every edit is computed structurally from the AST), but a
+                     failure is caught loudly, before anything is written to ``dest_path``, rather
+                     than silently handing back a broken or DOF-inconsistent hybrid network.
 
     Returns:
         HybridNetworkResult: The outcome of the write.
@@ -576,30 +680,27 @@ def write_hybrid_network_input_file(source_path: str,
     if not qm_transition_states:
         raise ValueError('qm_transition_states is empty; use t3.utils.writer.write_arkane_network_input_file(...) '
                          'instead to write an all-ILT (non-hybrid) Arkane network input file.')
+    qm_wells = dict(qm_wells or {})
 
     network = parse_pdep_network_file(source_path)
-    known_labels = set(network.transition_state_labels)
-    unknown_labels = sorted(set(qm_transition_states) - known_labels)
-    if unknown_labels:
+    known_ts_labels = set(network.transition_state_labels)
+    unknown_ts_labels = sorted(set(qm_transition_states) - known_ts_labels)
+    if unknown_ts_labels:
         raise ValueError(f"qm_transition_states references unknown transition state label(s) "
-                         f"{unknown_labels} for network '{network.network_id}'; known transition state labels are "
-                         f"{sorted(known_labels)}.")
-    for ts_label, artifact_path in qm_transition_states.items():
-        if not os.path.isfile(artifact_path):
-            raise ValueError(f"The QM statmech artifact for transition state '{ts_label}' was not found at "
-                             f"'{artifact_path}'.")
+                         f"{unknown_ts_labels} for network '{network.network_id}'; known transition state labels "
+                         f"are {sorted(known_ts_labels)}.")
+    known_species_labels = set(network.species_labels)
+    unknown_well_labels = sorted(set(qm_wells) - known_species_labels)
+    if unknown_well_labels:
+        raise ValueError(f"qm_wells references unknown species (well) label(s) {unknown_well_labels} for network "
+                         f"'{network.network_id}'; known species labels are {sorted(known_species_labels)}.")
 
-    # Pre-flight: parse every QM artifact and resolve every Log(...) path it references BEFORE
-    # writing anything to disk, so a missing log file can never result in a partially-written,
-    # dangling hybrid network.
-    artifact_infos = {
-        ts_label: _read_qm_artifact(
-            ts_label=ts_label,
-            artifact_path=artifact_path,
-            allowed_log_root=qm_artifacts_root if qm_artifacts_root is not None
-            else os.path.dirname(os.path.abspath(artifact_path)),
-        )
-        for ts_label, artifact_path in qm_transition_states.items()}
+    # Validate every conformer-data dict up front, before any text is generated, so a malformed
+    # extraction can never yield a partially-written or DOF-inconsistent hybrid network.
+    for ts_label, data in qm_transition_states.items():
+        _validate_conformer_data(ts_label, data, is_ts=True)
+    for well_label, data in qm_wells.items():
+        _validate_conformer_data(well_label, data, is_ts=False)
 
     with open(source_path, 'r') as f:
         text = f.read()
@@ -639,6 +740,28 @@ def write_hybrid_network_input_file(source_path: str,
         if call_name == 'species':
             if first_species_lineno is None:
                 first_species_lineno = node.lineno
+            keyword_nodes = {kw.arg: kw for kw in call.keywords if kw.arg is not None}
+            label = _literal_or_none(keyword_nodes['label'].value) if 'label' in keyword_nodes else None
+            if label in qm_wells:
+                # Adopt the QM well: replace this species' E0 and modes *in place* with the
+                # DOF-normalized (vibration-only) QM values, leaving structure, collision model,
+                # transport, molecular weight and thermo byte-identical. The well then sits on the
+                # same energy reference as the QM'd TS around it, with a DOF treatment consistent
+                # with every other conformer in the network.
+                data = qm_wells[label]
+                e0_kw = keyword_nodes.get('E0')
+                modes_kw = keyword_nodes.get('modes')
+                if e0_kw is None or modes_kw is None:
+                    missing = 'E0' if e0_kw is None else 'modes'
+                    raise ValueError(f"Cannot adopt QM well '{label}': its species(...) call in "
+                                     f"'{source_path}' carries no '{missing}' keyword to replace. A network "
+                                     f"isomer must carry both an E0 and a modes list.")
+                e0_start = _pos(text, line_starts, e0_kw.value.lineno, e0_kw.value.col_offset)
+                e0_end = _pos(text, line_starts, e0_kw.value.end_lineno, e0_kw.value.end_col_offset)
+                edits.append((e0_start, e0_end, _render_e0(data)))
+                modes_start = _pos(text, line_starts, modes_kw.value.lineno, modes_kw.value.col_offset)
+                modes_end = _pos(text, line_starts, modes_kw.value.end_lineno, modes_kw.value.end_col_offset)
+                edits.append((modes_start, modes_end, _render_modes_list(data, indent='    ')))
 
         elif call_name == 'transitionState':
             kwargs = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
@@ -646,7 +769,7 @@ def write_hybrid_network_input_file(source_path: str,
             if label in qm_transition_states:
                 start = _pos(text, line_starts, node.lineno, 0)
                 end = _consume_trailing_newline(text, _pos(text, line_starts, node.end_lineno, node.end_col_offset))
-                edits.append((start, end, f"transitionState('{label}', 'qm/{label}.py')\n"))
+                edits.append((start, end, _render_inline_transition_state(label, qm_transition_states[label])))
 
         elif call_name == 'reaction':
             keyword_nodes = {kw.arg: kw for kw in call.keywords if kw.arg is not None}
@@ -701,30 +824,16 @@ def write_hybrid_network_input_file(source_path: str,
         raise RuntimeError(f"Refusing to write '{dest_path}': the generated network file text failed "
                            f"its own self-check (it is not valid Python): {e}.") from e
 
+    # Self-check the degrees-of-freedom invariant: after normalization, no isomer (well) and no
+    # transition state in the generated network may enumerate a translational or overall-rotational
+    # mode. This is the whole point of the ticket -- a network that mixes DOF provenance is what
+    # makes the master-equation solve go singular -- so it is enforced structurally on the produced
+    # text, not merely assumed to follow from the emission code above.
+    _assert_network_dof_consistent(text=text, isomer_labels=set(network.isomers), dest_path=dest_path)
+
     dest_dir = os.path.dirname(dest_path)
     if dest_dir and not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
-
-    # Vendor the QM artifacts (and their referenced logs) BEFORE writing dest_path. Vendoring
-    # touches multiple files (one qm/<label>.py plus one or more qm/logs/<label>/<basename> per
-    # TS) and can fail partway through (e.g. a log file copy raising); writing dest_path first
-    # would leave behind an input.py whose 'qm/<label>.py' transitionState(...) references point
-    # at a missing or incomplete qm/ tree. Vendoring first means a failure here leaves no
-    # dest_path at all, rather than a dangling one.
-    qm_dir = os.path.join(dest_dir, 'qm')
-    vendored_files = _vendor_qm_artifacts(artifact_infos=artifact_infos, qm_dir=qm_dir, dest_dir=dest_dir)
-
-    # Self-check: every vendored TS artifact must also be valid Python, for the same reason.
-    for ts_label in artifact_infos:
-        vendored_ts_path = os.path.join(qm_dir, f'{ts_label}.py')
-        with open(vendored_ts_path, 'r') as f:
-            vendored_text = f.read()
-        try:
-            ast.parse(vendored_text)
-        except SyntaxError as e:
-            raise RuntimeError(f"Refusing to write '{dest_path}': the vendored QM artifact for transition "
-                               f"state '{ts_label}' at '{vendored_ts_path}' failed its own self-check "
-                               f"(it is not valid Python): {e}.") from e
 
     # Written atomically -- staged into a temp file in the SAME directory as dest_path, fsync'd,
     # then os.replace'd into place, mirroring t3.main.T3._mark_arc_finalization_complete (which
@@ -762,11 +871,47 @@ def write_hybrid_network_input_file(source_path: str,
     return HybridNetworkResult(
         dest_path=dest_path,
         qm_ts_labels=tuple(sorted(qm_transition_states)),
-        ilt_ts_labels=tuple(sorted(known_labels - set(qm_transition_states))),
-        vendored_files=vendored_files,
+        ilt_ts_labels=tuple(sorted(known_ts_labels - set(qm_transition_states))),
+        qm_well_labels=tuple(sorted(qm_wells)),
         warnings=tuple(warnings_list),
         t_grid_clamp=t_grid_clamp,
     )
+
+
+def _assert_network_dof_consistent(text: str, isomer_labels: set, dest_path: str) -> None:
+    """Refuse a generated hybrid whose isomers/TSs are not all degrees-of-freedom-consistent.
+
+    Every isomer (well) and every transition state must be vibration-only -- ``HarmonicOscillator``
+    (+ optional ``HinderedRotor``) -- with no ``IdealGasTranslation`` or external rotor. A single
+    conformer that enumerates translation/rotation on a network whose others do not is the mismatch
+    that makes ``Q_TS / Q_reactant`` fail to cancel and the modified-strong-collision matrix go
+    singular. Bimolecular reactant/product channel species are NOT checked: they are not isomers,
+    do not enter the isomer<->isomer RRKM density of states, and legitimately carry full conformers.
+    """
+    offenders = []
+    for node in ast.parse(text).body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        name = _get_call_name(call)
+        if name not in ('species', 'transitionState'):
+            continue
+        keyword_nodes = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
+        label = _literal_or_none(keyword_nodes.get('label'))
+        if name == 'species' and label not in isomer_labels:
+            continue  # a reactant/product channel species or bath gas: not part of the invariant.
+        modes_node = keyword_nodes.get('modes')
+        if not isinstance(modes_node, (ast.List, ast.Tuple)):
+            continue  # no inline modes (e.g. a thermo-only atomic well, or an E0-only TS).
+        mode_names = {_get_call_name(el) for el in modes_node.elts if isinstance(el, ast.Call)}
+        bad = sorted(mode_names & set(_EXTERNAL_DOF_MODE_NAMES))
+        if bad:
+            offenders.append(f"{name} '{label}': {bad}")
+    if offenders:
+        raise RuntimeError(f"Refusing to write '{dest_path}': the generated network is not "
+                           f"degrees-of-freedom-consistent -- these isomers/transition states still carry "
+                           f"translational/rotational modes: {offenders}. Every well and TS must be "
+                           f"vibration-only (HarmonicOscillator [+ HinderedRotor]).")
 
 
 def _read_qm_artifact(ts_label: str, artifact_path: str, allowed_log_root: str) -> dict:

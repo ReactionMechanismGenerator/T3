@@ -2057,14 +2057,19 @@ def test_a_capture_alone_can_drive_a_hybrid_network_write(tmp_path):
     assert len(captured_entries) == 1, captured_entries
     entry = captured_entries[0]
 
+    # The writer consumes DOF-normalized conformer data (E0/frequencies/imaginary extracted from the
+    # captured artifact through Arkane, in the real loop); this test uses a stub artifact, so it
+    # hands the writer synthetic vibration-only data directly, exercising the capture->write handoff
+    # without running Arkane.
+    ts_conformer = {'label': entry['network_ts_label'], 'is_ts': True, 'E0_kJ_mol': -38.0,
+                    'frequencies_cm_1': [500.0, 800.0, 1200.0], 'imaginary_frequency_cm_1': -1800.0,
+                    'spin_multiplicity': 1, 'optical_isomers': 1, 'hindered_rotors': []}
     result = write_hybrid_network_input_file(
         source_path=os.path.join(capture_dir, network_entry['captured_path']),
         dest_path=str(tmp_path / 'hybrid' / 'input.py'),
         method=network_entry['method'],
-        qm_transition_states={entry['network_ts_label']: os.path.join(capture_dir,
-                                                                     entry['captured_artifact_path'])},
+        qm_transition_states={entry['network_ts_label']: ts_conformer},
         energy_settings=QMEnergySettings.from_frozen(energy_settings),
-        qm_artifacts_root=capture_dir,
     )
 
     assert os.path.isfile(result.dest_path)

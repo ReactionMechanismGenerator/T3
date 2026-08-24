@@ -25,11 +25,13 @@ this loop is standalone until corroborated (see ``pes_loop.py``'s own module doc
 module only corroborates that the loop and the real runner agree with each other.
 """
 
+import hashlib
 import os
 import re
 import shutil
 import sys
 
+import pytest
 import yaml
 
 import PES
@@ -185,14 +187,14 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
 
     def _fake_write_hybrid_network_input_file(*, source_path, dest_path, method,
                                               qm_transition_states, energy_settings,
-                                              qm_artifacts_root):
+                                              qm_wells=None):
         write_hybrid_calls.append({'source_path': source_path, 'dest_path': dest_path})
         # run_pes_loop's own round>0 guard checks for this file's existence on disk for real, so
         # the double must actually write it, not merely return a result object claiming to.
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         open(dest_path, 'w').close()
         return HybridNetworkResult(dest_path=dest_path, qm_ts_labels=tuple(qm_transition_states),
-                                   ilt_ts_labels=(), vendored_files=(), warnings=())
+                                   ilt_ts_labels=(), qm_well_labels=(), warnings=())
 
     def _fake_verify_capture(root):
         # arc_qm_runner reads the energy settings an ADOPTED artifact was computed under from that
@@ -421,13 +423,64 @@ def _hybrid_channels(hybrid_path):
     return channels
 
 
-def _hybrid_marker(hybrid_path, ts_label):
-    """The channel marker inside the hybrid's own vendored log for ``ts_label`` -- the bytes that
-    prove WHICH barrier was folded under that label."""
-    log_dir = os.path.join(os.path.dirname(hybrid_path), 'qm', 'logs', ts_label)
-    (log_name,) = os.listdir(log_dir)
-    with open(os.path.join(log_dir, log_name)) as f:
+def _marker_e0(marker: str) -> float:
+    """A deterministic, channel-unique E0 (kJ/mol) standing in for a fake artifact's channel marker.
+
+    The real extractor (``t3.pdep.dof_conformers.extract_dof_conformers``) turns each QM artifact
+    into inline vibration-only data whose E0 is spliced into the hybrid's transitionState block; this
+    module -- whose artifacts are stubs Arkane cannot parse -- stubs that extractor and encodes the
+    artifact's channel-marker bytes into the E0. So "the right barrier sits on the right channel" is
+    still checked on a value carried THROUGH the real writer into the hybrid, rather than on a
+    vendored log the inline design no longer produces."""
+    digest = int(hashlib.sha256(marker.encode()).hexdigest()[:12], 16)
+    return -1000.0 - (digest % 1_000_000) / 1000.0
+
+
+def _read_artifact_marker(artifact_path: str) -> str:
+    """Read the channel marker out of a fake artifact's ``Log('...')`` file (resolved relative to
+    the artifact, matching how capture vendors it)."""
+    with open(artifact_path) as f:
+        artifact_text = f.read()
+    log_ref = re.search(r"Log\('([^']*)'\)", artifact_text).group(1)
+    with open(os.path.join(os.path.dirname(artifact_path), log_ref)) as f:
         return f.read().strip()
+
+
+def _fake_extract_dof_conformers(transition_states, wells, energy_settings, **kwargs):
+    """Stub for the Arkane-backed DOF-conformer extractor: turns each fake artifact into inline
+    vibration-only conformer data whose E0 encodes the artifact's channel marker, so the real writer
+    still splices a channel-discriminating value into the hybrid."""
+    def _conformer(label, path, is_ts):
+        # Marker-checking tests write a real artifact + log; wiring tests whose fake capture records
+        # a path it never wrote fall back to the label (they never assert on the encoded E0).
+        try:
+            marker = _read_artifact_marker(path)
+        except (OSError, AttributeError):
+            marker = label
+        conformer = {'label': label, 'is_ts': is_ts, 'E0_kJ_mol': _marker_e0(marker),
+                     'frequencies_cm_1': [500.0, 800.0, 1200.0, 1900.0, 2200.0],
+                     'spin_multiplicity': 2, 'optical_isomers': 1, 'hindered_rotors': []}
+        if is_ts:
+            conformer['imaginary_frequency_cm_1'] = -1800.0
+        return conformer
+    return ({label: _conformer(label, path, True) for label, path in transition_states.items()},
+            {label: _conformer(label, path, False) for label, path in wells.items()})
+
+
+@pytest.fixture(autouse=True)
+def _stub_dof_extraction(monkeypatch):
+    """Every loop test in this module drives the REAL writer over fake ARC artifacts Arkane cannot
+    parse, so the extraction seam (and only that seam) is stubbed; the writer stays real."""
+    monkeypatch.setattr('t3.pdep.pes_qm.extract_dof_conformers', _fake_extract_dof_conformers)
+
+
+def _hybrid_ts_e0(hybrid_path, ts_label) -> float:
+    """The E0 the hybrid emits inline for ``ts_label`` -- the value ``_fake_extract_dof_conformers``
+    encoded the channel marker into, proving WHICH barrier was folded under that label."""
+    with open(hybrid_path) as f:
+        content = f.read()
+    block = content[content.index(f"label = '{ts_label}'"):]
+    return float(re.search(r"E0 = \(([-\d.eE+]+),'kJ/mol'\)", block).group(1))
 
 
 def _fixture_explorer(monkeypatch, project_directory, network_id):
@@ -512,8 +565,8 @@ def test_real_loop_real_capture_keeps_qm_on_the_right_channel_across_a_renumber(
     # The bytes prove the attribution: under round 1's 'TS2' sits round 0's channel-1 barrier,
     # and under 'TS1' sits this round's channel-2 barrier -- the right barrier on the right
     # channel, across the renumber.
-    assert _hybrid_marker(round1_hybrid_path, 'TS2') == _CH1_MARKER
-    assert _hybrid_marker(round1_hybrid_path, 'TS1') == _CH2_MARKER
+    assert _hybrid_ts_e0(round1_hybrid_path, 'TS2') == _marker_e0(_CH1_MARKER)
+    assert _hybrid_ts_e0(round1_hybrid_path, 'TS1') == _marker_e0(_CH2_MARKER)
 
     # Both rounds' captures are REAL and re-verify cleanly, sensitivity evidence included --
     # exactly what defect 1 made impossible.
@@ -570,12 +623,12 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
     # Each adopted barrier's bytes sit on their own channel, matched purely structurally: the
     # prior project's markers carry ITS species labels, so equality here proves the artifact came
     # from the structurally-matching prior channel, not from any label agreement.
-    assert _hybrid_marker(round0_hybrid_path, 'TS1') \
-        == _channel_marker(('O-2(5)', 'CO2(7)'), ('O=C1OO1(9)',))
-    assert _hybrid_marker(round0_hybrid_path, 'TS2') \
-        == _channel_marker(('O=C1OO1(9)',), ('[O]C([O])=O(2)',))
-    assert _hybrid_marker(round0_hybrid_path, 'TS3') \
-        == _channel_marker(('O=C1OO1(9)',), ('[O]O[C]=O(3)',))
+    assert _hybrid_ts_e0(round0_hybrid_path, 'TS1') \
+        == _marker_e0(_channel_marker(('O-2(5)', 'CO2(7)'), ('O=C1OO1(9)',)))
+    assert _hybrid_ts_e0(round0_hybrid_path, 'TS2') \
+        == _marker_e0(_channel_marker(('O=C1OO1(9)',), ('[O]C([O])=O(2)',)))
+    assert _hybrid_ts_e0(round0_hybrid_path, 'TS3') \
+        == _marker_e0(_channel_marker(('O=C1OO1(9)',), ('[O]O[C]=O(3)',)))
     # The hybrid's energy settings came from the adopted artifacts' own prior manifest -- the
     # _adopted_energy_settings path a capture-less round is forced through.
     with open(round0_hybrid_path) as f:
@@ -657,8 +710,8 @@ def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
     assert round1[_CH2] == ('TS1', True)
     assert round1[_CH3] == ('TS3', False)
     # The bytes prove which barrier landed on which channel through the CLI's own run.
-    assert _hybrid_marker(round1_hybrid_path, 'TS2') == _CH1_MARKER
-    assert _hybrid_marker(round1_hybrid_path, 'TS1') == _CH2_MARKER
+    assert _hybrid_ts_e0(round1_hybrid_path, 'TS2') == _marker_e0(_CH1_MARKER)
+    assert _hybrid_ts_e0(round1_hybrid_path, 'TS1') == _marker_e0(_CH2_MARKER)
 
 
 def test_pes_cli_project_directory_flag_moves_the_whole_run(tmp_path, monkeypatch):
