@@ -268,12 +268,27 @@ class _FakeCalls(object):
         self.capture_ts_artifacts_calls = []
         self.write_hybrid_calls = []
         self.save_yaml_file_calls = []
+        self.extract_dof_calls = []
         self.capture_result = None
         self.hybrid_result = None
 
     def fake_capture_ts_artifacts(self, **kwargs):
         self.capture_ts_artifacts_calls.append(kwargs)
         return self.capture_result
+
+    def fake_extract_dof_conformers(self, transition_states, wells, energy_settings, **kwargs):
+        # Records the (label -> artifact path) maps arc_qm_runner hands the real extractor, and
+        # returns DOF-normalized conformer-data dicts keyed by the same labels -- exactly the shape
+        # write_hybrid_network_input_file now consumes -- so tests can assert on WHICH labels were
+        # extracted (the usable/adopted set) without running Arkane.
+        self.extract_dof_calls.append(
+            {'transition_states': transition_states, 'wells': wells, 'energy_settings': energy_settings})
+        ts = {label: {'label': label, 'is_ts': True, 'E0_kJ_mol': -38.0, 'frequencies_cm_1': [500.0],
+                      'imaginary_frequency_cm_1': -1800.0, 'spin_multiplicity': 1, 'optical_isomers': 1,
+                      'hindered_rotors': []} for label in transition_states}
+        wl = {label: {'label': label, 'is_ts': False, 'E0_kJ_mol': -170.0, 'frequencies_cm_1': [500.0],
+                      'spin_multiplicity': 2, 'optical_isomers': 1, 'hindered_rotors': []} for label in wells}
+        return ts, wl
 
     def fake_write_hybrid_network_input_file(self, **kwargs):
         self.write_hybrid_calls.append(kwargs)
@@ -306,6 +321,7 @@ def _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result):
     recorder = _FakeCalls()
     recorder.capture_result = capture_result
     monkeypatch.setattr('t3.pdep.pes_qm.capture_ts_artifacts', recorder.fake_capture_ts_artifacts)
+    monkeypatch.setattr('t3.pdep.pes_qm.extract_dof_conformers', recorder.fake_extract_dof_conformers)
     monkeypatch.setattr('t3.pdep.pes_qm.write_hybrid_network_input_file',
                         recorder.fake_write_hybrid_network_input_file)
     monkeypatch.setattr('t3.pdep.pes_qm.save_yaml_file', recorder.fake_save_yaml_file)
@@ -468,13 +484,12 @@ class TestArcQmRunner(object):
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
-            vendored_files=(), warnings=())
+            qm_well_labels=(), warnings=())
         arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
         assert len(recorder.write_hybrid_calls) == 1
         call = recorder.write_hybrid_calls[0]
         assert call['source_path'] == os.path.join(capture_dir, 'networks', f'{_NETWORK_ID}.py')
         assert call['method'] == 'MSC'
-        assert call['qm_artifacts_root'] == capture_dir
 
     def test_hybrid_write_dest_path_is_the_loops_own_hybrid_network_path(self, tmp_path, monkeypatch):
         capture_dir = os.path.join(str(tmp_path), 'capture')
@@ -485,7 +500,7 @@ class TestArcQmRunner(object):
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
-            vendored_files=(), warnings=())
+            qm_well_labels=(), warnings=())
         arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
         assert recorder.write_hybrid_calls[0]['dest_path'] == hybrid_network_path(paths, _NETWORK_ID)
 
@@ -539,10 +554,12 @@ class TestArcQmRunner(object):
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
-            vendored_files=(), warnings=())
+            qm_well_labels=(), warnings=())
         arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
-        qm_transition_states = recorder.write_hybrid_calls[0]['qm_transition_states']
-        assert qm_transition_states == {'TS1': os.path.join(capture_dir, 'qm', 'TS1.py')}
+        # The usable record's artifact path is handed to the DOF-conformer extractor (which turns it
+        # into the vibration-only inline data the writer then splices), keyed by its network TS label.
+        transition_states = recorder.extract_dof_calls[0]['transition_states']
+        assert transition_states == {'TS1': os.path.join(capture_dir, 'qm', 'TS1.py')}
 
     def test_return_value_is_converged_and_queued_ts_labels_as_a_tuple(self, tmp_path, monkeypatch):
         """arc_qm_runner returns (converged_ts_labels, queued_ts_labels) -- N3."""
@@ -554,7 +571,7 @@ class TestArcQmRunner(object):
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
-            vendored_files=(), warnings=())
+            qm_well_labels=(), warnings=())
         converged, queued = arc_qm_runner(candidates, paths, _config(), _NETWORK_ID)
         assert converged == frozenset({'TS1'})
         assert queued == frozenset({'TS1'})
@@ -582,7 +599,7 @@ class TestArcQmRunner(object):
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
-            vendored_files=(), warnings=())
+            qm_well_labels=(), warnings=())
 
         # Critical 1 (fix round 2): the adopted artifact's own Log(...) argument is relative to
         # its OWN directory (SPs/), the same way a real captured artifact's is (see
@@ -602,8 +619,10 @@ class TestArcQmRunner(object):
         assert converged == frozenset()
         assert queued == frozenset({'TS1'})
         assert len(recorder.write_hybrid_calls) == 1
-        call = recorder.write_hybrid_calls[0]
-        vendored_path = call['qm_transition_states']['TS1']
+        # The adopted artifact is vendored into this round's capture/adopted/ subtree, and it is that
+        # vendored copy's path -- not the prior project's -- that is handed to the DOF-conformer
+        # extractor for this round's hybrid.
+        vendored_path = recorder.extract_dof_calls[0]['transition_states']['TS1']
         assert vendored_path != prior_artifact_path
         assert os.path.dirname(vendored_path) == os.path.join(capture_dir, 'adopted')
         assert os.path.isfile(vendored_path)
@@ -616,7 +635,6 @@ class TestArcQmRunner(object):
         assert "geometry = Log('logs/TS1/output.out')" in vendored_content
         vendored_log_path = os.path.join(capture_dir, 'adopted', 'logs', 'TS1', 'output.out')
         assert os.path.isfile(vendored_log_path)
-        assert call['qm_artifacts_root'] == capture_dir
 
     def test_adopted_settings_are_consulted_even_when_this_round_captured_new_qm(self, tmp_path,
                                                                                   monkeypatch):
@@ -634,7 +652,7 @@ class TestArcQmRunner(object):
             tmp_path, monkeypatch, _usable_capture_result(None, capture_dir, network_path=''))
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1', 'TS2'),
-            ilt_ts_labels=(), vendored_files=(), warnings=())
+            ilt_ts_labels=(), qm_well_labels=(), warnings=())
         prior_artifact_path = _write_prior_adopted_artifact(tmp_path, 'TS2')
         verified = []
 
@@ -683,7 +701,7 @@ class TestArcQmRunner(object):
             tmp_path, monkeypatch, _usable_capture_result(None, capture_dir, network_path=''))
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1', 'TS2'),
-            ilt_ts_labels=(), vendored_files=(), warnings=())
+            ilt_ts_labels=(), qm_well_labels=(), warnings=())
         prior_artifact_path = _write_prior_adopted_artifact(tmp_path, 'TS2')
         prior_settings = dict(_FROZEN_ENERGY_SETTINGS,
                               source_paths={'input_py': '/round_0/ARC/input.py'})
@@ -705,7 +723,7 @@ class TestArcQmRunner(object):
         paths, candidates, recorder, network_path = _arc_qm_runner_fixture(tmp_path, monkeypatch, capture_result)
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',), ilt_ts_labels=(),
-            vendored_files=(), warnings=())
+            qm_well_labels=(), warnings=())
 
         try:
             arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
@@ -1115,7 +1133,7 @@ class TestArcQmRunnerWithNothingQueued(object):
             tmp_path, monkeypatch, capture_result=None)
         recorder.hybrid_result = HybridNetworkResult(
             dest_path=hybrid_network_path(paths, _NETWORK_ID), qm_ts_labels=('TS1',),
-            ilt_ts_labels=(), vendored_files=(), warnings=())
+            ilt_ts_labels=(), qm_well_labels=(), warnings=())
 
         converged, queued = arc_qm_runner((), paths, _config(), _NETWORK_ID, adopted=adopted)
 
@@ -1132,12 +1150,11 @@ class TestArcQmRunnerWithNothingQueued(object):
         # own prior manifest.
         assert len(recorder.write_hybrid_calls) == 1
         call = recorder.write_hybrid_calls[0]
-        vendored_path = call['qm_transition_states']['TS1']
+        vendored_path = recorder.extract_dof_calls[0]['transition_states']['TS1']
         assert os.path.dirname(vendored_path) == os.path.join(paths.capture, 'adopted')
         assert os.path.isfile(vendored_path)
         assert call['source_path'] == network_path
         assert call['method'] == 'MSC'
-        assert call['qm_artifacts_root'] == paths.capture
         assert call['dest_path'] == hybrid_network_path(paths, _NETWORK_ID)
         assert call['energy_settings'].model_chemistry == _arc_model_chemistry_text('wb97xd/def2tzvp')
 
