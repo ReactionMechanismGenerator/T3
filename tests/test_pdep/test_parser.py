@@ -1348,3 +1348,76 @@ network(label='N', isomers=['I'], reactants=[])
         assert ts.label == 'TS1'
         assert ts.relative_e0 is not None
         assert ts.relative_e0 == pytest.approx((264.497 - 411.735) - 0.0)
+
+
+# The hybrid network file the PES loop wrote in round 0 of the r001_m1-cho2-pilot run and then
+# crashed reading in round 1. Vendored byte-for-byte because /home/alon/runs/ is scratch; see
+# tests/data/pdep_hybrid/positional_ts/README.md for provenance and the sha256.
+HYBRID_POSITIONAL_TS_FILE = os.path.join(
+    TEST_DATA_BASE_PATH, 'pdep_hybrid', 'positional_ts', 'network0_reduced.py'
+)
+
+
+def _transition_state_call(text: str, label: str) -> ast.Call:
+    """Return the top-level ``transitionState(...)`` call whose FIRST positional argument is the
+    string literal ``label``, from real pdep-network file text. Used to hand ``_call_keywords`` the
+    exact AST node a real file produced, rather than one a test hand-built."""
+    for node in ast.parse(text).body:
+        if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)):
+            continue
+        call = node.value
+        if (isinstance(call.func, ast.Name) and call.func.id == 'transitionState'
+                and call.args and isinstance(call.args[0], ast.Constant)
+                and call.args[0].value == label):
+            return call
+    raise AssertionError(f"no positional transitionState({label!r}, ...) call in the text")
+
+
+class TestPositionalTransitionState:
+    """The producer/consumer bug I-016: T3's hybrid writer emits ``transitionState('TS2',
+    'qm/TS2.py')`` -- the two-positional form Arkane (arkane/input.py:241) requires to load a
+    stat-mech file from a path, and the ONLY form it offers for that -- while the pdep reader
+    refused every positional argument and crashed on the file T3 itself had just written."""
+
+    def test_real_hybrid_file_parses(self):
+        """Verifier 1: the real crashed artifact drives through the pdep parser and parses."""
+        network = parse_pdep_network_file(HYBRID_POSITIONAL_TS_FILE)
+        # Verifier 2a -- the label is recovered through the full public parse, not merely
+        # "no exception raised": TS2 (the QM-adopted, positionally-written state) is present
+        # alongside the keyword-written TS1 and TS3.
+        assert 'TS2' in network.transition_state_labels
+        assert set(network.transition_state_labels) == {'TS1', 'TS2', 'TS3'}
+
+    def test_real_hybrid_file_recovers_ts2_label_and_path(self):
+        """Verifier 2b: the parse recovers BOTH the transition state's label AND its path from the
+        positional call, rather than silently discarding the path a keyword reader never mapped."""
+        with open(HYBRID_POSITIONAL_TS_FILE, 'r') as f:
+            text = f.read()
+        call = _transition_state_call(text, 'TS2')
+        kwargs = _call_keywords(call, path=HYBRID_POSITIONAL_TS_FILE, call_name='transitionState')
+        assert set(kwargs) == {'label', 'path'}
+        assert ast.literal_eval(kwargs['label']) == 'TS2'
+        assert ast.literal_eval(kwargs['path']) == 'qm/TS2.py'
+
+    def test_positional_exception_is_narrow_other_call_names_still_refused(self):
+        """Non-goal guard: the widening is exactly ``transitionState(label, path)``. The same
+        two-positional shape for any OTHER call name still falls through to the refusal."""
+        (call,) = [n.value for n in ast.parse("species('X', 'qm/X.py')").body]
+        with pytest.raises(ValueError, match='POSITIONAL'):
+            _call_keywords(call, call_name='species')
+
+    def test_positional_exception_is_narrow_other_arities_still_refused(self):
+        """Non-goal guard: only two positionals map. One, or three, positional argument(s) to a
+        ``transitionState(...)`` call is not the Arkane path form and is still refused."""
+        for src in ("transitionState('TS2')",
+                    "transitionState('TS2', 'qm/TS2.py', 'extra')"):
+            (call,) = [n.value for n in ast.parse(src).body]
+            with pytest.raises(ValueError, match='POSITIONAL'):
+                _call_keywords(call, call_name='transitionState')
+
+    def test_positional_exception_is_narrow_mixed_positional_keyword_refused(self):
+        """Non-goal guard: a positional label mixed with a keyword is NOT the Arkane path form
+        (Arkane loads a path only when ``len(kwargs) == 0``) and is still refused."""
+        (call,) = [n.value for n in ast.parse("transitionState('TS2', path='qm/TS2.py')").body]
+        with pytest.raises(ValueError, match='POSITIONAL'):
+            _call_keywords(call, call_name='transitionState')
