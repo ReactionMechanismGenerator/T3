@@ -35,13 +35,24 @@ MAX_RMG_RUNS_PER_ITERATION = 5
 
 RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
 
-if RMG_EXECUTION_TYPE == 'local':
-    LOCAL_CLUSTER_SOFTWARE = settings['servers']['local']['cluster_soft']
+# These describe the *local cluster software* (PBS/Slurm/OGE/HTCondor) and are therefore keyed on
+# ``cluster_soft`` -- NOT on the RMG execution type. Gating them on ``RMG_EXECUTION_TYPE == 'local'``
+# blanked all four to '' on any machine that runs RMG ``incore`` while still having a queue
+# configured; the empty ``SUBMIT_FILENAME`` then made ``write_submit_script``/``submit_job`` join an
+# empty component onto the project directory and open the directory itself (IsADirectoryError).
+#
+# These globals describe HOW to talk to a queue, so the only thing that can define them is which
+# cluster software is configured -- not which execution type RMG happens to be set to. Deriving
+# them from `cluster_soft` keeps them well-formed whenever a queue exists; whether a submit script
+# is actually USED is a separate question, answered at each use site (`write_submit_script` /
+# `submit_job`), which refuse when no cluster software is configured.
+LOCAL_CLUSTER_SOFTWARE = settings['servers']['local'].get('cluster_soft') or ''
+if LOCAL_CLUSTER_SOFTWARE:
     SUBMIT_COMMAND = settings['submit_command'][LOCAL_CLUSTER_SOFTWARE]
     CHECK_STATUS_COMMAND = settings['check_status_command'][LOCAL_CLUSTER_SOFTWARE]
     SUBMIT_FILENAME = settings['submit_filenames'][LOCAL_CLUSTER_SOFTWARE]
 else:
-    SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME = LOCAL_CLUSTER_SOFTWARE = ''
+    SUBMIT_COMMAND = CHECK_STATUS_COMMAND = SUBMIT_FILENAME = ''
 
 
 def write_submit_script(project_directory: str,
@@ -61,8 +72,21 @@ def write_submit_script(project_directory: str,
         verbose (str, optional): Level of verbosity, e.g., ``-v 10``.
         max_iterations (str, optional): Max RMG iterations, e.g., ``-m 100``.
         t3_project_name (str, optional): The T3 project name, used for setting a job name on the server for the RMG run.
+
+    Raises:
+        ValueError: If no local cluster software is configured (``SUBMIT_FILENAME`` is empty). A
+                    queue submit script is only meaningful for queue-based ('local') RMG execution;
+                    refusing here names the real condition instead of joining an empty filename onto
+                    ``project_directory`` and opening the directory itself.
     """
     global MEM
+    if not SUBMIT_FILENAME:
+        raise ValueError(
+            "Cannot write an RMG submit script: no local cluster software is configured "
+            "(settings['servers']['local']['cluster_soft'] is missing or empty). A submit script is only "
+            "meaningful for queue-based ('local') RMG execution; on a queue-less machine set the "
+            "RMG execution type to 'incore' instead."
+        )
     cpus = cpus or 16
     submit_scripts_content = submit_scripts['rmg'].format(name=f'{t3_project_name}_RMG' or 'T3_RMG',
                                                           cpus=cpus,
@@ -101,6 +125,13 @@ def submit_job(project_directory: str,
         Tuple[Optional[str], Optional[str]]: job_status, job_id
     """
     global MEM
+    if not SUBMIT_COMMAND or not SUBMIT_FILENAME:
+        raise ValueError(
+            "Cannot submit an RMG job: no local cluster software is configured "
+            "(settings['servers']['local']['cluster_soft'] is missing or empty). Without it the submit "
+            "command would be 'cd dir;  ; cd ..'. Set the RMG execution type to 'incore' on a "
+            "queue-less machine."
+        )
     job_status = ''
     job_id = 0
     cmd = f"cd {project_directory}; {SUBMIT_COMMAND} {SUBMIT_FILENAME}; cd .."
