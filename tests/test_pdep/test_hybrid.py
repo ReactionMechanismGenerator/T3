@@ -25,8 +25,6 @@ All test outputs are written to pytest's ``tmp_path``, never into ``tests/data/`
 import ast
 import dataclasses
 import os
-import re
-import shutil
 
 import pytest
 
