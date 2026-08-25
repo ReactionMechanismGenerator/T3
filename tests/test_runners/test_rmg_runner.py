@@ -148,6 +148,20 @@ touch final_time
             content_submit = submit_file.read()
         assert content_submit == expected_submit
 
+    def test_write_submit_script_refuses_with_no_local_cluster(self, monkeypatch):
+        """With no local cluster software (SUBMIT_FILENAME == ''), write_submit_script must refuse
+        with a clear error naming the real condition, rather than joining an empty filename onto the
+        project directory and opening the directory itself (the historical IsADirectoryError)."""
+        project_directory_path = os.path.join(EXAMPLES_BASE_PATH, "minimal")
+        monkeypatch.setattr(rmg_runner, "SUBMIT_FILENAME", "")
+        with pytest.raises(ValueError, match="no local cluster software is configured"):
+            write_submit_script(project_directory_path,
+                                cpus=None,
+                                memory=None,
+                                verbose=None,
+                                max_iterations=None,
+                                t3_project_name=None)
+
     def test_rmg_job_converged(self):
         """Test correctly identifying whether an RMG job converged ot not, and if not which error was received."""
         rmg_folder_1 = os.path.join(TEST_DATA_BASE_PATH, 'rmg_convergence', '1_frag_error')
