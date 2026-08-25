@@ -43,6 +43,9 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
 ]
+markers = [
+    "slow: an end-to-end test that shells out to the real Arkane explorer in rmg_env (~30s); runs in the normal suite where rmg_env is available, deselect with '-m \"not slow\"'.",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # unused imports in __init__.py are re-exports
