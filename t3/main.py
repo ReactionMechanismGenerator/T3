@@ -67,6 +67,7 @@ from t3.pdep.discovery import (ARTIFACT_STATUS_MISSING,
                                ARTIFACT_STATUS_USABLE,
                                evaluate_pdep_hybrid,
                                )
+from t3.pdep.dof_conformers import extract_dof_conformers
 from t3.pdep.hybrid import QMEnergySettings, write_hybrid_network_input_file
 from t3.pdep.join import (ARC_TS_LABEL_PREFIX,
                           JOIN_STATUS_ALREADY_PRESENT,
@@ -1431,14 +1432,21 @@ class T3:
             # this lookup cannot miss -- and if it somehow did, the KeyError is the correct,
             # loud outcome.
             network_entry = verified.networks[network_id]
+            # DOF-normalize: extract each QM transition state through Arkane into vibration-only
+            # inline data (E0, frequencies, imaginary mode) on the hybrid header's one energy
+            # reference, so the TS is spliced with a degrees-of-freedom treatment consistent with the
+            # network's vibration-only wells rather than as a full conformer that makes the master
+            # equation go singular (I-023). Well adoption is left to the PES loop; here every well
+            # stays its RMG estimate, which is already vibration-only, so the network is consistent.
+            ts_conformers, _ = extract_dof_conformers(
+                transition_states=qm_transition_states, wells={}, energy_settings=energy_settings)
             result = write_hybrid_network_input_file(
                 source_path=os.path.join(capture_dir, network_entry['captured_path']),
                 # Already confined to the 'PDep hybrid' root above, before the prune ran.
                 dest_path=os.path.join(network_dirs[network_id], 'input.py'),
                 method=network_entry['method'],
-                qm_transition_states=qm_transition_states,
+                qm_transition_states=ts_conformers,
                 energy_settings=energy_settings,
-                qm_artifacts_root=capture_dir,
             )
             self.logger.info(f"Wrote a hybrid P-dep network input for '{network_id}' to "
                              f'{result.dest_path}: QM/RRKM for {list(result.qm_ts_labels)}, '
