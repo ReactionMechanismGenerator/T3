@@ -141,7 +141,8 @@ def _resolve_level_of_theory(spec) -> LevelOfTheory:
 
 
 def main() -> int:
-    spec = json.load(open(sys.argv[1]))
+    with open(sys.argv[1]) as f:
+        spec = json.load(f)
     scale_raw = spec.get('frequency_scale_factor')
     scale = 1.0 if scale_raw is None else float(scale_raw)
     atom_energies = spec['atom_energies']

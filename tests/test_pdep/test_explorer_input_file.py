@@ -30,6 +30,7 @@ from t3.pdep.explorer.input_file import (
     _get_call_name,
     _render_literal,
     _resolve_seed_labels,
+    _seed_structure_identity,
     _TOP_LEVEL_CALL_NAMES,
     _validate_source_statements,
     ExplorerInputSummary,
@@ -1424,8 +1425,10 @@ class TestGeneratedFileCannotBeInjectedThrough:
     @pytest.mark.parametrize('line', [
         "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp')",
         "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp', software='qchem')",
-        "modelChemistry = CompositeLevelOfTheory("
-        "freq=LevelOfTheory(method='wb97xd'), energy=LevelOfTheory(method='dlpno'))",
+        # Explicit `+`: inside a list of parametrize cases, adjacent-literal concatenation is
+        # indistinguishable from a missing comma, which would silently split this one case in two.
+        ("modelChemistry = CompositeLevelOfTheory("
+         + "freq=LevelOfTheory(method='wb97xd'), energy=LevelOfTheory(method='dlpno'))"),
     ])
     def test_the_self_check_accepts_the_model_chemistry_line_the_source_guard_accepts(self, line):
         """
@@ -2236,16 +2239,14 @@ def test_a_seed_whose_parse_raises_an_unexpected_type_still_fails_closed(monkeyp
     backend error -- and the backend is third-party code whose exception set is not ours to
     enumerate (a non-str label already surfaces as TypeError, not ValueError).
     """
-    import t3.pdep.explorer.input_file as input_file_module
-
     class _ExplodingMolecule:
         def from_smiles(self, label):
             raise RuntimeError('backend blew up in a way this module never anticipated')
 
-    monkeypatch.setattr(input_file_module, 'Molecule', _ExplodingMolecule)
+    monkeypatch.setattr('t3.pdep.explorer.input_file.Molecule', _ExplodingMolecule)
 
     # Must not propagate: None is the fail-closed answer the caller is built on.
-    assert input_file_module._seed_structure_identity('[O]C=O') is None
+    assert _seed_structure_identity('[O]C=O') is None
 
 
 def test_real_hybrid_gets_past_seed_validation_through_the_full_writer(tmp_path):
