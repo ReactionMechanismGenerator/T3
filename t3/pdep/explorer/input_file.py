@@ -27,6 +27,7 @@ import warnings
 from dataclasses import dataclass, field
 
 from t3.pdep.hashing import hash_bytes
+from t3.pdep.hybrid import _MODEL_CHEMISTRY_CALL_NAMES, _validate_model_chemistry_expression
 from t3.utils.writer import METHOD_LINE_CANDIDATE_RE, METHOD_MAP, rewrite_arkane_method_line
 
 # The only top-level Arkane DSL calls this module needs to recognize while walking the source's
@@ -1533,6 +1534,29 @@ def _validate_source_statements(tree: ast.Module, text: str, source_path: str) -
                     f"Arkane itself defines in the namespace it loads an input file in. Rebinding it shadows "
                     f"the real one for every statement that follows -- including the directives this module "
                     f"generates and appends -- so a source may not assign to it, however harmless the value.")
+            # ``modelChemistry`` is the one directive whose real ARC/hybrid value is a bare
+            # ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)`` call (which Arkane execs at load
+            # time), not an ``ast.literal_eval``-able literal. Rather than grow a second model-chemistry
+            # allowlist here, route it through the SAME structural checker T3 uses when it EMITS this
+            # directive (``t3.pdep.hybrid._validate_model_chemistry_expression``); the AST is what
+            # decides exec semantics and the verbatim splice reproduces it, so validating the
+            # ``ast.unparse``-round-tripped node -- which that string-taking checker re-parses -- is
+            # equivalent to validating the spliced text. The gate is deliberately on a genuine call
+            # node to one of the two known names: the checker accepts any NON-call string as a plain
+            # label (injection-char check only), so a computed ``modelChemistry`` value must keep
+            # falling through to the refusal below rather than being handed over as a bare label.
+            if (target == 'modelChemistry' and isinstance(node.value, ast.Call)
+                    and isinstance(node.value.func, ast.Name)
+                    and node.value.func.id in _MODEL_CHEMISTRY_CALL_NAMES):
+                try:
+                    _validate_model_chemistry_expression(target, ast.unparse(node.value))
+                except ValueError as e:
+                    raise ValueError(
+                        f"Refusing to use '{source_path}' as an Arkane explorer/network source: line "
+                        f"{node.lineno} assigns a 'modelChemistry' value that fails structural validation "
+                        f"({_source_snippet(node, text)!r}): {e}. This source's text is spliced verbatim into "
+                        f"a NEW file Arkane will exec, so a malformed model-chemistry call is refused.") from e
+                continue
             try:
                 ast.literal_eval(node.value)
             except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError) as e:

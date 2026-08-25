@@ -173,3 +173,4 @@ tests/data/minimal_data/iteration_1/t3_pdep_qm_budget.yml
 tests/data/minimal_data/iteration_1/t3_pdep_network_assessments.yml
 tests/data/pdep_network/iteration_1/t3_pdep_qm_budget.yml
 tests/data/pdep_network/iteration_1/t3_pdep_network_assessments.yml
+docs/contracts/

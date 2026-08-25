@@ -137,7 +137,7 @@ def _model_chemistry_ast_call(value: str) -> ast.Call | None:
     return None
 
 
-def _validate_level_of_theory_call(call: ast.Call, value: str) -> None:
+def _validate_level_of_theory_call(call: ast.Call, value: str, field_name: str) -> None:
     """
     Structurally validate a ``LevelOfTheory(...)`` call node against the real Arkane
     ``LevelOfTheory`` constructor schema (see ``_LEVEL_OF_THEORY_FIELD_TYPES``): only keyword
@@ -151,6 +151,11 @@ def _validate_level_of_theory_call(call: ast.Call, value: str) -> None:
     Args:
         call (ast.Call): The ``LevelOfTheory(...)`` call node to validate.
         value (str): The original ``model_chemistry`` string (used in error messages).
+        field_name (str): The name of the field ``value`` came from, as the caller knows it
+                          (e.g. ``QMEnergySettings.model_chemistry`` when validating settings, or
+                          ``modelChemistry`` when validating a directive in an Arkane source).
+                          Reported verbatim in error messages, so a failure names the field the
+                          caller actually has rather than one from an unrelated context.
 
     Raises:
         ValueError: If ``call`` has positional args, ``**kwargs``, a duplicate keyword, a keyword
@@ -159,33 +164,33 @@ def _validate_level_of_theory_call(call: ast.Call, value: str) -> None:
                    ``method`` keyword.
     """
     if call.args:
-        raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call must not have positional "
+        raise ValueError(f"{field_name}'s LevelOfTheory(...) call must not have positional "
                          f"arguments, got {value!r}.")
     seen_keywords = set()
     for kw in call.keywords:
         if kw.arg is None:
-            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call must not use "
+            raise ValueError(f"{field_name}'s LevelOfTheory(...) call must not use "
                              f"**kwargs, got {value!r}.")
         if kw.arg in seen_keywords:
-            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call must not repeat "
+            raise ValueError(f"{field_name}'s LevelOfTheory(...) call must not repeat "
                              f"keyword {kw.arg!r}, got {value!r}.")
         seen_keywords.add(kw.arg)
         allowed_types = _LEVEL_OF_THEORY_FIELD_TYPES.get(kw.arg)
         if allowed_types is None:
-            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call has unknown keyword "
+            raise ValueError(f"{field_name}'s LevelOfTheory(...) call has unknown keyword "
                              f"{kw.arg!r}, got {value!r}.")
         # Compare exact type(), not isinstance(): isinstance(True, int) is True in Python's numeric
         # tower, so an isinstance check would silently accept e.g. method=True as if it were a str.
         if not isinstance(kw.value, ast.Constant) or type(kw.value.value) not in allowed_types:
-            raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) keyword {kw.arg!r} must be a "
+            raise ValueError(f"{field_name}'s LevelOfTheory(...) keyword {kw.arg!r} must be a "
                              f"literal of type {allowed_types!r}, got {value!r}.")
     missing = [field for field in _LEVEL_OF_THEORY_REQUIRED_FIELDS if field not in seen_keywords]
     if missing:
-        raise ValueError(f"QMEnergySettings.model_chemistry's LevelOfTheory(...) call is missing required "
+        raise ValueError(f"{field_name}'s LevelOfTheory(...) call is missing required "
                          f"keyword(s) {missing!r}, got {value!r}.")
 
 
-def _validate_composite_level_of_theory_call(call: ast.Call, value: str) -> None:
+def _validate_composite_level_of_theory_call(call: ast.Call, value: str, field_name: str) -> None:
     """
     Structurally validate a ``CompositeLevelOfTheory(...)`` call node against the real Arkane
     ``CompositeLevelOfTheory`` constructor schema (see
@@ -198,6 +203,11 @@ def _validate_composite_level_of_theory_call(call: ast.Call, value: str) -> None
     Args:
         call (ast.Call): The ``CompositeLevelOfTheory(...)`` call node to validate.
         value (str): The original ``model_chemistry`` string (used in error messages).
+        field_name (str): The name of the field ``value`` came from, as the caller knows it
+                          (e.g. ``QMEnergySettings.model_chemistry`` when validating settings, or
+                          ``modelChemistry`` when validating a directive in an Arkane source).
+                          Reported verbatim in error messages, so a failure names the field the
+                          caller actually has rather than one from an unrelated context.
 
     Raises:
         ValueError: If ``call`` has positional args, ``**kwargs``, a duplicate keyword, a keyword
@@ -205,25 +215,25 @@ def _validate_composite_level_of_theory_call(call: ast.Call, value: str) -> None
                    ``LevelOfTheory(...)`` call, or is missing ``freq`` and/or ``energy``.
     """
     if call.args:
-        raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call must not have "
+        raise ValueError(f"{field_name}'s CompositeLevelOfTheory(...) call must not have "
                          f"positional arguments, got {value!r}.")
     seen_keywords = set()
     for kw in call.keywords:
         if kw.arg not in _COMPOSITE_LEVEL_OF_THEORY_REQUIRED_FIELDS:
-            raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call only accepts "
+            raise ValueError(f"{field_name}'s CompositeLevelOfTheory(...) call only accepts "
                              f"'freq'/'energy' keywords, got {kw.arg!r} in {value!r}.")
         if kw.arg in seen_keywords:
-            raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call must not "
+            raise ValueError(f"{field_name}'s CompositeLevelOfTheory(...) call must not "
                              f"repeat keyword {kw.arg!r}, got {value!r}.")
         seen_keywords.add(kw.arg)
         if not (isinstance(kw.value, ast.Call) and isinstance(kw.value.func, ast.Name)
                 and kw.value.func.id == 'LevelOfTheory'):
-            raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) keyword {kw.arg!r} "
+            raise ValueError(f"{field_name}'s CompositeLevelOfTheory(...) keyword {kw.arg!r} "
                              f"must be a LevelOfTheory(...) call, got {value!r}.")
-        _validate_level_of_theory_call(kw.value, value)
+        _validate_level_of_theory_call(kw.value, value, field_name)
     missing = [field for field in _COMPOSITE_LEVEL_OF_THEORY_REQUIRED_FIELDS if field not in seen_keywords]
     if missing:
-        raise ValueError(f"QMEnergySettings.model_chemistry's CompositeLevelOfTheory(...) call is missing "
+        raise ValueError(f"{field_name}'s CompositeLevelOfTheory(...) call is missing "
                          f"required keyword(s) {missing!r}, got {value!r}.")
 
 
@@ -251,9 +261,9 @@ def _validate_model_chemistry_expression(field_name: str, value: str) -> None:
         _validate_no_injection_chars(field_name, value)
         return
     if call.func.id == 'LevelOfTheory':
-        _validate_level_of_theory_call(call, value)
+        _validate_level_of_theory_call(call, value, field_name)
     else:
-        _validate_composite_level_of_theory_call(call, value)
+        _validate_composite_level_of_theory_call(call, value, field_name)
 
 
 # Every QMEnergySettings field carries its own expected-type metadata (see the ``field(...)``
@@ -543,7 +553,7 @@ def write_hybrid_network_input_file(source_path: str,
         raise ValueError("QMEnergySettings.model_chemistry is required and must not be blank: without it, Arkane "
                          "cannot apply atom energy corrections, so a QM'd transition state's E0 would not be on "
                          "the same energy reference scale as the RMG wells around it.")
-    _validate_model_chemistry_expression('model_chemistry', energy_settings.model_chemistry)
+    _validate_model_chemistry_expression('QMEnergySettings.model_chemistry', energy_settings.model_chemistry)
     if not energy_settings.use_atom_corrections:
         raise ValueError("QMEnergySettings.use_atom_corrections is False: this directive silently disables "
                          "Arkane's atom energy corrections, so a QM'd transition state's E0 would not be on the "
