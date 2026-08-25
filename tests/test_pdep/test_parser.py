@@ -243,6 +243,16 @@ def test_reaction_less_seed_is_accepted_when_reactions_not_required():
     ('[C-]#[O+]', '[C-]#[O+]'),   # no suffix -> unchanged
     ('[O]C=O', '[O]C=O'),         # no suffix -> unchanged
     ('Ar', 'Ar'),
+    # A hybrid round explores a network whose labels ALREADY carry one RMG index (the previous
+    # round's hybrid declares 'O=C=O(5)'); Arkane then appends a SECOND index when it writes that
+    # round's network file ('O=C=O(5)(3)'), while its output.py keeps the single-indexed label.
+    # Both artifacts must normalize to the same base identity, so EVERY trailing index group is
+    # stripped, not just the last one -- otherwise the two sides stay one index level apart and a
+    # genuinely single-run pairing is reported as "did not come from one run" (I-025).
+    ('O=C=O(5)(3)', 'O=C=O'),
+    ('O=[C]O(8)(4)', 'O=[C]O'),
+    ('[O]C=O(1)(1)', '[O]C=O'),
+    ('[H](6)(2)', '[H]'),
 ])
 def test_strip_rmg_index_suffix(label, expected):
     from t3.pdep.parser import strip_rmg_index_suffix
