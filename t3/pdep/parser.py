@@ -186,21 +186,33 @@ def canonical_channel_pair(reactant_labels, product_labels) -> tuple:
 # genuinely single-run pairing as "did not come from one run". Distinct species have distinct base
 # labels (the base is the SMILES), so stripping never merges two real species -- the index only
 # ever disambiguates a base from itself.
-_RMG_INDEX_SUFFIX_RE = re.compile(r'\(\d+\)$')
+#
+# The index ACCUMULATES across the loop's rounds. A hybrid network (t3.pdep.hybrid) declares the
+# previous round's already-indexed labels (``O=C=O(5)``); when the next round explores that hybrid,
+# Arkane appends ANOTHER index to the network file it writes (``O=C=O(5)(3)``) while its
+# ``output.py`` keeps the single-indexed label -- so the two artifacts of THIS round sit one index
+# level apart. Stripping only the last group would leave them apart (``O=C=O`` vs ``O=C=O(5)``) and
+# refuse a genuinely single-run pairing (I-025). Every trailing group is therefore stripped, down to
+# the base label. This never merges two real species for the same reason one strip does not: a
+# SMILES-derived base never itself ends in ``(<int>)`` (charges are ``[..]``, ring bonds are bare
+# digits), so any trailing ``(<int>)`` group is an index, not identity.
+_RMG_INDEX_SUFFIX_RE = re.compile(r'(?:\(\d+\))+$')
 
 
 def strip_rmg_index_suffix(label: str) -> str:
     """
-    Strip RMG's trailing ``(<int>)`` disambiguation index from a species label.
+    Strip RMG's trailing ``(<int>)`` disambiguation index/indices from a species label.
 
-    ``'[O]C=O(1)' -> '[O]C=O'``; ``'O=C=O(5)' -> 'O=C=O'``; a label with no such suffix
-    (``'[C-]#[O+]'``, ``'[O]C=O'``) is returned unchanged.
+    ``'[O]C=O(1)' -> '[O]C=O'``; ``'O=C=O(5)' -> 'O=C=O'``; the accumulated multi-round form
+    ``'O=C=O(5)(3)' -> 'O=C=O'``; a label with no such suffix (``'[C-]#[O+]'``, ``'[O]C=O'``) is
+    returned unchanged.
 
     Args:
         label (str): A species label as written in an RMG network or Arkane output file.
 
     Returns:
-        str: The label with a single trailing ``(<int>)`` index removed, if present.
+        str: The label with EVERY trailing ``(<int>)`` index group removed, if present -- so a
+             label that has accumulated one index per round collapses to its base identity.
     """
     return _RMG_INDEX_SUFFIX_RE.sub('', label)
 
