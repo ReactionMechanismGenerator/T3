@@ -21,11 +21,21 @@ configuration overall, and the diagram data says so via ``reference_kind``.
 from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 from t3.pdep.parser import (PDepNetwork,
                             PDepNetworkE0,
                             parse_pdep_network_e0_file,
                             parse_pdep_network_file)
+from t3.pdep.provenance import (PROVENANCE_CONFIDENCE,
+                                PROVENANCE_FAMILY,
+                                PROVENANCE_GAV,
+                                PROVENANCE_LABELS,
+                                PROVENANCE_LIBRARY,
+                                PROVENANCE_QM,
+                                PROVENANCE_UNKNOWN,
+                                classify_provenance,
+                                combine_channel_provenance)
 
 # The file name the explorer adapter writes the diagram under, inside the exploration run
 # directory (next to Arkane's own input.py/output.py for that run).
@@ -38,23 +48,42 @@ CONFIGURATION_KIND_ISOMER = 'isomer'
 CONFIGURATION_KIND_REACTANT_CHANNEL = 'reactant_channel'
 CONFIGURATION_KIND_PRODUCT_CHANNEL = 'product_channel'
 
-# One categorical hue per configuration role plus one for transition states, assigned in fixed
-# order by the job each color does (identity), all four validated together for colorblind-safe
-# adjacent-pair separation on a white surface (OKLab CVD dE >= 8; the aqua's 2.7:1 surface
-# contrast is relieved by every level carrying a direct text label).
-_COLOR_ISOMER = '#2a78d6'             # blue
-_COLOR_REACTANT_CHANNEL = '#eb6834'   # orange
-_COLOR_PRODUCT_CHANNEL = '#1baf7a'    # aqua
-_COLOR_TRANSITION_STATE = '#4a3aa7'   # violet
+# Every level -- isomer, channel and transition state -- is coloured by the PROVENANCE of its
+# energy, not by its type (type stays readable from position: reactant channels left, isomers
+# centre, product channels right; transition states at midpoints with dotted connectors). The four
+# provenance classes are ordered by decreasing confidence (QM -> library -> family -> GAV) and
+# mapped onto the viridis sequential ramp: viridis is perceptually uniform, CVD-safe for all common
+# colour-vision types, AND monotonic in luminance, so the four classes stay distinguishable in
+# greyscale -- the case that matters when someone PRINTS the diagram to judge whether a surface is
+# trustworthy. QM (highest confidence) is the darkest end and reads as the most solid; GAV the
+# lightest. The samples avoid viridis's extreme-light tail (>0.88) so even the lowest-confidence
+# bar keeps enough contrast on a white surface (every level also carries a direct text label, as in
+# the type-coloured original). "Unknown provenance" sits OUTSIDE the ramp -- a neutral grey drawn
+# DOTTED -- so an honest gap can never be mistaken for one of the four classes.
+_VIRIDIS = plt.get_cmap('viridis')
+
+
+def _hex(rgba) -> str:
+    """Format a matplotlib RGBA tuple as a ``#rrggbb`` string (alpha dropped)."""
+    r, g, b = (int(round(channel * 255)) for channel in rgba[:3])
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
+_COLOR_PROVENANCE = {
+    PROVENANCE_QM: _hex(_VIRIDIS(0.00)),       # dark violet-blue: most trustworthy, most solid
+    PROVENANCE_LIBRARY: _hex(_VIRIDIS(0.38)),  # teal
+    PROVENANCE_FAMILY: _hex(_VIRIDIS(0.66)),   # green
+    PROVENANCE_GAV: _hex(_VIRIDIS(0.86)),      # yellow-green: least trustworthy, lightest
+    PROVENANCE_UNKNOWN: '#8a8a8a',             # neutral grey, drawn dotted (see below)
+}
+# The linestyle each provenance class draws its level bar in. All four known classes are solid;
+# unknown is dotted so it is distinct from every ramp colour even in greyscale.
+_LINESTYLE_PROVENANCE = {PROVENANCE_UNKNOWN: (0, (1, 1))}
+_DEFAULT_LEVEL_LINESTYLE = 'solid'
+
 _COLOR_BARRIERLESS = '#7a7a7a'        # neutral gray, dashed: "connected, no barrier datum"
 _COLOR_TEXT_PRIMARY = '#0b0b0b'
 _COLOR_TEXT_SECONDARY = '#52514e'
-
-_KIND_COLORS = {
-    CONFIGURATION_KIND_ISOMER: _COLOR_ISOMER,
-    CONFIGURATION_KIND_REACTANT_CHANNEL: _COLOR_REACTANT_CHANNEL,
-    CONFIGURATION_KIND_PRODUCT_CHANNEL: _COLOR_PRODUCT_CHANNEL,
-}
 
 # Horizontal geometry, in column units (one column per configuration).
 _CONFIG_HALF_WIDTH = 0.27
@@ -79,11 +108,17 @@ class PESConfiguration:
         kind (str): One of the ``CONFIGURATION_KIND_*`` constants.
         e0 (float): The configuration E0 (kJ/mol) as declared in the network file.
         relative_e0 (float): The E0 after the normalization shift (kJ/mol).
+        provenance (str): The ``PROVENANCE_*`` class of this configuration's energy -- the worst
+            (lowest-confidence) provenance over its species, since a channel's asymptote energy is
+            only as trustworthy as its least-trustworthy fragment. ``PROVENANCE_UNKNOWN`` for
+            construction sites that predate provenance (default), so the field never has to be
+            passed by callers that do not compute it.
     """
     labels: tuple
     kind: str
     e0: float
     relative_e0: float
+    provenance: str = PROVENANCE_UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -100,12 +135,16 @@ class PESTransitionState:
         relative_e0 (Optional[float]): The E0 after the normalization shift, or ``None``.
         reactants (tuple): The reactant-side configuration key (canonically ordered labels).
         products (tuple): The product-side configuration key (canonically ordered labels).
+        provenance (str): The ``PROVENANCE_*`` class of this transition state's barrier energy,
+            read from the path reaction's ``kinetics`` comment. ``PROVENANCE_UNKNOWN`` default, as
+            for ``PESConfiguration``.
     """
     label: str | None
     e0: float | None
     relative_e0: float | None
     reactants: tuple
     products: tuple
+    provenance: str = PROVENANCE_UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -144,6 +183,17 @@ def compute_pes_diagram_data(network: PDepNetwork, e0: PDepNetworkE0) -> PESDiag
     Returns:
         PESDiagramData: The normalized levels.
     """
+    # Provenance of each species' thermo, classified once from its network-file ``thermo`` comment
+    # (absent comment -> PROVENANCE_UNKNOWN). A configuration's provenance is the worst over its
+    # species (combine_channel_provenance); a transition state's comes from its reaction's kinetics
+    # comment below.
+    species_provenance = {label: classify_provenance(comment)
+                          for label, comment in network.species_thermo_comments.items()}
+
+    def _config_provenance(config_key):
+        return combine_channel_provenance(
+            species_provenance.get(label, PROVENANCE_UNKNOWN) for label in config_key)
+
     configurations = []
     seen_keys = dict()
     for kind, channels in (
@@ -196,6 +246,7 @@ def compute_pes_diagram_data(network: PDepNetwork, e0: PDepNetworkE0) -> PESDiag
             relative_e0=ts_e0 - reference_e0 if ts_e0 is not None else None,
             reactants=sides[0],
             products=sides[1],
+            provenance=classify_provenance(path_reaction.kinetics_comment),
         ))
 
     return PESDiagramData(
@@ -204,7 +255,8 @@ def compute_pes_diagram_data(network: PDepNetwork, e0: PDepNetworkE0) -> PESDiag
         reference_kind=reference_kind,
         configurations=tuple(
             PESConfiguration(labels=key, kind=kind, e0=energy,
-                             relative_e0=energy - reference_e0)
+                             relative_e0=energy - reference_e0,
+                             provenance=_config_provenance(key))
             for key, kind, energy in configurations),
         transition_states=tuple(transition_states),
     )
@@ -288,12 +340,13 @@ def _build_pes_figure(data: PESDiagramData):
 
     fig, ax = plt.subplots(figsize=(max(7.0, 1.9 * len(ordered) + 1.5), 6.5))
 
-    # Configuration level bars with direct labels.
+    # Configuration level bars with direct labels, coloured by energy provenance.
     for config in ordered:
         x = x_by_key[config.labels]
-        color = _KIND_COLORS[config.kind]
+        color = _COLOR_PROVENANCE[config.provenance]
+        linestyle = _LINESTYLE_PROVENANCE.get(config.provenance, _DEFAULT_LEVEL_LINESTYLE)
         ax.hlines(y=config.relative_e0, xmin=x - _CONFIG_HALF_WIDTH, xmax=x + _CONFIG_HALF_WIDTH,
-                  colors=color, linewidth=2.6, zorder=3)
+                  colors=color, linewidth=2.6, linestyles=linestyle, zorder=3)
         ax.annotate(_format_channel_label(config.labels),
                     xy=(x, config.relative_e0), xytext=(0, -10), textcoords='offset points',
                     ha='center', va='top', fontsize=7.5, color=_COLOR_TEXT_PRIMARY, zorder=4,
@@ -328,14 +381,19 @@ def _build_pes_figure(data: PESDiagramData):
         points=tuple((x, ts.relative_e0) for ts, x, _, _ in ts_positions),
         min_dx=2.0 * _TS_SPREAD + 0.01, min_dy=0.05 * span)
     for (ts, x, x1, x2), annotation_level in zip(ts_positions, annotation_levels):
+        ts_color = _COLOR_PROVENANCE[ts.provenance]
+        ts_linestyle = _LINESTYLE_PROVENANCE.get(ts.provenance, _DEFAULT_LEVEL_LINESTYLE)
         ax.hlines(y=ts.relative_e0, xmin=x - _TS_HALF_WIDTH, xmax=x + _TS_HALF_WIDTH,
-                  colors=_COLOR_TRANSITION_STATE, linewidth=2.2, zorder=3)
+                  colors=ts_color, linewidth=2.2, linestyles=ts_linestyle, zorder=3)
         for x_config, key in ((x1, ts.reactants), (x2, ts.products)):
             config_e0 = next(c.relative_e0 for c in ordered if c.labels == key)
             direction = 1 if x_config < x else -1
+            # Connectors are drawn in a neutral grey, not the provenance colour: they carry no
+            # energy of their own, so tinting them would imply a provenance the connection does
+            # not have. The provenance colour lives on the level bars, which are the energies.
             ax.plot([x_config + direction * _CONFIG_HALF_WIDTH, x - direction * _TS_HALF_WIDTH],
                     [config_e0, ts.relative_e0],
-                    color=_COLOR_TRANSITION_STATE, linewidth=0.9, linestyle=':', zorder=2)
+                    color=_COLOR_BARRIERLESS, linewidth=0.9, linestyle=':', zorder=2)
         annotation = f'{ts.label} ({ts.relative_e0:.1f})' if ts.label else f'{ts.relative_e0:.1f}'
         ax.annotate(annotation,
                     xy=(x, ts.relative_e0), xytext=(0, 4 + 11 * annotation_level),
@@ -371,6 +429,21 @@ def _build_pes_figure(data: PESDiagramData):
         ax.spines[spine].set_visible(False)
     ax.yaxis.grid(True, linewidth=0.4, alpha=0.25)
     ax.set_axisbelow(True)
+
+    # Legend: one entry per provenance class ACTUALLY DRAWN (configurations plus transition states
+    # that got an energy level), ordered by decreasing confidence so it reads QM -> ... -> unknown
+    # top to bottom. Only present classes are shown, so a diagram with no estimates does not claim
+    # one exists; "unknown" appears only when a level genuinely could not be classified.
+    present = {config.provenance for config in ordered}
+    present |= {ts.provenance for ts in data.transition_states if ts.relative_e0 is not None}
+    legend_classes = sorted(present, key=lambda p: PROVENANCE_CONFIDENCE[p], reverse=True)
+    handles = [Line2D([0], [0], color=_COLOR_PROVENANCE[p], linewidth=2.6,
+                      linestyle=_LINESTYLE_PROVENANCE.get(p, _DEFAULT_LEVEL_LINESTYLE),
+                      label=PROVENANCE_LABELS[p])
+               for p in legend_classes]
+    ax.legend(handles=handles, title='Energy provenance', loc='best', fontsize=7.5,
+              title_fontsize=8, framealpha=0.9, borderpad=0.6, labelspacing=0.5)
+
     fig.tight_layout()
     return fig
 

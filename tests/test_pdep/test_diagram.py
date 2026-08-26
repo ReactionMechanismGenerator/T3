@@ -237,6 +237,77 @@ class TestDrawPESDiagram:
             head = f.read(200)
         assert b'<svg' in head or b'<?xml' in head
 
+
+# A compact surface whose comments exercise all provenance classes: a QM well (GAV estimate
+# superseded by the QM output library -- the concatenation trap), a curated-library well, a GAV
+# well, a bimolecular reactant channel whose two fragments are QM and GAV (worst-link -> GAV), a
+# QM transition state (kinetics fitted then written back as the QM kinetics library), and a family
+# estimated one. Comments mirror the real markers in the r002_m1-cho2-rerun final network file.
+_PROVENANCE_NETWORK = """species(label='QMwell', E0=(0.0,'kJ/mol'),
+    thermo=NASA(polynomials=[], comment='''Thermo group additivity estimation: group(x)Thermo library: thermojobs'''))
+species(label='LibWell', E0=(5.0,'kJ/mol'),
+    thermo=NASA(polynomials=[], comment='''Thermo library: primaryThermoLibrary'''))
+species(label='A', E0=(30.0,'kJ/mol'),
+    thermo=NASA(polynomials=[], comment='''Thermo library: primaryThermoLibraryThermo library: thermojobs'''))
+species(label='B', E0=(10.0,'kJ/mol'),
+    thermo=NASA(polynomials=[], comment='''Thermo group additivity estimation: group(y)'''))
+transitionState(label='TS_qm', E0=(60.0,'kJ/mol'))
+transitionState(label='TS_fam', E0=(70.0,'kJ/mol'))
+reaction(label='r_qm', reactants=['LibWell'], products=['QMwell'], transitionState='TS_qm',
+    kinetics=Arrhenius(A=(1.0,'s^-1'), n=0.0, Ea=(0.0,'kJ/mol'), comment='''Fitted to 50 data pointsReaction library: 'kineticsjobs' '''))
+reaction(label='r_fam', reactants=['A','B'], products=['QMwell'], transitionState='TS_fam',
+    kinetics=Arrhenius(A=(1.0,'s^-1'), n=0.0, Ea=(0.0,'kJ/mol'), comment='''Estimated using template [x] for rate rule [y]'''))
+network(label='N', isomers=['QMwell','LibWell'], reactants=[('A','B')])
+"""
+
+
+class TestProvenance:
+
+    def _data(self):
+        return _compute_from_text(_PROVENANCE_NETWORK)
+
+    def test_qm_well_survives_the_concatenation_trap(self):
+        # The GAV prefix must NOT win over the trailing QM library -- the inversion this exists to
+        # prevent.
+        data = self._data()
+        assert _config_by_labels(data, ['QMwell']).provenance == 'qm'
+
+    def test_curated_library_well_is_library(self):
+        assert _config_by_labels(self._data(), ['LibWell']).provenance == 'library'
+
+    def test_bimolecular_channel_takes_its_worst_fragment(self):
+        # A (QM) + B (GAV) -> the channel is only as trustworthy as B.
+        assert _config_by_labels(self._data(), ['A', 'B']).provenance == 'gav'
+
+    def test_transition_state_provenance_comes_from_kinetics_comment(self):
+        data = self._data()
+        by_label = {ts.label: ts.provenance for ts in data.transition_states}
+        assert by_label['TS_qm'] == 'qm'
+        assert by_label['TS_fam'] == 'family'
+
+    def test_absent_comment_is_unknown_not_defaulted(self):
+        text = """species(label='I', E0=(0.0,'kJ/mol'))
+species(label='P', E0=(-5.0,'kJ/mol'))
+reaction(label='r', reactants=['I'], products=['P'])
+network(label='N', isomers=['I'], reactants=[])
+"""
+        assert _config_by_labels(_compute_from_text(text), ['I']).provenance == 'unknown'
+
+    def test_legend_lists_only_the_provenance_classes_present(self):
+        fig = _build_pes_figure(self._data())
+        try:
+            legend = fig.axes[0].get_legend()
+            assert legend is not None
+            labels = {text.get_text() for text in legend.get_texts()}
+            # Present: QM, Library, GAV, Family. Absent: Unknown (no unclassifiable level here).
+            assert 'QM (this campaign)' in labels
+            assert 'Library' in labels
+            assert 'GAV estimate' in labels
+            assert 'Family estimate (ILT)' in labels
+            assert 'Unknown provenance' not in labels
+        finally:
+            plt.close(fig)
+
     def test_drawing_a_no_isomer_network_annotates_the_fallback_reference(self, tmp_path):
         text = """species(label='A', E0=(10.0, 'kJ/mol'))
 species(label='B', E0=(20.0, 'kJ/mol'))

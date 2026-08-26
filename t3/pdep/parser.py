@@ -297,6 +297,13 @@ class PDepNetwork:
                                    one to hand ARC a real molecule. Default ``{}`` so every existing
                                    ``PDepNetwork(...)`` construction site (which never passes this
                                    keyword) keeps working unchanged.
+        species_thermo_comments (dict): Species label -> the ``comment`` text of that species'
+                                   ``thermo = NASA(..., comment='''...''')`` keyword, for every
+                                   ``species(...)`` call that carries one. These comments are what
+                                   ``t3.pdep.provenance`` reads to colour a well/channel level on
+                                   the PES diagram by where its energy came from. A species with no
+                                   thermo comment is simply absent from this dict. Default ``{}`` so
+                                   every existing construction site keeps working unchanged.
     """
     network_id: str
     path: str
@@ -310,6 +317,7 @@ class PDepNetwork:
     product_channels_declared: bool = False
     source_hash: str | None = None
     species_structures: dict = field(default_factory=dict)
+    species_thermo_comments: dict = field(default_factory=dict)
 
     def expected_net_reaction_count(self) -> int:
         """
@@ -836,6 +844,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
 
     species_labels = list()
     species_structures = dict()
+    species_thermo_comments = dict()
     transition_state_labels = list()
     path_reactions = list()
     network_label = None
@@ -861,6 +870,9 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
                 structure = _species_structure(kwargs.get('structure'))
                 if structure is not None:
                     species_structures[label] = structure
+                thermo_comment = _species_thermo_comment(kwargs.get('thermo'))
+                if thermo_comment:
+                    species_thermo_comments[label] = thermo_comment
 
         elif call_name == 'transitionState':
             label = _literal_or_raise(kwargs.get('label'), path=path, keyword='label',
@@ -924,6 +936,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
         product_channels_declared=product_channels_declared,
         source_hash=source_hash,
         species_structures=species_structures,
+        species_thermo_comments=species_thermo_comments,
     )
 
 
@@ -1393,6 +1406,29 @@ def _species_structure(node) -> str | None:
     if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
         return arg.value
     return None
+
+
+def _species_thermo_comment(node) -> str:
+    """
+    Extract the ``comment`` text from a species' ``thermo`` keyword value node, if any.
+
+    A ``species(...)`` call's thermo is written as ``thermo = NASA(..., comment='''...''')`` (or
+    ``ThermoData``/``Wilhoit``); the ``comment`` string carries the provenance markers T3 reads to
+    colour the PES diagram (see ``t3.pdep.provenance``). This mirrors how ``_parse_reaction`` reads
+    a reaction's ``kinetics`` ``comment``. Fails open (returns ``''``) for any shape other than a
+    thermo call carrying a literal-string ``comment`` -- a missing comment only leaves that level's
+    provenance unknown, it never changes the reported topology.
+
+    Args:
+        node: The AST value node bound to a ``thermo`` keyword (or ``None``).
+
+    Returns:
+        str: The comment text, or ``''`` if absent/unreadable.
+    """
+    if not isinstance(node, ast.Call):
+        return ''
+    comment = _literal_or_none(_call_keywords(node).get('comment'))
+    return comment if isinstance(comment, str) else ''
 
 
 def _literal_or_none(node):
