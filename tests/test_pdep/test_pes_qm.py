@@ -1,5 +1,6 @@
 """Tests for t3.pdep.pes_qm."""
 
+import ast
 import glob
 import logging
 import os
@@ -193,6 +194,15 @@ class TestBuildARCInput(object):
 _NETWORK_ID = 'network799_1'
 _FIXTURE_NETWORK_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'data', 'pdep_real_networks', 'network799_1', 'network799_1.py')
+
+# A real, completed Gaussian freq log for a genuine transition state (the nC3H7 -> iC3H7
+# intramolecular H-migration TS: C3H7, doublet, exactly one imaginary frequency), vendored from
+# ARC's test data (arc/testing/freq/TS_nC3H7-iC3H7.out). The DOF-conformer extraction step
+# (t3.pdep.dof_conformers) shells into rmg_env and drives Arkane over the fabricated artifact's
+# Log(...) reference, so the referenced log must be one Arkane's ess_factory can actually identify
+# and parse -- a placeholder text file no longer suffices. See tests/data/pdep_qm_logs/PROVENANCE.md.
+_FIXTURE_QM_FREQ_LOG_PATH = os.path.join(
+    os.path.dirname(__file__), '..', 'data', 'pdep_qm_logs', 'TS_nC3H7-iC3H7_freq.out')
 
 _FROZEN_ENERGY_SETTINGS = {
     'model_chemistry': 'wb97xd/def2tzvp',
@@ -1207,9 +1217,12 @@ def _fabricate_completed_arc_project(arc_project, network_id, network_ts_label,
     artifact_path = expected_ts_artifact_path(arc_project, arc_label)
     os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
     # Log(...) argument is resolved against the artifact's own directory and confined to the ARC
-    # project, so the referenced log sits beside the artifact.
-    with open(os.path.join(os.path.dirname(artifact_path), 'output.out'), 'w') as f:
-        f.write('stub quantum chemistry log\n')
+    # project, so the referenced log sits beside the artifact. It must be a REAL electronic-structure
+    # log: the DOF-conformer extraction (t3.pdep.dof_conformers) now drives Arkane over this artifact,
+    # and Arkane's ess_factory rejects anything it cannot identify as a supported QM log. A vendored
+    # nC3H7 -> iC3H7 TS freq log (C3H7, doublet, one imaginary frequency) matches the artifact's
+    # linear=False / spinMultiplicity=2 header below.
+    shutil.copyfile(_FIXTURE_QM_FREQ_LOG_PATH, os.path.join(os.path.dirname(artifact_path), 'output.out'))
     with open(artifact_path, 'w') as f:
         f.write("linear = False\n\nspinMultiplicity = 2\n\nenergy = Log('output.out')\n\n"
                 "geometry = Log('output.out')\n\nfrequencies = Log('output.out')\n")
@@ -1271,6 +1284,25 @@ def _hybrid_atom_energies(hybrid_path):
     return None
 
 
+def _hybrid_transition_state_block(hybrid_path, label):
+    """Return the source text of the ``transitionState(...)`` call for ``label`` (ast, no exec).
+
+    The DOF-consistent hybrid writer splices a QM'd TS in inline -- ``label``, ``E0``,
+    ``HarmonicOscillator`` modes and the single imaginary ``frequency`` -- rather than by-reference
+    into a vendored ``qm/`` file, so a test asserts a TS is QM (not an RMG/ILT estimate) by looking
+    at that TS's own inline block."""
+    with open(hybrid_path) as f:
+        source = f.read()
+    for node in ast.walk(ast.parse(source)):
+        if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name) and node.value.func.id == 'transitionState'):
+            for kw in node.value.keywords:
+                if (kw.arg == 'label' and isinstance(kw.value, ast.Constant)
+                        and kw.value.value == label):
+                    return ast.get_source_segment(source, node.value)
+    return None
+
+
 class TestArcQmRunnerRealCaptureHybrid(object):
     """arc_qm_runner's post-submission path (capture + hybrid write) driven for real, with only
     ARC stubbed -- the seam TestArcQmRunner mocks and the pilot has never run."""
@@ -1287,14 +1319,18 @@ class TestArcQmRunnerRealCaptureHybrid(object):
         assert os.path.isfile(hybrid_path)
         with open(hybrid_path) as f:
             hybrid_text = f.read()
-        # The converged TS is folded in as a QM statmech reference, not an RMG/ILT estimate.
-        assert "transitionState('TS1', 'qm/TS1.py')" in hybrid_text
-        # ...and the hybrid is self-contained: the referenced artifact and the log IT references
-        # both sit beside the hybrid, so Arkane can read it with no path escaping the round.
-        vendored = os.path.join(os.path.dirname(hybrid_path), 'qm', 'TS1.py')
-        assert os.path.isfile(vendored)
-        with open(vendored) as f:
-            assert 'Log(' in f.read()
+        # The converged TS is folded in as a QM statmech reference, not an RMG/ILT estimate: the
+        # DOF-normalized (vibration-only) conformer is spliced INLINE into TS1's own block -- its
+        # HarmonicOscillator vibrational modes and the single imaginary frequency of a TS.
+        ts1_block = _hybrid_transition_state_block(hybrid_path, 'TS1')
+        assert ts1_block is not None, "TS1 was not folded into the hybrid at all"
+        assert 'HarmonicOscillator(' in ts1_block
+        assert "frequency = (" in ts1_block and "'cm^-1')" in ts1_block
+        # ...and the hybrid is self-contained: the whole conformer lives in the file, so it points
+        # at no external qm/ statmech artifact and no Log() -- nothing escapes the round.
+        assert 'qm/' not in hybrid_text
+        assert 'Log(' not in hybrid_text
+        assert not os.path.isdir(os.path.join(os.path.dirname(hybrid_path), 'qm'))
 
     def test_the_real_arc_class_accepts_the_kwargs_and_serializes_them(self, tmp_path, monkeypatch):
         """Drive the REAL ``arc.main.ARC``, stubbing only ``execute`` -- the one cluster-touching call.
@@ -1367,10 +1403,14 @@ class TestArcQmRunnerRealCaptureHybrid(object):
         shutil.copyfile(_FIXTURE_NETWORK_PATH, os.path.join(final_dir, f'{_NETWORK_ID}.py'))
         converged, queued = arc_qm_runner((), paths1, _config(), _NETWORK_ID,
                                           adopted={'TS1': adopted_artifact})
-        # No new convergence (nothing queued), but the hybrid still carries the adopted TS.
+        # No new convergence (nothing queued), but the hybrid still carries the adopted TS --
+        # re-folded inline (QM statmech), never reverted to an RMG/ILT line.
         assert converged == frozenset()
         hybrid_path = hybrid_network_path(paths1, _NETWORK_ID)
         assert os.path.isfile(hybrid_path)
-        with open(hybrid_path) as f:
-            assert "transitionState('TS1', 'qm/TS1.py')" in f.read()
-        assert os.path.isfile(os.path.join(os.path.dirname(hybrid_path), 'qm', 'TS1.py'))
+        ts1_block = _hybrid_transition_state_block(hybrid_path, 'TS1')
+        assert ts1_block is not None, "the adopted TS1 was not re-folded into the round-1 hybrid"
+        assert 'HarmonicOscillator(' in ts1_block
+        assert "frequency = (" in ts1_block and "'cm^-1')" in ts1_block
+        # Self-contained inline conformer: no external qm/ statmech file is written beside it.
+        assert not os.path.isdir(os.path.join(os.path.dirname(hybrid_path), 'qm'))
