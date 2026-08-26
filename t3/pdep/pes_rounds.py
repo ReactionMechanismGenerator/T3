@@ -37,6 +37,63 @@ _logger = logging.getLogger(__name__)
 # loop converts the same handful of structures once per round per consumer.
 _CANONICAL_STRUCTURE_CACHE: dict = dict()
 
+# The closed vocabulary for a SkippedChannel's ``classification`` -- WHY a channel was not sent to
+# ARC, as a machine-readable code alongside the prose ``reason`` (a consumer must never have to
+# regex a sentence to recover a fact). The first three come from ``split_qm_candidates``; the last
+# three from ``attach_sensitivity_evidence``. ``SKIP_UNMEASURABLE`` is deliberately distinct from
+# ``SKIP_BELOW_FLOOR``: a below-floor skip is a MEASURED "not worth the spend", while an
+# unmeasurable skip is a channel whose E0 sensitivity the master-equation model structurally
+# cannot compute at all (see ``e0_sensitivity_is_measurable``) -- rendering the latter as a
+# measurement is a false statement about the physics (I-030/I-031).
+SKIP_NO_TRANSITION_STATE = 'no_transition_state'
+SKIP_ALREADY_COMPUTED = 'already_computed'
+SKIP_BARRIERLESS = 'barrierless'
+SKIP_NO_EVIDENCE = 'no_evidence'
+SKIP_BELOW_FLOOR = 'below_floor'
+SKIP_UNMEASURABLE = 'unmeasurable'
+
+
+def e0_sensitivity_is_measurable(path_reaction: PDepPathReaction,
+                                 ts_declares_statmech: bool) -> bool:
+    """
+    Whether a master-equation dln(k)/dE0 sensitivity is structurally computable for this path
+    reaction's transition state.
+
+    The screen this loop runs perturbs a transition state's ``E0`` and measures the ln(k)
+    response. That response is structurally zero -- not small, uncomputable -- for a specific
+    class of candidates (diagnosed and control-verified on the r002 CHO2 run, I-030):
+
+    * A TS with no statmech modes makes ``Reaction.can_tst()`` False (it is literally
+      ``len(self.transition_state.conformer.modes) > 0``, ``rmgpy/reaction.py``), so RRKM is
+      never used and every k(E) comes from the inverse Laplace transform
+      (``rmgpy/pdep/reaction.pyx``). Under ILT the TS ``E0`` enters ONLY as a discrete threshold
+      gate (``if e_list[r] > E0``), never as a continuous partition-function input.
+    * For a **bimolecular** channel (an association/dissociation) that gate never binds: the rate
+      is fixed by the bimolecular asymptote, the detailed-balance clamp, and HPL renormalization,
+      so perturbing the saddle's ``E0`` is an exact no-op -- the control experiment left every
+      k(T,P) bit-identical, and the SA reports 0.0 (or ~1e-18 solver roundoff).
+    * For a **unimolecular** channel the gate CAN bind (a high saddle truncates the k(E)
+      integrand), so the sensitivity is a real measurement even without modes -- r002 round 0's
+      isomerization saddle measured a −12% ln(k) response this way and was rightly queued.
+
+    Hence the predicate: measurable iff the TS declares statmech (RRKM engages and ``E0`` is a
+    continuous input) OR the channel is unimolecular on both sides. This is the STRUCTURAL test,
+    chosen over inspecting the SA result, because it does not depend on a structural zero
+    surviving floating-point arithmetic (the r002 entrance channels measured ~1e-18 in one round
+    and exactly 0.0 in the next -- no epsilon separates those from a genuinely small response).
+
+    Args:
+        path_reaction (PDepPathReaction): The parsed path reaction.
+        ts_declares_statmech (bool): Whether the network file declares statmech data for this
+            reaction's TS (``PDepNetwork.ts_labels_with_statmech``).
+
+    Returns:
+        bool: Whether the ME E0 sensitivity is structurally computable for this candidate.
+    """
+    if ts_declares_statmech:
+        return True
+    return len(path_reaction.reactants) == 1 and len(path_reaction.products) == 1
+
 
 @dataclass(frozen=True)
 class QMCandidate:
@@ -56,12 +113,19 @@ class QMCandidate:
         delta_ln_k (float | None): The corresponding dimensionless rate response,
             ``abs(coefficient) * perturbation`` -- same convention as
             ``t3.pdep.selector.SensitiveTransitionState``.
+        e0_sensitivity_measurable (bool): Whether the ME E0 sensitivity is structurally
+            computable for this candidate (``e0_sensitivity_is_measurable``), stamped by
+            ``split_qm_candidates`` from the network file's own declarations. Classification
+            only: it never gates queueing (an unmeasurable candidate is skipped by exactly the
+            same evidence/floor tests as before -- it is just no longer recorded as having
+            "measured" its structural zero).
     """
     path_reaction: PDepPathReaction
     ts_label: str
     family: str | None
     coefficient: float | None = None
     delta_ln_k: float | None = None
+    e0_sensitivity_measurable: bool = True
 
 
 @dataclass(frozen=True)
@@ -71,10 +135,25 @@ class SkippedChannel:
 
     Attributes:
         label (str): The path reaction's label.
-        reason (str): Why it was skipped, for the log and the round record.
+        reason (str): Why it was skipped, for the log and the round record -- prose, for a human.
+        ts_label (str | None): The network-local transition state label, when the channel declares
+            one (``None`` for a ``SKIP_NO_TRANSITION_STATE`` skip).
+        classification (str): The machine-readable skip class, one of the ``SKIP_*`` constants.
+            ``''`` only for records predating this field.
+        coefficient (float | None): The signed dln(k)/dE0 value (mol/J) the round's ME SA
+            reported for this TS, when the skip happened at the evidence stage and the SA
+            reported one. For a ``SKIP_UNMEASURABLE`` skip this is the reported STRUCTURAL ZERO,
+            carried verbatim (never clamped or substituted) -- the ``classification`` is what
+            says it is not a measurement.
+        delta_ln_k (float | None): The corresponding dimensionless ``abs(coefficient) *
+            perturbation`` response, same provenance and caveat as ``coefficient``.
     """
     label: str
     reason: str
+    ts_label: str | None = None
+    classification: str = ''
+    coefficient: float | None = None
+    delta_ln_k: float | None = None
 
 
 @dataclass(frozen=True)
@@ -109,20 +188,25 @@ def split_qm_candidates(network: PDepNetwork, computed_ts_labels: frozenset) -> 
             skipped.append(SkippedChannel(
                 label=path_reaction.label,
                 reason=f"'{path_reaction.label}': declares no transition state in the network "
-                       f'file, so there is nothing to compute.'))
+                       f'file, so there is nothing to compute.',
+                classification=SKIP_NO_TRANSITION_STATE))
             continue
         if ts_label in computed_ts_labels:
             skipped.append(SkippedChannel(
                 label=path_reaction.label,
                 reason=f"'{path_reaction.label}': transition state {ts_label} already has QM; not "
-                       f'queueing it again.'))
+                       f'queueing it again.',
+                ts_label=ts_label, classification=SKIP_ALREADY_COMPUTED))
             continue
         verdict = classify_barrierless(path_reaction)
         if verdict.is_barrierless:
-            skipped.append(SkippedChannel(label=path_reaction.label, reason=verdict.reason))
+            skipped.append(SkippedChannel(label=path_reaction.label, reason=verdict.reason,
+                                          ts_label=ts_label, classification=SKIP_BARRIERLESS))
             continue
-        candidates.append(QMCandidate(path_reaction=path_reaction, ts_label=ts_label,
-                                      family=verdict.family))
+        candidates.append(QMCandidate(
+            path_reaction=path_reaction, ts_label=ts_label, family=verdict.family,
+            e0_sensitivity_measurable=e0_sensitivity_is_measurable(
+                path_reaction, ts_label in network.ts_labels_with_statmech)))
     return CandidateSplit(candidates=tuple(candidates), skipped=tuple(skipped))
 
 
@@ -148,6 +232,14 @@ def attach_sensitivity_evidence(split: CandidateSplit,
     definitionally unreachable. The floor applies under BOTH ``qm.scope`` values -- 'sensitive'
     ranks and 'all' does not, but neither may queue below it.
 
+    A skipped candidate that is structurally UNMEASURABLE (``QMCandidate.e0_sensitivity_measurable``
+    False -- see ``e0_sensitivity_is_measurable``) takes the SAME two skip branches, so queueing is
+    unchanged, but is classified ``SKIP_UNMEASURABLE`` rather than ``SKIP_NO_EVIDENCE``/
+    ``SKIP_BELOW_FLOOR``, with a reason that says the model could not respond to its E0 at all:
+    its reported value is a structural zero, and recording it as a measurement would be a false
+    statement about the physics. The reported value itself is still carried verbatim on the
+    skip's numeric fields, never clamped or substituted.
+
     Args:
         split (CandidateSplit): The split to stamp, from ``split_qm_candidates``.
         evidence_by_ts_label (dict): Network-local TS label -> ``(coefficient, delta_ln_k)``,
@@ -163,23 +255,60 @@ def attach_sensitivity_evidence(split: CandidateSplit,
     candidates, skipped = [], list(split.skipped)
     for candidate in split.candidates:
         pair = evidence_by_ts_label.get(candidate.ts_label)
+        # The unmeasurable classification (e0_sensitivity_is_measurable, stamped by
+        # split_qm_candidates) NEVER moves a candidate between the queue and the skips: the
+        # evidence/floor tests below are exactly the ones that decided before it existed, so a
+        # run makes the same QM decisions -- the classification only changes what the record SAYS
+        # about a skip that was happening anyway (a structural zero is not a measurement).
+        unmeasurable_clause = (
+            'its E0 sensitivity is structurally uncomputable, not small: its '
+            'transitionState(...) block declares no statmech modes, so Reaction.can_tst() is '
+            'False and every k(E) of its bimolecular channel comes from the inverse Laplace '
+            'transform, where the TS E0 enters only as a threshold gate that never binds '
+            '(rmgpy/pdep/reaction.pyx) -- perturbing this E0 is an exact no-op')
         if pair is None:
+            if not candidate.e0_sensitivity_measurable:
+                reason = (f"'{candidate.path_reaction.label}': transition state "
+                          f'{candidate.ts_label} could not measure an E0 sensitivity: '
+                          f'{unmeasurable_clause}, and this round\'s master-equation sensitivity '
+                          f'analysis reported no finite row for it; not queueing it rather than '
+                          f'inventing a number.')
+                skipped.append(SkippedChannel(
+                    label=candidate.path_reaction.label, reason=reason,
+                    ts_label=candidate.ts_label, classification=SKIP_UNMEASURABLE))
+                continue
             skipped.append(SkippedChannel(
                 label=candidate.path_reaction.label,
                 reason=f"'{candidate.path_reaction.label}': transition state "
                        f'{candidate.ts_label} has no finite sensitivity evidence in this '
                        f"round's master-equation sensitivity analysis, and a captured artifact "
                        f'must carry the evidence that justified selecting it '
-                       f'(t3.pdep.capture); not queueing it rather than inventing a number.'))
+                       f'(t3.pdep.capture); not queueing it rather than inventing a number.',
+                ts_label=candidate.ts_label, classification=SKIP_NO_EVIDENCE))
             continue
         coefficient, delta_ln_k = pair
         if delta_ln_k < min_delta_ln_k:
+            if not candidate.e0_sensitivity_measurable:
+                reason = (f"'{candidate.path_reaction.label}': transition state "
+                          f'{candidate.ts_label} could not measure an E0 sensitivity: '
+                          f'{unmeasurable_clause}. The SA reported {delta_ln_k:.3e}, which is a '
+                          f'structural zero, not a measurement; it falls below the '
+                          f'min_delta_ln_k floor ({min_delta_ln_k:.3e}) and the channel is '
+                          f'skipped exactly as before, but "below the floor" is not a fact this '
+                          f'screen established about it.')
+                skipped.append(SkippedChannel(
+                    label=candidate.path_reaction.label, reason=reason,
+                    ts_label=candidate.ts_label, classification=SKIP_UNMEASURABLE,
+                    coefficient=coefficient, delta_ln_k=delta_ln_k))
+                continue
             skipped.append(SkippedChannel(
                 label=candidate.path_reaction.label,
                 reason=f"'{candidate.path_reaction.label}': transition state "
                        f'{candidate.ts_label} measured a ln(k) response of {delta_ln_k:.3e}, '
                        f'below the min_delta_ln_k floor ({min_delta_ln_k:.3e}); its leverage on '
-                       f'the network is too small to justify the QM spend.'))
+                       f'the network is too small to justify the QM spend.',
+                ts_label=candidate.ts_label, classification=SKIP_BELOW_FLOOR,
+                coefficient=coefficient, delta_ln_k=delta_ln_k))
             continue
         candidates.append(replace(candidate, coefficient=coefficient, delta_ln_k=delta_ln_k))
     return CandidateSplit(candidates=tuple(candidates), skipped=tuple(skipped))

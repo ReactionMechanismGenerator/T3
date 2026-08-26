@@ -12,8 +12,11 @@ from t3.common import TEST_DATA_BASE_PATH
 from t3.pdep import barrierless
 from t3.pdep.parser import PDepNetwork, PDepPathReaction, parse_pdep_network_file
 from t3.pdep.pes_rounds import (CandidateSplit, PES_LOOP_DIAGRAM_FILENAME,
+                                SKIP_ALREADY_COMPUTED, SKIP_BARRIERLESS, SKIP_BELOW_FLOOR,
+                                SKIP_NO_EVIDENCE, SKIP_NO_TRANSITION_STATE, SKIP_UNMEASURABLE,
                                 adoption_channel_keys_by_ts_label, attach_sensitivity_evidence,
-                                channel_keys_by_ts_label, round_paths, split_qm_candidates,
+                                channel_keys_by_ts_label, e0_sensitivity_is_measurable,
+                                round_paths, split_qm_candidates,
                                 structural_channel_key)
 
 
@@ -435,3 +438,109 @@ class TestAdoptionChannelKeysAreNotEndpointsOnly(object):
         network = self._network(['family: H_Abstraction'])
         network = dataclasses.replace(network, species_structures={'A': 'not an adjacency list'})
         assert adoption_channel_keys_by_ts_label(network) == {}
+
+
+def _bimolecular_rxn(label: str, ts: str) -> PDepPathReaction:
+    return PDepPathReaction(label=label, reactants=('H', 'CO2'), products=('HOCO',),
+                            transition_state=ts, kinetics_type='Arrhenius',
+                            kinetics_comment='family: R_Addition_MultipleBond')
+
+
+class TestE0SensitivityMeasurability(object):
+    """``e0_sensitivity_is_measurable`` (I-031): the ME E0 sensitivity is structurally
+    uncomputable -- not small -- exactly for a no-statmech TS on a bimolecular channel (ILT's
+    threshold gate never binds for an association; verified by control experiment on r002)."""
+
+    def test_no_modes_bimolecular_is_unmeasurable(self):
+        assert e0_sensitivity_is_measurable(_bimolecular_rxn('r1', 'TS1'),
+                                            ts_declares_statmech=False) is False
+
+    def test_no_modes_unimolecular_is_measurable(self):
+        """The ILT threshold gate CAN bind for a high unimolecular saddle -- r002 round 0's
+        isomerization saddle measured a real -12% ln(k) response without modes and was queued,
+        so 'no modes' alone must never classify a channel unmeasurable."""
+        assert e0_sensitivity_is_measurable(_rxn('r1', 'family: 1,2_Insertion_CO'),
+                                            ts_declares_statmech=False) is True
+
+    def test_statmech_makes_any_channel_measurable(self):
+        """With modes, can_tst() is True, RRKM engages, and E0 is a continuous input."""
+        assert e0_sensitivity_is_measurable(_bimolecular_rxn('r1', 'TS1'),
+                                            ts_declares_statmech=True) is True
+
+    def test_split_stamps_the_classification_from_the_network_declarations(self):
+        network = dataclasses.replace(
+            _network([_bimolecular_rxn('r1', 'TS1'), _bimolecular_rxn('r2', 'TS2'),
+                      _rxn('r3', 'family: 1,2_Insertion_CO', ts='TS3')]),
+            ts_labels_with_statmech=frozenset({'TS2'}))
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        measurable = {c.ts_label: c.e0_sensitivity_measurable for c in split.candidates}
+        assert measurable == {'TS1': False, 'TS2': True, 'TS3': True}
+
+
+class TestSkippedChannelClassification(object):
+    """Every skip carries a machine-readable ``classification`` and, at the evidence stage, the
+    NUMERIC coefficient/delta_ln_k -- a consumer must never regex the prose ``reason`` (I-031)."""
+
+    def test_split_skips_carry_their_classes(self):
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO', ts='TS_done'),
+                            _rxn('r2', 'in family R_Recombination.'),
+                            PDepPathReaction(label='r3', reactants=('A',), products=('B',),
+                                             transition_state=None, kinetics_type='Arrhenius',
+                                             kinetics_comment='')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset({'TS_done'}))
+        classes = {s.label: s.classification for s in split.skipped}
+        assert classes == {'r1': SKIP_ALREADY_COMPUTED, 'r2': SKIP_BARRIERLESS,
+                           'r3': SKIP_NO_TRANSITION_STATE}
+        ts_labels = {s.label: s.ts_label for s in split.skipped}
+        assert ts_labels == {'r1': 'TS_done', 'r2': 'TS_r2', 'r3': None}
+
+    def test_unmeasurable_below_floor_is_classified_and_carries_the_structural_zero(self):
+        """The reported value is carried VERBATIM (never clamped or hidden); the classification
+        -- not a substituted number -- is what says it is not a measurement."""
+        network = _network([_bimolecular_rxn('r1', 'TS1')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        split = attach_sensitivity_evidence(split, {'TS1': (1.66e-18, 1.39e-14)},
+                                            min_delta_ln_k=1e-3)
+        assert split.candidates == ()
+        (skip,) = split.skipped
+        assert skip.classification == SKIP_UNMEASURABLE
+        assert skip.coefficient == 1.66e-18
+        assert skip.delta_ln_k == 1.39e-14
+        assert 'structurally uncomputable' in skip.reason
+        assert 'not a measurement' in skip.reason
+        assert 'measured a ln(k) response' not in skip.reason
+
+    def test_measurable_below_floor_keeps_the_measured_classification(self):
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        split = attach_sensitivity_evidence(split, {'TS_r1': (0.0, 0.0)}, min_delta_ln_k=1e-3)
+        (skip,) = split.skipped
+        assert skip.classification == SKIP_BELOW_FLOOR
+        assert skip.coefficient == 0.0
+        assert skip.delta_ln_k == 0.0
+        assert 'below the min_delta_ln_k floor' in skip.reason
+
+    def test_unmeasurable_with_no_evidence_row_is_still_unmeasurable(self):
+        network = _network([_bimolecular_rxn('r1', 'TS1')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        split = attach_sensitivity_evidence(split, {}, min_delta_ln_k=1e-3)
+        (skip,) = split.skipped
+        assert skip.classification == SKIP_UNMEASURABLE
+        assert skip.coefficient is None and skip.delta_ln_k is None
+
+    def test_measurable_with_no_evidence_row_is_no_evidence(self):
+        network = _network([_rxn('r1', 'family: 1,2_Insertion_CO')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        split = attach_sensitivity_evidence(split, {}, min_delta_ln_k=1e-3)
+        (skip,) = split.skipped
+        assert skip.classification == SKIP_NO_EVIDENCE
+
+    def test_classification_never_gates_queueing(self):
+        """THE non-goal pin: an unmeasurable candidate above the floor is queued exactly as
+        before -- the classification changes what the record says, never what gets queued."""
+        network = _network([_bimolecular_rxn('r1', 'TS1')])
+        split = split_qm_candidates(network, computed_ts_labels=frozenset())
+        split = attach_sensitivity_evidence(split, {'TS1': (-3.0e-5, 0.25)},
+                                            min_delta_ln_k=1e-3)
+        assert [c.ts_label for c in split.candidates] == ['TS1']
+        assert split.skipped == ()

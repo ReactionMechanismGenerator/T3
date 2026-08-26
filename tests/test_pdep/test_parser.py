@@ -1431,3 +1431,65 @@ class TestPositionalTransitionState:
         (call,) = [n.value for n in ast.parse("transitionState('TS2', path='qm/TS2.py')").body]
         with pytest.raises(ValueError, match='POSITIONAL'):
             _call_keywords(call, call_name='transitionState')
+
+
+class TestTransitionStateStatmechDetection(object):
+    """``PDepNetwork.ts_labels_with_statmech``: which ``transitionState(...)`` blocks declare
+    statmech data (I-031). A TS absent from this set has an empty ``conformer.modes``, so
+    ``Reaction.can_tst()`` is False and every k(E) of its channel comes from the inverse Laplace
+    transform -- the fact ``t3.pdep.pes_rounds.e0_sensitivity_is_measurable`` classifies on."""
+
+    E0_ONLY = ("transitionState(\n"
+               "    label = 'TS1',\n"
+               "    E0 = (21.347, 'kJ/mol'),\n"
+               "    spinMultiplicity = 1,\n"
+               "    opticalIsomers = 1,\n"
+               ")\n")
+    WITH_MODES = ("transitionState(\n"
+                  "    label = 'TS2',\n"
+                  "    E0 = (135.3, 'kJ/mol'),\n"
+                  "    modes = [HarmonicOscillator(frequencies=([1000.0, 2000.0], 'cm^-1'))],\n"
+                  "    spinMultiplicity = 1,\n"
+                  "    opticalIsomers = 1,\n"
+                  ")\n")
+    BY_REFERENCE = "transitionState('TS3', 'qm/TS3.py')\n"
+    EMPTY_MODES = ("transitionState(\n"
+                   "    label = 'TS4',\n"
+                   "    E0 = (10.0, 'kJ/mol'),\n"
+                   "    modes = [],\n"
+                   ")\n")
+
+    def _parse(self, ts_blocks: str):
+        return parse_pdep_network_text(text=ts_blocks, network_id='synthetic_statmech',
+                                       require_reactions=False)
+
+    def test_e0_only_block_declares_no_statmech(self):
+        """The exact shape every un-QM'd TS takes in an explored reduced network (verified on
+        r002 round 1's network0_reduced.py: E0/spinMultiplicity/opticalIsomers only)."""
+        network = self._parse(self.E0_ONLY)
+        assert network.transition_state_labels == ('TS1',)
+        assert network.ts_labels_with_statmech == frozenset()
+
+    def test_non_empty_modes_list_declares_statmech(self):
+        """The inline form ``t3.pdep.hybrid`` writes for a QM'd TS. The list elements are calls
+        (``HarmonicOscillator(...)``), so the detection must be structural, never literal_eval."""
+        network = self._parse(self.WITH_MODES)
+        assert network.ts_labels_with_statmech == frozenset({'TS2'})
+
+    def test_by_reference_path_form_declares_statmech(self):
+        """``transitionState(label, path)`` loads a statmech file (arkane/input.py); the TS it
+        names will have modes once Arkane runs, so it is statmech-bearing."""
+        network = self._parse(self.BY_REFERENCE)
+        assert network.ts_labels_with_statmech == frozenset({'TS3'})
+
+    def test_empty_modes_list_declares_no_statmech(self):
+        """``modes = []`` leaves ``conformer.modes`` empty exactly as omitting the keyword does,
+        and an empty-modes TS still fails ``can_tst()``; counting it would relabel a structurally
+        unmeasurable channel as measured."""
+        network = self._parse(self.EMPTY_MODES)
+        assert network.ts_labels_with_statmech == frozenset()
+
+    def test_mixed_file_keeps_the_sets_apart(self):
+        network = self._parse(self.E0_ONLY + self.WITH_MODES + self.BY_REFERENCE + self.EMPTY_MODES)
+        assert network.transition_state_labels == ('TS1', 'TS2', 'TS3', 'TS4')
+        assert network.ts_labels_with_statmech == frozenset({'TS2', 'TS3'})
