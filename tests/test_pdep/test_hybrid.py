@@ -25,8 +25,6 @@ All test outputs are written to pytest's ``tmp_path``, never into ``tests/data/`
 import ast
 import dataclasses
 import os
-import re
-import shutil
 
 import pytest
 
@@ -66,6 +64,30 @@ DEFAULT_ENERGY_SETTINGS = QMEnergySettings(
 )
 
 
+def ts_conformer(e0=-38.0, frequencies=(500.0, 800.0, 1200.0, 1900.0, 2200.0),
+                 imaginary=-1800.0, spin_multiplicity=1, optical_isomers=1, hindered_rotors=()):
+    """A DOF-normalized (vibration-only) transition-state conformer-data dict, the shape
+    ``t3.runners.statmech_conformer_extract`` produces and ``write_hybrid_network_input_file``
+    now consumes (in place of a by-reference artifact path)."""
+    return {
+        'label': 'ts', 'is_ts': True, 'E0_kJ_mol': e0,
+        'frequencies_cm_1': list(frequencies), 'imaginary_frequency_cm_1': imaginary,
+        'spin_multiplicity': spin_multiplicity, 'optical_isomers': optical_isomers,
+        'hindered_rotors': list(hindered_rotors),
+    }
+
+
+def well_conformer(e0=-170.0, frequencies=(500.0, 800.0, 1200.0, 1500.0, 1900.0, 2400.0),
+                   spin_multiplicity=2, optical_isomers=1, hindered_rotors=()):
+    """A DOF-normalized (vibration-only) well conformer-data dict (the ``is_ts=False`` shape)."""
+    return {
+        'label': 'well', 'is_ts': False, 'E0_kJ_mol': e0,
+        'frequencies_cm_1': list(frequencies),
+        'spin_multiplicity': spin_multiplicity, 'optical_isomers': optical_isomers,
+        'hindered_rotors': list(hindered_rotors),
+    }
+
+
 def test_refuses_unknown_ts_label(tmp_path):
     """Behavior 1: an unknown transition state label raises ValueError."""
     with pytest.raises(ValueError, match='TS_NOT_IN_NETWORK'):
@@ -73,7 +95,7 @@ def test_refuses_unknown_ts_label(tmp_path):
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS_NOT_IN_NETWORK': TS1_ARTIFACT},
+            qm_transition_states={'TS_NOT_IN_NETWORK': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
@@ -90,18 +112,6 @@ def test_refuses_empty_qm_transition_states(tmp_path):
         )
 
 
-def test_refuses_missing_artifact_file(tmp_path):
-    """Behavior 3: a QM artifact path that does not exist on disk raises ValueError."""
-    with pytest.raises(ValueError, match='TS1'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=str(tmp_path / 'input.py'),
-            method='CSE',
-            qm_transition_states={'TS1': str(tmp_path / 'does_not_exist.py')},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-
-
 @pytest.mark.parametrize('model_chemistry', [None, '', '   '])
 def test_refuses_missing_or_blank_model_chemistry(tmp_path, model_chemistry):
     """Behavior 4: a missing/blank model_chemistry raises ValueError."""
@@ -111,7 +121,7 @@ def test_refuses_missing_or_blank_model_chemistry(tmp_path, model_chemistry):
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -133,7 +143,7 @@ def test_refuses_use_bond_corrections_true_unconditionally(tmp_path):
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -149,7 +159,7 @@ def test_refuses_bond_correction_type_set_when_bond_corrections_disabled(tmp_pat
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -166,7 +176,7 @@ def test_refuses_use_atom_corrections_true_with_atom_energies_none(tmp_path):
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -186,7 +196,7 @@ def test_rejects_model_chemistry_with_injection_characters(tmp_path, bad_model_c
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -207,7 +217,7 @@ def test_rejects_tunneling_with_injection_characters(tmp_path, bad_tunneling):
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -221,7 +231,7 @@ def test_refuses_use_atom_corrections_false(tmp_path):
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -240,7 +250,7 @@ def test_refuses_use_atom_corrections_false_even_with_atom_energies_present(tmp_
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -253,7 +263,7 @@ def test_emits_use_atom_corrections_true_by_default(tmp_path):
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -280,7 +290,7 @@ def test_accepts_and_renders_bare_level_of_theory_model_chemistry(tmp_path, mode
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=energy_settings,
     )
     with open(dest_path, 'r') as f:
@@ -331,20 +341,8 @@ def test_rejects_structurally_invalid_model_chemistry_object_expression(tmp_path
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
-        )
-
-
-def test_refuses_missing_log_target(tmp_path):
-    """Behavior 10: a Log(...) target that does not exist on disk raises ValueError."""
-    with pytest.raises(ValueError, match='does_not_exist.out'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=str(tmp_path / 'input.py'),
-            method='CSE',
-            qm_transition_states={'TS1': TS_MISSING_LOG_ARTIFACT},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
 
@@ -356,7 +354,7 @@ def test_replaces_qm_ts_block_and_leaves_others_byte_identical(tmp_path):
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     assert isinstance(result, HybridNetworkResult)
@@ -366,9 +364,13 @@ def test_replaces_qm_ts_block_and_leaves_others_byte_identical(tmp_path):
     with open(dest_path, 'r') as f:
         text = f.read()
 
-    # New by-reference form for TS1, and no more inline E0 for TS1.
-    assert "transitionState('TS1', 'qm/TS1.py')" in text
-    assert "label = 'TS1'" not in text
+    # New inline form for TS1: the whole conformer is spliced in directly, no by-reference
+    # pointer into a vendored qm/ directory.
+    assert "label = 'TS1'" in text
+    assert "E0 = (-38.0,'kJ/mol')" in text
+    assert 'HarmonicOscillator(' in text
+    assert "frequency = (-1800.0,'cm^-1')" in text
+    assert 'qm/' not in text
     assert 'E0 = (505.143' not in text
 
     # TS2-TS5's inline blocks are untouched, byte-identical to the source.
@@ -390,7 +392,7 @@ def test_qm_reaction_drops_kinetics_and_adds_tunneling(tmp_path):
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -419,7 +421,7 @@ def test_qm_reaction_omits_tunneling_when_not_configured(tmp_path):
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=energy_settings,
     )
     with open(dest_path, 'r') as f:
@@ -483,7 +485,7 @@ def test_kinetics_removal_handles_kinetics_as_first_keyword(tmp_path):
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -514,7 +516,7 @@ def test_kinetics_removal_handles_trailing_inline_comment(tmp_path):
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -540,7 +542,7 @@ def test_kinetics_removal_handles_single_line_reaction_call(tmp_path):
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -571,7 +573,7 @@ def test_kinetics_removal_handles_non_ascii_text_earlier_on_the_same_line(tmp_pa
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -599,7 +601,7 @@ def test_injects_energy_header_before_first_species_and_never_disables_atom_corr
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=energy_settings,
     )
     with open(dest_path, 'r') as f:
@@ -613,182 +615,6 @@ def test_injects_energy_header_before_first_species_and_never_disables_atom_corr
     assert 'useHinderedRotors = True' in text
     assert 'useBondCorrections = False' in text
     assert "atomEnergies" in text
-
-
-def test_vendors_qm_artifacts_and_rewrites_log_paths(tmp_path):
-    """Behavior 9: artifacts are vendored into qm/, Log(...)-referenced files are copied into
-    qm/logs/ and their paths in the vendored .py are rewritten to point there."""
-    dest_path = str(tmp_path / 'network' / 'input.py')
-    result = write_hybrid_network_input_file(
-        source_path=NETWORK_FIXTURE,
-        dest_path=dest_path,
-        method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
-        energy_settings=DEFAULT_ENERGY_SETTINGS,
-    )
-    dest_dir = os.path.dirname(dest_path)
-
-    vendored_ts_path = os.path.join(dest_dir, 'qm', 'TS1.py')
-    assert os.path.isfile(vendored_ts_path)
-    assert os.path.relpath(vendored_ts_path, dest_dir) in result.vendored_files
-
-    with open(vendored_ts_path, 'r') as f:
-        vendored_text = f.read()
-    assert 'ts1_sp.out' not in vendored_text.replace(os.path.join('logs', 'TS1', 'ts1_sp.out'), '')
-    assert os.path.join('logs', 'TS1', 'ts1_sp.out') in vendored_text
-    assert os.path.join('logs', 'TS1', 'ts1_freq.out') in vendored_text
-    assert os.path.join('logs', 'TS1', 'ts1_scan.out') in vendored_text
-
-    for basename in ('ts1_sp.out', 'ts1_freq.out', 'ts1_scan.out'):
-        vendored_log_path = os.path.join(dest_dir, 'qm', 'logs', 'TS1', basename)
-        assert os.path.isfile(vendored_log_path)
-        assert os.path.relpath(vendored_log_path, dest_dir) in result.vendored_files
-        with open(os.path.join(ARC_TS_DIR, 'logs', basename), 'r') as f_src, open(vendored_log_path, 'r') as f_dst:
-            assert f_src.read() == f_dst.read()
-
-
-def _write_prefixed_log_artifact(tmp_path, quoted_log_expr):
-    """Write a minimal, self-contained ARC-shaped TS artifact (in its own directory, so it is
-    self-confined under ``_read_qm_artifact``'s default ``qm_artifacts_root=None`` rule) whose
-    single distinct ``Log(...)`` call's argument source text is exactly ``quoted_log_expr`` (e.g.
-    ``"r'logs/ts.out'"``), plus the stub log file it references. Returns the artifact's path."""
-    artifact_dir = tmp_path / 'prefixed_ts_artifact'
-    (artifact_dir / 'logs').mkdir(parents=True)
-    (artifact_dir / 'logs' / 'ts.out').write_text('stub log content\n')
-    artifact_path = artifact_dir / 'TS1.py'
-    artifact_path.write_text(
-        'linear = False\n'
-        'spinMultiplicity = 2\n'
-        f'energy = Log({quoted_log_expr})\n'
-        f'geometry = Log({quoted_log_expr})\n'
-        f'frequencies = Log({quoted_log_expr})\n'
-    )
-    return str(artifact_path)
-
-
-@pytest.mark.parametrize('quoted_log_expr_template, prefix, quote', [
-    ("'{}'", '', "'"),
-    ('"{}"', '', '"'),
-    ("r'{}'", 'r', "'"),
-    ("R'{}'", 'R', "'"),
-    ("u'{}'", 'u', "'"),
-    ("U'{}'", 'U', "'"),
-    ("'''{}'''", '', "'''"),
-    ('"""{}"""', '', '"""'),
-], ids=['single-plain', 'double-plain', 'raw-lower', 'raw-upper', 'u-lower', 'u-upper',
-        'triple-single', 'triple-double'])
-def test_rewrites_log_path_of_any_valid_string_literal_prefix_and_quote_style(
-        tmp_path, quoted_log_expr_template, prefix, quote):
-    """Regression (silent corruption): the Log(...) path rewrite must not assume the first
-    character of the string literal's source span is always the opening quote. That assumption is
-    false for a prefixed literal such as Log(r'foo/bar.log') -- it is an ordinary ast.Constant str
-    that passes every confinement check, so a rewrite that splices from the wrong offset produces
-    invalid Python text (a stray prefix character stuck against the closing quote) rather than
-    failing loudly. Covers a raw string, another prefix (u), and a triple-quoted literal, alongside
-    the plain single/double-quoted cases, and asserts the rewritten file still parses."""
-    quoted_log_expr = quoted_log_expr_template.format('logs/ts.out')
-    artifact_path = _write_prefixed_log_artifact(tmp_path, quoted_log_expr)
-    dest_path = str(tmp_path / 'network' / 'input.py')
-
-    write_hybrid_network_input_file(
-        source_path=NETWORK_FIXTURE,
-        dest_path=dest_path,
-        method='CSE',
-        qm_transition_states={'TS1': artifact_path},
-        energy_settings=DEFAULT_ENERGY_SETTINGS,
-    )
-
-    dest_dir = os.path.dirname(dest_path)
-    vendored_ts_path = os.path.join(dest_dir, 'qm', 'TS1.py')
-    with open(vendored_ts_path, 'r') as f:
-        vendored_text = f.read()
-
-    # The core regression check: the rewritten artifact must still be valid, parseable Python.
-    ast.parse(vendored_text)
-
-    vendored_log_relpath = os.path.join('logs', 'TS1', 'ts.out')
-    assert os.path.isfile(os.path.join(dest_dir, 'qm', vendored_log_relpath))
-    expected_segment = f'{prefix}{quote}{vendored_log_relpath}{quote}'
-    assert expected_segment in vendored_text, (
-        f'expected the rewritten Log(...) argument to preserve its original prefix/quote style '
-        f'({expected_segment!r}), got: {vendored_text!r}')
-
-
-def test_refuses_log_path_when_literal_span_cannot_be_determined(tmp_path):
-    """Fail-closed backstop: if a Log(...) argument's string value is built from an implicit
-    concatenation of literals using DIFFERENT quote characters (e.g. Log('logs/' "ts.out")), the
-    node's source span starts and ends with different quote characters, so this module cannot
-    determine a single bounding quote to splice at without guessing. It must refuse loudly with a
-    ValueError naming the artifact, rather than silently emitting a corrupted rewrite."""
-    artifact_dir = tmp_path / 'mismatched_quote_artifact'
-    (artifact_dir / 'logs').mkdir(parents=True)
-    (artifact_dir / 'logs' / 'ts.out').write_text('stub log content\n')
-    artifact_path = artifact_dir / 'TS1.py'
-    artifact_path.write_text(
-        'linear = False\n'
-        'spinMultiplicity = 2\n'
-        'energy = Log(\'logs/\' "ts.out")\n'
-    )
-
-    dest_path = str(tmp_path / 'network' / 'input.py')
-    with pytest.raises(ValueError, match='TS1'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=dest_path,
-            method='CSE',
-            qm_transition_states={'TS1': str(artifact_path)},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-    assert not os.path.exists(dest_path)
-
-
-def test_vendoring_only_rewrites_the_located_log_call_not_every_textual_occurrence(tmp_path):
-    """Item 5: the Log(...) path rewrite must be scoped to that specific call's own argument node,
-    not to every textual occurrence of the same quoted string in the artifact. TS_dup_path_text.py
-    carries an unrelated 'unrelated_note' variable whose string value is textually identical to the
-    'energy' Log(...) path -- a text-based (regex) rewrite cannot tell them apart and would corrupt
-    that unrelated line too."""
-    dest_path = str(tmp_path / 'network' / 'input.py')
-    write_hybrid_network_input_file(
-        source_path=NETWORK_FIXTURE,
-        dest_path=dest_path,
-        method='CSE',
-        qm_transition_states={'TS1': TS_DUP_PATH_TEXT_ARTIFACT},
-        energy_settings=DEFAULT_ENERGY_SETTINGS,
-    )
-    dest_dir = os.path.dirname(dest_path)
-    vendored_ts_path = os.path.join(dest_dir, 'qm', 'TS1.py')
-    with open(vendored_ts_path, 'r') as f:
-        vendored_text = f.read()
-
-    # The actual Log(...) call's path IS rewritten to point at the vendored location.
-    assert "energy = Log('" + os.path.join('logs', 'TS1', 'ts1_sp.out') + "')" in vendored_text
-    # The unrelated same-text variable is untouched -- still the original, un-rewritten path.
-    assert "unrelated_note = 'logs/ts1_sp.out'" in vendored_text
-
-
-def test_never_writes_dest_path_if_vendoring_fails(tmp_path, monkeypatch):
-    """Item 6: vendoring QM artifacts must happen BEFORE the hybrid network file is written, so a
-    vendoring failure partway through (e.g. a log file copy that raises) never leaves behind a
-    dest_path that references a missing/stale qm/ tree. Force shutil.copyfile to fail and assert
-    dest_path was never created."""
-
-    def _raising_copyfile(*args, **kwargs):
-        raise OSError('simulated disk failure during vendoring')
-
-    monkeypatch.setattr(shutil, 'copyfile', _raising_copyfile)
-
-    dest_path = str(tmp_path / 'network' / 'input.py')
-    with pytest.raises(OSError, match='simulated disk failure during vendoring'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=dest_path,
-            method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-
-    assert not os.path.exists(dest_path)
 
 
 def test_dest_path_write_is_atomic_no_torn_file_on_crash(tmp_path, monkeypatch):
@@ -849,7 +675,7 @@ def test_dest_path_write_is_atomic_no_torn_file_on_crash(tmp_path, monkeypatch):
             source_path=NETWORK_FIXTURE,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
@@ -858,8 +684,8 @@ def test_dest_path_write_is_atomic_no_torn_file_on_crash(tmp_path, monkeypatch):
     # directly under the 'PDep hybrid' root -- but a staging file lives ONE level deeper, inside a
     # network's own directory, so it can never be such a top-level entry; still, it must not be
     # left behind at all).
-    # 'qm/' is expected here -- vendoring runs (and legitimately creates it) BEFORE the dest_path
-    # write this test targets -- but no '.hybrid-input-*' staging file may survive a failed write.
+    # No '.hybrid-input-*' staging file may survive a failed write (the network is now spliced
+    # inline with no vendoring step, so nothing else is created alongside dest_path either).
     dest_dir = os.path.dirname(dest_path)
     leftover_staging_files = [name for name in os.listdir(dest_dir) if name.startswith('.hybrid-input-')]
     assert leftover_staging_files == [], (
@@ -878,15 +704,18 @@ def test_multiple_qm_transition_states(tmp_path):
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT, 'TS2': TS2_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer(e0=-38.0), 'TS2': ts_conformer(e0=-50.0)},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     assert result.qm_ts_labels == ('TS1', 'TS2')
     assert result.ilt_ts_labels == ('TS3', 'TS4', 'TS5')
     with open(dest_path, 'r') as f:
         text = f.read()
-    assert "transitionState('TS1', 'qm/TS1.py')" in text
-    assert "transitionState('TS2', 'qm/TS2.py')" in text
+    assert "label = 'TS1'" in text
+    assert "E0 = (-38.0,'kJ/mol')" in text
+    assert "label = 'TS2'" in text
+    assert "E0 = (-50.0,'kJ/mol')" in text
+    assert 'qm/' not in text
 
 
 def test_rewrites_method_line_same_as_write_arkane_network_input_file(tmp_path):
@@ -898,7 +727,7 @@ def test_rewrites_method_line_same_as_write_arkane_network_input_file(tmp_path):
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='RS',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -925,7 +754,7 @@ def test_rewrites_unspaced_method_line(tmp_path):
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
     )
     with open(dest_path, 'r') as f:
@@ -951,7 +780,7 @@ def test_raises_if_no_method_line(tmp_path):
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
@@ -985,7 +814,7 @@ def test_clamps_pressure_dependence_and_sensitivity_conditions_tmax_to_the_speci
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
         sensitivity=True,
     )
@@ -1023,7 +852,7 @@ def test_raises_when_clamping_the_hybrid_networks_tmax_would_leave_it_at_or_belo
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
@@ -1055,7 +884,7 @@ def test_drops_an_out_of_range_tlist_line_from_the_hybrid_network(tmp_path):
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
         sensitivity=True,
     )
@@ -1080,7 +909,7 @@ def test_leaves_an_in_range_tlist_line_untouched_in_the_hybrid_network(tmp_path)
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
         sensitivity=True,
     )
@@ -1109,7 +938,7 @@ def test_drops_tlist_even_when_hybrid_tmax_already_within_ceiling(tmp_path):
         source_path=source_path,
         dest_path=dest_path,
         method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
+        qm_transition_states={'TS1': ts_conformer()},
         energy_settings=DEFAULT_ENERGY_SETTINGS,
         sensitivity=True,
     )
@@ -1141,7 +970,7 @@ def test_raises_on_out_of_range_tlist_without_tcount_in_the_hybrid_network(tmp_p
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
             sensitivity=True,
         )
@@ -1197,7 +1026,7 @@ def test_propagates_a_non_unparseable_valueerror_from_network_thermo_t_max(tmp_p
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
@@ -1235,7 +1064,7 @@ def test_warns_when_the_hybrid_networks_ceiling_skips_a_species(tmp_path, caplog
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
     assert any("'H(34)'" in record.message and 'could not account for' in record.message
@@ -1267,7 +1096,7 @@ def test_raises_on_hybrid_tlist_with_non_kelvin_unit(tmp_path):
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
             sensitivity=True,
         )
@@ -1297,7 +1126,7 @@ def test_raises_on_hybrid_tlist_with_non_2_tuple_shape(tmp_path):
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
             sensitivity=True,
         )
@@ -1327,7 +1156,7 @@ def test_raises_on_hybrid_tlist_with_non_numeric_entries(tmp_path):
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
             sensitivity=True,
         )
@@ -1358,7 +1187,7 @@ def test_raises_on_multiline_hybrid_tlist(tmp_path):
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
             sensitivity=True,
         )
@@ -1396,7 +1225,7 @@ def test_raises_if_transition_state_kwarg_is_present_but_unevaluable(tmp_path):
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
@@ -1418,6 +1247,8 @@ def test_raises_if_transition_state_kwarg_is_present_but_unevaluable_in_isolatio
     class _FakeNetwork:
         network_id = 'network4_1'
         transition_state_labels = ('TS1', 'TS2', 'TS3', 'TS4', 'TS5')
+        species_labels = ()
+        isomers = ()  # wells are validated against the isomers, not every species() block
 
     monkeypatch.setattr(hybrid_module, 'parse_pdep_network_file', lambda path: _FakeNetwork())
 
@@ -1427,180 +1258,9 @@ def test_raises_if_transition_state_kwarg_is_present_but_unevaluable_in_isolatio
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
-
-
-def test_vendors_logs_that_share_a_basename_without_collapsing_them(tmp_path):
-    """Regression: ARC renames EVERY job's output file to 'output.out'
-    (``arc/job/local.py:356``, ``arc/job/adapter.py:870``), so one transition state's sp, freq and
-    rotor-scan logs differ only by their job directory. Vendoring them by basename would collapse
-    all three onto one file and repoint every Log(...) at it, so the frequencies could silently be
-    read from the sp job's output -- Arkane would parse that happily and return wrong kinetics.
-    Each referenced log must therefore land in its own vendored file."""
-    dest_path = str(tmp_path / 'input.py')
-    write_hybrid_network_input_file(
-        source_path=NETWORK_FIXTURE,
-        dest_path=dest_path,
-        method='MSC',
-        qm_transition_states={'TS1': TS_COLLIDING_ARTIFACT},
-        energy_settings=DEFAULT_ENERGY_SETTINGS,
-    )
-
-    log_dir = os.path.join(str(tmp_path), 'qm', 'logs', 'TS1')
-    vendored_logs = sorted(os.listdir(log_dir))
-    assert len(vendored_logs) == 3, f'expected the sp, freq and scan logs to stay distinct, got {vendored_logs}'
-
-    # The three stubs carry distinguishable text, so a collapse is detectable by content too.
-    contents = set()
-    for name in vendored_logs:
-        with open(os.path.join(log_dir, name), 'r') as f:
-            contents.add(f.read())
-    assert len(contents) == 3, 'two vendored logs share content, so one overwrote another'
-
-    with open(os.path.join(str(tmp_path), 'qm', 'TS1.py'), 'r') as f:
-        vendored_ts = f.read()
-    assert 'output.out' in vendored_ts
-    # sp and scan must not have been rewritten onto the freq log's path.
-    referenced = set(re.findall(r"Log\('([^']*)'\)", vendored_ts))
-    assert len(referenced) == 3, f'Log(...) references collapsed onto {referenced}'
-    for relative_path in referenced:
-        assert os.path.isfile(os.path.join(str(tmp_path), 'qm', relative_path)), \
-            f'vendored network references a missing log: {relative_path}'
-
-
-def test_resolving_into_same_output_dir_clears_stale_qm_subdirectory(tmp_path):
-    """Item 7: re-solving into the same output dir must not leave orphaned files behind from a
-    prior run's qm/ subdirectory -- e.g. a TS that was QM'd in a previous solve but is ILT this
-    time (or renamed/removed) must not have its stale qm/<label>.py and qm/logs/<label>/ linger."""
-    dest_path = str(tmp_path / 'input.py')
-    qm_dir = os.path.join(str(tmp_path), 'qm')
-    os.makedirs(qm_dir)
-    stale_ts_file = os.path.join(qm_dir, 'stale_ts_from_prior_run.py')
-    with open(stale_ts_file, 'w') as f:
-        f.write('# stale artifact from a previous solve into this same output directory\n')
-    stale_log_dir = os.path.join(qm_dir, 'logs', 'stale_ts_from_prior_run')
-    os.makedirs(stale_log_dir)
-    stale_log_file = os.path.join(stale_log_dir, 'stale.out')
-    with open(stale_log_file, 'w') as f:
-        f.write('stale log\n')
-
-    write_hybrid_network_input_file(
-        source_path=NETWORK_FIXTURE,
-        dest_path=dest_path,
-        method='CSE',
-        qm_transition_states={'TS1': TS1_ARTIFACT},
-        energy_settings=DEFAULT_ENERGY_SETTINGS,
-    )
-
-    assert not os.path.exists(stale_ts_file), 'stale TS artifact from a prior solve was not cleared'
-    assert not os.path.exists(stale_log_dir), 'stale log directory from a prior solve was not cleared'
-    assert os.path.isfile(os.path.join(qm_dir, 'TS1.py'))
-
-
-def test_mid_vendor_failure_preserves_previous_qm_directory_contents(tmp_path, monkeypatch):
-    """Finding 21: _vendor_qm_artifacts must not destroy a previously-good qm/ directory before the
-    new vendoring is known to have fully succeeded. Simulate a copy failure partway through
-    vendoring (the first Log(...) file copies fine, the second raises) and assert the OLD qm/
-    contents from a prior successful solve into this same output directory are still present and
-    byte-identical afterward -- not a half-emptied, half-overwritten qm/ directory."""
-    dest_path = str(tmp_path / 'input.py')
-    qm_dir = os.path.join(str(tmp_path), 'qm')
-    os.makedirs(qm_dir)
-    previous_ts_file = os.path.join(qm_dir, 'TS1.py')
-    previous_ts_content = '# TS1.py from a prior, successful solve into this same output directory\n'
-    with open(previous_ts_file, 'w') as f:
-        f.write(previous_ts_content)
-    previous_log_dir = os.path.join(qm_dir, 'logs', 'TS1')
-    os.makedirs(previous_log_dir)
-    previous_log_file = os.path.join(previous_log_dir, 'output.out')
-    previous_log_content = 'previous good log content\n'
-    with open(previous_log_file, 'w') as f:
-        f.write(previous_log_content)
-
-    call_count = {'n': 0}
-    real_copyfile = shutil.copyfile
-
-    def _failing_copyfile(src, dst):
-        call_count['n'] += 1
-        if call_count['n'] == 1:
-            return real_copyfile(src, dst)
-        raise OSError('simulated disk failure partway through vendoring')
-
-    monkeypatch.setattr(shutil, 'copyfile', _failing_copyfile)
-
-    with pytest.raises(OSError, match='simulated disk failure partway through vendoring'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=dest_path,
-            method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-
-    assert call_count['n'] >= 2, 'the simulated failure must occur mid-copy, after at least one log file was staged'
-    assert not os.path.exists(dest_path), 'a network file must never be written if vendoring failed partway through'
-    with open(previous_ts_file, 'r') as f:
-        assert f.read() == previous_ts_content, \
-            'the PREVIOUS qm/TS1.py must survive intact when a mid-vendor failure occurs'
-    with open(previous_log_file, 'r') as f:
-        assert f.read() == previous_log_content, \
-            'the PREVIOUS qm/logs/TS1/output.out must survive intact when a mid-vendor failure occurs'
-
-
-def test_failure_at_replacement_step_preserves_previous_qm_directory_contents(tmp_path, monkeypatch):
-    """A failure during the actual qm_dir swap (not during copying) must not destroy the previous
-    qm/ directory. Staging succeeds in full (every artifact/log copies fine), then os.replace(...)
-    itself is forced to raise -- simulating a crash/kill/exception in the gap between renaming the
-    old qm_dir aside and completing the swap. The previous qm/ contents must still be present and
-    byte-identical afterward, proving the old tree is not removed until the new one is confirmed in
-    place (and is restored if the swap fails)."""
-    dest_path = str(tmp_path / 'input.py')
-    qm_dir = os.path.join(str(tmp_path), 'qm')
-    os.makedirs(qm_dir)
-    previous_ts_file = os.path.join(qm_dir, 'TS1.py')
-    previous_ts_content = '# TS1.py from a prior, successful solve into this same output directory\n'
-    with open(previous_ts_file, 'w') as f:
-        f.write(previous_ts_content)
-    previous_log_dir = os.path.join(qm_dir, 'logs', 'TS1')
-    os.makedirs(previous_log_dir)
-    previous_log_file = os.path.join(previous_log_dir, 'output.out')
-    previous_log_content = 'previous good log content\n'
-    with open(previous_log_file, 'w') as f:
-        f.write(previous_log_content)
-
-    real_replace = os.replace
-
-    def _failing_replace(src, dst):
-        if os.path.basename(os.path.normpath(dst)) == 'qm':
-            raise OSError('simulated failure during the qm_dir swap itself')
-        return real_replace(src, dst)
-
-    monkeypatch.setattr(os, 'replace', _failing_replace)
-
-    with pytest.raises(OSError, match='simulated failure during the qm_dir swap itself'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=dest_path,
-            method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-
-    assert not os.path.exists(dest_path), 'a network file must never be written if the qm_dir swap failed'
-    # qm_dir itself must still exist (not left renamed-aside or half-swapped) and hold the OLD
-    # contents intact -- not emptied, not partially replaced with the new (never-completed) solve.
-    assert os.path.isdir(qm_dir)
-    with open(previous_ts_file, 'r') as f:
-        assert f.read() == previous_ts_content, \
-            'the PREVIOUS qm/TS1.py must survive intact when the swap step itself fails'
-    with open(previous_log_file, 'r') as f:
-        assert f.read() == previous_log_content, \
-            'the PREVIOUS qm/logs/TS1/output.out must survive intact when the swap step itself fails'
-    # No leftover renamed-aside temp directory from the failed swap.
-    leftovers = [name for name in os.listdir(str(tmp_path)) if name.startswith('.qm-old-')]
-    assert not leftovers, f'a renamed-aside old qm_dir was not restored/cleaned up: {leftovers}'
 
 
 def test_raises_if_generated_network_file_would_fail_to_parse(tmp_path, monkeypatch):
@@ -1622,159 +1282,11 @@ def test_raises_if_generated_network_file_would_fail_to_parse(tmp_path, monkeypa
             source_path=NETWORK_FIXTURE,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
 
     assert not os.path.exists(dest_path), 'a network file that fails its own self-check must never be written'
-
-
-def test_raises_if_vendored_ts_artifact_would_fail_to_parse(tmp_path, monkeypatch):
-    """Item 8: every vendored qm/<label>.py file must also be self-checked with ast.parse(...);
-    if a vendored TS artifact would not parse, the write must raise RuntimeError."""
-    real_vendor = hybrid_module._vendor_qm_artifacts
-
-    def _corrupting_vendor(artifact_infos, qm_dir, dest_dir):
-        vendored_files = real_vendor(artifact_infos=artifact_infos, qm_dir=qm_dir, dest_dir=dest_dir)
-        with open(os.path.join(qm_dir, 'TS1.py'), 'a') as f:
-            f.write('this is not valid python !!! (\n')
-        return vendored_files
-
-    monkeypatch.setattr(hybrid_module, '_vendor_qm_artifacts', _corrupting_vendor)
-
-    dest_path = str(tmp_path / 'input.py')
-    with pytest.raises(RuntimeError, match='TS1'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=dest_path,
-            method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-
-    assert not os.path.exists(dest_path), 'a network file must never be written if a vendored TS artifact is broken'
-
-
-def test_refuses_absolute_log_path_escaping_the_allowed_root(tmp_path):
-    """B1 (security): an absolute Log(...) path pointing outside the allowed root must RAISE --
-    never be silently accepted and then COPIED into the project by the vendoring step. A
-    malicious or malformed artifact could otherwise name any file the process can read
-    (/etc/passwd, an SSH key) and have it exfiltrated into the run directory."""
-    secret = tmp_path / 'secret' / 'credentials.txt'
-    secret.parent.mkdir()
-    secret.write_text('super secret\n')
-    artifact_dir = tmp_path / 'arc_project'
-    artifact_dir.mkdir()
-    artifact = artifact_dir / 'TS1.py'
-    artifact.write_text(
-        "linear = False\n\nspinMultiplicity = 2\n\n"
-        f"energy = Log('{secret}')\n\n"
-        f"geometry = Log('{secret}')\n\n"
-        f"frequencies = Log('{secret}')\n"
-    )
-    dest_path = str(tmp_path / 'network' / 'input.py')
-    with pytest.raises(ValueError, match='outside'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=dest_path,
-            method='CSE',
-            qm_transition_states={'TS1': str(artifact)},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-    assert not os.path.exists(dest_path)
-    assert not os.path.isdir(os.path.join(os.path.dirname(dest_path), 'qm')), \
-        'nothing may be vendored from an artifact whose Log(...) escapes the allowed root'
-
-
-def test_refuses_relative_log_path_traversing_out_of_the_allowed_root(tmp_path):
-    """B1 (security): a relative Log(...) path that resolves outside the allowed root via
-    '..' traversal must RAISE, exactly like the absolute form."""
-    secret = tmp_path / 'secret' / 'credentials.txt'
-    secret.parent.mkdir()
-    secret.write_text('super secret\n')
-    artifact_dir = tmp_path / 'arc_project'
-    artifact_dir.mkdir()
-    artifact = artifact_dir / 'TS1.py'
-    artifact.write_text(
-        "linear = False\n\nspinMultiplicity = 2\n\n"
-        "energy = Log('../secret/credentials.txt')\n\n"
-        "geometry = Log('../secret/credentials.txt')\n\n"
-        "frequencies = Log('../secret/credentials.txt')\n"
-    )
-    with pytest.raises(ValueError, match='outside'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=str(tmp_path / 'network' / 'input.py'),
-            method='CSE',
-            qm_transition_states={'TS1': str(artifact)},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-
-
-def test_explicit_qm_artifacts_root_widens_confinement_to_that_root(tmp_path):
-    """B1: with an explicit qm_artifacts_root (the ARC project directory case), a Log(...)
-    path that leaves the artifact's own directory but stays under that root is legitimate;
-    the same artifact without the explicit root (default: the artifact's own directory) must
-    be refused."""
-    project = tmp_path / 'arc_project'
-    log_dir = project / 'calcs' / 'sp_a42'
-    os.makedirs(str(log_dir))
-    log_path = log_dir / 'output.out'
-    log_path.write_text('stub quantum chemistry log\n')
-    ts_dir = project / 'calcs' / 'statmech' / 'kinetics' / 'TSs'
-    os.makedirs(str(ts_dir))
-    artifact = ts_dir / 'TS1.py'
-    artifact.write_text(
-        "linear = False\n\nspinMultiplicity = 2\n\n"
-        f"energy = Log('{log_path}')\n\n"
-        f"geometry = Log('{log_path}')\n\n"
-        f"frequencies = Log('{log_path}')\n"
-    )
-
-    result = write_hybrid_network_input_file(
-        source_path=NETWORK_FIXTURE,
-        dest_path=str(tmp_path / 'network_a' / 'input.py'),
-        method='CSE',
-        qm_transition_states={'TS1': str(artifact)},
-        energy_settings=DEFAULT_ENERGY_SETTINGS,
-        qm_artifacts_root=str(project),
-    )
-    assert os.path.isfile(result.dest_path)
-
-    with pytest.raises(ValueError, match='outside'):
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=str(tmp_path / 'network_b' / 'input.py'),
-            method='CSE',
-            qm_transition_states={'TS1': str(artifact)},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-
-
-def test_refuses_non_literal_log_argument(tmp_path):
-    """B2: a Log(...) whose argument is not a string literal (a variable, an os.path.join(...))
-    cannot be checked for existence or confinement, so the module's guarantee that every
-    referenced log exists would silently be false for it. It must be REFUSED -- raising and
-    naming the artifact and the unevaluable argument -- never silently skipped."""
-    log = tmp_path / 'output.out'
-    log.write_text('stub quantum chemistry log\n')
-    artifact = tmp_path / 'TS1.py'
-    artifact.write_text(
-        "linear = False\n\nspinMultiplicity = 2\n\n"
-        "log_name = 'output.out'\n\n"
-        "energy = Log(log_name)\n\n"
-        "geometry = Log('output.out')\n\n"
-        "frequencies = Log('output.out')\n"
-    )
-    with pytest.raises(ValueError, match=r'log_name') as excinfo:
-        write_hybrid_network_input_file(
-            source_path=NETWORK_FIXTURE,
-            dest_path=str(tmp_path / 'network' / 'input.py'),
-            method='CSE',
-            qm_transition_states={'TS1': str(artifact)},
-            energy_settings=DEFAULT_ENERGY_SETTINGS,
-        )
-    assert 'TS1.py' in str(excinfo.value)
 
 
 @pytest.mark.parametrize('field_name, value', [
@@ -1805,7 +1317,7 @@ def test_refuses_wrongly_typed_energy_settings_fields(tmp_path, field_name, valu
             source_path=NETWORK_FIXTURE,
             dest_path=str(tmp_path / 'input.py'),
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=energy_settings,
         )
 
@@ -1872,7 +1384,7 @@ class TestKwargsUnpackingIsRefusedByTheRewriterToo:
             source_path=source_path,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
         assert os.path.isfile(dest_path), \
@@ -1893,7 +1405,7 @@ class TestKwargsUnpackingIsRefusedByTheRewriterToo:
                 source_path=source_path,
                 dest_path=dest_path,
                 method='CSE',
-                qm_transition_states={'TS1': TS1_ARTIFACT},
+                qm_transition_states={'TS1': ts_conformer()},
                 energy_settings=DEFAULT_ENERGY_SETTINGS,
             )
         assert not os.path.isfile(dest_path), 'nothing may be written once the source is refused'
@@ -1918,7 +1430,7 @@ class TestKwargsUnpackingIsRefusedByTheRewriterToo:
                 source_path=source_path,
                 dest_path=dest_path,
                 method='CSE',
-                qm_transition_states={'TS1': TS1_ARTIFACT},
+                qm_transition_states={'TS1': ts_conformer()},
                 energy_settings=DEFAULT_ENERGY_SETTINGS,
             )
         assert not os.path.isfile(dest_path)
@@ -1930,7 +1442,169 @@ class TestKwargsUnpackingIsRefusedByTheRewriterToo:
             source_path=NETWORK_FIXTURE,
             dest_path=dest_path,
             method='CSE',
-            qm_transition_states={'TS1': TS1_ARTIFACT},
+            qm_transition_states={'TS1': ts_conformer()},
             energy_settings=DEFAULT_ENERGY_SETTINGS,
         )
         assert os.path.isfile(dest_path)
+
+
+# ---------------------------------------------------------------------------------------------------
+# I-023: adopt QM wells, and make the degrees-of-freedom treatment a network-wide invariant.
+#
+# These tests drive the REAL committed CHO2 round-0 data, not a synthetic stub: the source network
+# is the real RMG-explored network the pilot run produced, and the conformer data is the real
+# Arkane-extracted (E0, frequencies, imaginary) for both wells and the transition state, on the one
+# self-consistent energy reference. Every prior defect on this producer/consumer handoff was
+# invisible to synthetic fixtures, so the standing rule for this ticket is that at least one test
+# drives the real artifact end to end.
+# ---------------------------------------------------------------------------------------------------
+
+CHO2_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_hybrid', 'cho2_round0')
+CHO2_SOURCE = os.path.join(CHO2_DIR, 'source_network0_reduced.py')
+CHO2_CONFORMERS = os.path.join(CHO2_DIR, 'conformers.json')
+CHO2_ENERGY_SETTINGS = QMEnergySettings(
+    model_chemistry="LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')",
+    atom_energies={
+        'Br': -2574.174533595486, 'C': -37.84706210301937, 'Cl': -460.1467876783656,
+        'F': -99.73955550924293, 'H': -0.5006557872395249, 'N': -54.584995947182875,
+        'O': -75.07252406126821, 'S': -398.1105530401693,
+    },
+    tunneling='Eckart',
+)
+# The two isomers of the real CHO2 network and its QM'd transition state.
+CHO2_WELL_QM = 'O=[C]O(8)'
+CHO2_WELL_ESTIMATED = '[O]C=O(1)'
+CHO2_TS = 'TS2'
+
+
+def _load_cho2_conformers():
+    import json
+    with open(CHO2_CONFORMERS) as f:
+        return json.load(f)
+
+
+def _external_dof_mode_names(text):
+    """Every statmech mode class *constructed* in the network text that carries translation or
+    overall rotation. Matches the ``Name(`` constructor form so it never trips on the unrelated
+    ``activeKRotor``/``activeJRotor`` pressureDependence flags."""
+    return [name for name in ('IdealGasTranslation', 'LinearRotor', 'NonlinearRotor', 'KRotor',
+                              'SphericalTopRotor') if f'{name}(' in text]
+
+
+def _species_block(text, label):
+    start = text.index(f"label = '{label}'")
+    return text[start:text.index('\n)\n', start)]
+
+
+@pytest.mark.parametrize('non_isomer_label', ['Ar', 'O=C=O(5)', '[H](6)'])
+def test_only_an_isomer_can_be_adopted_as_a_well(tmp_path, non_isomer_label):
+    """`qm_wells` must be validated against the network's ISOMERS, not against every species block.
+
+    The CHO2 source declares five species(...) blocks but only two isomers: the other three are the
+    bath gas `Ar` and the bimolecular channel species `O=C=O(5)` and `[H](6)`. Validating against
+    `species_labels` accepted all five, so `qm_wells={'Ar': ...}` would have rewritten the BATH
+    GAS's E0 and modes -- and nothing downstream would have caught it, because the write-time
+    degrees-of-freedom invariant deliberately skips non-isomer species (channel species legitimately
+    carry full conformers).
+    """
+    conf = _load_cho2_conformers()
+    with pytest.raises(ValueError) as exc_info:
+        write_hybrid_network_input_file(
+            source_path=CHO2_SOURCE,
+            dest_path=str(tmp_path / 'input.py'),
+            method='MSC',
+            qm_transition_states={CHO2_TS: conf[CHO2_TS]},
+            qm_wells={non_isomer_label: conf[CHO2_WELL_QM]},
+            energy_settings=CHO2_ENERGY_SETTINGS,
+        )
+    message = str(exc_info.value)
+    assert non_isomer_label in message
+    assert 'not isomers' in message
+
+
+def test_i023_mixed_network_adopts_one_qm_well_and_stays_dof_consistent(tmp_path):
+    """The mixed case, on the real CHO2 network: one well is adopted from QM, the other keeps its
+    RMG estimate, and the transition state is QM'd. The produced network must be
+    degrees-of-freedom-consistent -- every well and the TS vibration-only, no translation/rotation
+    anywhere -- which is the invariant this ticket exists to guarantee even for a partially-explored
+    network."""
+    conf = _load_cho2_conformers()
+    dest_path = str(tmp_path / 'input.py')
+    result = write_hybrid_network_input_file(
+        source_path=CHO2_SOURCE,
+        dest_path=dest_path,
+        method='MSC',
+        qm_transition_states={CHO2_TS: conf[CHO2_TS]},
+        qm_wells={CHO2_WELL_QM: conf[CHO2_WELL_QM]},  # only ONE well has QM data
+        energy_settings=CHO2_ENERGY_SETTINGS,
+    )
+    assert result.qm_ts_labels == (CHO2_TS,)
+    assert result.qm_well_labels == (CHO2_WELL_QM,)
+
+    with open(dest_path) as f:
+        text = f.read()
+
+    # The invariant: no isomer or TS carries a translational/rotational mode.
+    assert _external_dof_mode_names(text) == [], \
+        f"DOF-inconsistent network leaked external modes: {_external_dof_mode_names(text)}"
+    # The network is self-contained: it never falls back to a by-reference qm/ statmech file.
+    assert 'qm/' not in text
+
+    # The adopted well carries the QM E0 and QM frequencies (vibration-only, HarmonicOscillator).
+    qm_well_block = _species_block(text, CHO2_WELL_QM)
+    assert f"({conf[CHO2_WELL_QM]['E0_kJ_mol']!r},'kJ/mol')" in qm_well_block
+    assert 'HarmonicOscillator' in qm_well_block
+
+    # The un-adopted well keeps its RMG-estimated E0 -- it was NOT rewritten -- yet is still
+    # vibration-only, so the mixed-provenance network is DOF-consistent.
+    estimated_block = _species_block(text, CHO2_WELL_ESTIMATED)
+    assert "E0 = (-169.935,'kJ/mol')" in estimated_block
+    assert 'HarmonicOscillator' in estimated_block
+
+    # The TS is inline (not by-reference) with its imaginary frequency and QM E0.
+    assert f"({conf[CHO2_TS]['E0_kJ_mol']!r},'kJ/mol')" in text
+    assert f"frequency = ({conf[CHO2_TS]['imaginary_frequency_cm_1']!r},'cm^-1')" in text
+
+
+def test_i023_full_qm_network_adopts_both_wells_and_is_dof_consistent(tmp_path):
+    """Both wells adopted from QM plus the QM'd TS: the whole isomer set is on one QM energy
+    reference and every conformer is vibration-only. This is the network whose round-1 master
+    equation solves (verified out of band by driving Arkane's explorer on it)."""
+    conf = _load_cho2_conformers()
+    dest_path = str(tmp_path / 'input.py')
+    result = write_hybrid_network_input_file(
+        source_path=CHO2_SOURCE,
+        dest_path=dest_path,
+        method='MSC',
+        qm_transition_states={CHO2_TS: conf[CHO2_TS]},
+        qm_wells={CHO2_WELL_QM: conf[CHO2_WELL_QM], CHO2_WELL_ESTIMATED: conf[CHO2_WELL_ESTIMATED]},
+        energy_settings=CHO2_ENERGY_SETTINGS,
+    )
+    assert result.qm_well_labels == tuple(sorted((CHO2_WELL_QM, CHO2_WELL_ESTIMATED)))
+
+    with open(dest_path) as f:
+        text = f.read()
+    assert _external_dof_mode_names(text) == []
+    # Both wells now carry their QM E0 (on the same reference as the TS).
+    assert f"({conf[CHO2_WELL_QM]['E0_kJ_mol']!r},'kJ/mol')" in text
+    assert f"({conf[CHO2_WELL_ESTIMATED]['E0_kJ_mol']!r},'kJ/mol')" in text
+    # The reaction whose TS was QM'd drops its ILT kinetics and takes tunneling.
+    assert "tunneling = 'Eckart'" in text
+
+
+def test_i023_refuses_a_conformer_with_a_non_hindered_rotor_mode(tmp_path):
+    """The DOF invariant is enforced up front: a conformer-data dict whose internal-rotor entry is
+    not a HinderedRotor (e.g. the extractor regressing and leaking an external rotor) must be
+    refused before anything reaches disk, rather than emitting a DOF-inconsistent network."""
+    conf = _load_cho2_conformers()
+    bad = dict(conf[CHO2_WELL_QM])
+    bad['hindered_rotors'] = [{'type': 'NonlinearRotor'}]
+    with pytest.raises(ValueError, match='HinderedRotor'):
+        write_hybrid_network_input_file(
+            source_path=CHO2_SOURCE,
+            dest_path=str(tmp_path / 'input.py'),
+            method='MSC',
+            qm_transition_states={CHO2_TS: conf[CHO2_TS]},
+            qm_wells={CHO2_WELL_QM: bad},
+            energy_settings=CHO2_ENERGY_SETTINGS,
+        )

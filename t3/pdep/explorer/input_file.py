@@ -26,6 +26,8 @@ import tokenize
 import warnings
 from dataclasses import dataclass, field
 
+from arc.molecule.molecule import Molecule
+
 from t3.pdep.hashing import hash_bytes
 from t3.pdep.hybrid import _MODEL_CHEMISTRY_CALL_NAMES, _validate_model_chemistry_expression
 from t3.utils.writer import METHOD_LINE_CANDIDATE_RE, METHOD_MAP, rewrite_arkane_method_line
@@ -174,6 +176,17 @@ class ExplorerInputSummary:
                           (adjacency ``multiplicity 3``, u2, thermo label ``O(T)``); re-feeding that
                           file makes Arkane round-trip an inconsistent species and crash, so any
                           RMG-explored network carrying O(3P) is otherwise un-re-feedable.
+        stat_mech_paths_absolutized (tuple): One ``(label, old_path, new_path)`` per
+                          ``species()``/``transitionState()`` block whose external stat-mech FILE
+                          path (I-021: the hybrid writer emits
+                          ``transitionState('TS2', 'qm/TS2.py')`` with the ``qm/`` tree beside the
+                          hybrid) was relative and was rewritten to an absolute path anchored at the
+                          SOURCE file's directory. Splicing the relative path verbatim into a
+                          generated explorer input under a DIFFERENT directory made Arkane resolve it
+                          against its own working directory, where no ``qm/`` tree exists, and fail
+                          with ``FileNotFoundError`` at ``arkane/statmech.py`` load time. The
+                          hybrid's own relative convention (portable run directories) is left
+                          untouched; only the SPLICED copy is absolutized.
     """
     dest_path: str
     seed_species: tuple
@@ -182,6 +195,30 @@ class ExplorerInputSummary:
     reactive_false_injected: tuple = field(default_factory=tuple)
     warnings: tuple = field(default_factory=tuple)
     spin_multiplicity_corrected: tuple = field(default_factory=tuple)
+    stat_mech_paths_absolutized: tuple = field(default_factory=tuple)
+
+
+def _declared_label(call: ast.Call, kwargs: dict) -> str | None:
+    """
+    The label a ``species(...)``/``transitionState(...)`` call declares, in EITHER of the two forms
+    Arkane accepts: ``species(label='S', ...)`` and the positional ``species('S', 'qm/S.py')``.
+
+    Registration used to read ``kwargs['label']`` only, while the stat-mech path rewrite already
+    understood the positional form -- so a source containing ``species('S', 'qm/S.py')`` had its
+    path absolutized but its label never registered, and any ``seed_species=('S',)`` or
+    ``bath_gas={'S': 1.0}`` naming it was then refused with "Known species labels are []". One
+    reader for both, so the two cannot drift apart again.
+
+    Args:
+        call (ast.Call): The ``species(...)``/``transitionState(...)`` call node.
+        kwargs (dict): That call's keyword nodes, by name.
+
+    Returns:
+        str | None: The declared label, or ``None`` when it is not a literal string.
+    """
+    if 'label' in kwargs:
+        return _literal_or_none(kwargs['label'])
+    return _literal_or_none(call.args[0]) if call.args else None
 
 
 def write_arkane_explorer_input_file(source_path: str,
@@ -308,6 +345,13 @@ def write_arkane_explorer_input_file(source_path: str,
     _validate_source_statements(tree=tree, text=text, source_path=source_path)
     line_starts = _line_start_offsets(text)
 
+    # The directory the source file lives in, resolved absolutely. Every RELATIVE stat-mech FILE path
+    # spliced out of the source (``transitionState('TS2', 'qm/TS2.py')`` and the species-from-file
+    # form) is relative to THIS directory -- the hybrid writer vendors the ``qm/`` tree right beside
+    # the source it writes (see t3.pdep.hybrid, lines ~649/700-715). Anchoring the rewrite here is
+    # what lets the generated file, which lands in an unrelated directory, still reach that tree.
+    source_dir = os.path.dirname(os.path.abspath(source_path))
+
     species_nodes = dict()
     species_reactive = dict()
     species_structure_nodes = dict()
@@ -316,6 +360,7 @@ def write_arkane_explorer_input_file(source_path: str,
     network_nodes = list()
     pdep_nodes = list()
     kinetics_labels_emitted = list()
+    stat_mech_paths_absolutized = list()
     edits = list()
 
     for node in tree.body:
@@ -327,8 +372,32 @@ def write_arkane_explorer_input_file(source_path: str,
             continue
         kwargs = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
 
+        # I-021: rewrite a RELATIVE external stat-mech file path to absolute, anchored at the source
+        # file's own directory, BEFORE the block is spliced verbatim into the generated file. The
+        # hybrid writer emits ``transitionState('TS2', 'qm/TS2.py')`` -- a path relative to the
+        # hybrid, whose ``qm/`` tree sits right beside it. That is deliberately portable for the
+        # hybrid, but the generated explorer input this module writes lands in a DIFFERENT directory
+        # with no ``qm/`` sibling, and Arkane resolves the raw path against its own working directory
+        # (arkane/statmech.py bare ``open(path)``, after arkane/input.py rebases it only onto the
+        # generated input's own dir) -- so the verbatim splice made Arkane fail with FileNotFoundError
+        # at load time. An ABSOLUTE path is passed through by Arkane's ``os.path.join`` rebase
+        # unchanged and resolves from anywhere; the hybrid's relative convention is left untouched
+        # (only the spliced copy is edited). Refuses nothing new: a string literal stays a string
+        # literal, so both the inbound source guard and the outbound self-check still accept it.
+        if call_name in ('species', 'transitionState'):
+            path_node = _stat_mech_file_path_node(call)
+            if path_node is not None and not os.path.isabs(path_node.value):
+                absolute_path = os.path.join(source_dir, path_node.value)
+                start = _pos(text, line_starts, path_node.lineno, path_node.col_offset)
+                end = _pos(text, line_starts, path_node.end_lineno, path_node.end_col_offset)
+                # Rendered with repr(), never interpolated into a quoted literal, so any path is a
+                # well-formed Python string literal in the generated file.
+                edits.append((start, end, repr(absolute_path)))
+                path_label = _declared_label(call, kwargs)
+                stat_mech_paths_absolutized.append((path_label, path_node.value, absolute_path))
+
         if call_name == 'species':
-            label = _literal_or_none(kwargs.get('label'))
+            label = _declared_label(call, kwargs)
             if label is not None:
                 species_nodes[label] = node
                 reactive_node = kwargs.get('reactive')
@@ -338,7 +407,7 @@ def write_arkane_explorer_input_file(source_path: str,
                 species_spin_mult_nodes[label] = kwargs.get('spinMultiplicity')
 
         elif call_name == 'transitionState':
-            label = _literal_or_none(kwargs.get('label'))
+            label = _declared_label(call, kwargs)
             if label is not None:
                 ts_nodes[label] = node
 
@@ -368,6 +437,16 @@ def write_arkane_explorer_input_file(source_path: str,
                          f"or ambiguous (more than one) pressureDependence block.")
     pdep_node = pdep_nodes[0]
 
+    # Resolve the configured seed(s) to the label THIS network actually uses BEFORE validating them.
+    # The seed is configured once, against the original source network, where it is a literal
+    # species() label ('[O]C=O'). From round 1 on the loop re-explores a HYBRID network whose species
+    # Arkane relabelled with network indices ('[O]C=O(1)'), so the configured label is no longer a
+    # literal label here and _validate_seed_species (by-label, like Arkane's own source resolution)
+    # would refuse it. Resolution is by structure, never by loosening that validator -- a seed that
+    # cannot be resolved is passed through unchanged, so the validator still raises its clear error.
+    seed_species, seed_resolution_warnings = _resolve_seed_labels(
+        seed_species=seed_species, species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path=source_path)
     _validate_seed_species(seed_species=seed_species, species_nodes=species_nodes, ts_nodes=ts_nodes)
     # Rebound from the return value, not merely called for its side effect: an integer-only field
     # coerces an integral float (2.0 -> 2), and rendering the un-coerced argument would write a count
@@ -389,6 +468,9 @@ def write_arkane_explorer_input_file(source_path: str,
     warnings_list, reactive_injection_labels = _validate_bath_gas(
         bath_gas=bath_gas, species_nodes=species_nodes,
         species_reactive=species_reactive, source_path=source_path)
+    # Seed resolution runs before warnings_list exists, so fold its notes in now; they belong in the
+    # same ExplorerInputSummary.warnings the caller surfaces.
+    warnings_list = list(seed_resolution_warnings) + warnings_list
 
     # Inject 'reactive = False,' into each declared bath-gas species() block that carries no
     # 'reactive' keyword in the source -- see _validate_bath_gas's docstring for why this is a
@@ -399,9 +481,19 @@ def write_arkane_explorer_input_file(source_path: str,
     # here, never by text-scanning for a species block.
     for label in reactive_injection_labels:
         species_call = species_nodes[label].value
-        first_kw = species_call.keywords[0]
-        insert_pos = _pos(text, line_starts, first_kw.lineno, first_kw.col_offset)
-        edits.append((insert_pos, insert_pos, f"reactive = False,\n{' ' * first_kw.col_offset}"))
+        if species_call.keywords:
+            first_kw = species_call.keywords[0]
+            insert_pos = _pos(text, line_starts, first_kw.lineno, first_kw.col_offset)
+            edits.append((insert_pos, insert_pos, f"reactive = False,\n{' ' * first_kw.col_offset}"))
+        else:
+            # A wholly positional block -- ``species('S', 'qm/S.py')`` -- has no keyword to anchor
+            # to, and indexing keywords[0] here used to raise IndexError. Append the keyword after
+            # the last positional argument instead: trailing keywords are legal after positionals,
+            # so this is the same faithful translation, computed from the AST just like the branch
+            # above rather than by text-scanning.
+            last_arg = species_call.args[-1]
+            insert_pos = _pos(text, line_starts, last_arg.end_lineno, last_arg.end_col_offset)
+            edits.append((insert_pos, insert_pos, ", reactive = False"))
 
     # Correct any spinMultiplicity that contradicts its species' own adjacency-list multiplicity.
     # RMG's explorer writes triplet atomic O ('[O]', thermo label "O(T)") with spinMultiplicity = 1
@@ -549,7 +641,53 @@ def write_arkane_explorer_input_file(source_path: str,
         reactive_false_injected=tuple(reactive_injection_labels),
         warnings=tuple(warnings_list),
         spin_multiplicity_corrected=tuple(spin_multiplicity_corrected),
+        stat_mech_paths_absolutized=tuple(stat_mech_paths_absolutized),
     )
+
+
+def _stat_mech_file_path_node(call: ast.Call):
+    """
+    Return the ``ast.Constant`` node of a ``species()``/``transitionState()`` call's external
+    stat-mech FILE PATH argument, or ``None`` if the call is not Arkane's "path to a conformer input
+    file" form.
+
+    Arkane's ``species(label, *args, **kwargs)`` and ``transitionState(label, *args, **kwargs)``
+    (RMG-Py ``arkane/input.py:130,241``) treat a call of shape ``<name>(label, path)`` -- EXACTLY one
+    positional argument beyond the label, and NO keyword arguments other than the label -- as a
+    reference to an external stat-mech file (``StatMechJob(species=..., path=path)``). Every other
+    shape is an inline definition carrying its parameters as keywords (``E0=``, ``structure=``, ...),
+    which has no file path to rewrite. The path is always POSITIONAL: Arkane has no ``path=`` keyword;
+    a ``path`` passed by keyword lands in ``**kwargs`` and Arkane rejects the call outright
+    (``arkane/input.py:280-284``), so a keyword there never denotes a file to reach.
+
+    Returns the node only when the path is a plain string literal, so its exact source span can be
+    replaced. A non-literal path expression (which the inbound source guard refuses upstream anyway)
+    returns ``None`` and is left untouched rather than silently rewritten.
+
+    Args:
+        call (ast.Call): A top-level ``species()``/``transitionState()`` call node from the source.
+
+    Returns:
+        Optional[ast.Constant]: The path string-literal node, or ``None``.
+    """
+    keyword_names = {kw.arg for kw in call.keywords}
+    if 'label' in keyword_names:
+        # The label was passed by keyword, so every positional argument is a candidate path slot.
+        positional_path_args = call.args
+        other_keywords = [kw for kw in call.keywords if kw.arg != 'label']
+    else:
+        # The first positional argument is the label; the rest are Arkane's ``*args``.
+        positional_path_args = call.args[1:]
+        other_keywords = list(call.keywords)
+    if len(positional_path_args) != 1 or other_keywords:
+        # Not Arkane's ``len(args) == 1 and len(kwargs) == 0`` file-path form (an inline definition,
+        # a bare label, or something with extra keywords -- ``**kwargs`` unpacking lands here too and
+        # is conservatively left alone). No external path to absolutize.
+        return None
+    path_node = positional_path_args[0]
+    if isinstance(path_node, ast.Constant) and isinstance(path_node.value, str):
+        return path_node
+    return None
 
 
 def _validate_seed_species(seed_species: tuple, species_nodes: dict, ts_nodes: dict) -> None:
@@ -582,6 +720,164 @@ def _validate_seed_species(seed_species: tuple, species_nodes: dict, ts_nodes: d
         if not is_species:
             raise ValueError(f"Seed species label '{label}' is not defined as a species() block anywhere in the "
                              f"source. Known species labels are {sorted(species_nodes)}.")
+
+
+def _molecule_identity(molecule) -> str:
+    """
+    The canonical structural identity of an ARC ``Molecule``: its canonical SMILES joined to its spin
+    multiplicity.
+
+    Mirrors ``t3.pdep.pes_rounds._canonical_structure`` so a seed built from a SMILES and a network
+    species built from an ``adjacencyList`` that are the same physical structure (same connectivity,
+    same multiplicity) produce the same string here.
+    """
+    return f'{molecule.to_smiles()}|m{molecule.multiplicity}'
+
+
+def _seed_structure_identity(label: str) -> str | None:
+    """
+    The canonical structure identity of a configured seed LABEL read as a SMILES.
+
+    T3's PES seeds are SMILES labels (e.g. ``'[O]C=O'``), so a seed that is no longer a literal
+    ``species()`` label in a re-explored (hybrid) network can still be matched to the label that
+    network uses, by structure. Returns ``None`` when the label is not a parseable SMILES -- an
+    index-suffixed label such as ``'O=C=O(5)'`` or any non-structural name -- in which case
+    ``_resolve_seed_labels`` leaves the seed untouched for ``_validate_seed_species`` to judge by
+    string.
+
+    Args:
+        label (str): The configured seed (source) label.
+
+    Returns:
+        Optional[str]: The canonical structure identity, or ``None`` if the label is not a SMILES.
+    """
+    try:
+        molecule = Molecule().from_smiles(label)
+    except Exception:
+        # Deliberately broad, and the breadth is the point. This function's contract is "None when
+        # the label is not a parseable SMILES", and every caller depends on that failing CLOSED --
+        # an unresolved seed is passed through untouched so `_validate_seed_species` can refuse it
+        # by name, with a message naming the labels the network actually defines. A parser
+        # exception escaping here would replace that diagnostic with a raw backend error from
+        # somewhere inside openbabel. The backend raises more than ValueError/KeyError in practice
+        # (a non-str label surfaces as TypeError), and it is third-party code whose exception set
+        # is not ours to enumerate. `pes_rounds._canonical_structure` guards its own parse the same
+        # way, for the same reason.
+        return None
+    return _molecule_identity(molecule)
+
+
+def _species_structure_identity(structure_node) -> str | None:
+    """
+    The canonical structure identity of a ``species()`` block's ``structure`` keyword value.
+
+    Mirrors ``_adjacency_list_multiplicity``'s extraction -- the same two ``structure`` call forms
+    real network files use, ``adjacencyList(...)`` and ``SMILES(...)`` -- but resolves the whole
+    structure to the identity seed resolution compares against, not merely its multiplicity.
+
+    Args:
+        structure_node: The AST node of the species' ``structure`` keyword value, or ``None``.
+
+    Returns:
+        Optional[str]: The canonical structure identity, or ``None`` when the structure is absent or
+        is not a parseable ``adjacencyList(...)``/``SMILES(...)`` string literal.
+    """
+    if not isinstance(structure_node, ast.Call) or not structure_node.args:
+        return None
+    call_name = _get_call_name(structure_node)
+    arg = structure_node.args[0]
+    text = arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
+    if text is None:
+        return None
+    try:
+        if call_name == 'adjacencyList':
+            molecule = Molecule().from_adjacency_list(text)
+        elif call_name == 'SMILES':
+            molecule = Molecule().from_smiles(text)
+        else:
+            return None
+    except Exception:
+        # Broad for the same reason as `_seed_structure_identity`: an unparseable `structure`
+        # keyword must leave this species unmatched rather than abort the whole write.
+        return None
+    return _molecule_identity(molecule)
+
+
+def _resolve_seed_labels(seed_species: tuple, species_nodes: dict, species_structure_nodes: dict,
+                         source_path: str) -> tuple:
+    """
+    Resolve each configured seed (source) label to the label THIS network actually uses, matching by
+    molecular structure whenever the configured label is not itself a ``species()`` label here.
+
+    T3's PES loop configures its seed once, against the original source network, where the seed is a
+    literal ``species()`` label (``'[O]C=O'``). From round 1 on, the loop re-explores a HYBRID network
+    whose species Arkane's explorer relabelled with network indices (``'[O]C=O(1)'``), so the
+    configured label is no longer a literal label in the file and Arkane's by-label ``source``
+    resolution -- which ``_validate_seed_species`` refuses first, with a clearer message -- would
+    raise. The information to bridge the two labels is in the file: every species carries
+    ``structure = adjacencyList(...)``, so the configured seed can be matched to the round's actual
+    label by canonical structure rather than by string.
+
+    Resolution is per label, and never loosens ``_validate_seed_species``:
+
+    * **Literal match** -- the label is already a ``species()`` label here (round 0 against the real
+      source): keep it, with no structural work at all, so round-0 behaviour is byte-for-byte
+      unchanged.
+    * **Structural match** -- otherwise, if the configured label parses as a species structure (a
+      SMILES; the campaign's seeds are SMILES labels), match its identity against every
+      ``species()`` block's structure. Exactly one match resolves to that label. **Zero** matches
+      leave the configured label unchanged, so ``_validate_seed_species`` raises its own clear
+      "not defined ... known labels are [...]" error rather than this function inventing one.
+      **More than one** match is refused (ambiguous): a source configuration must name exactly one
+      physical species, and seeding from an arbitrary one of several structurally identical species
+      could explore from the wrong copy.
+    * A label that neither matches literally nor parses as a structure likewise falls through to
+      ``_validate_seed_species`` unchanged.
+
+    Args:
+        seed_species (tuple): The configured seed (source) labels.
+        species_nodes (dict): ``species()`` label -> AST node, as collected from the source.
+        species_structure_nodes (dict): ``species()`` label -> ``structure`` keyword AST node.
+        source_path (str): The network path the seed is being resolved against (for messages).
+
+    Returns:
+        tuple: ``(resolved_seed_species, warnings)`` -- the resolved labels in input order, and any
+        human-readable notes about labels that were remapped.
+
+    Raises:
+        ValueError: If a seed label matches more than one ``species()`` block by structure.
+    """
+    resolved = list()
+    resolution_warnings = list()
+    network_identities = None  # computed lazily, only if some label actually needs structural work
+    for label in seed_species:
+        if label in species_nodes:
+            resolved.append(label)
+            continue
+        seed_identity = _seed_structure_identity(label)
+        if seed_identity is None:
+            resolved.append(label)
+            continue
+        if network_identities is None:
+            network_identities = {net_label: _species_structure_identity(node)
+                                  for net_label, node in species_structure_nodes.items()}
+        matches = sorted(net_label for net_label, identity in network_identities.items()
+                         if identity is not None and identity == seed_identity)
+        if len(matches) == 1:
+            resolution_warnings.append(
+                f"Seed species label {label!r} is not a species() block in '{source_path}'; resolved "
+                f"it by structure ({seed_identity}) to {matches[0]!r}, the label this network uses for "
+                f"that species.")
+            resolved.append(matches[0])
+        elif len(matches) > 1:
+            raise ValueError(
+                f"Seed species label {label!r} matches {len(matches)} species() blocks in "
+                f"'{source_path}' by structure ({seed_identity}): {matches}. A source configuration "
+                f"must identify exactly one species; refusing to seed the explorer from an arbitrary "
+                f"one of several structurally identical species.")
+        else:
+            resolved.append(label)
+    return tuple(resolved), resolution_warnings
 
 
 def _validate_kinetics_label(label: str, source_path: str) -> None:
@@ -1404,6 +1700,47 @@ def _validate_source_expression(node: ast.AST, text: str, source_path: str) -> N
 _GENERATED_CALL_NAMES = tuple(_TOP_LEVEL_CALL_NAMES) + ('database', 'explorer', 'kinetics')
 
 
+def _is_model_chemistry_call_assignment(target: str, value: ast.expr) -> bool:
+    """
+    Decide whether a single-target assignment is the one non-literal shape both guards accept:
+    ``modelChemistry = LevelOfTheory(...)`` / ``CompositeLevelOfTheory(...)``, whose real ARC/hybrid
+    value is a bare call Arkane execs at load time rather than an ``ast.literal_eval``-able literal.
+
+    This is the SHARED accept-test for that one directive, called from BOTH the inbound source guard
+    (``_validate_source_statements``) and the outbound self-check (``_validate_generated_statements``).
+    The line is spliced verbatim from source to generated file, so what the inbound guard admits the
+    outbound guard must re-admit; keeping the decision in one place is what stops the two from drifting
+    apart again -- the drift that let this exact line pass on the way in and fail on the way out.
+
+    The call is routed through the SAME structural checker T3 uses when it EMITS this directive
+    (``t3.pdep.hybrid._validate_model_chemistry_expression``): validating the ``ast.unparse``
+    round-tripped node -- which that string-taking checker re-parses -- is equivalent to validating
+    the spliced text, because the AST is what decides exec semantics and the verbatim splice
+    reproduces it. The gate is deliberately on a genuine call node to one of the two known names: a
+    ``modelChemistry`` bound to some OTHER value returns False and falls through to the caller's
+    literal test, so a computed value stays refused.
+
+    Args:
+        target (str): The single assignment target's name.
+        value (ast.expr): The assignment's value node.
+
+    Returns:
+        bool: True if this is a structurally valid ``modelChemistry`` call assignment; False if the
+              value is not a ``modelChemistry`` call at all (leave it to the caller's literal test).
+
+    Raises:
+        ValueError: If it IS a ``modelChemistry`` call to a known name but fails structural
+                    validation. Each caller wraps this in its own error (a source ValueError inbound,
+                    a self-check RuntimeError outbound).
+    """
+    if not (target == 'modelChemistry' and isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id in _MODEL_CHEMISTRY_CALL_NAMES):
+        return False
+    _validate_model_chemistry_expression(target, ast.unparse(value))
+    return True
+
+
 def _validate_generated_statements(tree: ast.Module, text: str, dest_path: str) -> None:
     """
     Self-check the top-level statement list of the file this module is about to WRITE.
@@ -1436,7 +1773,15 @@ def _validate_generated_statements(tree: ast.Module, text: str, dest_path: str) 
                 and _get_call_name(node.value) in _GENERATED_CALL_NAMES):
             continue
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target = node.targets[0].id
+            # Accept exactly what the inbound guard accepts for an assignment, via the shared helper:
+            # the one non-literal shape is ``modelChemistry = LevelOfTheory(...)``, spliced verbatim
+            # from an already-validated source. A malformed such call (helper raises) cannot reach here
+            # -- the inbound guard refuses it with the same checker -- so it correctly falls through to
+            # the RuntimeError below, which is the right response to this module emitting a bad one.
             try:
+                if _is_model_chemistry_call_assignment(target, node.value):
+                    continue
                 ast.literal_eval(node.value)
             except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
                 pass
@@ -1446,10 +1791,11 @@ def _validate_generated_statements(tree: ast.Module, text: str, dest_path: str) 
             f"Refusing to write '{dest_path}': the generated explorer input file text failed its own "
             f"self-check. Line {node.lineno} is a top-level {type(node).__name__} statement "
             f"({_source_snippet(node, text)!r}) that this module never emits and no validated source "
-            f"statement can become -- only calls to {sorted(_GENERATED_CALL_NAMES)}, bare literals and "
-            f"literal assignments belong here. Something spliced or rendered a statement into this file, "
-            f"which is a defect in this module (or an injection through one of its arguments), not a "
-            f"problem with the source file.")
+            f"statement can become -- only calls to {sorted(_GENERATED_CALL_NAMES)}, bare literals, "
+            f"literal assignments, and a validated 'modelChemistry = "
+            f"{'/'.join(_MODEL_CHEMISTRY_CALL_NAMES)}(...)' directive belong here. Something spliced or "
+            f"rendered a statement into this file, which is a defect in this module (or an injection "
+            f"through one of its arguments), not a problem with the source file.")
 
 
 def _validate_source_statements(tree: ast.Module, text: str, source_path: str) -> None:
@@ -1536,27 +1882,21 @@ def _validate_source_statements(tree: ast.Module, text: str, source_path: str) -
                     f"generates and appends -- so a source may not assign to it, however harmless the value.")
             # ``modelChemistry`` is the one directive whose real ARC/hybrid value is a bare
             # ``LevelOfTheory(...)``/``CompositeLevelOfTheory(...)`` call (which Arkane execs at load
-            # time), not an ``ast.literal_eval``-able literal. Rather than grow a second model-chemistry
-            # allowlist here, route it through the SAME structural checker T3 uses when it EMITS this
-            # directive (``t3.pdep.hybrid._validate_model_chemistry_expression``); the AST is what
-            # decides exec semantics and the verbatim splice reproduces it, so validating the
-            # ``ast.unparse``-round-tripped node -- which that string-taking checker re-parses -- is
-            # equivalent to validating the spliced text. The gate is deliberately on a genuine call
-            # node to one of the two known names: the checker accepts any NON-call string as a plain
-            # label (injection-char check only), so a computed ``modelChemistry`` value must keep
-            # falling through to the refusal below rather than being handed over as a bare label.
-            if (target == 'modelChemistry' and isinstance(node.value, ast.Call)
-                    and isinstance(node.value.func, ast.Name)
-                    and node.value.func.id in _MODEL_CHEMISTRY_CALL_NAMES):
-                try:
-                    _validate_model_chemistry_expression(target, ast.unparse(node.value))
-                except ValueError as e:
-                    raise ValueError(
-                        f"Refusing to use '{source_path}' as an Arkane explorer/network source: line "
-                        f"{node.lineno} assigns a 'modelChemistry' value that fails structural validation "
-                        f"({_source_snippet(node, text)!r}): {e}. This source's text is spliced verbatim into "
-                        f"a NEW file Arkane will exec, so a malformed model-chemistry call is refused.") from e
-                continue
+            # time), not an ``ast.literal_eval``-able literal. It is accepted via the SAME shared
+            # helper the outbound self-check uses, so the inbound and outbound rules for this one
+            # non-literal shape cannot drift apart (the drift that let a spliced ``modelChemistry``
+            # line pass here and then fail its own self-check on the way out). The helper returns False
+            # for a ``modelChemistry`` bound to some OTHER value, which then keeps falling through to
+            # the literal refusal below rather than being handed over as a bare label.
+            try:
+                if _is_model_chemistry_call_assignment(target, node.value):
+                    continue
+            except ValueError as e:
+                raise ValueError(
+                    f"Refusing to use '{source_path}' as an Arkane explorer/network source: line "
+                    f"{node.lineno} assigns a 'modelChemistry' value that fails structural validation "
+                    f"({_source_snippet(node, text)!r}): {e}. This source's text is spliced verbatim into "
+                    f"a NEW file Arkane will exec, so a malformed model-chemistry call is refused.") from e
             try:
                 ast.literal_eval(node.value)
             except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError) as e:

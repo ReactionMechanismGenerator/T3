@@ -85,6 +85,26 @@ TS1_STRUCTURES = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _stub_extract_dof_conformers(monkeypatch):
+    """Stub the one Arkane-invoking seam ``_write_pdep_hybrid_network_inputs()`` now calls
+    (``extract_dof_conformers``, which shells out to ``rmg_env`` and is unavailable in tests) so the
+    real hybrid writer still runs end to end against synthetic, correctly-shaped conformer data.
+    ``wells`` is always ``{}`` from ``t3/main.py``, so the well half stays empty. Module-scoped
+    (autouse) so every process_arc_run-driving test in this module gets it."""
+    def _fake_extract(transition_states, wells, energy_settings, **kwargs):
+        def _conformer(label, is_ts):
+            conformer = {'label': label, 'is_ts': is_ts, 'E0_kJ_mol': -38.0,
+                         'frequencies_cm_1': [500.0, 800.0, 1200.0],
+                         'spin_multiplicity': 1, 'optical_isomers': 1, 'hindered_rotors': []}
+            if is_ts:
+                conformer['imaginary_frequency_cm_1'] = -1800.0
+            return conformer
+        return ({label: _conformer(label, True) for label in transition_states},
+                {label: _conformer(label, False) for label in wells})
+    monkeypatch.setattr(t3_main, 'extract_dof_conformers', _fake_extract)
+
+
 def _sa_dict_with_ts1_structures(t3) -> dict:
     """The sensitivity fixture, extended so TS1's species can actually be built."""
     sa_dict = _build_sa_dict(t3)
@@ -1934,9 +1954,11 @@ class TestProcessArcRunHybridWiring(object):
         assert os.path.isfile(hybrid_input_path)
         with open(hybrid_input_path, 'r') as f:
             written = f.read()
-        # TS9 must be QM/RRKM: its transitionState entry now points at the vendored artifact ...
-        assert "transitionState('TS9', 'qm/TS9.py')" in written
-        assert os.path.isfile(os.path.join(hybrid_network_dir, 'qm', 'TS9.py'))
+        # TS9 must be QM/RRKM: its transitionState is now spliced inline and vibration-only (its
+        # E0, frequencies and imaginary mode), and the network references no external qm/ file ...
+        assert "label = 'TS9'" in written
+        assert "frequency = (-1800.0,'cm^-1')" in written
+        assert 'qm/' not in written
         # ... while a never-selected transition state survives as ILT rather than being dropped.
         assert "'TS1'" in written
         # The frozen energy reference must have been injected from the capture's manifest.
@@ -1988,7 +2010,8 @@ class TestProcessArcRunHybridWiring(object):
         assert os.path.commonpath([resolved_hybrid_root, resolved_dest_path]) == resolved_hybrid_root
         with open(result.dest_path, 'r') as f:
             written = f.read()
-        assert "transitionState('TS9', 'qm/TS9.py')" in written
+        assert "label = 'TS9'" in written
+        assert 'qm/' not in written
         assert 'useAtomCorrections = True' in written
 
     def test_hybrid_write_refuses_when_no_capture_exists(self, tmp_path):

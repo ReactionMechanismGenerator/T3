@@ -29,6 +29,8 @@ from t3.pdep.explorer.input_file import (
     _ARKANE_VALUE_NAMES,
     _get_call_name,
     _render_literal,
+    _resolve_seed_labels,
+    _seed_structure_identity,
     _TOP_LEVEL_CALL_NAMES,
     _validate_source_statements,
     ExplorerInputSummary,
@@ -181,7 +183,9 @@ def _species_reactive_map(path: str) -> dict:
                 or not isinstance(node.value.func, ast.Name) or node.value.func.id != 'species':
             continue
         kwargs = {kw.arg: kw.value for kw in node.value.keywords if kw.arg is not None}
-        label = ast.literal_eval(kwargs['label'])
+        # Both of Arkane's forms: species(label='S', ...) and the positional species('S', 'qm/S.py').
+        label = ast.literal_eval(kwargs['label']) if 'label' in kwargs \
+            else ast.literal_eval(node.value.args[0])
         assert [kw.arg for kw in node.value.keywords].count('reactive') <= 1, \
             f'species {label!r} carries a duplicated reactive keyword'
         reactive_map[label] = ast.literal_eval(kwargs['reactive']) if 'reactive' in kwargs else None
@@ -1418,6 +1422,38 @@ class TestGeneratedFileCannotBeInjectedThrough:
                 'network(isomers=["a"])\npressureDependence(method="MSC")\nexplorer(source=["a"])\n')
         _validate_generated_statements(tree=ast.parse(text), text=text, dest_path='/nonexistent/input.py')
 
+    @pytest.mark.parametrize('line', [
+        "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp')",
+        "modelChemistry = LevelOfTheory(method='wb97xd', basis='def2tzvp', software='qchem')",
+        # Explicit `+`: inside a list of parametrize cases, adjacent-literal concatenation is
+        # indistinguishable from a missing comma, which would silently split this one case in two.
+        ("modelChemistry = CompositeLevelOfTheory("
+         + "freq=LevelOfTheory(method='wb97xd'), energy=LevelOfTheory(method='dlpno'))"),
+    ])
+    def test_the_self_check_accepts_the_model_chemistry_line_the_source_guard_accepts(self, line):
+        """
+        The symmetric-guard fix: the ``modelChemistry = LevelOfTheory(...)`` directive is spliced
+        verbatim from an already-validated source, so the outbound self-check must re-admit exactly
+        what the inbound source guard admits. Before the fix this line failed its own self-check even
+        though the source guard accepted it, so the file was never written. Mirrors the source-side
+        acceptance test so a future divergence between the two fails here.
+        """
+        text = f'{line}\ndatabase(thermoLibraries=[])\nexplorer(source=["a"])\n'
+        _validate_generated_statements(tree=ast.parse(text), text=text, dest_path='/nonexistent/input.py')
+
+    @pytest.mark.parametrize('line', [
+        "modelChemistry = compute_level()",              # a call, but not a known LevelOfTheory name
+        "modelChemistry = LevelOfTheory(method=().__class__)",  # known name, non-literal argument
+        "notModelChemistry = LevelOfTheory(method='wb97xd')",   # right shape, wrong target name
+    ])
+    def test_the_self_check_still_refuses_a_non_model_chemistry_call_assignment(self, line):
+        """Accept exactly what the source guard accepts, no more: a call assignment that is not a
+        structurally valid ``modelChemistry`` directive stays refused by the self-check, so the
+        modelChemistry exception cannot be a hole for arbitrary computed assignments."""
+        text = f'{line}\ndatabase(thermoLibraries=[])\nexplorer(source=["a"])\n'
+        with pytest.raises(RuntimeError, match='failed its own self-check'):
+            _validate_generated_statements(tree=ast.parse(text), text=text, dest_path='/nonexistent/input.py')
+
     @pytest.mark.parametrize('target', ['explorer', 'database', 'species', 'kinetics', 'network',
                                         'Arrhenius', 'NASA', 'range'])
     def test_a_source_may_not_shadow_a_name_arkane_defines(self, target):
@@ -2137,3 +2173,307 @@ class TestASeedGivenAsABareStringIsRefused:
         """Over-refusal guard: the shape every caller is supposed to use."""
         self._write(tmp_path, ('methoxy',))
         assert os.path.isfile(str(tmp_path / 'input.py'))
+
+
+# ---------------------------------------------------------------------------------------------------
+# I-019: resolving a configured seed to the label the round's actual (re-explored/hybrid) network uses.
+#
+# The PES loop configures its seed once, against the source network, where it is a literal species()
+# label ('[O]C=O'). From round 1 on the loop re-explores a HYBRID network whose species Arkane
+# relabelled with network indices ('[O]C=O(1)'), so the configured label is no longer literal there
+# and _validate_seed_species (by-label, like Arkane's own source resolution) refuses it. These tests
+# drive the REAL round-0 hybrid of the r001_m1-cho2-pilot run (copied verbatim into tests/data),
+# because every defect on this handoff was invisible to synthetic fixtures -- including a hand-built
+# one.
+# ---------------------------------------------------------------------------------------------------
+
+REAL_HYBRID_PATH = os.path.join(
+    TEST_DATA_BASE_PATH, 'pdep_hybrid', 'cho2_round0', 'network0_reduced.py')
+
+
+def _collect_species_nodes(text):
+    """``(species_nodes, species_structure_nodes)`` from a network source, mirroring the collection
+    loop in ``write_arkane_explorer_input_file`` (label -> species() node, label -> structure node)."""
+    tree = ast.parse(text)
+    species_nodes, species_structure_nodes = dict(), dict()
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if _get_call_name(call) != 'species':
+            continue
+        kwargs = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
+        if 'label' not in kwargs:
+            continue
+        label = ast.literal_eval(kwargs['label'])
+        species_nodes[label] = node
+        species_structure_nodes[label] = kwargs.get('structure')
+    return species_nodes, species_structure_nodes
+
+
+def test_real_hybrid_seed_smiles_resolves_to_the_networks_indexed_label():
+    """The configured SMILES seed '[O]C=O' is not a literal label in the round-0 hybrid (whose species
+    Arkane relabelled '[O]C=O(1)'); resolution matches it by structure to that label, and says so."""
+    with open(REAL_HYBRID_PATH) as f:
+        species_nodes, species_structure_nodes = _collect_species_nodes(f.read())
+    # Precondition: the bare seed really is absent as a literal label here, so this exercises
+    # structural resolution, not the literal-match shortcut.
+    assert '[O]C=O' not in species_nodes
+    assert '[O]C=O(1)' in species_nodes
+
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('[O]C=O',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path=REAL_HYBRID_PATH)
+
+    assert resolved == ('[O]C=O(1)',)
+    assert len(warnings) == 1
+    assert '[O]C=O(1)' in warnings[0]
+
+
+def test_a_seed_whose_parse_raises_an_unexpected_type_still_fails_closed(monkeypatch):
+    """Seed resolution must fail CLOSED for any parser failure, not only ValueError/KeyError.
+
+    The whole point of returning ``None`` here is that an unresolvable seed is passed through
+    untouched, so ``_validate_seed_species`` can refuse it by name and list the labels the network
+    really defines. If a parser exception escapes instead, that diagnostic is replaced by a raw
+    backend error -- and the backend is third-party code whose exception set is not ours to
+    enumerate (a non-str label already surfaces as TypeError, not ValueError).
+    """
+    class _ExplodingMolecule:
+        def from_smiles(self, label):
+            raise RuntimeError('backend blew up in a way this module never anticipated')
+
+    monkeypatch.setattr('t3.pdep.explorer.input_file.Molecule', _ExplodingMolecule)
+
+    # Must not propagate: None is the fail-closed answer the caller is built on.
+    assert _seed_structure_identity('[O]C=O') is None
+
+
+def test_real_hybrid_gets_past_seed_validation_through_the_full_writer(tmp_path):
+    """End to end on the real seam: with resolution in place, driving the real hybrid through the
+    writer no longer raises the seed-label refusal. The write now completes (the generated-side
+    modelChemistry guard has been brought back into step with the source-side one -- see the full
+    end-to-end test below); this test pins specifically that the SEED barrier is cleared, i.e. the
+    resolved label reaches the summary rather than a seed-label refusal."""
+    dest_path = str(tmp_path / 'input.py')
+    kwargs = dict(DEFAULT_KWARGS)
+    kwargs['seed_species'] = ('[O]C=O',)
+    kwargs['bath_gas'] = {'Ar': 1.0}  # the real hybrid's bath gas, so bath-gas validation is reached
+    summary = write_arkane_explorer_input_file(source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
+    # The seed barrier is cleared: the configured SMILES seed resolved to the network's indexed label
+    # rather than being refused as a non-literal label.
+    assert summary.seed_species == ('[O]C=O(1)',)
+
+
+# Arkane accepts a wholly POSITIONAL species()/transitionState() block -- species('S', 'qm/S.py')
+# -- and real sources use it (that is the form the stat-mech path rewrite was written for). It has
+# no keyword arguments at all, which is what makes it the awkward case for both label registration
+# and the bath-gas `reactive` injection.
+SOURCE_POSITIONAL_LABEL = """species('S', 'qm/S.py')
+pressureDependence(
+    label='n',
+    Tmin=(300, 'K'), Tmax=(1000, 'K'), Tcount=5,
+    Pmin=(0.01, 'bar'), Pmax=(10, 'bar'), Pcount=3,
+    maximumGrainSize=(1, 'kJ/mol'),
+    minimumGrainCount=100,
+    method='modified strong collision',
+    interpolationModel=('chebyshev', 6, 4),
+    activeKRotor=True,
+    rmgmode=False,
+)
+"""
+
+
+def _write_positional_source(tmp_path):
+    qm_dir = tmp_path / 'qm'
+    qm_dir.mkdir()
+    (qm_dir / 'S.py').write_text("energy = {'x': 0.0}\n")
+    return _write_source(tmp_path, SOURCE_POSITIONAL_LABEL)
+
+
+def test_a_positional_label_species_is_registered_not_only_path_rewritten(tmp_path):
+    """A species declared positionally must be usable as a seed.
+
+    The stat-mech path rewrite already understood ``species('S', 'qm/S.py')``, but registration
+    read ``kwargs['label']`` only -- so such a block had its path absolutized while its label
+    stayed invisible, and naming it as a seed was refused with "Known species labels are []".
+    Rewriting a block the rest of the writer cannot then refer to is the inconsistency this pins.
+    """
+    source_path = _write_positional_source(tmp_path)
+    dest_path = str(tmp_path / 'out' / 'input.py')
+
+    write_arkane_explorer_input_file(
+        source_path=source_path, dest_path=dest_path, seed_species=('S',), method='MSC',
+        bath_gas={'S': 1.0}, explore_tol=0.01, energy_tol=1.0e+01, flux_tol=1.0e-06,
+        maximum_radical_electrons=2)
+
+    with open(dest_path) as f:
+        generated = f.read()
+    # Registered (no seed refusal), path absolutized, and still valid Python.
+    assert str(tmp_path / 'qm' / 'S.py') in generated
+    ast.parse(generated)
+
+
+def test_reactive_false_is_injected_into_a_keyword_less_species_block(tmp_path):
+    """The bath-gas ``reactive = False`` injection anchors on the first keyword, and a positional
+    block has none -- indexing ``keywords[0]`` there raised IndexError. It must append after the
+    last positional argument instead, and the result must still parse."""
+    source_path = _write_positional_source(tmp_path)
+    dest_path = str(tmp_path / 'out' / 'input.py')
+
+    write_arkane_explorer_input_file(
+        source_path=source_path, dest_path=dest_path, seed_species=('S',), method='MSC',
+        bath_gas={'S': 1.0}, explore_tol=0.01, energy_tol=1.0e+01, flux_tol=1.0e-06,
+        maximum_radical_electrons=2)
+
+    with open(dest_path) as f:
+        generated = f.read()
+    ast.parse(generated)
+    assert _species_reactive_map(dest_path)['S'] is False
+
+
+def test_real_hybrid_survives_the_full_writer_and_emits_the_resolved_source(tmp_path):
+    """The intended end state: the real hybrid writes a valid explorer input whose source is the
+    resolved label and which carries the modelChemistry directive. This is the symmetric-guard fix:
+    the generated-side self-check now accepts the ``modelChemistry = LevelOfTheory(...)`` line that
+    the source-side guard accepts, so the line survives the verbatim splice on the way out."""
+    dest_path = str(tmp_path / 'input.py')
+    kwargs = dict(DEFAULT_KWARGS)
+    kwargs['seed_species'] = ('[O]C=O',)
+    kwargs['bath_gas'] = {'Ar': 1.0}
+    summary = write_arkane_explorer_input_file(
+        source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
+    assert summary.seed_species == ('[O]C=O(1)',)
+    with open(dest_path) as f:
+        text = f.read()
+    assert "'[O]C=O(1)'" in text
+    assert 'modelChemistry' in text
+
+
+def test_source_guard_accepts_the_real_hybrids_model_chemistry_line():
+    """Pins the branch-below (i018-modelchem) fix against real data: _validate_source_statements
+    accepts the real hybrid's bare ``modelChemistry = LevelOfTheory(...)`` directive. All prior
+    coverage of that acceptance was synthetic."""
+    with open(REAL_HYBRID_PATH) as f:
+        text = f.read()
+    tree = ast.parse(text)
+    # Must not raise: the real hybrid opens with modelChemistry = LevelOfTheory(...).
+    _validate_source_statements(tree=tree, text=text, source_path=REAL_HYBRID_PATH)
+
+
+# ---------------------------------------------------------------------------------------------------
+# I-021: a relative stat-mech FILE path spliced verbatim into a file in another directory.
+#
+# The real round-0 hybrid references its QM transition state by a path RELATIVE to the hybrid --
+# ``transitionState('TS2', 'qm/TS2.py')`` -- with the ``qm/`` tree vendored right beside it (portable
+# run directories, a convention the hybrid writer keeps deliberately). But the explorer writer splices
+# that block into a generated Arkane input in an UNRELATED directory; Arkane then resolves the raw
+# 'qm/TS2.py' against its own working directory (bare open at arkane/statmech.py) and dies with
+# FileNotFoundError at load time. The writer now rewrites the spliced copy to an absolute path
+# anchored at the source's own directory. The committed fixture carries the real qm/ tree beside the
+# hybrid so the emitted path can be asserted to resolve to a file that EXISTS.
+# ---------------------------------------------------------------------------------------------------
+
+def _emitted_transition_state_file_paths(text):
+    """``{label: path}`` for every ``transitionState(label, path)`` FILE-path block (Arkane's two-
+    positional-string form) in a generated explorer input, read back via AST. Inline transition
+    states (``transitionState(label='TS1', E0=..., ...)``) carry no external path and are excluded."""
+    tree = ast.parse(text)
+    paths = dict()
+    for node in tree.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if _get_call_name(call) != 'transitionState':
+            continue
+        if len(call.args) == 2 and not call.keywords \
+                and all(isinstance(a, ast.Constant) and isinstance(a.value, str) for a in call.args):
+            paths[call.args[0].value] = call.args[1].value
+    return paths
+
+
+def test_real_hybrid_transition_state_path_is_absolutized_to_an_existing_file(tmp_path):
+    """I-021 regression on the real seam: driving the committed round-0 hybrid through the writer
+    into an unrelated directory (``tmp_path``) must emit a ``transitionState`` path that resolves to
+    a file that EXISTS -- the assertion is ``os.path.isfile``, not merely 'is absolute' and not
+    merely 'the writer did not raise'. Before the fix the spliced path was the verbatim relative
+    'qm/TS2.py', which Arkane opens against its own cwd and cannot find."""
+    # Precondition: the committed hybrid's own line really is RELATIVE, and the vendored qm/ tree it
+    # points at really sits beside it -- so this exercises the rewrite, not a path that was already
+    # absolute in the source.
+    with open(REAL_HYBRID_PATH) as f:
+        assert "transitionState('TS2', 'qm/TS2.py')" in f.read()
+    assert os.path.isfile(os.path.join(os.path.dirname(REAL_HYBRID_PATH), 'qm', 'TS2.py')), \
+        'fixture precondition: the real qm/TS2.py artifact must sit beside the committed hybrid'
+
+    dest_path = str(tmp_path / 'input.py')
+    kwargs = dict(DEFAULT_KWARGS)
+    kwargs['seed_species'] = ('[O]C=O',)
+    kwargs['bath_gas'] = {'Ar': 1.0}  # the real hybrid's bath gas, so the full writer runs
+    summary = write_arkane_explorer_input_file(source_path=REAL_HYBRID_PATH, dest_path=dest_path, **kwargs)
+
+    with open(dest_path) as f:
+        emitted = _emitted_transition_state_file_paths(f.read())
+    assert 'TS2' in emitted, 'the QM transition state block must survive the splice'
+    emitted_path = emitted['TS2']
+
+    # THE core assertion: the spliced path resolves to a real file, from tmp_path, with no chdir.
+    assert os.path.isabs(emitted_path)
+    assert os.path.isfile(emitted_path), \
+        f'Arkane would FileNotFoundError on {emitted_path!r}: it does not resolve to an existing file.'
+    # And it is the SOURCE hybrid's own vendored artifact, anchored at the source's directory, not
+    # the generated file's directory (tmp_path, which has no qm/ tree).
+    expected_path = os.path.join(os.path.dirname(os.path.abspath(REAL_HYBRID_PATH)), 'qm', 'TS2.py')
+    assert emitted_path == expected_path
+
+    # The rewrite is recorded, never silent; the inline TS1/TS3 blocks (no external path) are untouched.
+    assert summary.stat_mech_paths_absolutized == (('TS2', 'qm/TS2.py', expected_path),)
+
+
+def test_a_literal_seed_label_is_returned_unchanged_without_structural_work():
+    """Round-0 correctness: when the seed IS a literal species() label (the real source network), it
+    is returned as-is with no warning -- structural resolution never runs for it."""
+    species_nodes, species_structure_nodes = _collect_species_nodes(SOURCE_NO_KINETICS)
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('methoxy',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path='x')
+    assert resolved == ('methoxy',)
+    assert warnings == []
+
+
+def test_seed_with_no_structural_match_is_left_unchanged_for_the_validator():
+    """Zero-match cost: a seed that is neither a literal label nor structurally present is returned
+    unchanged, so _validate_seed_species raises its own clear 'not defined' error rather than this
+    resolver inventing one. Here the radical seed '[O]C=O' is matched against a CO2-only network."""
+    text = "species(label='O=C=O(5)', structure=SMILES('O=C=O'), E0=(0, 'kJ/mol'))\n"
+    species_nodes, species_structure_nodes = _collect_species_nodes(text)
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('[O]C=O',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path='x')
+    assert resolved == ('[O]C=O',)
+    assert warnings == []
+
+
+def test_a_non_smiles_seed_label_is_left_unchanged_for_the_validator():
+    """A seed label that is not a parseable SMILES (an index-suffixed 'O=C=O(5)') yields no structure
+    to match on, so it is returned unchanged for _validate_seed_species to judge by string."""
+    text = "species(label='O=C=O(1)', structure=SMILES('O=C=O'), E0=(0, 'kJ/mol'))\n"
+    species_nodes, species_structure_nodes = _collect_species_nodes(text)
+    resolved, warnings = _resolve_seed_labels(
+        seed_species=('O=C=O(5)',), species_nodes=species_nodes,
+        species_structure_nodes=species_structure_nodes, source_path='x')
+    assert resolved == ('O=C=O(5)',)
+    assert warnings == []
+
+
+def test_a_seed_matching_more_than_one_species_by_structure_is_refused():
+    """Multiple-match cost: a source configuration must name exactly one physical species; two
+    structurally identical species make the seed ambiguous, and seeding from an arbitrary one could
+    explore the wrong copy, so resolution refuses rather than picking one."""
+    text = ("species(label='A', structure=SMILES('[O]C=O'), E0=(0, 'kJ/mol'))\n"
+            "species(label='B', structure=SMILES('[O]C=O'), E0=(0, 'kJ/mol'))\n")
+    species_nodes, species_structure_nodes = _collect_species_nodes(text)
+    with pytest.raises(ValueError, match='matches 2 species'):
+        _resolve_seed_labels(
+            seed_species=('[O]C=O',), species_nodes=species_nodes,
+            species_structure_nodes=species_structure_nodes, source_path='x')
