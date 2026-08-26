@@ -304,6 +304,17 @@ class PDepNetwork:
                                    the PES diagram by where its energy came from. A species with no
                                    thermo comment is simply absent from this dict. Default ``{}`` so
                                    every existing construction site keeps working unchanged.
+        ts_labels_with_statmech (frozenset): The transition state labels whose
+                                             ``transitionState(...)`` call declares statmech data
+                                             (a non-empty ``modes`` list, or the by-reference
+                                             ``transitionState(label, path)`` form) -- see
+                                             ``_transition_state_declares_statmech``. A label
+                                             absent from this set names a TS whose conformer has
+                                             no modes, for which ``Reaction.can_tst()`` is False
+                                             and every k(E) comes from the inverse Laplace
+                                             transform. Default empty for the same
+                                             construction-site-compatibility reason as
+                                             ``species_structures``.
     """
     network_id: str
     path: str
@@ -318,6 +329,7 @@ class PDepNetwork:
     source_hash: str | None = None
     species_structures: dict = field(default_factory=dict)
     species_thermo_comments: dict = field(default_factory=dict)
+    ts_labels_with_statmech: frozenset = frozenset()
 
     def expected_net_reaction_count(self) -> int:
         """
@@ -801,6 +813,39 @@ def parse_pdep_network_file(path: str, require_reactions: bool = True) -> PDepNe
                                    source_hash=hash_bytes(data), require_reactions=require_reactions)
 
 
+def _transition_state_declares_statmech(kwargs: dict) -> bool:
+    """
+    Whether one ``transitionState(...)`` call's keywords declare statmech data for the TS.
+
+    Statmech reaches a transition state through exactly two Arkane DSL spellings (see the
+    ``_call_keywords`` docstring): the inline form's ``modes = [HarmonicOscillator(...), ...]``
+    list, and the by-reference form ``transitionState('TS2', 'qm/TS2.py')`` (which
+    ``_call_keywords`` maps to a ``path`` keyword) that loads a statmech file. An E0-only block --
+    ``label``/``E0``/``spinMultiplicity``/``opticalIsomers``, the shape every un-QM'd transition
+    state takes in an explored reduced network -- has neither, leaves the TS's
+    ``conformer.modes`` empty, and therefore makes ``Reaction.can_tst()`` False
+    (``rmgpy/reaction.py``), forcing the master equation onto the inverse Laplace transform for
+    every k(E) of its channel. That distinction is what
+    ``t3.pdep.pes_rounds.e0_sensitivity_is_measurable`` classifies on, so it is detected here,
+    at the parse, from the file's own AST -- never by executing the file.
+
+    The ``modes`` list is inspected structurally (a non-empty ``ast.List``/``ast.Tuple``), not
+    literal-evaluated: its elements are calls (``HarmonicOscillator(...)``), which
+    ``ast.literal_eval`` cannot resolve. An empty ``modes = []`` counts as NO statmech -- it
+    leaves ``conformer.modes`` empty exactly as omitting the keyword does.
+
+    Args:
+        kwargs (dict): The call's keyword name -> AST value node mapping, from ``_call_keywords``.
+
+    Returns:
+        bool: Whether the call declares statmech data.
+    """
+    if 'path' in kwargs:
+        return True
+    modes_node = kwargs.get('modes')
+    return isinstance(modes_node, (ast.List, ast.Tuple)) and len(modes_node.elts) > 0
+
+
 def parse_pdep_network_text(text: str, network_id: str, path: str = '',
                             source_hash: str | None = None,
                             require_reactions: bool = True) -> PDepNetwork:
@@ -846,6 +891,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
     species_structures = dict()
     species_thermo_comments = dict()
     transition_state_labels = list()
+    ts_labels_with_statmech = list()
     path_reactions = list()
     network_label = None
     isomers = tuple()
@@ -879,6 +925,8 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
                                       action="omit it from the transition state labels")
             if label is not None:
                 transition_state_labels.append(label)
+                if _transition_state_declares_statmech(kwargs):
+                    ts_labels_with_statmech.append(label)
 
         elif call_name == 'reaction':
             path_reactions.append(_parse_reaction(kwargs, path=path))
@@ -937,6 +985,7 @@ def parse_pdep_network_text(text: str, network_id: str, path: str = '',
         source_hash=source_hash,
         species_structures=species_structures,
         species_thermo_comments=species_thermo_comments,
+        ts_labels_with_statmech=frozenset(ts_labels_with_statmech),
     )
 
 

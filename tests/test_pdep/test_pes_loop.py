@@ -5,6 +5,7 @@ import logging
 import os
 
 import pytest
+import yaml
 
 from arc.molecule.molecule import Molecule
 
@@ -15,6 +16,7 @@ from t3.pdep.join import arc_ts_label
 from t3.pdep.parser import PDepNetwork, PDepPathReaction
 from t3.pdep.pes_loop import (PES_LOOP_CONVERGED, PES_LOOP_DIAGRAM_ONLY, PES_LOOP_FAILED,
                               PES_LOOP_MAX_ROUNDS, PES_LOOP_NO_CANDIDATES, PES_LOOP_STALLED,
+                              PES_LOOP_UNMEASURABLE,
                               _build_explorer_config,
                               hybrid_network_path, run_pes_loop)
 from t3.pdep.pes_rounds import round_paths
@@ -1222,3 +1224,192 @@ class TestDiagramFailuresAreNeverFatal(object):
         assert result.final_diagram_path is None
         assert result.final_network_path is not None, \
             'the exploration succeeded; only the drawing failed'
+
+
+def _stub_network(monkeypatch, tmp_path, path_reactions, species_structures,
+                  ts_labels_with_statmech=frozenset()):
+    """Patch the explorer seams with one fixed, caller-built network -- the bimolecular /
+    statmech-bearing shapes ``_stub_explorer``'s fabricated unimolecular channels cannot
+    express (I-031)."""
+    network = PDepNetwork(network_id='network1_1', path='/abs/network1_1.py', label=None,
+                          species_labels=tuple(species_structures),
+                          transition_state_labels=tuple(r.transition_state
+                                                        for r in path_reactions
+                                                        if r.transition_state),
+                          path_reactions=tuple(path_reactions), isomers=(), reactant_channels=(),
+                          product_channels=(), species_structures=species_structures,
+                          ts_labels_with_statmech=ts_labels_with_statmech)
+    calls = []
+
+    def _fake_explore(*, network_path, config, logger=None):
+        calls.append(network_path)
+        output_path = os.path.join(str(tmp_path), f'explored_round{len(calls) - 1}.py')
+        open(output_path, 'w').close()
+        return PDepExplorationResult(network_id='network1_1',
+                                     status=EXPLORATION_STATUS_SUCCEEDED,
+                                     network_paths=(output_path,))
+
+    def _fake_parse(path, require_reactions=True):
+        return dataclasses.replace(network, path=path)
+
+    def _fake_draw(network_path, output_path):
+        open(output_path, 'w').close()
+
+    monkeypatch.setattr('t3.pdep.pes_loop.explore_pdep_network', _fake_explore)
+    monkeypatch.setattr('t3.pdep.pes_loop.parse_pdep_network_file', _fake_parse)
+    monkeypatch.setattr('t3.pdep.pes_loop.draw_pes_diagram', _fake_draw)
+
+
+def _entrance_channel_fixture():
+    """Two bimolecular association channels plus one unimolecular isomerization, no TS declaring
+    statmech -- the r002 round-1 shape."""
+    adj = {'H': _alkane_adjlist(1), 'CO2': _alkane_adjlist(2),
+           'HOCO': _alkane_adjlist(3), 'HCO2': _alkane_adjlist(4)}
+
+    def _reaction(label, ts, reactants, products):
+        return PDepPathReaction(label=label, reactants=reactants, products=products,
+                                transition_state=ts, kinetics_type='Arrhenius',
+                                kinetics_comment='family: R_Addition_MultipleBond')
+
+    return (_reaction('reaction1', 'TS1', ('HOCO',), ('HCO2',)),
+            _reaction('reaction2', 'TS2', ('H', 'CO2'), ('HOCO',)),
+            _reaction('reaction3', 'TS3', ('H', 'CO2'), ('HCO2',))), adj
+
+
+class TestUnmeasurableTermination(object):
+    """I-031: a stop where the remaining candidates could not MEASURE their E0 sensitivity is
+    reported as 'unmeasurable', never as convergence; the message names which criterion fired
+    and how many candidates were blind; queueing is untouched."""
+
+    @staticmethod
+    def _never_called_runner(candidates, paths, cfg, network_id, adopted=None):
+        raise AssertionError('qm_runner must not be called when nothing survives the screen.')
+
+    def test_all_remaining_unmeasurable_is_not_convergence(self, tmp_path, monkeypatch, config):
+        reactions, adj = _entrance_channel_fixture()
+        _stub_network(monkeypatch, tmp_path, reactions, adj)
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            return {'TS1': (0.0, 0.0), 'TS2': (1.66e-18, 1.39e-14), 'TS3': (0.0, 0.0)}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        result = run_pes_loop(config, project_directory=str(tmp_path),
+                              qm_runner=self._never_called_runner)
+        assert result.status == PES_LOOP_UNMEASURABLE
+        assert result.status != PES_LOOP_CONVERGED and result.status != PES_LOOP_NO_CANDIDATES
+        assert '2 (TS2, TS3) are structurally UNMEASURABLE' in result.reason
+        assert 'NOT a demonstrated convergence' in result.reason
+        assert '1 (TS1) measured a ln(k) response below the min_delta_ln_k floor' in result.reason
+        assert 'round_record.yml' in result.reason
+        classes = {s.ts_label: s.classification for s in result.rounds[0].skipped}
+        assert classes == {'TS1': 'below_floor', 'TS2': 'unmeasurable', 'TS3': 'unmeasurable'}
+
+    def test_statmech_bearing_channels_keep_the_converged_claim(self, tmp_path, monkeypatch,
+                                                                config):
+        """Mutation control at the loop level: the SAME network with statmech declared for the
+        bimolecular TSs is measurable, so the same all-below-floor stop IS a measured 'done'."""
+        reactions, adj = _entrance_channel_fixture()
+        _stub_network(monkeypatch, tmp_path, reactions, adj,
+                      ts_labels_with_statmech=frozenset({'TS2', 'TS3'}))
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            return {'TS1': (0.0, 0.0), 'TS2': (1.66e-18, 1.39e-14), 'TS3': (0.0, 0.0)}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        result = run_pes_loop(config, project_directory=str(tmp_path),
+                              qm_runner=self._never_called_runner)
+        assert result.status == PES_LOOP_NO_CANDIDATES
+        assert 'Criterion: the min_delta_ln_k floor' in result.reason
+
+    def test_the_floor_stop_names_its_criterion_and_the_exhausted_budget(self, tmp_path,
+                                                                         monkeypatch):
+        """When the floor fires on the LAST budgeted round, 'converged' and 'ran out of rounds'
+        were previously indistinguishable from outside; the message now says which fired."""
+        config = PESLoopConfig(pes={'network': '/abs/network1_1.py', 'source': ['HOCHO'],
+                                    'bath_gas': {'He': 1.0}},
+                               termination={'max_rounds': 1})
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity',
+                            lambda **kwargs: {'TS0': (0.0, 0.0)})
+        result = run_pes_loop(config, project_directory=str(tmp_path),
+                              qm_runner=self._never_called_runner)
+        assert result.status == PES_LOOP_NO_CANDIDATES
+        assert 'Criterion: the min_delta_ln_k floor' in result.reason
+        assert 'last budgeted round (max_rounds: 1)' in result.reason
+        assert 'not the exhausted budget' in result.reason
+
+
+class TestRoundRecordPersistence(object):
+    """I-031: the round record is WRITTEN, not just returned -- one YAML per round, in the
+    round's own directory, with numeric fields a script reads without regexing prose."""
+
+    def test_terminal_round_record_is_persisted_with_numeric_fields(self, tmp_path, monkeypatch,
+                                                                    config):
+        reactions, adj = _entrance_channel_fixture()
+        _stub_network(monkeypatch, tmp_path, reactions, adj)
+
+        def _fake_sa(*, network_path, sa_dir, method, timeout=None, logger=None):
+            return {'TS1': (0.0, 0.0), 'TS2': (1.66e-18, 1.39e-14), 'TS3': (0.0, 0.0)}
+
+        monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
+        result = run_pes_loop(config, project_directory=str(tmp_path),
+                              qm_runner=TestUnmeasurableTermination._never_called_runner)
+        record_path = os.path.join(round_paths(str(tmp_path), 0).root, 'round_record.yml')
+        assert os.path.isfile(record_path)
+        with open(record_path) as f:
+            payload = yaml.safe_load(f)
+        assert payload['index'] == 0
+        assert payload['status'] == PES_LOOP_UNMEASURABLE
+        assert payload['reason'] == result.reason
+        assert payload['queued_ts_labels'] == []
+        by_ts = {entry['ts_label']: entry for entry in payload['skipped']}
+        assert by_ts['TS2']['classification'] == 'unmeasurable'
+        assert by_ts['TS2']['coefficient'] == 1.66e-18
+        assert by_ts['TS2']['delta_ln_k'] == 1.39e-14
+        assert by_ts['TS1']['classification'] == 'below_floor'
+        assert by_ts['TS1']['coefficient'] == 0.0
+
+    def test_every_round_gets_its_own_record_file(self, tmp_path, monkeypatch, config):
+        """A converging two-round loop writes round_0 and round_1 records matching the returned
+        RoundRecords -- the 'continuing' round is persisted too, not only the terminal one."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO', '1,2_Insertion_CO'])
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label
+                                                                        for c in candidates)
+
+        result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_CONVERGED
+        for record in result.rounds:
+            record_path = os.path.join(round_paths(str(tmp_path), record.index).root,
+                                       'round_record.yml')
+            assert os.path.isfile(record_path)
+            with open(record_path) as f:
+                payload = yaml.safe_load(f)
+            assert payload['index'] == record.index
+            assert payload['status'] == record.status
+            assert payload['queued_ts_labels'] == list(record.queued_ts_labels)
+            assert [entry['label'] for entry in payload['skipped']] == \
+                   [skip.label for skip in record.skipped]
+
+    def test_a_failed_record_write_never_fails_the_round(self, tmp_path, monkeypatch, config,
+                                                         caplog):
+        """Best-effort exactly as the diagram: the record describes the result, it is not part
+        of it."""
+        _stub_explorer(monkeypatch, tmp_path, families=['1,2_Insertion_CO'])
+
+        def _runner(candidates, paths, cfg, network_id, adopted=None):
+            _touch_hybrid_file(paths, network_id)
+            return frozenset(c.ts_label for c in candidates), frozenset(c.ts_label
+                                                                        for c in candidates)
+
+        def _refuse_dump(*args, **kwargs):
+            raise OSError('disk full')
+
+        monkeypatch.setattr('t3.pdep.pes_loop.yaml.safe_dump', _refuse_dump)
+        with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_loop'):
+            result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
+        assert result.status == PES_LOOP_CONVERGED
+        assert len(result.rounds) == 2
+        assert 'could not write the round 0 record' in caplog.text

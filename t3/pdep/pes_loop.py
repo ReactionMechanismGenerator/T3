@@ -51,8 +51,10 @@ file: everything at that boundary flows through ``t3.pdep.parser`` (``ast.parse`
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
+
+import yaml
 
 from t3.pdep.api import explore_pdep_network
 from t3.pdep.capture import captured_qm_artifact_path
@@ -60,9 +62,10 @@ from t3.pdep.diagram import draw_pes_diagram
 from t3.pdep.join import arc_ts_label
 from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED
-from t3.pdep.parser import parse_pdep_network_file
+from t3.pdep.parser import parse_pdep_network_file, to_json_safe
 from t3.pdep.pes_qm import adopt_prior_qm
-from t3.pdep.pes_rounds import (RoundPaths, adoption_channel_keys_by_ts_label,
+from t3.pdep.pes_rounds import (SKIP_BELOW_FLOOR, SKIP_NO_EVIDENCE, SKIP_UNMEASURABLE,
+                                RoundPaths, adoption_channel_keys_by_ts_label,
                                 attach_sensitivity_evidence,
                                 channel_keys_by_ts_label, hybrid_network_path, round_paths,
                                 split_qm_candidates)
@@ -82,6 +85,17 @@ _logger = logging.getLogger(__name__)
 #                     that is barrierless end to end, or whose every barriered channel measured a
 #                     response below the floor, is not a loop that "converged" after doing
 #                     work, it never had any to do.
+# - 'unmeasurable'    nothing could be queued, but at least one remaining candidate's E0
+#                     sensitivity was structurally UNCOMPUTABLE rather than measured
+#                     (t3.pdep.pes_rounds.e0_sensitivity_is_measurable: no statmech modes on a
+#                     bimolecular channel, so under ILT the master equation cannot respond to
+#                     that E0 at all -- its reported coefficient is a structural zero, not a
+#                     measurement). This stop point and the queueing decisions are IDENTICAL to
+#                     the 'converged'/'no_candidates' floor stop; only the claim differs, because
+#                     "converged" was not demonstrated -- the screen was blind to those channels.
+#                     What a run SHOULD do about them (rank on barrier height, seed provisional
+#                     statmech, ...) is an open decision (I-030/I-031) that this status
+#                     deliberately reports rather than takes.
 # - 'stalled'        a round ran the QM runner and it returned no newly-converged TS labels, and
 #                     ``config.termination.stop_when_no_new_ts`` says that is a reason to stop now
 #                     rather than spend the rest of the round budget on a runner that is not making
@@ -100,15 +114,30 @@ _logger = logging.getLogger(__name__)
 PES_LOOP_CONVERGED = 'converged'
 PES_LOOP_MAX_ROUNDS = 'max_rounds'
 PES_LOOP_NO_CANDIDATES = 'no_candidates'
+PES_LOOP_UNMEASURABLE = 'unmeasurable'
 PES_LOOP_STALLED = 'stalled'
 PES_LOOP_DIAGRAM_ONLY = 'diagram_only'
 PES_LOOP_FAILED = 'failed'
+
+# The durable per-round record file, written into each round's own directory
+# (``RoundPaths.root``) by ``_record_round``: the ``RoundRecord`` -- including every skipped
+# entry's machine-readable classification and NUMERIC coefficient/delta_ln_k fields -- as plain
+# YAML. Before this file existed the record was assembled, returned inside ``PESLoopResult``, and
+# dropped, while termination messages directed the reader to "the round record" -- a pointer to an
+# artifact that was never written (I-031).
+ROUND_RECORD_FILENAME = 'round_record.yml'
 
 
 @dataclass(frozen=True)
 class RoundRecord:
     """
     What one round of the PES exploration loop did.
+
+    Every record is also PERSISTED, at the moment it is made, to its round's own directory as
+    ``round_record.yml`` (see ``_record_round``): each skipped entry carries its machine-readable
+    ``classification`` and its numeric ``coefficient``/``delta_ln_k`` as YAML fields, so both a
+    human and a script can read back what the round measured -- and what it structurally could
+    not measure -- without regexing prose.
 
     Attributes:
         index (int): The zero-based round number.
@@ -246,6 +275,53 @@ def _draw_round_diagram(explored_network_path: str, diagram_path: str, logger) -
             logger.warning(message)
         return None
     return diagram_path
+
+
+def round_record_path(paths: RoundPaths) -> str:
+    """
+    Where one round's durable ``RoundRecord`` YAML lives.
+
+    Args:
+        paths (RoundPaths): The round's directory layout.
+
+    Returns:
+        str: The absolute path of the round's ``round_record.yml``.
+    """
+    return os.path.join(paths.root, ROUND_RECORD_FILENAME)
+
+
+def _record_round(rounds: list, record: RoundRecord, paths: RoundPaths, logger) -> None:
+    """
+    Append one round's record to the in-memory list AND persist it to the round's directory.
+
+    The write is best-effort in exactly the sense ``_draw_round_diagram`` is: the record describes
+    the round's result, it is not part of it, so a full disk or a read-only directory logs a loud
+    warning rather than flipping a round that genuinely ran into a failed loop. The in-memory
+    append is unconditional -- ``PESLoopResult.rounds`` never silently loses a round.
+
+    The YAML is written with ``yaml.safe_dump`` over ``to_json_safe(asdict(record))``, so every
+    skipped entry's ``classification`` and NUMERIC ``coefficient``/``delta_ln_k`` fields land as
+    real YAML scalars a script can read directly -- a consumer never has to regex the prose
+    ``reason`` to recover a number (I-031). ``safe_dump`` also guarantees no ``!!python/...`` tag
+    can ever land in the file, so it reloads with a plain ``yaml.safe_load``.
+
+    Args:
+        rounds (list): The loop's accumulating ``RoundRecord`` list, appended in place.
+        record (RoundRecord): The record to append and persist.
+        paths (RoundPaths): The round's directory layout (the YAML goes to ``paths.root``).
+        logger: A T3 ``Logger``, or ``None``.
+    """
+    rounds.append(record)
+    record_path = round_record_path(paths)
+    try:
+        with open(record_path, 'w') as f:
+            yaml.safe_dump(to_json_safe(asdict(record)), f, sort_keys=False)
+    except Exception as e:
+        message = (f'PES loop: could not write the round {record.index} record to '
+                   f'{record_path!r} ({type(e).__name__}): {e}')
+        _logger.warning(message)
+        if logger is not None:
+            logger.warning(message)
 
 
 def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
@@ -432,9 +508,10 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                      f"{current_network_path!r} does not exist. The previous round's qm_runner "
                      "must write it (see t3.pdep.pes_rounds.hybrid_network_path) before returning.")
             prior = rounds[-1] if rounds else None
-            rounds.append(RoundRecord(index=round_index, network_path=current_network_path,
-                                      diagram_path=None, queued_ts_labels=(), skipped=(),
-                                      status=PES_LOOP_FAILED, reason=reason))
+            _record_round(rounds, RoundRecord(index=round_index, network_path=current_network_path,
+                                              diagram_path=None, queued_ts_labels=(), skipped=(),
+                                              status=PES_LOOP_FAILED, reason=reason),
+                          paths, logger)
             return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                  final_network_path=prior.network_path if prior else None,
                                  final_diagram_path=prior.diagram_path if prior else None)
@@ -454,9 +531,10 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             reason = '; '.join(result.reasons) if result.reasons else \
                 f"exploration ended with status {result.status!r} and no stated reason."
             prior = rounds[-1] if rounds else None
-            rounds.append(RoundRecord(index=round_index, network_path=current_network_path,
-                                      diagram_path=None, queued_ts_labels=(), skipped=(),
-                                      status=PES_LOOP_FAILED, reason=reason))
+            _record_round(rounds, RoundRecord(index=round_index, network_path=current_network_path,
+                                              diagram_path=None, queued_ts_labels=(), skipped=(),
+                                              status=PES_LOOP_FAILED, reason=reason),
+                          paths, logger)
             # The same rule as the missing-hybrid branch above: this round failed, but rounds
             # 0..N-1 explored real networks and drew real diagrams, and those remain the best
             # result this run has. Reporting None here throws them away and makes the caller (e.g.
@@ -488,10 +566,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                       f'structures, or structurally duplicated channels). QM computed for them '
                       f'could not be carried across rounds, so every round would re-submit the '
                       f'same transition states to ARC; refusing to spend the budget on that.')
-            rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                      diagram_path=diagram_path, queued_ts_labels=(),
-                                      skipped=split_qm_candidates(network, frozenset()).skipped,
-                                      status=PES_LOOP_FAILED, reason=reason))
+            _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                              diagram_path=diagram_path, queued_ts_labels=(),
+                                              skipped=split_qm_candidates(network, frozenset()).skipped,
+                                              status=PES_LOOP_FAILED, reason=reason),
+                          paths, logger)
             return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
@@ -508,9 +587,10 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         round0_has_adopted = round_index == 0 and prior_adopted_artifacts
         if not split.candidates and not round0_has_adopted:
             status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
-            rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                      diagram_path=diagram_path, queued_ts_labels=(),
-                                      skipped=split.skipped, status=status))
+            _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                              diagram_path=diagram_path, queued_ts_labels=(),
+                                              skipped=split.skipped, status=status),
+                          paths, logger)
             return PESLoopResult(rounds=tuple(rounds), status=status, reason='',
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
@@ -521,13 +601,14 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             # justify and no capture to evidence), so scope='sensitive' cannot rank here: the
             # record simply reports the first `limit` candidates in network-file order.
             offered = split.candidates[:config.qm.max_transition_states_per_round]
-            rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                      diagram_path=diagram_path,
-                                      queued_ts_labels=tuple(candidate.ts_label
-                                                             for candidate in offered),
-                                      skipped=split.skipped, status=PES_LOOP_DIAGRAM_ONLY,
-                                      reason='no qm_runner configured: explored and drew the '
-                                            'diagram only, nothing was computed.'))
+            _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                              diagram_path=diagram_path,
+                                              queued_ts_labels=tuple(candidate.ts_label
+                                                                     for candidate in offered),
+                                              skipped=split.skipped, status=PES_LOOP_DIAGRAM_ONLY,
+                                              reason='no qm_runner configured: explored and drew the '
+                                                     'diagram only, nothing was computed.'),
+                          paths, logger)
             return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_DIAGRAM_ONLY,
                                  reason=rounds[-1].reason, final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
@@ -553,10 +634,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                           f'transition state must carry real sensitivity evidence '
                           f'(t3.pdep.capture refuses a captured artifact without it), so this '
                           f'round cannot queue QM.')
-                rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                          diagram_path=diagram_path, queued_ts_labels=(),
-                                          skipped=split.skipped, status=PES_LOOP_FAILED,
-                                          reason=reason))
+                _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                                  diagram_path=diagram_path, queued_ts_labels=(),
+                                                  skipped=split.skipped, status=PES_LOOP_FAILED,
+                                                  reason=reason),
+                              paths, logger)
                 return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                      final_network_path=explored_network_path,
                                      final_diagram_path=diagram_path)
@@ -570,31 +652,81 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                     # fault in the evidence pipeline, not a legitimate "nothing worth computing".
                     reason = (f'round {round_index}: the master-equation sensitivity analysis for '
                               f'network {network.network_id!r} measured no finite sensitivity '
-                              f'evidence for any QM candidate, so nothing can be queued (see the '
-                              f"round record's skipped entries for the per-candidate reasons).")
-                    rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                              diagram_path=diagram_path, queued_ts_labels=(),
-                                              skipped=split.skipped, status=PES_LOOP_FAILED,
-                                              reason=reason))
+                              f'evidence for any QM candidate, so nothing can be queued '
+                              f'(per-candidate reasons: {round_record_path(paths)}).')
+                    _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                                      diagram_path=diagram_path, queued_ts_labels=(),
+                                                      skipped=split.skipped, status=PES_LOOP_FAILED,
+                                                      reason=reason),
+                                  paths, logger)
                     return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED,
                                          reason=reason,
                                          final_network_path=explored_network_path,
                                          final_diagram_path=diagram_path)
-                # Every remaining candidate measured a real response BELOW the floor: a measured
-                # "nothing here is worth the QM spend", which is the same honest terminal outcome
-                # as having no candidates at all -- each skip carries its measured value in the
-                # round record. Never 'failed' (nothing malfunctioned) and never a queue of
-                # below-floor transition states (their manifests would record a coefficient that
-                # justified nothing). The reason clause is what separates this, at the summary
-                # level, from "everything was already computed".
-                status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
-                reason = (f'round {round_index}: every remaining QM candidate of network '
-                          f'{network.network_id!r} measured a ln(k) response below the '
-                          f'min_delta_ln_k floor ({config.qm.min_delta_ln_k:.3e}); see the round '
-                          f"record's skipped entries for the measured values.")
-                rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                          diagram_path=diagram_path, queued_ts_labels=(),
-                                          skipped=split.skipped, status=status, reason=reason))
+                # Nothing survived the evidence screen, so the loop stops HERE either way (the
+                # same stop point, and the same queueing decisions, as before the unmeasurable
+                # classification existed -- I-031 changes what is claimed, never what is queued).
+                # What is claimed depends on WHAT the screen actually established, per the
+                # classifications attach_sensitivity_evidence just stamped:
+                #
+                # * every remaining candidate MEASURED a real response below the floor -- a
+                #   measured "nothing here is worth the QM spend": 'converged' (or
+                #   'no_candidates' at round 0), exactly as before. Never 'failed' (nothing
+                #   malfunctioned) and never a queue of below-floor transition states (their
+                #   manifests would record a coefficient that justified nothing).
+                # * at least one remaining candidate was structurally UNMEASURABLE
+                #   (SKIP_UNMEASURABLE): its reported value is a structural zero, not a
+                #   measurement, so "converged" was not demonstrated -- the screen was blind to
+                #   that channel. Reported as 'unmeasurable', loudly, with the count; what to DO
+                #   about such channels is an open decision this loop refuses to take silently.
+                #
+                # The reason also names WHICH criterion fired -- indistinguishable stops (floor
+                # vs. exhausted budget in the same round) are exactly what made the r002 run's
+                # "converged" unfalsifiable from the outside.
+                evidence_skips = {
+                    classification: tuple(s for s in split.skipped
+                                          if s.classification == classification)
+                    for classification in (SKIP_BELOW_FLOOR, SKIP_UNMEASURABLE, SKIP_NO_EVIDENCE)}
+                clauses = []
+                if evidence_skips[SKIP_BELOW_FLOOR]:
+                    labels = ', '.join(s.ts_label for s in evidence_skips[SKIP_BELOW_FLOOR])
+                    clauses.append(f'{len(evidence_skips[SKIP_BELOW_FLOOR])} ({labels}) measured '
+                                   f'a ln(k) response below the min_delta_ln_k floor '
+                                   f'({config.qm.min_delta_ln_k:.3e})')
+                if evidence_skips[SKIP_UNMEASURABLE]:
+                    labels = ', '.join(s.ts_label for s in evidence_skips[SKIP_UNMEASURABLE])
+                    clauses.append(f'{len(evidence_skips[SKIP_UNMEASURABLE])} ({labels}) are '
+                                   f'structurally UNMEASURABLE -- no statmech modes on a '
+                                   f'bimolecular channel, so the master equation cannot respond '
+                                   f'to their E0 at all and their reported values are structural '
+                                   f'zeros, not measurements')
+                if evidence_skips[SKIP_NO_EVIDENCE]:
+                    labels = ', '.join(s.ts_label for s in evidence_skips[SKIP_NO_EVIDENCE])
+                    clauses.append(f'{len(evidence_skips[SKIP_NO_EVIDENCE])} ({labels}) had no '
+                                   f'finite sensitivity row')
+                remaining = sum(len(entries) for entries in evidence_skips.values())
+                budget_note = (f' This was also the last budgeted round (max_rounds: '
+                               f'{max_rounds}); the criterion above, not the exhausted budget, '
+                               f'is what stopped the loop.') if round_index == max_rounds - 1 else ''
+                if evidence_skips[SKIP_UNMEASURABLE]:
+                    status = PES_LOOP_UNMEASURABLE
+                    reason = (f'round {round_index}: none of the {remaining} remaining QM '
+                              f'candidate(s) of network {network.network_id!r} can be queued: '
+                              f'{"; ".join(clauses)}. Criterion: unmeasurable candidates remain '
+                              f'({len(evidence_skips[SKIP_UNMEASURABLE])} of {remaining}), so '
+                              f'this stop is NOT a demonstrated convergence. Per-candidate '
+                              f'values: {round_record_path(paths)}.{budget_note}')
+                else:
+                    status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
+                    reason = (f'round {round_index}: every remaining QM candidate of network '
+                              f'{network.network_id!r} fell to the evidence screen: '
+                              f'{"; ".join(clauses)}. Criterion: the min_delta_ln_k floor. '
+                              f'Per-candidate measured values: '
+                              f'{round_record_path(paths)}.{budget_note}')
+                _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                                  diagram_path=diagram_path, queued_ts_labels=(),
+                                                  skipped=split.skipped, status=status, reason=reason),
+                              paths, logger)
                 return PESLoopResult(rounds=tuple(rounds), status=status, reason=reason,
                                      final_network_path=explored_network_path,
                                      final_diagram_path=diagram_path)
@@ -651,9 +783,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
         if config.termination.stop_when_no_new_ts and not made_progress:
             reason = ('qm_runner returned no newly-converged transition states and '
                      'termination.stop_when_no_new_ts is set: continuing would not make progress.')
-            rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                      diagram_path=diagram_path, queued_ts_labels=queued_ts_labels,
-                                      skipped=split.skipped, status=PES_LOOP_STALLED, reason=reason))
+            _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                              diagram_path=diagram_path, queued_ts_labels=queued_ts_labels,
+                                              skipped=split.skipped, status=PES_LOOP_STALLED,
+                                              reason=reason),
+                          paths, logger)
             return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_STALLED, reason=reason,
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
@@ -669,10 +803,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                               'qm_runner converged no new transition states this round; '
                               're-exploring the same network next round rather than advancing to '
                               'a hybrid file that was never written.')
-        rounds.append(RoundRecord(index=round_index, network_path=explored_network_path,
-                                  diagram_path=diagram_path, queued_ts_labels=queued_ts_labels,
-                                  skipped=split.skipped, status='continuing',
-                                  reason=no_progress_reason))
+        _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                          diagram_path=diagram_path, queued_ts_labels=queued_ts_labels,
+                                          skipped=split.skipped, status='continuing',
+                                          reason=no_progress_reason),
+                      paths, logger)
 
         # The next round explores the QM-informed surface: a real qm_runner (Task 6) writes this
         # round's hybrid network input file (t3.pdep.hybrid) to hybrid_network_path(paths,
