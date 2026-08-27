@@ -51,6 +51,15 @@ SKIP_BARRIERLESS = 'barrierless'
 SKIP_NO_EVIDENCE = 'no_evidence'
 SKIP_BELOW_FLOOR = 'below_floor'
 SKIP_UNMEASURABLE = 'unmeasurable'
+# The distrust selector's own skip classes (``qm.scope == 'distrust'``, see ``t3.pdep.distrust``).
+# ``SKIP_OUTSIDE_WINDOW``: the saddle sits above the flat energy window, so it carries too little
+# reactive flux to be worth the QM spend regardless of how its barrier's provenance is (dis)trusted.
+# ``SKIP_TRUSTED_PROVENANCE``: the barrier is a library / already-computed (QM) value, which distrust
+# trusts and does not re-queue -- spending QM on it would be redundant. Both are decided from the
+# pre-QM network file, never from a sensitivity value, and both are distinct from
+# ``SKIP_BELOW_FLOOR`` (a MEASURED sensitivity below the floor) for that reason.
+SKIP_OUTSIDE_WINDOW = 'outside_energy_window'
+SKIP_TRUSTED_PROVENANCE = 'trusted_provenance'
 
 
 def e0_sensitivity_is_measurable(path_reaction: PDepPathReaction,
@@ -119,6 +128,12 @@ class QMCandidate:
             only: it never gates queueing (an unmeasurable candidate is skipped by exactly the
             same evidence/floor tests as before -- it is just no longer recorded as having
             "measured" its structural zero).
+        distrust_score (float | None): The pre-QM distrust score this candidate was ranked by when
+            ``qm.scope == 'distrust'`` (``t3.pdep.distrust.compute_distrust``), higher meaning less
+            trusted and so more worth computing. ``None`` under the sensitivity/all scopes, where
+            ranking is by ``coefficient`` or file order and distrust plays no part. Carried on the
+            queued candidate so the round record says WHY distrust selected it, rather than leaving
+            the (now non-gating) sensitivity coefficient to imply a justification it no longer gives.
     """
     path_reaction: PDepPathReaction
     ts_label: str
@@ -126,6 +141,7 @@ class QMCandidate:
     coefficient: float | None = None
     delta_ln_k: float | None = None
     e0_sensitivity_measurable: bool = True
+    distrust_score: float | None = None
 
 
 @dataclass(frozen=True)
@@ -229,8 +245,11 @@ def attach_sensitivity_evidence(split: CandidateSplit,
     "the sensitivity evidence that justified selecting this transition state" would make that
     sentence false. This mirrors T3's in-run selection, where ``t3.pdep.selector``'s
     ``_bounded_cutoff`` floors at ``min_delta_ln_k / perturbation > 0`` and such a record is
-    definitionally unreachable. The floor applies under BOTH ``qm.scope`` values -- 'sensitive'
-    ranks and 'all' does not, but neither may queue below it.
+    definitionally unreachable. This function runs under the 'sensitive' and 'all' scopes --
+    'sensitive' ranks and 'all' does not, but neither may queue below the floor. The 'distrust'
+    scope (I-032) does not call this function at all: it selects through ``t3.pdep.distrust`` from
+    the pre-QM E0 surface, precisely because a structural-zero sensitivity below the floor is the
+    blindness it exists to route around.
 
     A skipped candidate that is structurally UNMEASURABLE (``QMCandidate.e0_sensitivity_measurable``
     False -- see ``e0_sensitivity_is_measurable``) takes the SAME two skip branches, so queueing is

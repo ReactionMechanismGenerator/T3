@@ -62,9 +62,11 @@ from t3.pdep.diagram import draw_pes_diagram
 from t3.pdep.join import arc_ts_label
 from t3.pdep.explorer.config import PDepExplorerConfig
 from t3.pdep.explorer.result import EXPLORATION_STATUS_SUCCEEDED
-from t3.pdep.parser import parse_pdep_network_file, to_json_safe
+from t3.pdep.distrust import DistrustParams, select_by_distrust
+from t3.pdep.parser import parse_pdep_network_e0_file, parse_pdep_network_file, to_json_safe
 from t3.pdep.pes_qm import adopt_prior_qm
-from t3.pdep.pes_rounds import (SKIP_BELOW_FLOOR, SKIP_NO_EVIDENCE, SKIP_UNMEASURABLE,
+from t3.pdep.pes_rounds import (SKIP_BELOW_FLOOR, SKIP_NO_EVIDENCE, SKIP_OUTSIDE_WINDOW,
+                                SKIP_TRUSTED_PROVENANCE, SKIP_UNMEASURABLE,
                                 RoundPaths, adoption_channel_keys_by_ts_label,
                                 attach_sensitivity_evidence,
                                 channel_keys_by_ts_label, hybrid_network_path, round_paths,
@@ -219,17 +221,20 @@ def _trim_candidates(candidates: tuple, config: PESLoopConfig, logger) -> tuple:
     stamped by ``t3.pdep.pes_rounds.attach_sensitivity_evidence``), so ``scope == 'sensitive'``
     ranks by that evidence -- descending ``abs(coefficient)``, ties keeping network-file order --
     rather than degrading to file order the way it had to before the loop had an SA of its own.
-    ``scope == 'all'`` keeps the network file's own order. Both take the first ``limit``.
+    ``scope == 'all'`` keeps the network file's own order. ``scope == 'distrust'`` keeps the order
+    already imposed by ``t3.pdep.distrust.select_by_distrust`` (descending distrust), so it must not
+    be re-sorted here. All take the first ``limit``.
 
     Args:
-        candidates (tuple): The ``QMCandidate`` entries to trim, in network-file order, each
-                            already stamped with its sensitivity evidence.
+        candidates (tuple): The ``QMCandidate`` entries to trim, in network-file order (or, for the
+                            'distrust' scope, already in descending-distrust order), each stamped
+                            with its sensitivity evidence.
         config (PESLoopConfig): The loop's configuration.
         logger: A T3 ``Logger``, or ``None``.
 
     Returns:
         tuple: The trimmed candidates -- evidence-ranked for ``scope == 'sensitive'``,
-        network-file order for ``scope == 'all'``.
+        distrust-ranked for ``scope == 'distrust'``, network-file order for ``scope == 'all'``.
     """
     limit = config.qm.max_transition_states_per_round
     if config.qm.scope == 'sensitive':
@@ -237,7 +242,9 @@ def _trim_candidates(candidates: tuple, config: PESLoopConfig, logger) -> tuple:
         # split_qm_candidates' own docstring promises.
         candidates = tuple(sorted(candidates, key=lambda candidate: -abs(candidate.coefficient)))
     if len(candidates) > limit:
-        message = (f"PES loop: taking the {'most sensitive' if config.qm.scope == 'sensitive' else 'first'} "
+        ordering = {'sensitive': 'most sensitive', 'distrust': 'most distrusted'}.get(
+            config.qm.scope, 'first')
+        message = (f'PES loop: taking the {ordering} '
                    f'{limit} of {len(candidates)} candidate(s) '
                    f'(qm.max_transition_states_per_round).')
         _logger.info(message)
@@ -644,8 +651,18 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                      final_diagram_path=diagram_path)
             any_finite_evidence = any(candidate.ts_label in evidence
                                       for candidate in split.candidates)
-            split = attach_sensitivity_evidence(split, evidence,
-                                                min_delta_ln_k=config.qm.min_delta_ln_k)
+            if config.qm.scope == 'distrust':
+                # Rank by distrust (I-032), not by the sensitivity floor: the floor cannot reach the
+                # low bimolecular entrance channels whose sensitivity is a structural zero. The SA
+                # still ran above -- its coefficient is carried onto each survivor for capture and
+                # kept visible in the record (I-031) -- but distrust, not that coefficient, decides
+                # what survives and in what order.
+                split = select_by_distrust(
+                    split, evidence, parse_pdep_network_e0_file(explored_network_path),
+                    DistrustParams(energy_window_kj=config.qm.energy_window_kj))
+            else:
+                split = attach_sensitivity_evidence(split, evidence,
+                                                    min_delta_ln_k=config.qm.min_delta_ln_k)
             if not split.candidates and not round0_has_adopted:
                 if not any_finite_evidence:
                     # The SA ran but measured nothing finite for ANY candidate -- an operational
@@ -661,6 +678,56 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                   paths, logger)
                     return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED,
                                          reason=reason,
+                                         final_network_path=explored_network_path,
+                                         final_diagram_path=diagram_path)
+                if config.qm.scope == 'distrust':
+                    # Nothing survived the distrust screen: every candidate was declined by the flat
+                    # energy window (or lacked a finite sensitivity row to record for capture). This
+                    # is a legitimate "nothing on this surface is both poorly-trusted and
+                    # flux-bearing enough to compute" -- NOT the sensitivity screen's structural-zero
+                    # blindness, so it is never reported 'unmeasurable'. The reason names the window
+                    # criterion so the stop is falsifiable from the outside.
+                    outside = tuple(s for s in split.skipped
+                                    if s.classification == SKIP_OUTSIDE_WINDOW)
+                    trusted = tuple(s for s in split.skipped
+                                    if s.classification == SKIP_TRUSTED_PROVENANCE)
+                    no_row = tuple(s for s in split.skipped
+                                   if s.classification in (SKIP_NO_EVIDENCE, SKIP_UNMEASURABLE))
+                    clauses = []
+                    if outside:
+                        labels = ', '.join(s.ts_label for s in outside)
+                        clauses.append(f'{len(outside)} ({labels}) sit above the '
+                                       f'{config.qm.energy_window_kj:.1f} kJ/mol flat energy window')
+                    if trusted:
+                        labels = ', '.join(s.ts_label for s in trusted)
+                        clauses.append(f'{len(trusted)} ({labels}) already carry a trusted '
+                                       f'library / already-computed rate that distrust does not '
+                                       f're-queue')
+                    if no_row:
+                        labels = ', '.join(s.ts_label for s in no_row)
+                        clauses.append(f'{len(no_row)} ({labels}) had no finite sensitivity row to '
+                                       f'record for capture')
+                    if not clauses:
+                        # Defensive: no candidate reached the distrust selector's own skip classes
+                        # (e.g. all were removed upstream by split_qm_candidates). Keep the reason
+                        # non-empty and falsifiable rather than emitting a dangling "screen: .".
+                        clauses.append(f'no QM candidate remained after the pre-QM screen '
+                                       f'(per-candidate reasons: {round_record_path(paths)})')
+                    budget_note = (f' This was also the last budgeted round (max_rounds: '
+                                   f'{max_rounds}); the criterion above, not the exhausted budget, '
+                                   f'is what stopped the loop.') if round_index == max_rounds - 1 else ''
+                    status = PES_LOOP_NO_CANDIDATES if round_index == 0 else PES_LOOP_CONVERGED
+                    reason = (f'round {round_index}: no QM candidate of network '
+                              f'{network.network_id!r} survived the distrust screen: '
+                              f'{"; ".join(clauses)}. Criterion: the '
+                              f'{config.qm.energy_window_kj:.1f} kJ/mol flat energy window over the '
+                              f'E0 surface. Per-candidate values: '
+                              f'{round_record_path(paths)}.{budget_note}')
+                    _record_round(rounds, RoundRecord(index=round_index, network_path=explored_network_path,
+                                                      diagram_path=diagram_path, queued_ts_labels=(),
+                                                      skipped=split.skipped, status=status, reason=reason),
+                                  paths, logger)
+                    return PESLoopResult(rounds=tuple(rounds), status=status, reason=reason,
                                          final_network_path=explored_network_path,
                                          final_diagram_path=diagram_path)
                 # Nothing survived the evidence screen, so the loop stops HERE either way (the
