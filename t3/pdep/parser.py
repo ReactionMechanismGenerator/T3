@@ -125,6 +125,15 @@ class PDepPathReaction:
         transition_state (str, optional): The associated transition state label, if any.
         kinetics_type (str, optional): The kinetics callee name, e.g. ``'Arrhenius'``, if any.
         kinetics_comment (str): The kinetics ``comment`` keyword text, or ``''`` if absent.
+        kinetics_uncertainty_var (float, optional): The ``var=`` of an
+            ``uncertainty=RateUncertainty(mu=..., var=...)`` keyword on the kinetics call, when RMG
+            wrote one -- its own stated variance (ln-space) of a rate it produced by decision-tree
+            averaging rather than from a measurement or calculation. A large ``var`` is RMG saying,
+            in its own voice, that it guessed this rate; ``t3.pdep.distrust`` reads it as one of the
+            pre-QM distrust signals. ``None`` when the reaction carries no such annotation (a real
+            measurement/calculation, a library value, or a plain estimate with no variance written).
+            Default ``None`` so every existing construction site (which never passes this keyword)
+            keeps working unchanged.
     """
     label: str
     reactants: tuple
@@ -132,6 +141,7 @@ class PDepPathReaction:
     transition_state: str | None
     kinetics_type: str | None
     kinetics_comment: str
+    kinetics_uncertainty_var: float | None = None
 
 
 def _canonical_channel(labels) -> tuple:
@@ -1269,6 +1279,7 @@ def _parse_reaction(kwargs: dict, path: str = '') -> PDepPathReaction:
 
     kinetics_type = None
     kinetics_comment = ''
+    kinetics_uncertainty_var = None
     kinetics_node = kwargs.get('kinetics')
     if isinstance(kinetics_node, ast.Call):
         kinetics_type = _get_call_name(kinetics_node)
@@ -1282,6 +1293,7 @@ def _parse_reaction(kwargs: dict, path: str = '') -> PDepPathReaction:
             # Walk the whole call tree and join every nested `comment=` string found, so this
             # provenance is not silently dropped for multi-component kinetics.
             kinetics_comment = _nested_kinetics_comment(kinetics_node)
+        kinetics_uncertainty_var = _kinetics_uncertainty_var(kinetics_node)
 
     return PDepPathReaction(
         label=label,
@@ -1290,7 +1302,41 @@ def _parse_reaction(kwargs: dict, path: str = '') -> PDepPathReaction:
         transition_state=transition_state,
         kinetics_type=kinetics_type,
         kinetics_comment=kinetics_comment,
+        kinetics_uncertainty_var=kinetics_uncertainty_var,
     )
+
+
+def _kinetics_uncertainty_var(kinetics_node: ast.Call) -> float | None:
+    """
+    Read the ``var=`` of an ``uncertainty=RateUncertainty(mu=..., var=...)`` keyword, if present.
+
+    RMG attaches a ``RateUncertainty`` to a rate it produced by decision-tree node averaging rather
+    than from a measurement or calculation; its ``var`` is the variance (ln-space) of that estimate
+    -- RMG's own statement of how much it distrusts the number. ``t3.pdep.distrust`` reads it as an
+    optional pre-QM distrust signal, so it is surfaced here alongside the kinetics comment. The call
+    subtree is walked (``ast.walk``) so a ``RateUncertainty`` nested inside composite kinetics is
+    still found; the first one carrying a foldable numeric ``var`` wins. Only constant numeric
+    ``var`` values are read -- a non-numeric one is treated as absent rather than guessed at, exactly
+    as ``_e0_kj_per_mol`` refuses a non-literal energy.
+
+    Args:
+        kinetics_node (ast.Call): The top-level ``kinetics=`` call node.
+
+    Returns:
+        float | None: The ``var`` value, or ``None`` if no ``RateUncertainty(var=<number>)`` is
+        declared anywhere in the kinetics call.
+    """
+    for node in ast.walk(kinetics_node):
+        if not (isinstance(node, ast.Call) and _get_call_name(node) == 'RateUncertainty'):
+            continue
+        var_node = _call_keywords(node).get('var')
+        if var_node is None:
+            continue
+        try:
+            return _fold_constant_number(var_node)
+        except (_NotAConstantNumber, ZeroDivisionError):
+            continue
+    return None
 
 
 def _nested_kinetics_comment(kinetics_node: ast.Call) -> str:

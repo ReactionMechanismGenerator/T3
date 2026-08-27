@@ -1000,14 +1000,24 @@ class PESQMSection(PESStrictSection):
                                                             'goflow', 'rits'])
     rotors: bool = False
     irc: bool = False
-    scope: Literal['all', 'sensitive'] = 'sensitive'
+    # 'sensitive' ranks the QM candidates by master-equation E0-sensitivity, 'all' keeps file order,
+    # and 'distrust' (I-032) ranks by how little the current barrier is trusted from data present
+    # BEFORE any QM runs -- a flat energy window over the E0 surface, the barrier's provenance, and
+    # RMG's own RateUncertainty variance -- so it reaches the low bimolecular entrance channels whose
+    # sensitivity is a structural zero the 'sensitive' screen cannot measure (see t3.pdep.distrust).
+    scope: Literal['all', 'sensitive', 'distrust'] = 'sensitive'
     max_transition_states_per_round: Annotated[int, Field(gt=0, strict=True)] = 10
     # The smallest measured ln(k) response that justifies spending QM on a transition state,
     # mirroring T3's in-run ``t3.sensitivity.pdep_min_delta_ln_k`` (same default, same bounds).
-    # Applies under BOTH scopes: 'sensitive' ranks and 'all' does not, but neither may queue a
-    # transition state whose measured leverage is below this floor -- its capture manifest would
-    # then record a coefficient that never justified anything.
+    # Applies under the 'sensitive' and 'all' scopes: 'sensitive' ranks and 'all' does not, but
+    # neither may queue a transition state whose measured leverage is below this floor -- its capture
+    # manifest would then record a coefficient that never justified anything. The 'distrust' scope
+    # does not gate on it (its whole point is that a structural-zero sensitivity is meaningless).
     min_delta_ln_k: Annotated[float, Field(gt=0, lt=1)] = 1e-3
+    # The flat energy window half-width (kJ/mol) for the 'distrust' scope: a saddle more than this
+    # above the lowest saddle on the surface carries negligible flux and is declined. Unused under
+    # the other scopes. Default mirrors t3.pdep.distrust.DEFAULT_ENERGY_WINDOW_KJ.
+    energy_window_kj: Annotated[float, Field(gt=0)] = 30.0
 
     @field_validator('opt_level', 'freq_level', 'sp_level', 'irc_level', 'scan_level')
     @classmethod
