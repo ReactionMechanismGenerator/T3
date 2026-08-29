@@ -655,8 +655,20 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                 # Rank by distrust (I-032), not by the sensitivity floor: the floor cannot reach the
                 # low bimolecular entrance channels whose sensitivity is a structural zero. The SA
                 # still ran above -- its coefficient is carried onto each survivor for capture and
-                # kept visible in the record (I-031) -- but distrust, not that coefficient, decides
-                # what survives and in what order.
+                # kept visible in the record (I-031). Distrust, not that coefficient's VALUE, sets
+                # the order and picks among the in-window candidates.
+                #
+                # But the coefficient's PRESENCE is still a precondition, so the escape from the
+                # floor lives in the RANKING and is not unconditional (I-037): select_by_distrust
+                # drops any candidate for which this round's Arkane SA left no finite row BEFORE the
+                # distrust window is applied, classifying it SKIP_UNMEASURABLE / SKIP_NO_EVIDENCE,
+                # because t3.pdep.capture refuses an artifact with no coefficient to record. An
+                # ordinary structural zero is a FINITE row (0.0 or ~1e-18) and is kept, so on a
+                # pristine pre-QM surface every entrance channel survives to be ranked (see
+                # tests/test_pdep/test_pes_sa.py::test_run_round_me_sensitivity_runs_real_arkane,
+                # where real Arkane emits a finite row for every TS). Only a NaN/absent row -- a
+                # degenerate ME solve, not the structural-zero case distrust was built for --
+                # reintroduces the floor's blindness for that one in-window candidate.
                 split = select_by_distrust(
                     split, evidence, parse_pdep_network_e0_file(explored_network_path),
                     DistrustParams(energy_window_kj=config.qm.energy_window_kj))
