@@ -122,7 +122,7 @@ jobs:
       # nobody can reproduce locally. A miss just means the build runs, as it does today.
       - name: Cache RMG-Py Cython build
         id: rmg-build-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             RMG-Py/**/*.so
