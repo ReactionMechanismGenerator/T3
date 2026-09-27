@@ -785,6 +785,17 @@ together for reference purposes.</p>
 <span class="w">                                 </span><span class="c1"># comparison (not optimization). See examples/idt_with_experiment/.</span>
 <span class="w">                                 </span><span class="c1"># default: null</span>
 
+<span class="w">    </span><span class="c1"># An unversioned experimental file retains the legacy citation + data[{T, P, phi, idt}]</span>
+<span class="w">    </span><span class="c1"># format and nearest-grid comparison under idt_criterion. A version: 1 file instead contains</span>
+<span class="w">    </span><span class="c1"># points with explicit temperature/pressure/IDT units, a normalized list of SMILES mole</span>
+<span class="w">    </span><span class="c1"># fractions, apparatus ('shock tube' or 'rapid compression machine'), ignition_definition,</span>
+<span class="w">    </span><span class="c1"># optional uncertainty, and source {doi, record}. Each point is simulated directly at its</span>
+<span class="w">    </span><span class="c1"># own state. Supported targets: pressure, temperature, OH, OH*, CH, CH*. Supported types:</span>
+<span class="w">    </span><span class="c1"># 'd/dt max', 'max', '1/2 max', 'd/dt max extrapolated'. Missing target species are refused;</span>
+<span class="w">    </span><span class="c1"># no ground-state or radical proxy is substituted. A target event that has not resolved by</span>
+<span class="w">    </span><span class="c1"># the integration horizon is also refused rather than scored from a truncated trace. See</span>
+<span class="w">    </span><span class="c1"># experimental_idt_v1.yaml in the example directory for a complete file.</span>
+
 <span class="w">  </span><span class="c1"># uncertainty analysis (optional block, T3 can run w/o UA)</span>
 <span class="w">  </span><span class="c1"># either local or global UA type must be specified to execute an UA</span>
 <span class="w">  </span><span class="nt">uncertainty</span><span class="p">:</span>

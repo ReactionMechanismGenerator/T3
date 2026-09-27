@@ -1164,8 +1164,16 @@ measurements, reporting per-point log-errors and RMSE.</p>
 <li><code>idt_criterion: max_dOHdt</code> (configurable: <code>max_dTdt</code>, <code>max_radical_dt</code>)</li>
 <li><code>idt_sa_method: adjoint</code> (<code>brute_force</code> or <code>adjoint</code> for Cantera built-in SA)</li>
 <li><code>experimental_idt_path</code> pointing to a YAML file with experimental data</li>
-<li>Experimental YAML format with citation, T/P/phi/idt fields</li>
+<li>Legacy experimental YAML with citation and T/P/phi/idt fields remains supported</li>
+<li><code>experimental_idt_v1.yaml</code> shows direct per-point states, explicit units, SMILES
+  mole fractions, apparatus, source ignition definitions, uncertainty, DOI, and
+  record locator</li>
 </ul>
+<p>Version 1 maps each composition SMILES to the configured RMG species by T3's
+structural <code>T3Species</code> identity, then uses the existing configured-label to
+Cantera-label lookup. An unmappable composition species or an absent OH/OH<em>/CH/CH</em>
+target produces a typed refusal for that point. RCM points represent only the
+post-compression constant-pressure state; volume histories are not supported here.</p>
 <h2 id="input-reference">Input reference<a class="headerlink" href="#input-reference" title="Permanent link">&para;</a></h2>
 <p>For a comprehensive reference showing <strong>every</strong> available input argument with
 inline documentation, see the <a href="../input_reference/">input reference</a> page.</p>
