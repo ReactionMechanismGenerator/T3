@@ -129,6 +129,162 @@ class IDTSAMethodEnum(str, Enum):
     adjoint = 'adjoint'
 
 
+class TemperatureUnitEnum(str, Enum):
+    """Temperature units accepted by versioned experimental IDT files."""
+    K = 'K'
+    degC = 'degC'
+
+
+class PressureUnitEnum(str, Enum):
+    """Pressure units accepted by versioned experimental IDT files."""
+    Pa = 'Pa'
+    kPa = 'kPa'
+    MPa = 'MPa'
+    bar = 'bar'
+    atm = 'atm'
+
+
+class TimeUnitEnum(str, Enum):
+    """Time units accepted by versioned experimental IDT files."""
+    s = 's'
+    ms = 'ms'
+    us = 'us'
+    micro_s = 'micro-s'
+
+
+class ExperimentalApparatusEnum(str, Enum):
+    """Apparatus models supported for versioned experimental IDT points."""
+    shock_tube = 'shock tube'
+    rapid_compression_machine = 'rapid compression machine'
+
+
+class IgnitionTargetEnum(str, Enum):
+    """Signals supported as source-defined experimental ignition targets."""
+    pressure = 'pressure'
+    temperature = 'temperature'
+    OH = 'OH'
+    OH_star = 'OH*'
+    CH = 'CH'
+    CH_star = 'CH*'
+
+
+class IgnitionTypeEnum(str, Enum):
+    """Source-defined methods supported for locating ignition on a target trace."""
+    derivative_max = 'd/dt max'
+    maximum = 'max'
+    half_max = '1/2 max'
+    derivative_max_extrapolated = 'd/dt max extrapolated'
+
+
+class ExperimentalIDTRefusalReason(str, Enum):
+    """Typed reasons why an otherwise valid experimental point was not scored."""
+    unmappable_species = 'unmappable species'
+    target_species_absent = 'target species absent'
+    ignition_not_resolved = 'ignition not resolved'
+    simulation_failed = 'simulation failed'
+
+
+class ExperimentalTemperature(BaseModel):
+    """A temperature with explicit units."""
+    value: Annotated[float, Field(gt=0, allow_inf_nan=False)]
+    units: TemperatureUnitEnum
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalPressure(BaseModel):
+    """A pressure with explicit units."""
+    value: Annotated[float, Field(gt=0, allow_inf_nan=False)]
+    units: PressureUnitEnum
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalTime(BaseModel):
+    """A positive time with explicit units."""
+    value: Annotated[float, Field(gt=0, allow_inf_nan=False)]
+    units: TimeUnitEnum
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalUncertainty(BaseModel):
+    """A non-negative IDT uncertainty with explicit time units."""
+    value: Annotated[float, Field(ge=0, allow_inf_nan=False)]
+    units: TimeUnitEnum
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalCompositionEntry(BaseModel):
+    """One SMILES-identified component of an experimental mole-fraction mixture."""
+    smiles: Annotated[str, Field(min_length=1)]
+    mole_fraction: Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalIgnitionDefinition(BaseModel):
+    """The source's target signal and rule for defining ignition."""
+    target: IgnitionTargetEnum
+    type: IgnitionTypeEnum
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalSourceReference(BaseModel):
+    """A DOI and free-text locator for the source record."""
+    doi: Annotated[str, Field(min_length=1)]
+    record: Annotated[str, Field(min_length=1)]
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalIDTPoint(BaseModel):
+    """One independently simulated version-1 experimental ignition-delay point."""
+    temperature: ExperimentalTemperature
+    pressure: ExperimentalPressure
+    composition: list[ExperimentalCompositionEntry]
+    apparatus: ExperimentalApparatusEnum
+    ignition_definition: ExperimentalIgnitionDefinition
+    idt: ExperimentalTime
+    uncertainty: ExperimentalUncertainty | None = None
+    source: ExperimentalSourceReference
+
+    class Config:
+        extra = 'forbid'
+
+    @field_validator('composition')
+    @classmethod
+    def validate_composition(cls, value):
+        """Require a non-empty, unique, normalized mole-fraction composition."""
+        if not value:
+            raise ValueError('composition must contain at least one species')
+        smiles = [entry.smiles for entry in value]
+        if len(set(smiles)) != len(smiles):
+            raise ValueError('composition SMILES entries must be unique')
+        total = sum(entry.mole_fraction for entry in value)
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(f'composition mole fractions must sum to 1.0, got {total}')
+        return value
+
+
+class ExperimentalIDTFile(BaseModel):
+    """Version-1 per-point experimental ignition-delay input file."""
+    version: Literal[1]
+    points: list[ExperimentalIDTPoint]
+
+    class Config:
+        extra = 'forbid'
+
+
 class T3Sensitivity(BaseModel):
     """
     A class for validating input.T3.sensitivity arguments
