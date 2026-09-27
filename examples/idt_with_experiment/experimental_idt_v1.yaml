@@ -1,0 +1,16 @@
+# Versioned experimental IDT: each point is simulated at its own initial state.
+version: 1
+points:
+  - temperature: {value: 1100, units: K}
+    pressure: {value: 2, units: bar}
+    composition:
+      - {smiles: '[H][H]', mole_fraction: 0.04}
+      - {smiles: '[O][O]', mole_fraction: 0.02}
+      - {smiles: '[Ar]', mole_fraction: 0.94}
+    apparatus: shock tube
+    ignition_definition: {target: pressure, type: d/dt max}
+    idt: {value: 0.95, units: ms}
+    uncertainty: {value: 0.05, units: ms}
+    source:
+      doi: 10.0000/replace-with-source-doi
+      record: Table 2, mixture 1, point 3

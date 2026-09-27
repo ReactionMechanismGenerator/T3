@@ -22,6 +22,7 @@ from matplotlib.ticker import ScalarFormatter
 from arc.common import read_yaml_file, save_yaml_file
 from arc.constants import R
 
+from t3.chem import T3Species
 from t3.common import determine_concentrations_by_equivalence_ratios, remove_numeric_parentheses
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
@@ -33,6 +34,26 @@ DELTA_H = 0.1  # +/- 0.1 kJ/mol enthalpy perturbation for thermo brute-force SA 
 DELTA_K = 0.05  # *(1 + 5%) rate-coefficient perturbation for kinetics brute-force SA (default, overridable via schema)
 EA_UNIT_CONVERSION = {'J/mol': 1, 'kJ/mol': 1e+3, 'cal/mol': 4.184, 'kcal/mol': 4.184e+3}
 P_UNIT_CONVERSION = {'bar': 1, 'atm': 1.01325, 'Pa': 1e-5}
+
+
+def _temperature_to_kelvin(value: float, units) -> float:
+    """Convert a validated experimental temperature to kelvin."""
+    units = getattr(units, 'value', units)
+    return value if units == 'K' else value + 273.15
+
+
+def _pressure_to_bar(value: float, units) -> float:
+    """Convert a validated experimental pressure to bar."""
+    units = getattr(units, 'value', units)
+    factors = {'Pa': 1e-5, 'kPa': 1e-2, 'MPa': 10.0, 'bar': 1.0, 'atm': 1.01325}
+    return value * factors[units]
+
+
+def _time_to_seconds(value: float, units) -> float:
+    """Convert a validated experimental time to seconds."""
+    units = getattr(units, 'value', units)
+    factors = {'s': 1.0, 'ms': 1e-3, 'us': 1e-6, 'micro-s': 1e-6}
+    return value * factors[units]
 
 
 class CanteraIDT(SimulateAdapter):
@@ -90,6 +111,7 @@ class CanteraIDT(SimulateAdapter):
         self.num_ct_species: int | None = None
         self.species_names_without_indices: list[str] = list()
         self.idt_sa_dict: dict = dict()
+        self.experimental_smiles_lookup: dict[str, str | None] = dict()
 
         sensitivity = self.t3.get('sensitivity', {})
         self.idt_criterion = sensitivity.get('idt_criterion', 'max_dOHdt')
@@ -225,21 +247,33 @@ class CanteraIDT(SimulateAdapter):
                                  save_fig: bool = True,
                                  energy: str = 'on',
                                  max_idt: float = 1.0,
-                                 ) -> float | None:
+                                 apparatus: str | None = None,
+                                 return_time_history: bool = False,
+                                 ) -> float | ct.SolutionArray | None:
         """
-        Simulate one IdealGasReactor at fixed (T, P, X) and return the IDT in seconds.
+        Simulate one reactor at fixed (T, P, X) and return its IDT in seconds.
+
+        The optional ``apparatus`` and ``return_time_history`` arguments serve
+        versioned experimental points. When omitted, this method follows the
+        existing adapter/subclass reactor and global IDT-criterion behavior.
         """
         fig_name = (f'R{r}_{phi}_{p:.2f}_bar_{t:.2f}_K.png'
                     if phi is not None else f'R{r}_{p:.2f}_bar_{t:.2f}_K.png')
         model = ct.Solution(infile=infile)
         model.TPX = t, p * 1e5, x
-        reactor = self._create_reactor(model, energy)
+        reactor = self._create_experimental_reactor(model, apparatus, energy)
         net = ct.ReactorNet([reactor])
         net.atol, net.rtol = self.atol, self.rtol
         net.atol_sensitivity, net.rtol_sensitivity = self.sa_atol, self.sa_rtol
         time_history = ct.SolutionArray(model, extra='t')
+        if return_time_history:
+            # Versioned extrapolated criteria define their baseline at the
+            # exact initial state, before the first integrator step.
+            time_history.append(reactor.thermo.state, t=0.0)
         t_, counter = 0.0, 0
-        use_radical_early_exit = self.idt_criterion != 'max_dTdt' and self.radical_label is not None
+        use_radical_early_exit = (not return_time_history
+                                  and self.idt_criterion != 'max_dTdt'
+                                  and self.radical_label is not None)
         while t_ < max_idt:
             t_ = net.step()
             time_history.append(reactor.thermo.state, t=t_)
@@ -252,6 +286,8 @@ class CanteraIDT(SimulateAdapter):
                         and time_history.t[-1] > time_history.t[max_c_idx] * 1.2):
                     break
             counter += 1
+        if return_time_history:
+            return time_history
         radical = self.radical_label
         if self.idt_criterion == 'max_radical_dt':
             radical = self._find_best_radical(time_history) or radical
@@ -265,6 +301,20 @@ class CanteraIDT(SimulateAdapter):
     def _create_reactor(self, model: ct.Solution, energy: str = 'on'):
         """Create the Cantera reactor for IDT simulation. Subclasses override this."""
         return ct.IdealGasReactor(model, energy=energy)
+
+    def _create_experimental_reactor(self,
+                                     model: ct.Solution,
+                                     apparatus: str | None,
+                                     energy: str = 'on'):
+        """Create the requested experimental reactor, or preserve adapter defaults."""
+        apparatus = getattr(apparatus, 'value', apparatus)
+        if apparatus is None:
+            return self._create_reactor(model, energy)
+        if apparatus == 'shock tube':
+            return ct.IdealGasReactor(model, energy=energy)
+        if apparatus == 'rapid compression machine':
+            return ct.IdealGasConstPressureReactor(model, energy=energy)
+        raise ValueError(f'Unknown experimental apparatus: {apparatus!r}')
 
     def determine_radical_label(self) -> str | None:
         """
@@ -719,26 +769,232 @@ class CanteraIDT(SimulateAdapter):
             save_yaml_file(path=self.paths['SA IDT dict top X'], content=self.idt_sa_dict)
         return self.idt_sa_dict
 
+    def _map_experimental_composition(self, composition) -> tuple[dict | None, str | None]:
+        """Map SMILES mole fractions through T3 species identity to Cantera labels."""
+        mapped: dict[str, float] = dict()
+        for entry in composition:
+            if entry.smiles in self.experimental_smiles_lookup:
+                cantera_label = self.experimental_smiles_lookup[entry.smiles]
+                if cantera_label is None:
+                    return None, entry.smiles
+                mapped[cantera_label] = mapped.get(cantera_label, 0.0) + entry.mole_fraction
+                continue
+            try:
+                query = T3Species(label=entry.smiles, smiles=entry.smiles)
+            except Exception:
+                self.experimental_smiles_lookup[entry.smiles] = None
+                return None, entry.smiles
+
+            cantera_label = None
+            for species_dict in self.rmg.get('species', []):
+                descriptor = next((key for key in ('smiles', 'inchi', 'adjlist') if species_dict.get(key)), None)
+                if descriptor is None:
+                    continue
+                try:
+                    candidate = T3Species(label=species_dict['label'],
+                                          **{descriptor: species_dict[descriptor]})
+                    if query.mol.is_isomorphic(candidate.mol):
+                        cantera_label = self.get_cantera_species_label(species_dict['label'])
+                        if cantera_label is not None:
+                            break
+                except Exception:
+                    continue
+
+            if cantera_label is None:
+                cantera_label = next(
+                    (species.name for species in self.model.species()
+                     if remove_numeric_parentheses(species.name) == entry.smiles),
+                    None,
+                )
+            if cantera_label is None:
+                self.experimental_smiles_lookup[entry.smiles] = None
+                return None, entry.smiles
+            self.experimental_smiles_lookup[entry.smiles] = cantera_label
+            mapped[cantera_label] = mapped.get(cantera_label, 0.0) + entry.mole_fraction
+        return mapped, None
+
+    def _experimental_target_trace(self,
+                                   time_history: ct.SolutionArray,
+                                   target: str,
+                                   ) -> tuple[np.ndarray | None, str | None]:
+        """Return the exact requested target trace without any species proxy fallback."""
+        target = getattr(target, 'value', target)
+        if target == 'pressure':
+            return np.asarray(time_history.P, dtype=np.float64), None
+        if target == 'temperature':
+            return np.asarray(time_history.T, dtype=np.float64), None
+        species_label = self.get_cantera_species_label(target)
+        if species_label is None:
+            return None, target
+        index = time_history.species_index(species_label)
+        return np.asarray(time_history.X[:, index], dtype=np.float64), None
+
+    def _compare_versioned_experiment(self, exp: dict) -> dict:
+        """Validate and score version-1 experimental points independently."""
+        # Local import avoids schema -> simulate factory -> adapter import cycles.
+        from t3.schema import ExperimentalIDTFile, ExperimentalIDTRefusalReason
+
+        parsed = ExperimentalIDTFile.model_validate(exp)
+        comparisons: list[dict] = list()
+        log_errors: list[float] = list()
+        refusals: dict[str, int] = dict()
+
+        for point, raw_point in zip(parsed.points, exp['points']):
+            criterion = raw_point['ignition_definition']
+            experimental_idt = _time_to_seconds(point.idt.value, point.idt.units)
+            comparison = {
+                'temperature': raw_point['temperature'],
+                'pressure': raw_point['pressure'],
+                'composition': raw_point['composition'],
+                'apparatus': raw_point['apparatus'],
+                'idt_exp': experimental_idt,
+                'uncertainty': raw_point.get('uncertainty'),
+                'idt_sim': None,
+                'criterion': criterion,
+                'source': raw_point['source'],
+                'log10_error': None,
+                'refusal': None,
+            }
+
+            mapped_composition, unmapped_smiles = self._map_experimental_composition(point.composition)
+            if unmapped_smiles is not None:
+                reason = ExperimentalIDTRefusalReason.unmappable_species.value
+                comparison['refusal'] = {
+                    'reason': reason,
+                    'detail': f'Could not map SMILES {unmapped_smiles!r} to a model species.',
+                }
+                refusals[reason] = refusals.get(reason, 0) + 1
+                comparisons.append(comparison)
+                continue
+
+            target = point.ignition_definition.target.value
+            if target not in ('pressure', 'temperature') and self.get_cantera_species_label(target) is None:
+                reason = ExperimentalIDTRefusalReason.target_species_absent.value
+                comparison['refusal'] = {
+                    'reason': reason,
+                    'detail': f'Target species {target!r} is absent from the model.',
+                }
+                refusals[reason] = refusals.get(reason, 0) + 1
+                comparisons.append(comparison)
+                continue
+
+            try:
+                time_history = self.simulate_idt_for_a_point(
+                    r=0,
+                    t=_temperature_to_kelvin(point.temperature.value, point.temperature.units),
+                    p=_pressure_to_bar(point.pressure.value, point.pressure.units),
+                    x=mapped_composition,
+                    phi=None,
+                    infile=self.paths['cantera annotated'],
+                    save_fig=False,
+                    max_idt=max(1.0, 10.0 * experimental_idt),
+                    apparatus=point.apparatus,
+                    return_time_history=True,
+                )
+                trace, _ = self._experimental_target_trace(time_history, target)
+                simulated_idt = compute_source_defined_idt(
+                    time_history.t,
+                    trace,
+                    point.ignition_definition.type,
+                )
+            except (ct.CanteraError, IndexError, TypeError, ValueError) as error:
+                simulated_idt = None
+                simulation_detail = str(error)
+            else:
+                simulation_detail = 'The target trace did not yield a positive finite ignition delay.'
+
+            if (simulated_idt is not None
+                    and not source_defined_idt_is_resolved(
+                        time_history.t,
+                        trace,
+                        point.ignition_definition.type,
+                        target,
+                    )):
+                reason = ExperimentalIDTRefusalReason.ignition_not_resolved.value
+                comparison['refusal'] = {
+                    'reason': reason,
+                    'detail': 'The target event was not resolved before the integration horizon.',
+                }
+                refusals[reason] = refusals.get(reason, 0) + 1
+                comparisons.append(comparison)
+                continue
+
+            if simulated_idt is None or not math.isfinite(simulated_idt) or simulated_idt <= 0:
+                reason = ExperimentalIDTRefusalReason.simulation_failed.value
+                comparison['refusal'] = {'reason': reason, 'detail': simulation_detail}
+                refusals[reason] = refusals.get(reason, 0) + 1
+                comparisons.append(comparison)
+                continue
+
+            log_error = math.log10(simulated_idt / experimental_idt)
+            comparison['idt_sim'] = simulated_idt
+            comparison['log10_error'] = log_error
+            log_errors.append(log_error)
+            comparisons.append(comparison)
+
+        rmse_log = float(np.sqrt(np.mean(np.asarray(log_errors) ** 2))) if log_errors else None
+        return {
+            'version': parsed.version,
+            'n_points': len(parsed.points),
+            'n_matched': len(log_errors),
+            'n_refused': sum(refusals.values()),
+            'refusals_by_reason': refusals,
+            'rmse_log': rmse_log,
+            'points': comparisons,
+        }
+
     def compare_with_experiment(self, exp_data_path: str) -> dict:
         """
         Load experimental IDT data from a YAML file and compare with simulated values.
 
-        The experimental YAML format::
+        A file without a ``version`` marker retains the legacy nearest-grid
+        behavior and global criterion. Its format is::
 
             citation: "Author et al., Journal (Year)"
             data:
               - {T: 1000, P: 10, phi: 1.0, idt: 2.3e-3}
               - ...
 
-        T in K, P in bar, idt in seconds.
+        T is K, P is bar, and IDT is seconds. Version 1 instead simulates every
+        point directly and validates this format::
+
+            version: 1
+            points:
+              - temperature: {value: 1200, units: K}
+                pressure: {value: 10, units: bar}
+                composition:
+                  - {smiles: C, mole_fraction: 0.095057}
+                  - {smiles: "[O][O]", mole_fraction: 0.190114}
+                  - {smiles: "N#N", mole_fraction: 0.714829}
+                apparatus: shock tube
+                ignition_definition: {target: temperature, type: d/dt max}
+                idt: {value: 2.5, units: ms}
+                uncertainty: {value: 0.2, units: ms}
+                source: {doi: 10.0000/example, record: "Table 2, point 17"}
+
+        Apparatus is ``shock tube`` (constant volume) or ``rapid compression
+        machine`` (constant pressure post-compression state). Targets are
+        pressure, temperature, OH, OH*, CH, or CH*, with no proxy substitution.
+        Each trace is integrated for at least one second and at least ten times
+        its measured delay, so long-delay source points are not silently cut at
+        the legacy one-second default. A target event that has not peaked or
+        settled by that horizon is returned as a typed refusal rather than a
+        truncated IDT.
+        ``1/2 max`` is the first rising-side half-peak crossing. ``d/dt max
+        extrapolated`` intersects the maximum-slope tangent with the initial
+        target value. See :func:`compute_source_defined_idt` for the numerical
+        definition.
 
         Returns:
-            dict with keys ``'citation'``, ``'points'`` (list of per-point comparisons),
-            ``'rmse_log'`` (RMSE of log10 errors), ``'n_points'``, ``'n_matched'``.
+            A comparison dictionary. Legacy files retain all existing keys.
+            Versioned files also report typed refusal counts and per-point
+            criterion/source metadata.
         """
+        exp = read_yaml_file(exp_data_path)
+        if 'version' in exp:
+            return self._compare_versioned_experiment(exp)
         if not self.reactor_idt_dict:
             self.simulate()
-        exp = read_yaml_file(exp_data_path)
         citation = exp.get('citation', 'unknown')
         points = exp.get('data', [])
 
@@ -970,6 +1226,111 @@ def compute_idt(time_history: ct.SolutionArray,
         finally:
             plt.close(fig)
     return idt
+
+
+def compute_source_defined_idt(times,
+                               values,
+                               criterion_type: str,
+                               ) -> float | None:
+    """
+    Locate ignition on an experimental source target trace.
+
+    ``'1/2 max'`` is the first, linearly interpolated time at which the
+    rising trace reaches half of its absolute peak value. ``'d/dt max
+    extrapolated'`` is the time where the tangent at the sample with the
+    maximum numerical slope intersects the pre-ignition baseline, defined as
+    the target's initial value. Species target traces are mole fractions;
+    pressure and temperature retain Cantera's native Pa and K units.
+
+    Args:
+        times: Strictly increasing trace times in seconds.
+        values: Target values at the corresponding times.
+        criterion_type: One of ``d/dt max``, ``max``, ``1/2 max``, or
+            ``d/dt max extrapolated``.
+
+    Returns:
+        The ignition time in seconds, or ``None`` for a degenerate trace.
+    """
+    criterion_type = getattr(criterion_type, 'value', criterion_type)
+    times_array = np.asarray(times, dtype=np.float64)
+    values_array = np.asarray(values, dtype=np.float64)
+    if (times_array.ndim != 1
+            or values_array.ndim != 1
+            or len(times_array) != len(values_array)
+            or len(times_array) < 2
+            or not np.all(np.isfinite(times_array))
+            or not np.all(np.isfinite(values_array))
+            or np.any(np.diff(times_array) <= 0)):
+        return None
+
+    peak_index = int(np.argmax(values_array))
+    if criterion_type == 'max':
+        return float(times_array[peak_index])
+
+    if criterion_type == '1/2 max':
+        threshold = 0.5 * float(values_array[peak_index])
+        rising_values = values_array[:peak_index + 1]
+        crossings = np.flatnonzero(rising_values >= threshold)
+        if not len(crossings):
+            return None
+        upper = int(crossings[0])
+        if upper == 0:
+            return float(times_array[0])
+        lower = upper - 1
+        value_delta = values_array[upper] - values_array[lower]
+        if value_delta == 0:
+            return float(times_array[upper])
+        fraction = (threshold - values_array[lower]) / value_delta
+        return float(times_array[lower] + fraction * (times_array[upper] - times_array[lower]))
+
+    slopes = np.gradient(values_array, times_array)
+    slope_index = int(np.argmax(slopes))
+    slope = float(slopes[slope_index])
+    if not math.isfinite(slope) or slope <= 0:
+        return None
+    if criterion_type == 'd/dt max':
+        return float(times_array[slope_index])
+    if criterion_type == 'd/dt max extrapolated':
+        baseline = float(values_array[0])
+        intersection = times_array[slope_index] - (values_array[slope_index] - baseline) / slope
+        if not math.isfinite(intersection):
+            return None
+        return float(intersection)
+    raise ValueError(f'Unknown source-defined IDT criterion type: {criterion_type!r}')
+
+
+def source_defined_idt_is_resolved(times,
+                                   values,
+                                   criterion_type: str,
+                                   target: str,
+                                   ) -> bool:
+    """Return whether a source-defined target event is complete within its trace."""
+    criterion_type = getattr(criterion_type, 'value', criterion_type)
+    target = getattr(target, 'value', target)
+    times_array = np.asarray(times, dtype=np.float64)
+    values_array = np.asarray(values, dtype=np.float64)
+    if len(times_array) < 3 or len(times_array) != len(values_array):
+        return False
+
+    span = float(np.ptp(values_array))
+    minimum_span = (max(abs(float(values_array[0])), 1.0) * 1e-6
+                    if target in ('pressure', 'temperature') else 1e-12)
+    if not math.isfinite(span) or span <= minimum_span:
+        return False
+
+    tail_length = max(3, len(values_array) // 10)
+    tail = values_array[-tail_length:]
+    plateau_tolerance = max(span * 1e-3, np.finfo(float).eps)
+    peak_index = int(np.argmax(values_array))
+    if criterion_type in ('max', '1/2 max'):
+        return peak_index < len(values_array) - 1 or float(np.ptp(tail)) <= plateau_tolerance
+
+    slopes = np.gradient(values_array, times_array)
+    slope_index = int(np.argmax(slopes))
+    peak_slope = abs(float(slopes[slope_index]))
+    tail_slope = float(np.max(np.abs(slopes[-tail_length:])))
+    return slope_index < len(values_array) - tail_length and tail_slope <= max(peak_slope * 0.1,
+                                                                               np.finfo(float).eps)
 
 
 def get_t_and_p_lists(reactor: dict,
