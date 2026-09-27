@@ -23,7 +23,8 @@ from arc.common import read_yaml_file, save_yaml_file
 from arc.constants import R
 
 from t3.chem import T3Species
-from t3.common import determine_concentrations_by_equivalence_ratios, remove_numeric_parentheses
+from t3.common import (convert_pressure_to_bar, convert_temperature_to_kelvin, convert_time_to_seconds,
+                       determine_concentrations_by_equivalence_ratios, remove_numeric_parentheses)
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.factory import register_simulate_adapter
@@ -34,26 +35,6 @@ DELTA_H = 0.1  # +/- 0.1 kJ/mol enthalpy perturbation for thermo brute-force SA 
 DELTA_K = 0.05  # *(1 + 5%) rate-coefficient perturbation for kinetics brute-force SA (default, overridable via schema)
 EA_UNIT_CONVERSION = {'J/mol': 1, 'kJ/mol': 1e+3, 'cal/mol': 4.184, 'kcal/mol': 4.184e+3}
 P_UNIT_CONVERSION = {'bar': 1, 'atm': 1.01325, 'Pa': 1e-5}
-
-
-def _temperature_to_kelvin(value: float, units) -> float:
-    """Convert a validated experimental temperature to kelvin."""
-    units = getattr(units, 'value', units)
-    return value if units == 'K' else value + 273.15
-
-
-def _pressure_to_bar(value: float, units) -> float:
-    """Convert a validated experimental pressure to bar."""
-    units = getattr(units, 'value', units)
-    factors = {'Pa': 1e-5, 'kPa': 1e-2, 'MPa': 10.0, 'bar': 1.0, 'atm': 1.01325}
-    return value * factors[units]
-
-
-def _time_to_seconds(value: float, units) -> float:
-    """Convert a validated experimental time to seconds."""
-    units = getattr(units, 'value', units)
-    factors = {'s': 1.0, 'ms': 1e-3, 'us': 1e-6, 'micro-s': 1e-6}
-    return value * factors[units]
 
 
 class CanteraIDT(SimulateAdapter):
@@ -257,6 +238,8 @@ class CanteraIDT(SimulateAdapter):
         versioned experimental points. When omitted, this method follows the
         existing adapter/subclass reactor and global IDT-criterion behavior.
         """
+        if not math.isfinite(max_idt):
+            raise ValueError(f'max_idt must be a finite integration horizon, got {max_idt!r}')
         fig_name = (f'R{r}_{phi}_{p:.2f}_bar_{t:.2f}_K.png'
                     if phi is not None else f'R{r}_{p:.2f}_bar_{t:.2f}_K.png')
         model = ct.Solution(infile=infile)
@@ -841,7 +824,7 @@ class CanteraIDT(SimulateAdapter):
 
         for point, raw_point in zip(parsed.points, exp['points']):
             criterion = raw_point['ignition_definition']
-            experimental_idt = _time_to_seconds(point.idt.value, point.idt.units)
+            experimental_idt = convert_time_to_seconds(point.idt.value, point.idt.units)
             comparison = {
                 'temperature': raw_point['temperature'],
                 'pressure': raw_point['pressure'],
@@ -881,8 +864,8 @@ class CanteraIDT(SimulateAdapter):
             try:
                 time_history = self.simulate_idt_for_a_point(
                     r=0,
-                    t=_temperature_to_kelvin(point.temperature.value, point.temperature.units),
-                    p=_pressure_to_bar(point.pressure.value, point.pressure.units),
+                    t=convert_temperature_to_kelvin(point.temperature.value, point.temperature.units),
+                    p=convert_pressure_to_bar(point.pressure.value, point.pressure.units),
                     x=mapped_composition,
                     phi=None,
                     infile=self.paths['cantera annotated'],

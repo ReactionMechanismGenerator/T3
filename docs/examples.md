@@ -225,7 +225,9 @@ measurements, reporting per-point log-errors and RMSE.
 - Legacy experimental YAML with citation and T/P/phi/idt fields remains supported
 - `experimental_idt_v1.yaml` shows direct per-point states, explicit units, SMILES
   mole fractions, apparatus, source ignition definitions, uncertainty, DOI, and
-  record locator
+  record locator. Versioned IDT values are converted to seconds and must be no
+  greater than 10 s; Celsius temperatures are converted to Kelvin before
+  validation.
 
 Version 1 maps each composition SMILES to the configured RMG species by T3's
 structural `T3Species` identity, then uses the existing configured-label to

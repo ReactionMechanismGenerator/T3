@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from t3.schema import ExperimentalIDTFile
 from t3.simulate.cantera_idt import (CanteraIDT, compute_source_defined_idt,
                                      source_defined_idt_is_resolved)
-from t3.common import SIMULATE_TEST_DATA_BASE_PATH
+from t3.common import SIMULATE_TEST_DATA_BASE_PATH, convert_time_to_seconds
 
 
 TEST_DIR_IDT = os.path.join(SIMULATE_TEST_DATA_BASE_PATH, 'cantera_idt_test')
@@ -54,6 +54,104 @@ def test_versioned_experimental_idt_schema_accepts_explicit_point():
     assert parsed.version == 1
     assert parsed.points[0].idt.units == 'ms'
     assert parsed.points[0].source.record == 'Table 2, point 17'
+
+
+@pytest.mark.parametrize('idt', [
+    {'value': 1e308, 'units': 's'},
+    {'value': 11, 'units': 's'},
+])
+def test_versioned_experimental_idt_schema_rejects_idt_over_ten_seconds(idt):
+    """The versioned schema bounds converted experimental IDTs to ten seconds."""
+    point = _point()
+    point['idt'] = idt
+
+    with pytest.raises(ValidationError, match='10 s'):
+        ExperimentalIDTFile.model_validate({'version': 1, 'points': [point]})
+
+
+def test_versioned_experimental_idt_schema_accepts_idt_at_ten_seconds():
+    """The ten-second IDT limit is inclusive and conversion respects units."""
+    point = _point()
+    point['idt'] = {'value': 10000, 'units': 'ms'}
+
+    parsed = ExperimentalIDTFile.model_validate({'version': 1, 'points': [point]})
+
+    assert parsed.points[0].idt.value == 10000
+
+
+@pytest.mark.parametrize('temperature', [
+    {'value': -273.15, 'units': 'degC'},
+    {'value': -300, 'units': 'degC'},
+    {'value': 0, 'units': 'K'},
+])
+def test_versioned_experimental_idt_schema_rejects_nonpositive_kelvin(temperature):
+    """Temperature validation occurs after conversion to Kelvin."""
+    point = _point()
+    point['temperature'] = temperature
+
+    with pytest.raises(ValidationError, match='Kelvin'):
+        ExperimentalIDTFile.model_validate({'version': 1, 'points': [point]})
+
+
+def test_versioned_experimental_idt_schema_accepts_zero_celsius():
+    """Zero Celsius is a valid positive Kelvin temperature."""
+    point = _point()
+    point['temperature'] = {'value': 0, 'units': 'degC'}
+
+    parsed = ExperimentalIDTFile.model_validate({'version': 1, 'points': [point]})
+
+    assert parsed.points[0].temperature.value == 0
+
+
+@pytest.mark.parametrize('idt', [
+    {'value': 5e-324, 'units': 'us'},
+    {'value': 5e-324, 'units': 'micro-s'},
+    {'value': 1e-322, 'units': 'ms'},
+])
+def test_versioned_experimental_idt_schema_rejects_idt_underflowing_to_zero(idt):
+    """A positive subnormal IDT that converts to exactly zero seconds is rejected.
+
+    ``Field(gt=0)`` on the raw value cannot catch this: the unit factor is applied
+    afterwards, and ``5e-324 * 1e-6`` underflows to ``0.0``. Such a point used to
+    validate cleanly and then divide by zero at the ``math.log10(simulated_idt /
+    experimental_idt)`` comparison.
+    """
+    # Pin the fixture to the state the guard defends against. Without these two assertions a
+    # value that stays non-zero after conversion -- 1e-320 ms is 1e-323, not 0.0 -- would make
+    # this test silently exercise nothing.
+    assert idt['value'] > 0, 'the fixture must be positive, or Field(gt=0) is what rejects it'
+    assert convert_time_to_seconds(idt['value'], idt['units']) == 0.0, \
+        'the fixture must underflow to exactly zero seconds, or it tests the wrong guard'
+
+    point = _point()
+    point['idt'] = idt
+
+    with pytest.raises(ValidationError, match='greater than 0 s'):
+        ExperimentalIDTFile.model_validate({'version': 1, 'points': [point]})
+
+
+def test_versioned_experimental_idt_schema_accepts_smallest_representable_idt():
+    """The lower bound is on the converted value, so a tiny-but-representable IDT still validates."""
+    point = _point()
+    point['idt'] = {'value': 1e-3, 'units': 'us'}
+
+    parsed = ExperimentalIDTFile.model_validate({'version': 1, 'points': [point]})
+
+    assert parsed.points[0].idt.value == 1e-3
+
+
+def test_simulate_idt_for_a_point_rejects_nonfinite_horizon():
+    """The integration horizon must be finite before reactor integration starts."""
+    with pytest.raises(ValueError, match='finite integration horizon'):
+        _adapter().simulate_idt_for_a_point(
+            r=0,
+            t=1200.0,
+            p=10.0,
+            x={'CH4': 0.1, 'O2': 0.2, 'N2': 0.7},
+            phi=None,
+            infile='not-a-real-file.yaml',
+            max_idt=math.inf,
+        )
 
 
 @pytest.mark.parametrize(
