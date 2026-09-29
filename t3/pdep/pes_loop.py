@@ -186,12 +186,18 @@ class PESLoopResult:
             ``None`` if no diagram could be drawn. Same rule as above: on ``'max_rounds'`` after a
             productive final round this is the QM-informed diagram, drawn after that round's
             quantum chemistry was folded in, never the last ``RoundRecord``'s pre-QM one.
+        computed_channels (frozenset): Structural channel keys whose QM is already in hand when
+            the loop stops.
+        qm_artifacts_by_channel (dict): Structural channel key -> originating captured artifact
+            path for every channel whose QM artifact is available when the loop stops.
     """
     rounds: tuple
     status: str
     reason: str
     final_network_path: str | None
     final_diagram_path: str | None
+    computed_channels: frozenset
+    qm_artifacts_by_channel: dict
 
 
 def _build_explorer_config(config: PESLoopConfig, project_directory: str,
@@ -338,7 +344,8 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
 
     Args:
         config (PESLoopConfig): The loop's configuration.
-        project_directory (str): The loop's project directory. Must be absolute (see
+        project_directory (str): The loop's project directory. Must be absolute. Each run's
+            artifacts are placed below its seed network id (see
             ``t3.pdep.pes_rounds.round_paths``).
         qm_runner: An injected callable, ``qm_runner(candidates, paths, config, network_id,
             adopted=...) -> tuple[frozenset[str], frozenset[str]]`` -- ``(converged_ts_labels,
@@ -470,8 +477,8 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                 continue
             computed_channels.add(key)
             qm_artifacts_by_channel[key] = artifact_path
+    network_id = Path(config.pes.network).stem
     if config.reuse.from_t3_projects:
-        network_id = Path(config.pes.network).stem
         # Adoption is matched on the FAMILY-QUALIFIED key, never the endpoints-only one the
         # within-run carry uses: the two files compared here are unrelated, so a different pathway
         # between the same endpoints would key identically and the prior artifact would land on a
@@ -494,6 +501,10 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             qm_artifacts_by_channel[key] = artifact_path
     # Whether round 0 starts with adopted ARTIFACTS to fold (reuse), as opposed to labels merely
     # marked computed (adopted_ts_labels carries no artifact paths) -- the round-0 fold decision.
+    def _result(**kwargs):
+        return PESLoopResult(**kwargs, computed_channels=frozenset(computed_channels),
+                             qm_artifacts_by_channel=dict(qm_artifacts_by_channel))
+
     prior_adopted_artifacts = bool(qm_artifacts_by_channel)
     current_network_path = config.pes.network
     max_rounds = config.termination.max_rounds
@@ -502,7 +513,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     last_round_made_progress = False
 
     for round_index in range(max_rounds):
-        paths = round_paths(project_directory, round_index)
+        paths = round_paths(project_directory, round_index, network_id=network_id)
         os.makedirs(paths.root, exist_ok=True)
 
         # Rounds after the first explore a hybrid network that a previous round's qm_runner is
@@ -519,7 +530,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                               diagram_path=None, queued_ts_labels=(), skipped=(),
                                               status=PES_LOOP_FAILED, reason=reason),
                           paths, logger)
-            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+            return _result(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                  final_network_path=prior.network_path if prior else None,
                                  final_diagram_path=prior.diagram_path if prior else None)
 
@@ -546,7 +557,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
             # 0..N-1 explored real networks and drew real diagrams, and those remain the best
             # result this run has. Reporting None here throws them away and makes the caller (e.g.
             # PES.py, which logs both paths) report a run that produced nothing at all.
-            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+            return _result(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                  final_network_path=prior.network_path if prior else None,
                                  final_diagram_path=prior.diagram_path if prior else None)
 
@@ -578,7 +589,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                               skipped=split_qm_candidates(network, frozenset()).skipped,
                                               status=PES_LOOP_FAILED, reason=reason),
                           paths, logger)
-            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+            return _result(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
         computed_ts_labels = frozenset(
@@ -598,7 +609,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                               diagram_path=diagram_path, queued_ts_labels=(),
                                               skipped=split.skipped, status=status),
                           paths, logger)
-            return PESLoopResult(rounds=tuple(rounds), status=status, reason='',
+            return _result(rounds=tuple(rounds), status=status, reason='',
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
@@ -616,7 +627,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                               reason='no qm_runner configured: explored and drew the '
                                                      'diagram only, nothing was computed.'),
                           paths, logger)
-            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_DIAGRAM_ONLY,
+            return _result(rounds=tuple(rounds), status=PES_LOOP_DIAGRAM_ONLY,
                                  reason=rounds[-1].reason, final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
@@ -646,7 +657,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                                   skipped=split.skipped, status=PES_LOOP_FAILED,
                                                   reason=reason),
                               paths, logger)
-                return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
+                return _result(rounds=tuple(rounds), status=PES_LOOP_FAILED, reason=reason,
                                      final_network_path=explored_network_path,
                                      final_diagram_path=diagram_path)
             any_finite_evidence = any(candidate.ts_label in evidence
@@ -688,7 +699,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                                       skipped=split.skipped, status=PES_LOOP_FAILED,
                                                       reason=reason),
                                   paths, logger)
-                    return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_FAILED,
+                    return _result(rounds=tuple(rounds), status=PES_LOOP_FAILED,
                                          reason=reason,
                                          final_network_path=explored_network_path,
                                          final_diagram_path=diagram_path)
@@ -739,7 +750,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                                       diagram_path=diagram_path, queued_ts_labels=(),
                                                       skipped=split.skipped, status=status, reason=reason),
                                   paths, logger)
-                    return PESLoopResult(rounds=tuple(rounds), status=status, reason=reason,
+                    return _result(rounds=tuple(rounds), status=status, reason=reason,
                                          final_network_path=explored_network_path,
                                          final_diagram_path=diagram_path)
                 # Nothing survived the evidence screen, so the loop stops HERE either way (the
@@ -806,7 +817,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                                   diagram_path=diagram_path, queued_ts_labels=(),
                                                   skipped=split.skipped, status=status, reason=reason),
                               paths, logger)
-                return PESLoopResult(rounds=tuple(rounds), status=status, reason=reason,
+                return _result(rounds=tuple(rounds), status=status, reason=reason,
                                      final_network_path=explored_network_path,
                                      final_diagram_path=diagram_path)
 
@@ -867,7 +878,7 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                                               skipped=split.skipped, status=PES_LOOP_STALLED,
                                               reason=reason),
                           paths, logger)
-            return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_STALLED, reason=reason,
+            return _result(rounds=tuple(rounds), status=PES_LOOP_STALLED, reason=reason,
                                  final_network_path=explored_network_path,
                                  final_diagram_path=diagram_path)
 
@@ -912,11 +923,11 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
     # most likely to run first (max_rounds: 1). So the loop completes one final
     # exploration-and-draw from that hybrid before returning. This charges NO further QM: no
     # candidate split, no ME SA, no qm_runner call, no ARC project directory -- only the explore
-    # and the draw. It gets round_paths(max_rounds) as its own directory so its explorer output and
-    # diagram never overwrite the last real round's, and it appends no RoundRecord: no round of QM
-    # happened, and claiming one would misreport the budget that was actually spent.
+    # and the draw. It gets its own namespaced round_paths(max_rounds) directory so its explorer
+    # output and diagram never overwrite the last real round's, and it appends no RoundRecord: no
+    # round of QM happened, and claiming one would misreport the budget that was actually spent.
     if last_round_made_progress and os.path.isfile(current_network_path):
-        final_paths = round_paths(project_directory, max_rounds)
+        final_paths = round_paths(project_directory, max_rounds, network_id=network_id)
         os.makedirs(final_paths.root, exist_ok=True)
         final_result = explore_pdep_network(
             network_path=current_network_path,
@@ -944,6 +955,6 @@ def run_pes_loop(config: PESLoopConfig, project_directory: str, qm_runner=None,
                 logger.warning(message)
             reason = f'{reason} {message}'
 
-    return PESLoopResult(rounds=tuple(rounds), status=PES_LOOP_MAX_ROUNDS, reason=reason,
+    return _result(rounds=tuple(rounds), status=PES_LOOP_MAX_ROUNDS, reason=reason,
                          final_network_path=final_network_path,
                          final_diagram_path=final_diagram_path)

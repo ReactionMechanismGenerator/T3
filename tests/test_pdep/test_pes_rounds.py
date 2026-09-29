@@ -168,6 +168,29 @@ class TestSplitQMCandidatesRealCHO2Network(object):
 class TestRoundLayout(object):
     """Each round is fully self-contained on disk."""
 
+    def test_networks_get_disjoint_round_trees_under_one_project(self, tmp_path):
+        project_directory = str(tmp_path / 'shared-project')
+        paths_a = round_paths(project_directory, 0, network_id='network_a')
+        paths_b = round_paths(project_directory, 0, network_id='network_b')
+        assert paths_a.root.startswith(project_directory + os.sep)
+        assert paths_b.root.startswith(project_directory + os.sep)
+        assert paths_a.root != paths_b.root
+
+        os.makedirs(paths_a.root)
+        os.makedirs(paths_b.root)
+        with open(os.path.join(paths_a.root, 'sentinel.txt'), 'w') as handle:
+            handle.write('network_a')
+        with open(os.path.join(paths_b.root, 'sentinel.txt'), 'w') as handle:
+            handle.write('network_b')
+
+        with open(os.path.join(paths_a.root, 'sentinel.txt')) as handle:
+            assert handle.read() == 'network_a'
+        with open(os.path.join(paths_b.root, 'sentinel.txt')) as handle:
+            assert handle.read() == 'network_b'
+
+    def test_omitting_network_id_resolves_the_legacy_layout(self):
+        assert round_paths('/proj', 0).root == os.path.join('/proj', 'round_0')
+
     def test_paths_are_under_the_round_root(self):
         paths = round_paths('/proj', 0)
         assert paths.root == os.path.join('/proj', 'round_0')
