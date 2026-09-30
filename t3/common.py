@@ -199,6 +199,13 @@ def convert_time_to_seconds(value: float, units) -> float:
     return value * factors[units]
 
 
+def convert_volume_to_cubic_meters(value: float, units) -> float:
+    """Convert a validated experimental volume to SI without importing simulators."""
+    units = getattr(units, 'value', units)
+    factors = {'m3': 1.0, 'cm3': 1e-6, 'L': 1e-3}
+    return value * factors[units]
+
+
 def convert_termination_time_to_seconds(termination_time: tuple[float, str]):
     """
     Converts the termination_time tuple from the RMG reactor to seconds.

@@ -14,3 +14,21 @@ points:
     source:
       doi: 10.0000/replace-with-source-doi
       record: Table 2, mixture 1, point 3
+  - temperature: {value: 1000, units: K}
+    pressure: {value: 22.4, units: bar}
+    initial_temperature: {value: 300, units: K}
+    initial_pressure: {value: 1, units: bar}
+    composition:
+      - {smiles: '[H][H]', mole_fraction: 0.04}
+      - {smiles: '[O][O]', mole_fraction: 0.02}
+      - {smiles: '[Ar]', mole_fraction: 0.94}
+    apparatus: rapid compression machine
+    volume_history:
+      time: {values: [0, 1, 2, 3, 20], units: ms}
+      volume: {values: [100, 80, 60, 15, 15], units: cm3}
+      compression_time: {value: 3, units: ms}
+    ignition_definition: {target: pressure, type: d/dt max}
+    idt: {value: 18, units: ms}
+    source:
+      doi: 10.0000/replace-with-source-doi
+      record: Illustrative RCM compression history, not measured data

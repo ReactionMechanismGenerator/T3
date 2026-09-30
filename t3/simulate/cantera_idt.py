@@ -812,6 +812,98 @@ class CanteraIDT(SimulateAdapter):
         index = time_history.species_index(species_label)
         return np.asarray(time_history.X[:, index], dtype=np.float64), None
 
+    def _simulate_rcm_volume_history(self, point, composition: dict, reactive: bool = True,
+                                    sample_times=None) -> ct.SolutionArray:
+        """Drive an RCM reactor through each linear-volume segment and a constant-volume tail.
+
+        A unit-area wall has velocity minus the forward volume slope. Keeping each
+        segment's slope constant until its boundary, then reinitializing CVODE,
+        prevents internal integration steps from smearing slope discontinuities.
+        Reactive runs record each adaptive integration step throughout the horizon.
+        A step crossing a segment boundary is discarded and replayed from its
+        starting state with advance(), stopping exactly at that boundary. Reference
+        runs advance to the reactive sample times and the same segment boundaries,
+        avoiding interpolation errors in the chemical-heating comparison.
+        """
+        times, volumes = (np.asarray(values, dtype=np.float64)
+                          for values in point.volume_history.to_si())
+        compression_time = point.volume_history.end_of_compression
+        horizon = point.volume_history_horizon
+        model = ct.Solution(infile=self.paths['cantera annotated'])
+        model.TPX = (convert_temperature_to_kelvin(point.initial_temperature.value, point.initial_temperature.units),
+                     convert_pressure_to_bar(point.initial_pressure.value, point.initial_pressure.units) * 1e5,
+                     composition)
+        reactor = ct.IdealGasReactor(model, energy='on', volume=volumes[0])
+        reactor.chemistry_enabled = reactive
+        reservoir = ct.Reservoir(model)
+        wall = ct.Wall(reservoir, reactor, A=1.0, velocity=0.0)
+        network = ct.ReactorNet([reactor])
+        network.atol, network.rtol = self.atol, self.rtol
+        network.initial_time = times[0]
+        history = ct.SolutionArray(model, extra=['t', 'volume'])
+        history.append(reactor.thermo.state, t=times[0], volume=reactor.volume)
+        boundaries = np.unique(np.concatenate((times, [compression_time, horizon])))
+        samples = (None if sample_times is None else
+                   np.unique(np.concatenate((boundaries, np.asarray(sample_times, dtype=np.float64)))))
+        for start, end in zip(boundaries, boundaries[1:]):
+            segment = int(np.searchsorted(times, start, side='right') - 1)
+            velocity = (-(volumes[segment + 1] - volumes[segment]) / (times[segment + 1] - times[segment])
+                        if start < times[-1] else 0.0)
+            wall.velocity = velocity
+            network.max_time_step = (min(end - start, min(volumes[segment:segment + 2]) / (2.0 * abs(velocity)))
+                                     if velocity else end - start)
+            network.reinitialize()
+            if samples is not None:
+                first = np.searchsorted(samples, start, side='right')
+                last = np.searchsorted(samples, end, side='right')
+                for sample in samples[first:last]:
+                    network.advance(float(sample))
+                    history.append(reactor.thermo.state, t=float(sample), volume=reactor.volume)
+                continue
+            while network.time < end:
+                previous_time = network.time
+                previous_state = reactor.thermo.state
+                previous_volume = reactor.volume
+                sample = network.step()
+                if sample > end:
+                    reactor.thermo.state = previous_state
+                    reactor.volume = previous_volume
+                    reactor.syncState()
+                    tolerance = 8.0 * np.spacing(max(abs(end), abs(previous_time)))
+                    if end - previous_time <= tolerance:
+                        reactor.volume -= velocity * (end - previous_time)
+                        network.initial_time = float(end)
+                    else:
+                        network.initial_time = previous_time
+                        network.advance(float(end))
+                    sample = end
+                history.append(reactor.thermo.state, t=float(sample), volume=reactor.volume)
+        return history
+
+    @staticmethod
+    def _rcm_has_chemical_heating(times, trace, temperatures, reference_temperatures, criterion_type) -> bool:
+        """Require at least 1 K of chemical heating at the defining target event.
+
+        The chemistry-disabled run carries exactly the same mechanical compression
+        and expansion. Its subtraction rejects pressure peaks caused solely by the
+        wall rather than chemistry.
+        Extrapolated criteria are checked at their slope peak, not at the earlier
+        baseline intersection where chemical heating has not yet developed.
+        """
+        criterion_type = getattr(criterion_type, 'value', criterion_type)
+        if len(times) < 3:
+            return False
+        if criterion_type == '1/2 max':
+            event = compute_source_defined_idt(times, trace, criterion_type)
+            if event is None:
+                return False
+            excess = float(np.interp(event, times, temperatures - reference_temperatures))
+            return math.isfinite(excess) and excess > 1.0
+        peak = int(np.argmax(np.gradient(trace, times) if criterion_type in
+                             ('d/dt max', 'd/dt max extrapolated') else trace))
+        excess = float(temperatures[peak] - reference_temperatures[peak])
+        return math.isfinite(excess) and excess > 1.0
+
     def _compare_versioned_experiment(self, exp: dict) -> dict:
         """Validate and score version-1 experimental points independently."""
         # Local import avoids schema -> simulate factory -> adapter import cycles.
@@ -838,6 +930,9 @@ class CanteraIDT(SimulateAdapter):
                 'log10_error': None,
                 'refusal': None,
             }
+            if point.volume_history is not None:
+                comparison.update({key: raw_point[key] for key in
+                                   ('volume_history', 'initial_temperature', 'initial_pressure')})
 
             mapped_composition, unmapped_smiles = self._map_experimental_composition(point.composition)
             if unmapped_smiles is not None:
@@ -862,36 +957,67 @@ class CanteraIDT(SimulateAdapter):
                 continue
 
             try:
-                time_history = self.simulate_idt_for_a_point(
-                    r=0,
-                    t=convert_temperature_to_kelvin(point.temperature.value, point.temperature.units),
-                    p=convert_pressure_to_bar(point.pressure.value, point.pressure.units),
-                    x=mapped_composition,
-                    phi=None,
-                    infile=self.paths['cantera annotated'],
-                    save_fig=False,
-                    max_idt=max(1.0, 10.0 * experimental_idt),
-                    apparatus=point.apparatus,
-                    return_time_history=True,
-                )
+                if point.volume_history is not None:
+                    time_history = self._simulate_rcm_volume_history(point, mapped_composition)
+                    reference_history = self._simulate_rcm_volume_history(point, mapped_composition, reactive=False,
+                                                                          sample_times=time_history.t)
+                    post_compression = time_history.t >= point.volume_history.end_of_compression
+                    time_history = time_history[post_compression]
+                    reference_temperatures = reference_history.T[post_compression]
+                    detection_times = time_history.t - point.volume_history.end_of_compression
+                else:
+                    time_history = self.simulate_idt_for_a_point(
+                        r=0,
+                        t=convert_temperature_to_kelvin(point.temperature.value, point.temperature.units),
+                        p=convert_pressure_to_bar(point.pressure.value, point.pressure.units),
+                        x=mapped_composition,
+                        phi=None,
+                        infile=self.paths['cantera annotated'],
+                        save_fig=False,
+                        max_idt=max(1.0, 10.0 * experimental_idt),
+                        apparatus=point.apparatus,
+                        return_time_history=True,
+                    )
+                    detection_times = time_history.t
                 trace, _ = self._experimental_target_trace(time_history, target)
                 simulated_idt = compute_source_defined_idt(
-                    time_history.t,
+                    detection_times,
                     trace,
                     point.ignition_definition.type,
                 )
             except (ct.CanteraError, IndexError, TypeError, ValueError) as error:
+                if point.volume_history is not None:
+                    reason = ExperimentalIDTRefusalReason.simulation_failed.value
+                    comparison['refusal'] = {'reason': reason, 'detail': str(error)}
+                    refusals[reason] = refusals.get(reason, 0) + 1
+                    comparisons.append(comparison)
+                    continue
                 simulated_idt = None
                 simulation_detail = str(error)
             else:
                 simulation_detail = 'The target trace did not yield a positive finite ignition delay.'
 
+            if (point.volume_history is not None
+                    and (simulated_idt is None or simulated_idt <= 0
+                         or not self._rcm_has_chemical_heating(detection_times, trace, time_history.T,
+                                                              reference_temperatures,
+                                                              point.ignition_definition.type))):
+                reason = ExperimentalIDTRefusalReason.ignition_not_resolved.value
+                comparison['refusal'] = {
+                    'reason': reason,
+                    'detail': 'no ignition within horizon: no chemically heated target event was resolved.',
+                }
+                refusals[reason] = refusals.get(reason, 0) + 1
+                comparisons.append(comparison)
+                continue
+
             if (simulated_idt is not None
                     and not source_defined_idt_is_resolved(
-                        time_history.t,
+                        detection_times,
                         trace,
                         point.ignition_definition.type,
                         target,
+                        adaptive_sampling=point.volume_history is not None,
                     )):
                 reason = ExperimentalIDTRefusalReason.ignition_not_resolved.value
                 comparison['refusal'] = {
@@ -1286,8 +1412,15 @@ def source_defined_idt_is_resolved(times,
                                    values,
                                    criterion_type: str,
                                    target: str,
+                                   adaptive_sampling: bool = False,
                                    ) -> bool:
-    """Return whether a source-defined target event is complete within its trace."""
+    """Return whether a source-defined target event is complete within its trace.
+
+    Adaptive traces use the final three samples plus a time-normalized end rate for
+    a boundary peak's settled-tail check. A fixed sample count can cover only a
+    fraction of a millisecond when solver steps cluster at the horizon, despite the
+    trace still rising. Fixed-grid, history-free traces retain their existing behavior.
+    """
     criterion_type = getattr(criterion_type, 'value', criterion_type)
     target = getattr(target, 'value', target)
     times_array = np.asarray(times, dtype=np.float64)
@@ -1301,11 +1434,19 @@ def source_defined_idt_is_resolved(times,
     if not math.isfinite(span) or span <= minimum_span:
         return False
 
-    tail_length = max(3, len(values_array) // 10)
+    tail_length = 3 if adaptive_sampling else max(3, len(values_array) // 10)
     tail = values_array[-tail_length:]
     plateau_tolerance = max(span * 1e-3, np.finfo(float).eps)
     peak_index = int(np.argmax(values_array))
     if criterion_type in ('max', '1/2 max'):
+        if adaptive_sampling and peak_index == len(values_array) - 1:
+            trace_duration = float(times_array[-1] - times_array[0])
+            if not math.isfinite(trace_duration) or trace_duration <= 0:
+                return False
+            slopes = np.gradient(values_array, times_array)
+            tail_slope = float(np.max(np.abs(slopes[-tail_length:])))
+            return (float(np.ptp(tail)) <= plateau_tolerance
+                    and tail_slope * trace_duration <= plateau_tolerance)
         return peak_index < len(values_array) - 1 or float(np.ptp(tail)) <= plateau_tolerance
 
     slopes = np.gradient(values_array, times_array)
@@ -1313,7 +1454,7 @@ def source_defined_idt_is_resolved(times,
     peak_slope = abs(float(slopes[slope_index]))
     tail_slope = float(np.max(np.abs(slopes[-tail_length:])))
     return slope_index < len(values_array) - tail_length and tail_slope <= max(peak_slope * 0.1,
-                                                                               np.finfo(float).eps)
+                                                                                np.finfo(float).eps)
 
 
 def get_t_and_p_lists(reactor: dict,
