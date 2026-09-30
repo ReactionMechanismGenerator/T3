@@ -163,6 +163,42 @@ def time_lapse(t0: datetime.datetime) -> datetime.timedelta:
     return datetime.datetime.now() - t0
 
 
+def convert_temperature_to_kelvin(value: float, units) -> float:
+    """Convert a validated experimental temperature to kelvin.
+
+    Lives here rather than beside its only simulator call site so that
+    ``t3.schema`` can reach it without importing the simulation stack: the
+    Cantera adapter pulls in Cantera, matplotlib and NumPy at module load,
+    none of which are runtime dependencies of the package, which would turn
+    a schema validation into a ``ModuleNotFoundError``.
+    """
+    units = getattr(units, 'value', units)
+    return value if units == 'K' else value + 273.15
+
+
+def convert_pressure_to_bar(value: float, units) -> float:
+    """Convert a validated experimental pressure to bar.
+
+    Kept beside the temperature and time converters deliberately: a schema
+    validator added for pressure later would otherwise reintroduce exactly the
+    simulation-stack import this grouping exists to avoid.
+    """
+    units = getattr(units, 'value', units)
+    factors = {'Pa': 1e-5, 'kPa': 1e-2, 'MPa': 10.0, 'bar': 1.0, 'atm': 1.01325}
+    return value * factors[units]
+
+
+def convert_time_to_seconds(value: float, units) -> float:
+    """Convert a validated experimental time to seconds.
+
+    See :func:`convert_temperature_to_kelvin` for why these converters live
+    here and not in the Cantera adapter.
+    """
+    units = getattr(units, 'value', units)
+    factors = {'s': 1.0, 'ms': 1e-3, 'us': 1e-6, 'micro-s': 1e-6}
+    return value * factors[units]
+
+
 def convert_termination_time_to_seconds(termination_time: tuple[float, str]):
     """
     Converts the termination_time tuple from the RMG reactor to seconds.

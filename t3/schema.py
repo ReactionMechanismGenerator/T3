@@ -3,6 +3,7 @@ t3 schema module
 used for input validation
 """
 
+import math
 import os
 import re
 from enum import Enum
@@ -12,7 +13,8 @@ from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_v
 
 from arc.common import read_yaml_file
 
-from t3.common import DATA_BASE_PATH, METHOD_MAP, VALID_CHARS
+from t3.common import (DATA_BASE_PATH, METHOD_MAP, VALID_CHARS,
+                       convert_temperature_to_kelvin, convert_time_to_seconds)
 from t3.simulate.factory import _registered_simulate_adapters
 
 
@@ -185,12 +187,19 @@ class ExperimentalIDTRefusalReason(str, Enum):
 
 
 class ExperimentalTemperature(BaseModel):
-    """A temperature with explicit units."""
-    value: Annotated[float, Field(gt=0, allow_inf_nan=False)]
+    """A temperature with explicit units whose converted value is above 0 K."""
+    value: Annotated[float, Field(allow_inf_nan=False)]
     units: TemperatureUnitEnum
 
     class Config:
         extra = 'forbid'
+
+    @model_validator(mode='after')
+    def validate_kelvin(self):
+        """Require the temperature converted to Kelvin to be positive."""
+        if convert_temperature_to_kelvin(self.value, self.units) <= 0:
+            raise ValueError('temperature must be greater than 0 K (Kelvin)')
+        return self
 
 
 class ExperimentalPressure(BaseModel):
@@ -248,7 +257,7 @@ class ExperimentalSourceReference(BaseModel):
 
 
 class ExperimentalIDTPoint(BaseModel):
-    """One independently simulated version-1 experimental ignition-delay point."""
+    """One independently simulated version-1 experimental point with an IDT up to 10 s."""
     temperature: ExperimentalTemperature
     pressure: ExperimentalPressure
     composition: list[ExperimentalCompositionEntry]
@@ -260,6 +269,21 @@ class ExperimentalIDTPoint(BaseModel):
 
     class Config:
         extra = 'forbid'
+
+    @model_validator(mode='after')
+    def validate_idt_horizon(self):
+        """Keep the per-point integration horizon finite, positive and bounded at 10 seconds.
+
+        The lower bound is checked here, on the *converted* value, rather than on
+        ``ExperimentalTime.value``: a positive subnormal survives ``Field(gt=0)`` and
+        then underflows to exactly ``0.0`` once the unit factor is applied, which would
+        reach the ``simulated_idt / experimental_idt`` comparison as a zero denominator.
+        """
+        idt_seconds = convert_time_to_seconds(self.idt.value, self.idt.units)
+        if not math.isfinite(idt_seconds) or idt_seconds <= 0 or idt_seconds > 10.0:
+            raise ValueError('IDT converted to seconds must be finite, greater than 0 s, '
+                             'and no greater than 10 s')
+        return self
 
     @field_validator('composition')
     @classmethod
