@@ -125,7 +125,7 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
         # network_id) recomputes that exact path independently rather than trusting whatever this
         # fake returns in network_paths -- so writing anywhere else would desync the two halves.
         round_index = len(received_network_paths) - 1
-        paths = round_paths(project_directory, round_index)
+        paths = round_paths(project_directory, round_index, network_id=real_network.network_id)
         dest_path = _explored_network_path(paths, real_network.network_id)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         shutil.copyfile(fixture_network_path, dest_path)
@@ -492,7 +492,7 @@ def _fixture_explorer(monkeypatch, project_directory, network_id):
     def _fake_explore(*, network_path, config, logger=None):
         explore_calls.append(network_path)
         round_index = len(explore_calls) - 1
-        paths = round_paths(project_directory, round_index)
+        paths = round_paths(project_directory, round_index, network_id=network_id)
         dest_path = _explored_network_path(paths, network_id)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         if round_index == 0:
@@ -550,9 +550,11 @@ def test_real_loop_real_capture_keeps_qm_on_the_right_channel_across_a_renumber(
         floor_skips = [s for s in record.skipped if 'below the min_delta_ln_k floor' in s.reason]
         assert len(floor_skips) == 1
 
-    round0 = _hybrid_channels(hybrid_network_path(round_paths(project_directory, 0),
+    round0 = _hybrid_channels(hybrid_network_path(
+        round_paths(project_directory, 0, network_id='network0_full'),
                                                   'network0_full'))
-    round1_hybrid_path = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
+    round1_hybrid_path = hybrid_network_path(
+        round_paths(project_directory, 1, network_id='network0_full'), 'network0_full')
     round1 = _hybrid_channels(round1_hybrid_path)
     # Round 0 hybrid (pristine labels): channel 1 is QM as 'TS1'; channels 2, 3 are ILT.
     assert round0[_CH1] == ('TS1', True)
@@ -572,7 +574,8 @@ def test_real_loop_real_capture_keeps_qm_on_the_right_channel_across_a_renumber(
     # exactly what defect 1 made impossible.
     verified_artifacts = 0
     for round_index in (0, 1):
-        verified = verify_capture(round_paths(project_directory, round_index).capture)
+        verified = verify_capture(
+            round_paths(project_directory, round_index, network_id='network0_full').capture)
         # Loop-written manifests carry the aggregation marker, so their ungated all-directions
         # evidence can never be silently compared against T3's in-run (observable-gated) values.
         assert verified.sensitivity_aggregation == 'all_directions_max_abs'
@@ -615,7 +618,8 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
     assert [record.status for record in result.rounds] == ['continuing', 'converged']
     # Nothing was ever queued, so ARC must never even have been constructed.
     assert _ArtifactWritingFakeARC.constructions == []
-    round0_hybrid_path = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
+    round0_hybrid_path = hybrid_network_path(
+        round_paths(project_directory, 0, network_id='network0_full'), 'network0_full')
     round0 = _hybrid_channels(round0_hybrid_path)
     assert round0[_CH1] == ('TS1', True)
     assert round0[_CH2] == ('TS2', True)
@@ -680,15 +684,17 @@ def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
     # The fake explorer makes its own round directories under this same path, so these two say
     # only that the run got as far as two rounds -- what proves the CLI's project_directory
     # default reached round_paths is the hybrid below, which production alone writes.
-    assert os.path.isdir(os.path.join(project_directory, 'round_0'))
-    assert os.path.isdir(os.path.join(project_directory, 'round_1'))
+    assert os.path.isdir(os.path.join(project_directory, 'network0_full', 'round_0'))
+    assert os.path.isdir(os.path.join(project_directory, 'network0_full', 'round_1'))
     # round_2 is the final draw pass over round 1's hybrid -- the whole point of the branch, since
     # round 1's own diagram predates round 1's own quantum chemistry. It is a draw, not a round:
     # the budget stayed at 2 (rounds, and ARC executions, both asserted above) and it has no ARC
     # project directory at all.
-    assert os.path.isdir(os.path.join(project_directory, 'round_2'))
-    assert not os.path.isdir(round_paths(project_directory, 2).arc_project)
-    assert result.final_diagram_path == round_paths(project_directory, 2).diagram
+    assert os.path.isdir(os.path.join(project_directory, 'network0_full', 'round_2'))
+    assert not os.path.isdir(
+        round_paths(project_directory, 2, network_id='network0_full').arc_project)
+    assert result.final_diagram_path == round_paths(
+        project_directory, 2, network_id='network0_full').diagram
     assert os.path.isfile(result.final_diagram_path)
 
     # Ruling 6: the final status, its reason, and the diagram reached the log, and the run was
@@ -701,7 +707,8 @@ def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
     assert f'Final network: {result.final_network_path}' in log_text
     assert 'Total T3 execution time' in log_text
 
-    round1_hybrid_path = hybrid_network_path(round_paths(project_directory, 1), 'network0_full')
+    round1_hybrid_path = hybrid_network_path(
+        round_paths(project_directory, 1, network_id='network0_full'), 'network0_full')
     assert os.path.isfile(round1_hybrid_path)
     round1 = _hybrid_channels(round1_hybrid_path)
     # Round 1 explored the RENUMBERED network, so channel 1 -- QM'd in round 0 -- carries the new
@@ -743,7 +750,8 @@ def test_pes_cli_project_directory_flag_moves_the_whole_run(tmp_path, monkeypatc
     assert result.status == 'max_rounds', f'{result.status}: {result.reason}'
     # The hybrid network -- written by arc_qm_runner, at a path derived from the project_directory
     # the LOOP was given -- landed under the -p directory, which the CLI also had to create.
-    round0_hybrid_path = hybrid_network_path(round_paths(run_directory, 0), 'network0_full')
+    round0_hybrid_path = hybrid_network_path(
+        round_paths(run_directory, 0, network_id='network0_full'), 'network0_full')
     assert os.path.isfile(round0_hybrid_path)
     assert _hybrid_channels(round0_hybrid_path)[_CH1] == ('TS1', True)
     assert os.path.isfile(os.path.join(run_directory, 't3.log'))
@@ -785,7 +793,8 @@ def test_pes_cli_resolves_a_relative_reuse_path_against_the_input_file(tmp_path,
     # All three channels adopted from the prior project, so nothing was ever queued: an
     # unresolved reuse path would have adopted nothing and run a real ARC round instead.
     assert _ArtifactWritingFakeARC.constructions == []
-    round0_hybrid_path = hybrid_network_path(round_paths(project_directory, 0), 'network0_full')
+    round0_hybrid_path = hybrid_network_path(
+        round_paths(project_directory, 0, network_id='network0_full'), 'network0_full')
     round0 = _hybrid_channels(round0_hybrid_path)
     assert [round0[channel][1] for channel in (_CH1, _CH2, _CH3)] == [True, True, True]
     # Ruling 3: the Logger main() built was actually handed to the loop -- this line is the
@@ -825,8 +834,9 @@ def test_pes_cli_diagram_only_explores_and_draws_without_touching_arc(tmp_path, 
     # after round 0 rather than spending the three rounds the input file allows.
     assert len(explore_calls) == 1
     assert len(result.rounds) == 1
-    assert result.final_diagram_path == os.path.join(project_directory, 'round_0',
+    assert result.final_diagram_path == os.path.join(project_directory, 'network0_full', 'round_0',
                                                      'pes_diagram.png')
     assert os.path.isfile(result.final_diagram_path)
-    assert not os.path.isfile(hybrid_network_path(round_paths(project_directory, 0),
+    assert not os.path.isfile(hybrid_network_path(
+        round_paths(project_directory, 0, network_id='network0_full'),
                                                   'network0_full'))

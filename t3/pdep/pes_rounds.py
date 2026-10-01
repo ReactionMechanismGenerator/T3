@@ -566,7 +566,8 @@ class RoundPaths:
     diagram: str
 
 
-def round_paths(project_directory: str, round_index: int) -> RoundPaths:
+def round_paths(project_directory: str, round_index: int,
+                network_id: str | None = None) -> RoundPaths:
     """
     Resolve the artifact layout for one round.
 
@@ -584,19 +585,27 @@ def round_paths(project_directory: str, round_index: int) -> RoundPaths:
     Args:
         project_directory (str): The loop's project directory. Must be absolute.
         round_index (int): The zero-based round number.
+        network_id (str, optional): The stable network identifier. New loop runs must provide it;
+            their artifacts are written below ``<project>/<network_id>/round_<index>``. Omitting it
+            resolves the legacy un-namespaced ``<project>/round_<index>`` layout so existing run
+            trees remain readable.
 
     Returns:
         RoundPaths: The resolved layout.
 
     Raises:
-        ValueError: If ``project_directory`` is not absolute, or ``round_index`` is negative.
+        ValueError: If ``project_directory`` is not absolute, ``round_index`` is negative, or
+            ``network_id`` is empty.
     """
     if not os.path.isabs(project_directory):
         raise ValueError(f"'project_directory' must be an absolute path, got "
                          f"{project_directory!r}.")
     if round_index < 0:
         raise ValueError(f"'round_index' must be non-negative, got {round_index}.")
-    root = os.path.join(project_directory, f'round_{round_index}')
+    if network_id is not None and not network_id:
+        raise ValueError("'network_id' must be non-empty when provided.")
+    root = os.path.join(project_directory, network_id, f'round_{round_index}') \
+        if network_id is not None else os.path.join(project_directory, f'round_{round_index}')
     return RoundPaths(root=root,
                       arc_project=os.path.join(root, 'ARC'),
                       explorer_output=os.path.join(root, 'explorer'),

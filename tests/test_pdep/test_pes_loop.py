@@ -311,7 +311,8 @@ class TestRunPESLoop(object):
 
         run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert calls[0] == '/abs/network1_1.py'
-        expected_round1_path = hybrid_network_path(round_paths(str(tmp_path), 0),
+        expected_round1_path = hybrid_network_path(
+            round_paths(str(tmp_path), 0, network_id='network1_1'),
                                                     'explored_round0')
         assert calls[1] == expected_round1_path
         assert calls[1] != calls[0]
@@ -585,7 +586,8 @@ class TestRunPESLoop(object):
         # Round 1 must re-explore round 0's own explored output, not a hybrid file round 0's
         # qm_runner never wrote.
         assert calls[1] == explored_paths[0]
-        never_written_hybrid = hybrid_network_path(round_paths(str(tmp_path), 0),
+        never_written_hybrid = hybrid_network_path(
+            round_paths(str(tmp_path), 0, network_id='network1_1'),
                                                     'explored_round0')
         assert calls[1] != never_written_hybrid
         assert not os.path.isfile(never_written_hybrid)
@@ -686,7 +688,8 @@ class TestRoundMeSensitivityWiring(object):
         # The SA runs on THIS round's freshly explored network, into this round's own SA dir,
         # with the configured ME method and the explorer's own timeout budget.
         assert os.path.basename(sa_calls[0]['network_path']) == 'explored_round0.py'
-        assert sa_calls[0]['sa_dir'] == round_paths(str(tmp_path), 0).sa
+        assert sa_calls[0]['sa_dir'] == round_paths(str(tmp_path), 0,
+                                                    network_id='network1_1').sa
         assert sa_calls[0]['method'] == config.pes.method
         assert sa_calls[0]['timeout'] == config.pes.timeout
         assert received[0].coefficient == -3.0e-5
@@ -832,9 +835,19 @@ class TestCumulativeAdoptedPlumbing(object):
         assert len(adopted_per_round) == 2
         assert adopted_per_round[0] == {'TS0': '/prior/capture/qm/TS0.py'}
         round0_ts1_path = captured_qm_artifact_path(
-            round_paths(str(tmp_path), 0).capture, arc_ts_label('explored_round0', 'TS1'))
+            round_paths(str(tmp_path), 0, network_id='network1_1').capture,
+            arc_ts_label('explored_round0', 'TS1'))
         assert adopted_per_round[1] == {'TS0': '/prior/capture/qm/TS0.py',
                                         'TS1': round0_ts1_path}
+        assert result.computed_channels
+        assert set(result.qm_artifacts_by_channel) == set(result.computed_channels)
+        assert set(result.qm_artifacts_by_channel.values()) == {
+            '/prior/capture/qm/TS0.py',
+            round0_ts1_path,
+            captured_qm_artifact_path(
+                round_paths(str(tmp_path), 1, network_id='network1_1').capture,
+                arc_ts_label('explored_round1', 'TS2')),
+        }
 
     def test_a_runner_mutating_its_adopted_dict_cannot_corrupt_the_loops_own_record(
             self, tmp_path, monkeypatch, config):
@@ -995,7 +1008,8 @@ class TestRenumberedNetworksKeepQMOnTheRightChannel(object):
         # label 'TS1', still pointing at the ORIGINATING (round 0) capture, where it was vendored
         # under round 0's arc label for 'TS0' -- the right barrier, on the right channel.
         round0_artifact = captured_qm_artifact_path(
-            round_paths(str(tmp_path), 0).capture, arc_ts_label('explored_round0', 'TS0'))
+            round_paths(str(tmp_path), 0, network_id='network1_1').capture,
+            arc_ts_label('explored_round0', 'TS0'))
         assert adopted_per_round[1] == {'TS1': round0_artifact}
 
 
@@ -1157,7 +1171,7 @@ class TestTheFinalRoundsQMReachesTheOutput(object):
         assert result.status == PES_LOOP_MAX_ROUNDS
         assert len(runner_calls) == 2, 'the final draw pass must not call the QM runner'
         assert len(sa_calls) == 2, 'the final draw pass must not run a master-equation SA'
-        assert not os.path.isdir(round_paths(str(tmp_path), 2).arc_project)
+        assert not os.path.isdir(round_paths(str(tmp_path), 2, network_id='network1_1').arc_project)
 
     def test_a_final_round_that_converged_nothing_is_not_re_explored(self, tmp_path, monkeypatch):
         """No hybrid was written, so there is nothing QM-informed to draw from and the extra
@@ -1354,7 +1368,8 @@ class TestRoundRecordPersistence(object):
         monkeypatch.setattr('t3.pdep.pes_loop.run_round_me_sensitivity', _fake_sa)
         result = run_pes_loop(config, project_directory=str(tmp_path),
                               qm_runner=TestUnmeasurableTermination._never_called_runner)
-        record_path = os.path.join(round_paths(str(tmp_path), 0).root, 'round_record.yml')
+        record_path = os.path.join(
+            round_paths(str(tmp_path), 0, network_id='network1_1').root, 'round_record.yml')
         assert os.path.isfile(record_path)
         with open(record_path) as f:
             payload = yaml.safe_load(f)
@@ -1382,7 +1397,8 @@ class TestRoundRecordPersistence(object):
         result = run_pes_loop(config, project_directory=str(tmp_path), qm_runner=_runner)
         assert result.status == PES_LOOP_CONVERGED
         for record in result.rounds:
-            record_path = os.path.join(round_paths(str(tmp_path), record.index).root,
+            record_path = os.path.join(
+                round_paths(str(tmp_path), record.index, network_id='network1_1').root,
                                        'round_record.yml')
             assert os.path.isfile(record_path)
             with open(record_path) as f:
