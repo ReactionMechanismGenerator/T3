@@ -662,8 +662,7 @@ def _normalized_model_chemistry(sp_level: str, freq_level: str | None = None) ->
     run dying before round 0.
 
     Args:
-        sp_level (str): A T3 single-point level-of-theory string, e.g. ``config.qm.sp_level``,
-                        undashed.
+        sp_level (str): A T3 single-point level-of-theory string, e.g. ``config.qm.sp_level``.
         freq_level (str, optional): The frequency level the same run used, e.g.
                                     ``config.qm.freq_level``. ``None`` falls back to ``sp_level``,
                                     the only honest guess when a caller has no separate frequency
@@ -699,7 +698,7 @@ def _normalized_model_chemistries(sp_level: str, freq_level: str | None = None) 
     the other side of that behaviour change, which is not a level-of-theory conflict at all.
 
     Args:
-        sp_level (str): The single-point level-of-theory string, undashed.
+        sp_level (str): The single-point level-of-theory string.
         freq_level (str, optional): The frequency level, defaulting to ``sp_level``.
 
     Returns:
@@ -788,7 +787,7 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
         network_id (str): This run's network id. Logged for traceability only -- never a gate
                           (see above).
         level_of_theory (str): The SINGLE-POINT level of theory ``model_chemistry`` must match to
-                               be adopted (e.g. ``config.qm.sp_level``), undashed.
+                               be adopted (e.g. ``config.qm.sp_level``).
         freq_level (str, optional): The frequency level of the same run (e.g.
                                     ``config.qm.freq_level``). Required to reproduce ARC's own
                                     ``model_chemistry`` string whenever it differs from
