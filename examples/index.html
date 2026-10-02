@@ -1174,8 +1174,46 @@ measurements, reporting per-point log-errors and RMSE.</p>
 <p>Version 1 maps each composition SMILES to the configured RMG species by T3's
 structural <code>T3Species</code> identity, then uses the existing configured-label to
 Cantera-label lookup. An unmappable composition species or an absent OH/OH<em>/CH/CH</em>
-target produces a typed refusal for that point. RCM points represent only the
-post-compression constant-pressure state; volume histories are not supported here.</p>
+target produces a typed refusal for that point. History-free RCM points retain
+the post-compression constant-pressure model and unchanged results.</p>
+<p>An RCM point may additionally supply <code>volume_history.time</code> and
+<code>volume_history.volume</code>, each with a <code>values</code> list and explicit <code>units</code> (time:
+<code>s</code>, <code>ms</code>, <code>us</code>; volume: <code>m3</code>, <code>cm3</code>, <code>L</code>). Lists must have equal length and at
+least two finite points; SI-converted times must strictly increase and volumes
+must be positive. Histories are not allowed on shock-tube points.
+The elapsed history duration (last time minus first time, after SI conversion)
+must be no greater than 10 s, independent of the time-axis origin.</p>
+<p>History-driven RCM points require separate <code>initial_temperature</code> and
+<code>initial_pressure</code> quantities, using the existing temperature/pressure units.
+This additive shape preserves the meaning of <code>temperature</code> and <code>pressure</code> in
+every existing file: for RCM they still describe the measured compressed state,
+not the state at the beginning of compression. The ideal-gas reactor instead
+starts at the explicitly supplied initial state and the first history volume.
+A unit-area wall drives the exact forward slope of the linearly interpolated
+volume, with integration boundaries at every history point. After the history
+ends, volume is held constant; no separate heat-loss model is fitted.
+T3 records the reactor's adaptive integration steps over the entire horizon,
+retaining fast ignition both near compression and late in a long history. Integration
+stops exactly at every history point before changing the wall's forward slope.</p>
+<p>Ignition uses the point's own target and criterion, restricted to the
+post-compression trace. Its delay is relative to <code>compression_time</code> (an optional
+quantity with time units inside <code>volume_history</code>), or otherwise the first time
+of minimum volume. An explicit compression time must lie within the history.
+The horizon is the later of the history end and end of compression plus ten
+times the measured delay, with that post-compression window capped at 10 s.
+Together with the 10 s history-duration limit, integration lasts at most 20 s
+from the first history time. The existing finite measured-delay limit of 10 s
+remains in force; history-free RCM horizons and results are unchanged.</p>
+<p>To reject purely mechanical pressure/temperature peaks, T3 also runs the same
+history with chemistry disabled, advancing to the reactive run's exact sample
+times and history boundaries so temperatures are directly comparable without
+interpolation. The defining target event (the slope peak for
+derivative criteria, including extrapolated criteria; the crossing itself for
+<code>1/2 max</code>) must be more than 1 K
+hotter than this non-reactive reference. This signal isolates chemical heating
+from compression/expansion, with a threshold above integration noise. Without
+it, T3 returns the typed <code>ignition not resolved</code> refusal with a
+<code>no ignition within horizon</code> detail, never a numeric delay.</p>
 <h2 id="input-reference">Input reference<a class="headerlink" href="#input-reference" title="Permanent link">&para;</a></h2>
 <p>For a comprehensive reference showing <strong>every</strong> available input argument with
 inline documentation, see the <a href="../input_reference/">input reference</a> page.</p>
