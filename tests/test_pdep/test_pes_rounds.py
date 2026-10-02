@@ -188,6 +188,113 @@ class TestRoundLayout(object):
         with open(os.path.join(paths_b.root, 'sentinel.txt')) as handle:
             assert handle.read() == 'network_b'
 
+    @pytest.mark.parametrize('network_id, pre_fix_behavior, message_fragment', [
+        ('..', 'escaped', 'resolves outside the project directory'),
+        ('../../etc', 'escaped', 'resolves outside the project directory'),
+        ('/etc/evil', 'escaped', 'is absolute and replaces the project directory'),
+        ('a/b', 'nested', 'resolves to nested directory'),
+        # Carries a separator but normalizes back to a DIRECT CHILD, so it must not be reported as
+        # nested: realpath collapses '<project>/a/../b' to '<project>/b'. Still refused, because
+        # pre-fix it wrote into a different network's namespace than the one its id names.
+        ('a/../b', 'normalized', 'normalizes to the direct child'),
+        ('.', 'collapsed', 'resolves to the project directory itself'),
+        ('network0', 'valid', None),
+    ])
+    def test_network_id_is_confined_to_one_path_component(self, network_id, pre_fix_behavior,
+                                                          message_fragment):
+        project_directory = '/home/alon/runs/t3-pes/demo'
+        round_index = 0
+        pre_fix_root = os.path.join(project_directory, network_id, f'round_{round_index}')
+
+        # This is the exact pre-fix join, kept as an assertion so this table cannot silently drift
+        # to values that do not exercise the old defect.
+        if pre_fix_behavior == 'escaped':
+            assert os.path.commonpath([os.path.realpath(project_directory),
+                                        os.path.realpath(pre_fix_root)]) \
+                != os.path.realpath(project_directory)
+        elif pre_fix_behavior == 'nested':
+            assert os.path.relpath(pre_fix_root, project_directory) == os.path.join(
+                network_id, f'round_{round_index}')
+        elif pre_fix_behavior == 'collapsed':
+            assert os.path.realpath(pre_fix_root) == os.path.realpath(
+                os.path.join(project_directory, f'round_{round_index}'))
+        elif pre_fix_behavior == 'normalized':
+            # The pre-fix join landed in a sibling network's namespace: the id says 'a/../b' but
+            # the bytes went to '<project>/b/round_0'. That is the defect, and it is also why the
+            # message must say "direct child" rather than "nested".
+            assert os.path.realpath(pre_fix_root) == os.path.join(
+                project_directory, 'b', f'round_{round_index}')
+            assert os.path.dirname(os.path.realpath(
+                os.path.join(project_directory, network_id))) == project_directory
+        else:
+            assert pre_fix_root == os.path.join(project_directory, 'network0', f'round_{round_index}')
+
+        if pre_fix_behavior == 'valid':
+            assert round_paths(project_directory, round_index, network_id=network_id).root \
+                == pre_fix_root
+        else:
+            with pytest.raises(ValueError) as exc_info:
+                round_paths(project_directory, round_index, network_id=network_id)
+            message = str(exc_info.value)
+            assert repr(network_id) in message
+            assert 'Refusing to resolve round paths' in message
+            assert 'single, plain path component naming a direct child' in message
+            assert message_fragment in message
+            assert message.endswith('refusing rather than silently accepting an invalid network namespace.')
+
+    def test_a_separator_free_network_id_that_symlinks_deeper_is_refused_without_claiming_a_separator(
+            self, tmp_path):
+        """A plain component can still resolve below a direct child -- through a symlink.
+
+        This needs a real symlink on disk, so it cannot be a row in the table above: the point is
+        what ``realpath`` does, and a non-existent path has no link to follow. It is the other half
+        of the diagnostic split -- the table's 'a/../b' row has a separator and resolves to a
+        direct child, and this one has NO separator and resolves to a nested directory. Both used
+        to print the same sentence, and that sentence was false in each.
+        """
+        project_directory = str(tmp_path / 'project')
+        nested = os.path.join(project_directory, 'a', 'b')
+        os.makedirs(nested)
+        link = os.path.join(project_directory, 'link')
+        os.symlink(nested, link)
+
+        # Preconditions, so the test fails loudly if the fixture stops exercising the case.
+        assert os.sep not in 'link'
+        assert os.path.realpath(link) == os.path.realpath(nested)
+        assert os.path.dirname(os.path.realpath(link)) != os.path.realpath(project_directory)
+
+        with pytest.raises(ValueError) as exc_info:
+            round_paths(project_directory, 0, network_id='link')
+        message = str(exc_info.value)
+        assert 'resolves through a symbolic link to nested directory' in message
+        assert os.path.realpath(nested) in message
+        # The whole point: it must NOT be described as containing a separator, because it does not.
+        assert 'contains a path separator' not in message
+
+    def test_a_network_id_that_symlinks_to_a_sibling_is_refused_as_an_alias(self, tmp_path):
+        project_directory = str(tmp_path / 'project')
+        sibling = os.path.join(project_directory, 'network_b')
+        os.makedirs(sibling)
+        link = os.path.join(project_directory, 'network_a')
+        try:
+            os.symlink(sibling, link, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            pytest.skip(f'Symbolic links are unavailable: {error}')
+
+        assert os.path.realpath(link) == os.path.realpath(sibling)
+        assert os.path.dirname(os.path.realpath(link)) == os.path.realpath(project_directory)
+
+        with pytest.raises(ValueError) as exc_info:
+            round_paths(project_directory, 0, network_id='network_a')
+        message = str(exc_info.value)
+        assert "network_id='network_a'" in message
+        assert 'aliases a different direct child' in message
+        assert os.path.realpath(sibling) in message
+        assert 'nested directory' not in message
+        assert 'not a single path component' not in message
+        assert round_paths(project_directory, 0, network_id='network_b').root \
+            == os.path.join(sibling, 'round_0')
+
     def test_omitting_network_id_resolves_the_legacy_layout(self):
         assert round_paths('/proj', 0).root == os.path.join('/proj', 'round_0')
 

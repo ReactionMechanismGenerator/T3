@@ -595,7 +595,7 @@ def round_paths(project_directory: str, round_index: int,
 
     Raises:
         ValueError: If ``project_directory`` is not absolute, ``round_index`` is negative, or
-            ``network_id`` is empty.
+            ``network_id`` is empty or not a plain path component.
     """
     if not os.path.isabs(project_directory):
         raise ValueError(f"'project_directory' must be an absolute path, got "
@@ -604,6 +604,45 @@ def round_paths(project_directory: str, round_index: int,
         raise ValueError(f"'round_index' must be non-negative, got {round_index}.")
     if network_id is not None and not network_id:
         raise ValueError("'network_id' must be non-empty when provided.")
+    if network_id is not None:
+        resolved_project_directory = os.path.realpath(project_directory)
+        resolved_network_directory = os.path.realpath(os.path.join(project_directory, network_id))
+        has_path_separator = os.sep in network_id \
+            or (os.path.altsep is not None and os.path.altsep in network_id)
+        if has_path_separator \
+                or resolved_network_directory != os.path.join(resolved_project_directory, network_id):
+            if os.path.isabs(network_id):
+                violation = f"is absolute and replaces the project directory, resolving to '{resolved_network_directory}'"
+            elif resolved_network_directory == resolved_project_directory:
+                violation = f"resolves to the project directory itself '{resolved_network_directory}'"
+            elif os.path.commonpath([resolved_project_directory, resolved_network_directory]) \
+                    == resolved_project_directory:
+                # Still inside the project but refused -- and unrelated causes land here, so
+                # the diagnostic has to separate them. A separator-bearing id can normalize back
+                # to a direct child ('a/../b' -> '<project>/b'), and a separator-free id can
+                # resolve deeper or alias another direct child through a symlink. Reporting one
+                # as another tells the caller something false about the id it actually passed,
+                # which defeats the point of refusing with a reason.
+                if has_path_separator \
+                        and os.path.dirname(resolved_network_directory) == resolved_project_directory:
+                    violation = (f"is not a single path component, though it normalizes to the "
+                                 f"direct child '{resolved_network_directory}'")
+                elif has_path_separator:
+                    violation = f"contains a path separator and resolves to nested directory '{resolved_network_directory}'"
+                elif os.path.dirname(resolved_network_directory) == resolved_project_directory:
+                    violation = (f"aliases a different direct child '{resolved_network_directory}' "
+                                 f"rather than naming its own network directory")
+                else:
+                    violation = (f"resolves through a symbolic link to nested directory "
+                                 f"'{resolved_network_directory}'")
+            else:
+                violation = f"resolves outside the project directory to '{resolved_network_directory}'"
+            raise ValueError(
+                f"Refusing to resolve round paths for network_id={network_id!r}: a network id "
+                f"must be a single, plain path component naming a direct child of the project "
+                f"directory '{resolved_project_directory}', but it {violation}; refusing "
+                f"rather than silently accepting an invalid network namespace."
+            )
     root = os.path.join(project_directory, network_id, f'round_{round_index}') \
         if network_id is not None else os.path.join(project_directory, f'round_{round_index}')
     return RoundPaths(root=root,
