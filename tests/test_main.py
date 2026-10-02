@@ -17,7 +17,7 @@ from arc.common import read_yaml_file, save_yaml_file
 from arc.molecule.molecule import Molecule
 
 from t3.chem import T3Reaction, T3Species, T3Status
-from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
+from t3.common import TEST_DATA_BASE_PATH, EXAMPLES_BASE_PATH
 from t3.pdep.cache import write_sa_cache_metadata
 from t3.pdep.join import JOIN_STATUS_NOT_QUEUED, JOIN_STATUS_QUEUED
 from tests.common import run_minimal
@@ -37,8 +37,6 @@ from t3.simulate.factory import simulate_factory
 from t3.utils.rmg_shim import Arrhenius, PDepNetwork, PDepReaction, ThermoData
 from t3.utils.writer import write_rmg_input_file
 
-
-test_minimal_project_directory = os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
 
 t3_minimal = {'options': {'all_core_reactions': False,
                           'all_core_species': False,
@@ -244,8 +242,36 @@ qm_minimal = {'adapter': 'ARC',
               'species': [],
               }
 
-restart_base_path = os.path.join(TEST_DATA_BASE_PATH, 'restart')
-dump_species_path = os.path.join(TEST_DATA_BASE_PATH, 'test_dump_species')
+
+@pytest.fixture
+def minimal_project_directory(tmp_path):
+    """An empty project directory belonging to this test only."""
+    return str(tmp_path)
+
+
+@pytest.fixture
+def copy_test_data(tmp_path):
+    """Copy input fixtures before T3 writes logs, results, or restart state beside them."""
+    copied = {}
+
+    def copy(name):
+        if name not in copied:
+            destination = tmp_path / name
+            shutil.copytree(os.path.join(TEST_DATA_BASE_PATH, name), destination)
+            copied[name] = str(destination)
+        return copied[name]
+
+    return copy
+
+
+@pytest.fixture
+def restart_base_path(copy_test_data):
+    return copy_test_data('restart')
+
+
+@pytest.fixture
+def dump_species_path(tmp_path):
+    return str(tmp_path / 'test_dump_species')
 
 
 def test_thermodata_no_duplicate_fields():
@@ -259,28 +285,19 @@ def test_thermodata_no_duplicate_fields():
     assert not duplicates, f"ThermoData has duplicate field definitions: {set(duplicates)}"
 
 
-def setup_module():
-    """
-    Setup.
-    Useful for rerunning these tests after a failed test during development.
-    """
-    if os.path.isdir(test_minimal_project_directory):
-        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
-
-
-def test_args_and_attributes():
+def test_args_and_attributes(minimal_project_directory):
     """Test passing args and assigning attributes in T3"""
     try:
-        run_minimal()
-        assert os.path.isfile(os.path.join(test_minimal_project_directory, 't3.log'))
-        assert not os.path.isdir(os.path.join(test_minimal_project_directory, 'log_archive'))
+        run_minimal(project_directory=minimal_project_directory)
+        assert os.path.isfile(os.path.join(minimal_project_directory, 't3.log'))
+        assert not os.path.isdir(os.path.join(minimal_project_directory, 'log_archive'))
 
-        t3 = run_minimal()
-        assert os.path.isfile(os.path.join(test_minimal_project_directory, 't3.log'))
-        assert os.path.isdir(os.path.join(test_minimal_project_directory, 'log_archive'))
+        t3 = run_minimal(project_directory=minimal_project_directory)
+        assert os.path.isfile(os.path.join(minimal_project_directory, 't3.log'))
+        assert os.path.isdir(os.path.join(minimal_project_directory, 'log_archive'))
 
         assert t3.project == 'T3_minimal_example'
-        assert t3.project_directory == os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
+        assert t3.project_directory == minimal_project_directory
         assert t3.verbose == 10
 
         assert t3.rmg_exceptions_counter == 0
@@ -290,81 +307,78 @@ def test_args_and_attributes():
         assert t3.rmg == rmg_minimal_defaults
         assert t3.qm == qm_minimal
     finally:
-        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
+        shutil.rmtree(minimal_project_directory, ignore_errors=True)
 
 
-def test_as_dict():
+def test_as_dict(minimal_project_directory):
     """Test T3.as_dict()"""
     try:
-        t3 = run_minimal()
+        t3 = run_minimal(project_directory=minimal_project_directory)
         assert t3.as_dict() == {'project': 'T3_minimal_example',
-                                'project_directory': test_minimal_project_directory,
+                                'project_directory': minimal_project_directory,
                                 'qm': qm_minimal,
                                 'rmg': rmg_minimal_defaults,
                                 't3': t3_minimal,
                                 'verbose': 10}
     finally:
-        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
+        shutil.rmtree(minimal_project_directory, ignore_errors=True)
 
 
-def test_write_t3_input_file():
+def test_write_t3_input_file(minimal_project_directory):
     """Test automatically writing a T3 input file"""
     try:
-        t3 = run_minimal()
+        t3 = run_minimal(project_directory=minimal_project_directory)
         t3.write_t3_input_file()
-        assert os.path.isfile(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml'))
-        with open(os.path.join(test_minimal_project_directory, 'T3_auto_saved_input.yml')) as f:
+        assert os.path.isfile(os.path.join(minimal_project_directory, 'T3_auto_saved_input.yml'))
+        with open(os.path.join(minimal_project_directory, 'T3_auto_saved_input.yml')) as f:
             assert f.readline() == 'project: T3_minimal_example\n'
     finally:
-        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
+        shutil.rmtree(minimal_project_directory, ignore_errors=True)
 
 
-def test_set_paths():
+def test_set_paths(minimal_project_directory):
     """Test updating self.paths"""
-    t3 = run_minimal(iteration=1, set_paths=True)
-    paths = {'ARC': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC',
-             'ARC info': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/T3_minimal_example_info.yml',
-             'ARC input': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/input.yml',
-             'ARC kinetics lib': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
-                                 'libraries/kinetics',
-             'ARC log': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/arc.log',
-             'ARC restart': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/restart.yml',
-             'ARC thermo lib': 'Projects/test_minimal_delete_after_usage/iteration_1/ARC/output/RMG '
-                               'libraries/thermo/T3_minimal_example.py',
-             'PDep SA': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_SA',
-             'PDep capture': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_capture',
-             'PDep hybrid': 'Projects/test_minimal_delete_after_usage/iteration_1/PDep_hybrid',
-            'PDep QM budget': 'Projects/test_minimal_delete_after_usage/iteration_1/'
-                             't3_pdep_qm_budget.yml',
-            'PDep network assessments': 'Projects/test_minimal_delete_after_usage/iteration_1/'
-                                        't3_pdep_network_assessments.yml',
-             'ARC finalization marker': 'Projects/test_minimal_delete_after_usage/iteration_1/arc_finalization_complete.marker',
-             'RMG': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG',
-             'RMG PDep': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/pdep',
-             'RMG coll vio': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/collision_rate_violators.log',
-             'RMG input': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/input.py',
-             'RMG log': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/RMG.log',
-             'RMG job log': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/job.log',
-             'RMS': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/rms',
-             'figs': 'Projects/test_minimal_delete_after_usage/iteration_1/Figures',
-             'SA': 'Projects/test_minimal_delete_after_usage/iteration_1/SA',
-             'SA input': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/input.py',
-             'SA coefficients': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_coefficients.yml',
-             'SA dict': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa.yaml',
-             'SA IDT dict': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt.yaml',
-             'SA IDT dict top X': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/sa_idt_top_x.yaml',
-             'SA solver': 'Projects/test_minimal_delete_after_usage/iteration_1/SA/solver',
-             'cantera annotated': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/cantera_from_ck/chem_annotated.yaml',
-             'chem annotated': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/chem_annotated.inp',
-             'flux diagrams': 'Projects/test_minimal_delete_after_usage/iteration_1/flux',
-             'iteration': 'Projects/test_minimal_delete_after_usage/iteration_1',
-             'species dict': 'Projects/test_minimal_delete_after_usage/iteration_1/RMG/chemkin/'
-                             'species_dictionary.txt',
-             'T3 thermo lib': 'test_minimal_delete_after_usage/Libraries/T3lib.py',
-             'T3 kinetics lib': 'test_minimal_delete_after_usage/Libraries/T3',
-             'shared T3 thermo lib': None,
-             'shared T3 kinetics lib': None,
-             }
+    t3 = run_minimal(project_directory=minimal_project_directory, iteration=1, set_paths=True)
+    iteration_directory = os.path.join(minimal_project_directory, 'iteration_1')
+    paths = {
+        'ARC': os.path.join(iteration_directory, 'ARC'),
+        'ARC info': os.path.join(iteration_directory, 'ARC', 'T3_minimal_example_info.yml'),
+        'ARC input': os.path.join(iteration_directory, 'ARC', 'input.yml'),
+        'ARC kinetics lib': os.path.join(iteration_directory, 'ARC', 'output', 'RMG libraries', 'kinetics'),
+        'ARC log': os.path.join(iteration_directory, 'ARC', 'arc.log'),
+        'ARC restart': os.path.join(iteration_directory, 'ARC', 'restart.yml'),
+        'ARC thermo lib': os.path.join(iteration_directory, 'ARC', 'output', 'RMG libraries', 'thermo', 'T3_minimal_example.py'),
+        'PDep SA': os.path.join(iteration_directory, 'PDep_SA'),
+        'PDep capture': os.path.join(iteration_directory, 'PDep_capture'),
+        'PDep hybrid': os.path.join(iteration_directory, 'PDep_hybrid'),
+        'PDep QM budget': os.path.join(iteration_directory, 't3_pdep_qm_budget.yml'),
+        'PDep network assessments': os.path.join(iteration_directory, 't3_pdep_network_assessments.yml'),
+        'ARC finalization marker': os.path.join(iteration_directory, 'arc_finalization_complete.marker'),
+        'RMG': os.path.join(iteration_directory, 'RMG'),
+        'RMG PDep': os.path.join(iteration_directory, 'RMG', 'pdep'),
+        'RMG coll vio': os.path.join(iteration_directory, 'RMG', 'collision_rate_violators.log'),
+        'RMG input': os.path.join(iteration_directory, 'RMG', 'input.py'),
+        'RMG log': os.path.join(iteration_directory, 'RMG', 'RMG.log'),
+        'RMG job log': os.path.join(iteration_directory, 'RMG', 'job.log'),
+        'RMS': os.path.join(iteration_directory, 'RMG', 'rms'),
+        'figs': os.path.join(iteration_directory, 'Figures'),
+        'SA': os.path.join(iteration_directory, 'SA'),
+        'SA input': os.path.join(iteration_directory, 'SA', 'input.py'),
+        'SA coefficients': os.path.join(iteration_directory, 'SA', 'sa_coefficients.yml'),
+        'SA dict': os.path.join(iteration_directory, 'SA', 'sa.yaml'),
+        'SA IDT dict': os.path.join(iteration_directory, 'SA', 'sa_idt.yaml'),
+        'SA IDT dict top X': os.path.join(iteration_directory, 'SA', 'sa_idt_top_x.yaml'),
+        'SA solver': os.path.join(iteration_directory, 'SA', 'solver'),
+        'cantera annotated': os.path.join(iteration_directory, 'RMG', 'cantera_from_ck', 'chem_annotated.yaml'),
+        'chem annotated': os.path.join(iteration_directory, 'RMG', 'chemkin', 'chem_annotated.inp'),
+        'flux diagrams': os.path.join(iteration_directory, 'flux'),
+        'iteration': iteration_directory,
+        'species dict': os.path.join(iteration_directory, 'RMG', 'chemkin', 'species_dictionary.txt'),
+        'T3 thermo lib': os.path.join(minimal_project_directory, 'Libraries', 'T3lib.py'),
+        'T3 kinetics lib': os.path.join(minimal_project_directory, 'Libraries', 'T3'),
+        'shared T3 thermo lib': None,
+        'shared T3 kinetics lib': None,
+    }
     # Iterate the LIVE paths, so a key added to set_paths() without being added here is a failure
     # rather than a silent omission -- assert the key set first so that shows up as a readable
     # message instead of a bare KeyError from the lookup below.
@@ -378,7 +392,7 @@ def test_set_paths():
             assert paths[key] in path
 
 
-def test_restart():
+def test_restart(restart_base_path):
     """Test that the restart() method deduces the correct status of a project"""
     # empty folders are not saved in git, add them if they don't already exist
     empty_dirs = [os.path.join(restart_base_path, 'r0'),
@@ -518,7 +532,7 @@ def test_should_run_rmg():
     assert T3._should_run_rmg(iteration=2, iteration_start=2, run_rmg_at_start=False, restart_rmg=True) is True
 
 
-def test_determine_params_based_on_sa_idt_resolves_index_attr(monkeypatch):
+def test_determine_params_based_on_sa_idt_resolves_index_attr(monkeypatch, copy_test_data):
     """
     determine_params_based_on_sa_idt must resolve the Cantera reaction index via the
     reaction's .index attribute (which stays aligned with the full annotated YAML,
@@ -526,7 +540,7 @@ def test_determine_params_based_on_sa_idt_resolves_index_attr(monkeypatch):
     rmg_reactions list. A Cantera index that exceeds len(rmg_reactions) (as happens once
     earlier duplicate reactions are dropped) must still resolve to the right reaction.
     """
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -554,17 +568,17 @@ def test_determine_params_based_on_sa_idt_resolves_index_attr(monkeypatch):
         assert 42 in rxn_keys
     finally:
         shutil.rmtree(t3.paths['SA'], ignore_errors=True)
-        t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
+        t3_log = os.path.join(copy_test_data('minimal_data'), 't3.log')
         if os.path.isfile(t3_log):
             os.remove(t3_log)
 
 
-def test_check_arc_args():
+def test_check_arc_args(minimal_project_directory):
     """Test the check_arc_args() method"""
     minimal_input = os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'input.yml')
     input_dict = read_yaml_file(path=minimal_input)
     input_dict['verbose'] = 10
-    input_dict['project_directory'] = test_minimal_project_directory
+    input_dict['project_directory'] = minimal_project_directory
     input_dict['qm'] = {'adapter': 'ARC',
                         'unsupported_ARC_arg': 'value',
                         'bac_type': 'm',
@@ -575,10 +589,10 @@ def test_check_arc_args():
     assert 'unsupported_ARC_arg' not in t3.qm
 
 
-def test_run_arc():
+def test_run_arc(minimal_project_directory):
     """Test executing ARC"""
     try:
-        t3 = run_minimal(iteration=1, set_paths=True)
+        t3 = run_minimal(project_directory=minimal_project_directory, iteration=1, set_paths=True)
         t3.run_arc(arc_kwargs=t3.qm)
         with open(t3.paths['ARC log']) as f:
             lines = f.readlines()
@@ -590,13 +604,13 @@ def test_run_arc():
             assert line in lines
         assert os.path.isfile(t3.paths['ARC input'])
     finally:
-        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
+        shutil.rmtree(minimal_project_directory, ignore_errors=True)
 
 
-def test_process_arc_run():
+def test_process_arc_run(copy_test_data):
     """Tests processing an ARC run and copying over a thermo library to the RMG-database repository"""
     t3 = run_minimal(project='T3',
-                     project_directory=os.path.join(TEST_DATA_BASE_PATH, 'process_arc'),
+                     project_directory=copy_test_data('process_arc'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -636,9 +650,9 @@ def test_process_arc_run():
             os.remove(t3.paths['ARC finalization marker'])
 
 
-def test_get_current_rmg_tol():
+def test_get_current_rmg_tol(minimal_project_directory):
     """Test getting the correct RMG tolerances"""
-    t3 = run_minimal()
+    t3 = run_minimal(project_directory=minimal_project_directory)
     t3.rmg['model']['core_tolerance'] = [0.1, 0.05, 0.01, 0.001]
     t3.iteration = 1
     assert t3.get_current_rmg_tol() == 0.1
@@ -656,10 +670,10 @@ def test_get_current_rmg_tol():
     assert t3.get_current_rmg_tol() == 0.001
 
 
-def test_run_rmg():
+def test_run_rmg(minimal_project_directory):
     """Test the ability to run RMG from T3"""
     try:
-        t3 = run_minimal(iteration=1, set_paths=True)
+        t3 = run_minimal(project_directory=minimal_project_directory, iteration=1, set_paths=True)
         t3.rmg['rmg_execution_type'] = 'incore'
         write_rmg_input_file(
             rmg=t3.rmg,
@@ -685,13 +699,13 @@ def test_run_rmg():
         assert os.path.isfile(t3.paths['chem annotated'])
         assert os.path.isfile(t3.paths['species dict'])
     finally:
-        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
+        shutil.rmtree(minimal_project_directory, ignore_errors=True)
 
 
-def test_determine_species_to_calculate():
+def test_determine_species_to_calculate(copy_test_data):
     """Test determining the species to be calculated"""
 
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'))
+    t3 = run_minimal(project_directory=copy_test_data('determine_species'))
 
     # 1. no calculations required
     t3.iteration = 1
@@ -739,9 +753,9 @@ def test_determine_species_to_calculate():
            ['(i 3) Species participates in collision rate violating reaction: C6H8(2027)=C2H4(21)+C4H4(2531)']
 
 
-def test_reaction_requires_refinement():
+def test_reaction_requires_refinement(copy_test_data):
     """Test properly identifying the kinetic comment of a reaction to determine whether it requires refinement"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_reactions'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -783,7 +797,7 @@ Library reaction: JetSurF2.0
 Flux pairs: C5H11(428), C5H10(431); H(2), H2(4);"""
 
 
-def test_reaction_requires_refinement_characterization():
+def test_reaction_requires_refinement_characterization(copy_test_data):
     """
     Characterize the behavior of ``T3.reaction_requires_refinement``, which delegates to the shared
     ``is_this_reaction_uncertain`` / ``is_this_kinetics_comment_uncertain`` predicate (on top of its
@@ -795,7 +809,7 @@ def test_reaction_requires_refinement_characterization():
     statement) that is not itself wrapped in an "Estimated using ..." qualifier; otherwise it is
     uncertain.
     """
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_reactions'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -838,9 +852,9 @@ def test_reaction_requires_refinement_characterization():
     assert t3.reaction_requires_refinement(reactions[82]) is False
 
 
-def test_determine_species_based_on_sa():
+def test_determine_species_based_on_sa(copy_test_data):
     """Test determining species to calculate based on sensitivity analysis"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -866,14 +880,14 @@ def test_determine_species_based_on_sa():
     finally:
         # remove directories created when performing SA
         shutil.rmtree(t3.paths['SA'], ignore_errors=True)
-        t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
+        t3_log = os.path.join(copy_test_data('minimal_data'), 't3.log')
         if os.path.isfile(t3_log):
             os.remove(t3_log)
 
 
-def test_determine_reactions_based_on_sa_cantera():
+def test_determine_reactions_based_on_sa_cantera(copy_test_data):
     """Test determining reactions to calculate based on SA using the CanteraConstantTP adapter"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -902,15 +916,15 @@ def test_determine_reactions_based_on_sa_cantera():
             assert len(t3.reactions[key].reasons) > 0
     finally:
         shutil.rmtree(t3.paths['SA'], ignore_errors=True)
-        t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
+        t3_log = os.path.join(copy_test_data('minimal_data'), 't3.log')
         if os.path.isfile(t3_log):
             os.remove(t3_log)
 
 
-def test_generate_flux_diagrams():
+def test_generate_flux_diagrams(copy_test_data):
     """_generate_flux_diagrams resolves base-label observables to cantera names and writes a diagram."""
     import shutil
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1, set_paths=True)
     # minimal_data species labels are base labels ('H2','O2','H','OH'); model uses 'H2(1)' etc.
     t3.sa_observables = ['H', 'OH']            # base labels on purpose -> must be mapped
@@ -930,9 +944,9 @@ def test_generate_flux_diagrams():
         shutil.rmtree(t3.paths['flux diagrams'], ignore_errors=True)
 
 
-def test_flux_reactor_type():
+def test_flux_reactor_type(minimal_project_directory):
     """_flux_reactor_type maps the simulate adapter to (reactor_type, energy) or None."""
-    t3 = run_minimal()
+    t3 = run_minimal(project_directory=minimal_project_directory)
     cases = {
         'CanteraJSR': ('JSR', False),
         'CanteraConstantTP': ('BatchP', False),
@@ -949,9 +963,9 @@ def test_flux_reactor_type():
     assert t3._flux_reactor_type() == ('BatchP', False)
 
 
-def test_select_flux_reactors():
+def test_select_flux_reactors(minimal_project_directory):
     """_select_flux_reactors resolves 1-based selection to 0-based indices, dropping out-of-range."""
-    t3 = run_minimal()
+    t3 = run_minimal(project_directory=minimal_project_directory)
     t3.rmg['reactors'] = [{}, {}, {}]  # three reactors; only the count matters here
     t3.t3['options']['flux_diagram_reactors'] = None
     assert t3._select_flux_reactors() == [0]
@@ -965,7 +979,7 @@ def test_select_flux_reactors():
     assert t3._select_flux_reactors() == [1]
 
 
-def test_execute_generates_flux_for_converged_model():
+def test_execute_generates_flux_for_converged_model(minimal_project_directory):
     """execute() calls _generate_flux_diagrams once more AFTER the T3 loop, on the converged model.
 
     A regression that dropped the post-loop call would leave the final converged mechanism without a
@@ -973,7 +987,7 @@ def test_execute_generates_flux_for_converged_model():
     records self.iteration. In-loop calls occur for iterations 1..max_T3_iterations, while the
     post-loop converged-model call fires only after self.iteration is incremented past that bound.
     """
-    t3 = run_minimal()
+    t3 = run_minimal(project_directory=minimal_project_directory)
     t3.t3['sensitivity'] = None                      # skip the (real) SA / simulate block entirely
     t3.t3['options']['max_T3_iterations'] = 1        # one in-loop iteration, then the post-loop RMG
     t3.qm['species'], t3.qm['reactions'] = [], []    # no pre-loop ARC-only iteration
@@ -988,20 +1002,20 @@ def test_execute_generates_flux_for_converged_model():
     try:
         t3.execute()
     finally:
-        shutil.rmtree(test_minimal_project_directory, ignore_errors=True)
+        shutil.rmtree(minimal_project_directory, ignore_errors=True)
     assert flux_call_iterations, 'expected _generate_flux_diagrams to be called during execute()'
     assert max(flux_call_iterations) > t3.t3['options']['max_T3_iterations'], \
         'expected a post-loop _generate_flux_diagrams call on the converged model'
 
 
-def test_generate_flux_diagrams_explicit_single_reactor_subfolder():
+def test_generate_flux_diagrams_explicit_single_reactor_subfolder(minimal_project_directory):
     """An explicit single-reactor selection writes to a reactor_<n> subfolder, not the generic flux folder.
 
     With flux_diagram_reactors=2 and two reactors, _select_flux_reactors resolves to the 0-based
     index 1, so the output folder must be '<flux diagrams>/reactor_2' (1-based) rather than the
     generic '<flux diagrams>' folder reserved for the default single-reactor case.
     """
-    t3 = run_minimal(iteration=1, set_paths=True)
+    t3 = run_minimal(project_directory=minimal_project_directory, iteration=1, set_paths=True)
     t3.t3['options']['generate_flux_diagrams'] = True
     t3.t3['options']['flux_diagrams_with_images'] = False
     t3.t3['options']['flux_diagram_reactors'] = 2                 # explicit -> per-reactor subfolder
@@ -1029,9 +1043,9 @@ def test_generate_flux_diagrams_explicit_single_reactor_subfolder():
     assert captured['folder_path'] != t3.paths['flux diagrams']
 
 
-def test_determine_reactions_based_on_sa_rmg():
+def test_determine_reactions_based_on_sa_rmg(copy_test_data):
     """Test determining reactions to calculate based on SA using the RMGConstantTP adapter"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1059,14 +1073,14 @@ def test_determine_reactions_based_on_sa_rmg():
             assert len(t3.reactions[key].reasons) > 0
     finally:
         shutil.rmtree(t3.paths['SA'], ignore_errors=True)
-        t3_log = os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 't3.log')
+        t3_log = os.path.join(copy_test_data('minimal_data'), 't3.log')
         if os.path.isfile(t3_log):
             os.remove(t3_log)
 
 
-def test_determine_species_from_pdep_network():
+def test_determine_species_from_pdep_network(copy_test_data):
     """Test determining species from pdep network"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'pdep_network'),
+    t3 = run_minimal(project_directory=copy_test_data('pdep_network'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1175,12 +1189,13 @@ def test_determine_species_and_reactions_to_calculate_refuses_a_barrierless_chan
     assert not any(record.status == JOIN_STATUS_QUEUED for record in t3.pdep_ts_join_records)
 
 
-def test_determine_species_based_on_collision_violators():
+def test_determine_species_based_on_collision_violators(minimal_project_directory, copy_test_data):
     """Test determining species to calculate based on collision rate violating reactions"""
-    t3 = run_minimal()
-    t3.paths['RMG coll vio'] = os.path.join(TEST_DATA_BASE_PATH, 'collision_rate_violators', 'collision_rate_violators.log')
-    t3.paths['cantera annotated'] = os.path.join(TEST_DATA_BASE_PATH, 'collision_rate_violators', 'cantera', 'chem_annotated.yaml')
-    t3.paths['species dict'] = os.path.join(TEST_DATA_BASE_PATH, 'collision_rate_violators', 'species_dictionary.txt')
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    collision_data = copy_test_data('collision_rate_violators')
+    t3.paths['RMG coll vio'] = os.path.join(collision_data, 'collision_rate_violators.log')
+    t3.paths['cantera annotated'] = os.path.join(collision_data, 'cantera', 'chem_annotated.yaml')
+    t3.paths['species dict'] = os.path.join(collision_data, 'species_dictionary.txt')
     t3.rmg_species, t3.rmg_reactions = t3.load_species_and_reactions_from_yaml_file()
     species_to_calc = t3.determine_species_and_reactions_based_on_collision_violators()[0]
     assert len(species_to_calc) == 18
@@ -1213,9 +1228,9 @@ def test_determine_species_based_on_collision_violators():
     assert expected_numeric_identifiers == numeric_identifiers
 
 
-def test_trsh_rmg_tol():
+def test_trsh_rmg_tol(minimal_project_directory):
     """Test troubleshooting the RMG tolerance"""
-    t3 = run_minimal()
+    t3 = run_minimal(project_directory=minimal_project_directory)
     t3.t3['options']['max_T3_iterations'] = 10
 
     t3.rmg['model']['core_tolerance'] = [0.1, 0.1, 0.001, 0.0001]
@@ -1239,9 +1254,9 @@ def test_trsh_rmg_tol():
     assert t3.rmg['model']['core_tolerance'] == [0.1, 0.1, 0.001, 0.0001]
 
 
-def test_get_species_key():
+def test_get_species_key(copy_test_data):
     """Test checking whether a species already exists in self.species and getting its key"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -1263,10 +1278,10 @@ def test_get_species_key():
     assert key == 6
 
 
-def test_get_species_key_rmg_label_not_shadowed():
+def test_get_species_key_rmg_label_not_shadowed(copy_test_data):
     """Test that get_species_key with RMG label_type can find species
     whose RMG label differs from their ARC-legalized label."""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -1286,9 +1301,9 @@ def test_get_species_key_rmg_label_not_shadowed():
     assert key == 0
 
 
-def test_get_reaction_key_smiles():
+def test_get_reaction_key_smiles(copy_test_data):
     """Test that get_reaction_key with SMILES label_type finds the right reaction."""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -1302,10 +1317,10 @@ def test_get_reaction_key_smiles():
     assert key == 0
 
 
-def test_paths_shared_lib_with_none_external_path():
+def test_paths_shared_lib_with_none_external_path(minimal_project_directory):
     """Test that set_paths doesn't crash when shared_library_name is set
     but external_library_path is None."""
-    t3 = run_minimal(iteration=1)
+    t3 = run_minimal(project_directory=minimal_project_directory, iteration=1)
     t3.t3['options']['shared_library_name'] = 'my_shared_lib'
     t3.t3['options']['external_library_path'] = None
     # This should not raise a TypeError from os.path.join(None, ...)
@@ -1319,9 +1334,9 @@ def test_paths_shared_lib_with_none_external_path():
         raise
 
 
-def test_load_species_and_reactions_from_yaml_file():
+def test_load_species_and_reactions_from_yaml_file(copy_test_data):
     """Test loading RMG species and reactions from a Chemkin file"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -1334,9 +1349,9 @@ def test_load_species_and_reactions_from_yaml_file():
     assert 'OH(4) + H2O2(9) <=> HO2(6) + H2O(7)' in str(rmg_reactions[10])
 
 
-def test_add_species():
+def test_add_species(copy_test_data):
     """Test adding a species to self.species and to self.qm['species']"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_species'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_species'),
                      iteration=2,
                      set_paths=True,
                      )
@@ -1387,9 +1402,9 @@ H  0.0000000  0.0000000 -0.3736550"""
     assert found_h2
 
 
-def test_add_reaction():
+def test_add_reaction(copy_test_data):
     """Test adding a reaction to self.reactions and to self.qm['reactions']"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+    t3 = run_minimal(project_directory=copy_test_data('determine_reactions'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1460,7 +1475,7 @@ def test_add_reaction():
     assert t3.reactions[3].created_at_iteration == 1
 
 
-def test_add_reaction_resolves_reactant_product_namespace():
+def test_add_reaction_resolves_reactant_product_namespace(copy_test_data):
     """
     Regression test for a reaction whose incoming r_species/p_species labels differ from the
     labels of the already-stored (isomorphic) species (e.g. the formyl radical spelled 'CHO' in
@@ -1470,7 +1485,7 @@ def test_add_reaction_resolves_reactant_product_namespace():
     namespace, or ARC's check_attributes() raises a ReactionError.
     """
     t3 = T3(project='test_add_reaction_namespace',
-           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           project_directory=copy_test_data('determine_reactions'),
            t3=t3_minimal,
            rmg=rmg_minimal,
            qm=qm_minimal,
@@ -1504,14 +1519,14 @@ def test_add_reaction_resolves_reactant_product_namespace():
     stored_reaction.check_attributes()  # must not raise
 
 
-def test_add_reaction_deduplicates_reactants_products_stoichiometry():
+def test_add_reaction_deduplicates_reactants_products_stoichiometry(copy_test_data):
     """
     Regression test: a reaction with a repeated species on one side (H + HO2 <=> OH + OH) must
     keep reaction.reactants/products deduplicated (no repeated 'OH' entry), while reaction.label
     keeps the full stoichiometry-expanded text ('OH + OH'), and check_attributes() passes.
     """
     t3 = T3(project='test_add_reaction_stoichiometry',
-           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           project_directory=copy_test_data('determine_reactions'),
            t3=t3_minimal,
            rmg=rmg_minimal,
            qm=qm_minimal,
@@ -1535,7 +1550,7 @@ def test_add_reaction_deduplicates_reactants_products_stoichiometry():
     stored_reaction.check_attributes()  # must not raise
 
 
-def test_add_reaction_qm_reaction_namespace_consistency():
+def test_add_reaction_qm_reaction_namespace_consistency(copy_test_data):
     """
     Regression test: the qm_reaction object handed off to ARC (self.qm['reactions'][-1]) must have
     reactants/products matching its own r_species/p_species labels, mimicking ARC's Scheduler
@@ -1543,7 +1558,7 @@ def test_add_reaction_qm_reaction_namespace_consistency():
     e.g. 's0_CHO' in qm_reaction.reactants.
     """
     t3 = T3(project='test_add_reaction_qm_consistency',
-           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           project_directory=copy_test_data('determine_reactions'),
            t3=t3_minimal,
            rmg=rmg_minimal,
            qm=qm_minimal,
@@ -1566,14 +1581,14 @@ def test_add_reaction_qm_reaction_namespace_consistency():
         assert spc.label in qm_reaction.reactants or spc.label in qm_reaction.products
 
 
-def test_add_reaction_qm_label_round_trip():
+def test_add_reaction_qm_label_round_trip(copy_test_data):
     """
     Regression test: after add_reaction(), simulating an ARC result reported using the
     qm_reaction's own label string must round-trip back to the same T3 reaction via
     get_reaction_key(label=...), which compares against t3_reaction.qm_label.
     """
     t3 = T3(project='test_add_reaction_qm_label_round_trip',
-           project_directory=os.path.join(TEST_DATA_BASE_PATH, 'determine_reactions'),
+           project_directory=copy_test_data('determine_reactions'),
            t3=t3_minimal,
            rmg=rmg_minimal,
            qm=qm_minimal,
@@ -1597,7 +1612,7 @@ def test_add_reaction_qm_label_round_trip():
     assert t3.get_reaction_key(label=arc_reported_label) == rxn_key
 
 
-def test_dump_species():
+def test_dump_species(dump_species_path):
     """Test dump species for restart purposes"""
     # create an empty `iteration_5` directory
     if not os.path.isdir(os.path.join(dump_species_path, 'iteration_5')):
@@ -1621,14 +1636,23 @@ def test_dump_species():
     assert t3.restart() == (5, True, False)
 
 
-def test_load_species():
-    """Test loading the dumped species dictionary from `test_dump_species()` above"""
+def test_load_species(dump_species_path):
+    """Test loading a species dictionary dumped in this test's own directory."""
     t3 = T3(project='test_dump_species',
             project_directory=dump_species_path,
             t3=t3_minimal,
             rmg=rmg_minimal,
             qm=qm_minimal,
             )
+    t3.species = {0: T3Species(label='Imipramine_1_peroxy',
+                               qm_label='Imipramine_1_peroxy_0',
+                               smiles='C',
+                               reasons=['reason'],
+                               t3_status=T3Status.PENDING,
+                               t3_index=0,
+                               created_at_iteration=2)}
+    t3.dump_species_and_reactions()
+    t3.species = {}
     t3.load_species_and_reactions()
     assert t3.species[0].label == 'Imipramine_1_peroxy'
     assert t3.species[0].qm_label == 'Imipramine_1_peroxy_0'
@@ -1636,9 +1660,9 @@ def test_load_species():
 
 # main functions:
 
-def test_get_reaction_by_index():
+def test_get_reaction_by_index(copy_test_data):
     """Test getting reaction by index"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1668,9 +1692,9 @@ def test_legalize_species_label():
     assert species.label == 'C3H6'
 
 
-def test_get_species_label_by_structure():
+def test_get_species_label_by_structure(copy_test_data):
     """Test getting the species label from a list by its structure"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1700,9 +1724,9 @@ multiplicity 1
     assert label_2 == 'CH2[S]'
 
 
-def test_check_overtime():
+def test_check_overtime(copy_test_data):
     """Test checking overtime"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1713,9 +1737,9 @@ def test_check_overtime():
     assert t3.check_overtime() is True
 
 
-def test_auto_complete_rmg_libraries():
+def test_auto_complete_rmg_libraries(copy_test_data):
     """Test auto completing RMG libraries"""
-    t3 = run_minimal(project_directory=os.path.join(TEST_DATA_BASE_PATH, 'minimal_data'),
+    t3 = run_minimal(project_directory=copy_test_data('minimal_data'),
                      iteration=1,
                      set_paths=True,
                      )
@@ -1750,41 +1774,3 @@ def test_auto_complete_rmg_libraries():
     assert database_3['kinetics_libraries'] == ['primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
     assert database_2['seed_mechanisms'] == ['primaryH2O2']
     assert 'chemistry_sets' not in database_3
-
-
-def teardown_module():
-    """teardown any state that was previously set up."""
-    # delete log files
-    for i in range(10):
-        directory = os.path.join(restart_base_path, f'r{i}')
-        if os.path.isdir(directory):
-            log_file = os.path.join(directory, 't3.log')
-            if os.path.isfile(log_file):
-                os.remove(log_file)
-            log_archive = os.path.join(directory, 'log_archive')
-            if os.path.isdir(log_archive):
-                shutil.rmtree(log_archive, ignore_errors=True)
-
-    # other files to delete
-    files = [os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'T3_ARC_restart_test.info'),
-             os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'input.yml'),
-             os.path.join(restart_base_path, 'r6', 'species.yml'),
-             os.path.join(TEST_DATA_BASE_PATH, 'process_arc', 'species.yml'),
-             ]
-    for file in files:
-        if os.path.isfile(file):
-            os.remove(file)
-
-    # delete folders
-    for directory in [
-        test_minimal_project_directory,
-        dump_species_path,
-        os.path.join(TEST_DATA_BASE_PATH, 'minimal_data', 'log_archive'),
-        os.path.join(TEST_DATA_BASE_PATH, 'determine_species', 'log_archive'),
-        os.path.join(TEST_DATA_BASE_PATH, 'pdep_network', 'log_archive'),
-        os.path.join(TEST_DATA_BASE_PATH, 'process_arc', 'log_archive'),
-        os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'output'),
-        os.path.join(restart_base_path, 'r6', 'iteration_6', 'ARC', 'log_and_restart_archive'),
-    ]:
-        if os.path.isdir(directory):
-            shutil.rmtree(directory, ignore_errors=True)

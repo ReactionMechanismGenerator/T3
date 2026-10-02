@@ -8,12 +8,12 @@ import shutil
 from arc.common import read_yaml_file
 from arc.molecule.molecule import Molecule
 
-from t3.common import EXAMPLES_BASE_PATH, PROJECTS_BASE_PATH
+from t3.common import EXAMPLES_BASE_PATH
 from t3.main import T3
 
 
-def run_minimal(project: str | None = None,
-                project_directory: str | None = None,
+def run_minimal(project_directory: str,
+                project: str | None = None,
                 iteration: int | None = None,
                 set_paths: bool = False,
                 ) -> T3:
@@ -21,8 +21,8 @@ def run_minimal(project: str | None = None,
     A helper function for running the minimal example.
 
     Args:
+        project_directory (str): The per-test project directory.
         project (str, optional): The project name.
-        project_directory (str, optional): The project directory.
         iteration (int, optional): The iteration number.
         set_paths (bool, optional): Whether to set the paths.
 
@@ -32,8 +32,7 @@ def run_minimal(project: str | None = None,
     minimal_input = os.path.join(EXAMPLES_BASE_PATH, 'minimal', 'input.yml')
     input_dict = read_yaml_file(path=minimal_input)
     input_dict['verbose'] = 10
-    input_dict['project_directory'] = project_directory \
-                                      or os.path.join(PROJECTS_BASE_PATH, 'test_minimal_delete_after_usage')
+    input_dict['project_directory'] = project_directory
     if project is not None:
         input_dict['project'] = project
     if 't3' in input_dict and 'sensitivity' in input_dict['t3']:
