@@ -170,10 +170,11 @@ class TestShippedExample(object):
 
     def test_the_shipped_example_writes_levels_undashed(self):
         """A dashed level makes ARC miss the cached frequency scale factor and makes Gaussian
-        reject the route line, so an example that shipped one would be actively harmful. The
-        schema's own validator refuses a dashed level at read time, so a bad example fails at
-        read_pes_input rather than at the assertion below -- these assertions are here to name
-        what the example must keep true, where someone editing it will read the reason."""
+        reject the route line for optimization/frequency levels, so an example that shipped one
+        would be actively harmful. Single-point levels are intentionally exempt because their
+        software-specific ARC keys may be dashed; this shipped example still keeps every level
+        undashed. These assertions name what the example must keep true, where someone editing it
+        will read the reason."""
         config = read_pes_input(self.EXAMPLE_PATH)
         levels = (config.qm.opt_level, config.qm.freq_level, config.qm.sp_level,
                   config.qm.irc_level, config.qm.scan_level)

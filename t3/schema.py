@@ -1150,27 +1150,6 @@ class RMG(BaseModel):
         return self
 
 
-class QM(BaseModel):
-    """
-    A class for validating input.QM arguments
-    """
-    adapter: str = 'ARC'
-    species: list = Field(default_factory=list)
-    reactions: list = Field(default_factory=list)
-
-    class Config:
-        extra = "allow"
-
-    @field_validator('adapter')
-    @classmethod
-    def check_adapter(cls, value):
-        """QM.adapter validator"""
-        supported_qm_adapters = ['ARC']
-        if value not in supported_qm_adapters:
-            raise ValueError(f'Supported QM adapters are:\n{supported_qm_adapters}\nGot:{value}')
-        return value
-
-
 # Only def2 basis sets and the wb97xd functional must be written hyphen-free: ARC's cached
 # frequency scale factors (data/freq_scale_factors.yml) are keyed without hyphens, so a dashed
 # form silently falls back to a Truhlar fit, logs "Could not determine software for job type",
@@ -1203,6 +1182,69 @@ def _refuse_dashed_level(value: str, field_name: str) -> str:
                 f"form makes ARC miss the cached frequency scale factor and makes Gaussian reject "
                 f"the route line. Genuine Dunning names such as 'cc-pvtz-f12' keep their dashes.")
     return value
+
+
+class LevelOfTheoryMixin:
+    """Shared level-of-theory validation for T3's QM sections."""
+
+    # ``sp_level`` is intentionally exempt from the dashed guard: ARC's software-specific
+    # frequency-scale keys include ``wb97xd/def2tzvp, software: gaussian``,
+    # ``wb97xd3/def2-tzvp, software: qchem``, and
+    # ``wb97xd3/def2-tzvpd, software: orca``. Single-point levels are where QChem/Orca
+    # methods such as DLPNO are used, and no frequency is scaled for a single point.
+    _LEVEL_PAIRING_FIELDS = ('opt_level', 'freq_level', 'irc_level', 'scan_level')
+    _DASHED_LEVEL_FIELDS = _LEVEL_PAIRING_FIELDS + ('level_of_theory',)
+
+    @model_validator(mode='after')
+    def validate_levels(self):
+        """Validate declared fields and only user-supplied extras on permissive QM models."""
+        extras = self.model_extra or {}
+        declared_fields = type(self).model_fields
+        levels = {field_name: getattr(self, field_name)
+                  for field_name in self._LEVEL_PAIRING_FIELDS if field_name in declared_fields}
+        levels.update({field_name: extras[field_name]
+                       for field_name in self._DASHED_LEVEL_FIELDS if field_name in extras})
+
+        for field_name, value in levels.items():
+            if isinstance(value, str):
+                _refuse_dashed_level(value, field_name)
+
+        if ('freq_level' in levels and 'opt_level' in levels
+                and levels['freq_level'] != levels['opt_level']):
+            raise ValueError(f"'freq_level' must equal 'opt_level' so frequencies are evaluated at "
+                             f"a real minimum of the same surface. Got freq_level="
+                             f"{levels['freq_level']!r}, opt_level={levels['opt_level']!r}.")
+        if ('scan_level' in levels and 'freq_level' in levels
+                and levels['scan_level'] != levels['freq_level']):
+            raise ValueError(f"'scan_level' must equal 'freq_level' so rotors project out "
+                             f"correctly. Got scan_level={levels['scan_level']!r}, freq_level="
+                             f"{levels['freq_level']!r}.")
+        if ('irc_level' in levels and 'opt_level' in levels
+                and levels['irc_level'] != levels['opt_level']):
+            raise ValueError(f"'irc_level' must equal 'opt_level'. Got irc_level="
+                             f"{levels['irc_level']!r}, opt_level={levels['opt_level']!r}.")
+        return self
+
+
+class QM(LevelOfTheoryMixin, BaseModel):
+    """
+    A class for validating input.QM arguments
+    """
+    adapter: str = 'ARC'
+    species: list = Field(default_factory=list)
+    reactions: list = Field(default_factory=list)
+
+    class Config:
+        extra = "allow"
+
+    @field_validator('adapter')
+    @classmethod
+    def check_adapter(cls, value):
+        """QM.adapter validator"""
+        supported_qm_adapters = ['ARC']
+        if value not in supported_qm_adapters:
+            raise ValueError(f'Supported QM adapters are:\n{supported_qm_adapters}\nGot:{value}')
+        return value
 
 
 class PESStrictSection(BaseModel):
@@ -1290,7 +1332,7 @@ class PESSection(PESStrictSection):
         return value
 
 
-class PESQMSection(PESStrictSection):
+class PESQMSection(LevelOfTheoryMixin, PESStrictSection):
     """
     A class for validating input.qm arguments of the standalone PES exploration loop.
 
@@ -1324,33 +1366,6 @@ class PESQMSection(PESStrictSection):
     # above the lowest saddle on the surface carries negligible flux and is declined. Unused under
     # the other scopes. Default mirrors t3.pdep.distrust.DEFAULT_ENERGY_WINDOW_KJ.
     energy_window_kj: Annotated[float, Field(gt=0)] = 30.0
-
-    @field_validator('opt_level', 'freq_level', 'sp_level', 'irc_level', 'scan_level')
-    @classmethod
-    def check_undashed(cls, value, info):
-        """PESQMSection level validators."""
-        return _refuse_dashed_level(value, info.field_name)
-
-    @model_validator(mode='after')
-    def check_level_pairings(self):
-        """PESQMSection cross-field validator.
-
-        freq must be evaluated at the same level as opt (so frequencies belong to a real minimum
-        of that surface), scan at the same level as freq (so rotors project out correctly), and
-        irc at the same level as opt. Source: Canonical Levels of Theory.
-        """
-        if self.freq_level != self.opt_level:
-            raise ValueError(f"'freq_level' must equal 'opt_level' so frequencies are evaluated at "
-                             f"a real minimum of the same surface. Got freq_level="
-                             f"{self.freq_level!r}, opt_level={self.opt_level!r}.")
-        if self.scan_level != self.freq_level:
-            raise ValueError(f"'scan_level' must equal 'freq_level' so rotors project out "
-                             f"correctly. Got scan_level={self.scan_level!r}, freq_level="
-                             f"{self.freq_level!r}.")
-        if self.irc_level != self.opt_level:
-            raise ValueError(f"'irc_level' must equal 'opt_level'. Got irc_level="
-                             f"{self.irc_level!r}, opt_level={self.opt_level!r}.")
-        return self
 
 
 class PESTerminationSection(PESStrictSection):

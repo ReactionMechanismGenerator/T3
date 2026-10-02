@@ -1113,10 +1113,64 @@ def test_rmg_species_constraints_schema():
 
 def test_qm_schema():
     """Test The QM schema"""
-    qm = {'adapter': 'ARC'}
+    qm = {'adapter': 'ARC', 'arc_specific_key': 'preserved'}
     qm = QM(**qm)
     assert qm.adapter == 'ARC'
     assert qm.species == qm.reactions == list()
+    assert qm.arc_specific_key == 'preserved'
+    assert not any(level in qm.model_dump() for level in
+                   ('opt_level', 'freq_level', 'sp_level', 'irc_level', 'scan_level'))
+
+
+def test_qm_level_validators_apply_to_the_main_input_path():
+    """The main T3 QM path shares PES's level guardrails without becoming strict."""
+    input_dict = read_yaml_file(path=os.path.join(EXAMPLES_BASE_PATH, 'pressure_dependence', 'input.yml'))
+    qm = dict(input_dict['qm'], arc_specific_key='preserved',
+              level_of_theory='b3lyp/6-31g(d,p)')
+
+    with pytest.raises(ValidationError, match='undashed'):
+        InputBase(project=input_dict['project'], project_directory=TEST_DATA_BASE_PATH,
+                  t3=input_dict['t3'], rmg=input_dict['rmg'], qm=dict(
+                      qm, opt_level='wb97x-d/def2-tzvp'))
+
+    valid = InputBase(project=input_dict['project'], project_directory=TEST_DATA_BASE_PATH,
+                      t3=input_dict['t3'], rmg=input_dict['rmg'], qm=qm)
+    assert valid.qm.arc_specific_key == 'preserved'
+    assert valid.qm.level_of_theory == 'b3lyp/6-31g(d,p)'
+    assert not any(level in valid.qm.model_dump() for level in
+                   ('opt_level', 'freq_level', 'sp_level', 'irc_level', 'scan_level'))
+
+    orca_sp = InputBase(project=input_dict['project'], project_directory=TEST_DATA_BASE_PATH,
+                        t3=input_dict['t3'], rmg=input_dict['rmg'], qm=dict(
+                            qm, sp_level='dlpno-ccsd(T)/def2-tzvp'))
+    assert orca_sp.qm.sp_level == 'dlpno-ccsd(T)/def2-tzvp'
+
+    with pytest.raises(ValidationError, match='undashed'):
+        InputBase(project=input_dict['project'], project_directory=TEST_DATA_BASE_PATH,
+                  t3=input_dict['t3'], rmg=input_dict['rmg'], qm=dict(
+                      qm, level_of_theory='wb97x-d/def2-tzvp'))
+
+    with pytest.raises(ValidationError, match="'freq_level' must equal 'opt_level'"):
+        InputBase(project=input_dict['project'], project_directory=TEST_DATA_BASE_PATH,
+                  t3=input_dict['t3'], rmg=input_dict['rmg'], qm=dict(
+                      qm, opt_level='wb97xd/def2tzvp', freq_level='wb97xd/def2svp',
+                      scan_level='wb97xd/def2svp'))
+
+
+def test_genuine_dunning_levels_are_allowed_on_guarded_fields():
+    """A genuine Dunning name keeps its dashes on fields the guard still validates."""
+    input_dict = read_yaml_file(path=os.path.join(EXAMPLES_BASE_PATH, 'pressure_dependence', 'input.yml'))
+    dunning = 'ccsd(t)-f12/cc-pvtz-f12'
+
+    main = InputBase(project=input_dict['project'], project_directory=TEST_DATA_BASE_PATH,
+                     t3=input_dict['t3'], rmg=input_dict['rmg'], qm=dict(
+                         input_dict['qm'], opt_level=dunning))
+    assert main.qm.opt_level == dunning
+
+    pes = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
+                        qm={'opt_level': dunning, 'freq_level': dunning,
+                            'scan_level': dunning, 'irc_level': dunning})
+    assert pes.qm.opt_level == dunning
 
 
 class TestPESLoopConfig(object):
@@ -1165,11 +1219,11 @@ class TestPESLoopConfig(object):
             PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
                           qm={'opt_level': 'wb97x-d/def2-tzvp', 'freq_level': 'wb97x-d/def2-tzvp'})
 
-    def test_genuine_dunning_dashes_are_allowed(self):
-        """cc-pvtz-f12 keeps its dashes -- only def2 and wb97xd must be hyphen-free."""
+    def test_dashed_sp_level_is_allowed(self):
+        """Orca's dashed DLPNO single-point level is preserved on the PES path."""
         config = PESLoopConfig(pes={'network': '/abs/n.py', 'source': ['A'], 'bath_gas': {'N2': 1.0}},
-                               qm={'sp_level': 'dlpno-ccsd(t)-f12/cc-pvtz-f12'})
-        assert config.qm.sp_level == 'dlpno-ccsd(t)-f12/cc-pvtz-f12'
+                               qm={'sp_level': 'dlpno-ccsd(T)/def2-tzvp'})
+        assert config.qm.sp_level == 'dlpno-ccsd(T)/def2-tzvp'
 
     def test_freq_level_must_equal_opt_level(self):
         """Frequencies must be evaluated at a real minimum of the same surface.
