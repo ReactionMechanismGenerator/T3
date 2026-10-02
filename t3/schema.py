@@ -14,8 +14,12 @@ from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_v
 from arc.common import read_yaml_file
 
 from t3.common import (DATA_BASE_PATH, METHOD_MAP, VALID_CHARS,
-                       convert_temperature_to_kelvin, convert_time_to_seconds)
+                       convert_pressure_to_bar, convert_temperature_to_kelvin, convert_time_to_seconds,
+                       convert_volume_to_cubic_meters)
 from t3.simulate.factory import _registered_simulate_adapters
+
+
+MAX_RCM_HISTORY_DURATION = 10.0
 
 
 class TerminationTimeEnum(str, Enum):
@@ -256,8 +260,93 @@ class ExperimentalSourceReference(BaseModel):
         extra = 'forbid'
 
 
+class ExperimentalHistoryTimes(BaseModel):
+    """Explicit time samples for an RCM volume history."""
+    values: list[float]
+    units: Literal['s', 'ms', 'us']
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalHistoryVolumes(BaseModel):
+    """Explicit volume samples for an RCM volume history."""
+    values: list[float]
+    units: Literal['m3', 'cm3', 'L']
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalCompressionTime(BaseModel):
+    """End-of-compression time on the volume history's time axis."""
+    value: float
+    units: Literal['s', 'ms', 'us']
+
+    class Config:
+        extra = 'forbid'
+
+
+class ExperimentalVolumeHistory(BaseModel):
+    """Piecewise-linear RCM volume history spanning at most 10 s after conversion to SI."""
+    time: ExperimentalHistoryTimes
+    volume: ExperimentalHistoryVolumes
+    compression_time: ExperimentalCompressionTime | None = None
+
+    class Config:
+        extra = 'forbid'
+
+    def to_si(self) -> tuple[list[float], list[float]]:
+        """Return time and volume samples in seconds and cubic meters."""
+        return ([convert_time_to_seconds(value, self.time.units) for value in self.time.values],
+                [convert_volume_to_cubic_meters(value, self.volume.units) for value in self.volume.values])
+
+    @property
+    def end_of_compression(self) -> float:
+        """Use the explicit compression time, otherwise the first minimum-volume time."""
+        if self.compression_time is not None:
+            return convert_time_to_seconds(self.compression_time.value, self.compression_time.units)
+        times, volumes = self.to_si()
+        return times[volumes.index(min(volumes))]
+
+    @model_validator(mode='after')
+    def validate_history(self):
+        """Reject degenerate, nonphysical or numerically unrepresentable histories."""
+        times, volumes = self.to_si()
+        if len(times) != len(volumes):
+            raise ValueError('volume_history time and volume lists must have equal length')
+        if len(times) < 2:
+            raise ValueError('volume_history must contain at least two points')
+        if not all(math.isfinite(value) for value in times + volumes):
+            raise ValueError('volume_history values converted to SI must all be finite')
+        if any(value <= 0 for value in volumes):
+            raise ValueError('volume_history volumes converted to m3 must be greater than zero')
+        intervals = [later - earlier for earlier, later in zip(times, times[1:])]
+        if any(interval <= 0 for interval in intervals):
+            raise ValueError('volume_history times converted to seconds must be strictly increasing')
+        duration = times[-1] - times[0]
+        if not math.isfinite(duration):
+            raise ValueError('volume_history integration horizon in seconds must be finite')
+        if duration > MAX_RCM_HISTORY_DURATION:
+            raise ValueError('volume_history duration converted to seconds must be no greater than 10 s')
+        if (not all(math.isfinite(interval) for interval in intervals)
+                or any(not math.isfinite((later - earlier) / interval)
+                       for earlier, later, interval in zip(volumes, volumes[1:], intervals))):
+            raise ValueError('volume_history intervals and volume slopes in SI must be finite')
+        compression_time = self.end_of_compression
+        if not math.isfinite(compression_time):
+            raise ValueError('compression_time converted to seconds must be finite')
+        if not times[0] <= compression_time <= times[-1]:
+            raise ValueError('compression_time must be within the history time range')
+        return self
+
+
 class ExperimentalIDTPoint(BaseModel):
-    """One independently simulated version-1 experimental point with an IDT up to 10 s."""
+    """One version-1 point with an IDT up to 10 s and optional RCM history spanning up to 10 s.
+
+    History-driven integration ends no later than 10 s after end of compression,
+    so its total elapsed duration is bounded by 20 s. History-free points are unchanged.
+    """
     temperature: ExperimentalTemperature
     pressure: ExperimentalPressure
     composition: list[ExperimentalCompositionEntry]
@@ -266,9 +355,46 @@ class ExperimentalIDTPoint(BaseModel):
     idt: ExperimentalTime
     uncertainty: ExperimentalUncertainty | None = None
     source: ExperimentalSourceReference
+    volume_history: ExperimentalVolumeHistory | None = None
+    initial_temperature: ExperimentalTemperature | None = None
+    initial_pressure: ExperimentalPressure | None = None
 
     class Config:
         extra = 'forbid'
+
+    @property
+    def volume_history_horizon(self) -> float:
+        """Cover the history and ten measured delays, capped at 10 s after compression."""
+        times, _ = self.volume_history.to_si()
+        return max(times[-1], self.volume_history.end_of_compression
+                   + min(MAX_RCM_HISTORY_DURATION,
+                         10.0 * convert_time_to_seconds(self.idt.value, self.idt.units)))
+
+    @model_validator(mode='after')
+    def validate_volume_history_state(self):
+        """Keep existing post-compression state fields unchanged for all RCM points."""
+        if self.volume_history is None:
+            if self.initial_temperature is not None or self.initial_pressure is not None:
+                raise ValueError('initial_temperature and initial_pressure require a volume_history')
+            return self
+        if self.apparatus != ExperimentalApparatusEnum.rapid_compression_machine:
+            raise ValueError('volume_history is only allowed for a rapid compression machine')
+        if self.initial_temperature is None or self.initial_pressure is None:
+            raise ValueError('volume_history requires initial_temperature and initial_pressure')
+        initial_pressure = convert_pressure_to_bar(self.initial_pressure.value, self.initial_pressure.units) * 1e5
+        if not math.isfinite(initial_pressure) or initial_pressure <= 0:
+            raise ValueError('initial_pressure converted to Pa must be finite and greater than zero')
+        times, _ = self.volume_history.to_si()
+        compression_time = self.volume_history.end_of_compression
+        horizon = self.volume_history_horizon
+        if not math.isfinite(horizon) or not math.isfinite(horizon - times[0]):
+            raise ValueError('volume_history integration horizon in seconds must be finite')
+        idt_seconds = convert_time_to_seconds(self.idt.value, self.idt.units)
+        window = min(MAX_RCM_HISTORY_DURATION, 10.0 * idt_seconds)
+        if (horizon - compression_time < 0.999 * window
+                and times[-1] - compression_time < window):
+            raise ValueError('volume_history horizon does not preserve the post-compression window')
+        return self
 
     @model_validator(mode='after')
     def validate_idt_horizon(self):
