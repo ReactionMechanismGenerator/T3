@@ -1185,9 +1185,10 @@ The elapsed history duration (last time minus first time, after SI conversion)
 must be no greater than 10 s, independent of the time-axis origin.</p>
 <p>History-driven RCM points require separate <code>initial_temperature</code> and
 <code>initial_pressure</code> quantities, using the existing temperature/pressure units.
-This additive shape preserves the meaning of <code>temperature</code> and <code>pressure</code> in
-every existing file: for RCM they still describe the measured compressed state,
-not the state at the beginning of compression. The ideal-gas reactor instead
+Their <code>temperature</code> and <code>pressure</code> fields are optional stated labels for the
+measured compressed state; when supplied, they retain that meaning rather than
+describing the state at the beginning of compression. Both fields remain
+required for every point without <code>volume_history</code>. The ideal-gas reactor instead
 starts at the explicitly supplied initial state and the first history volume.
 A unit-area wall drives the exact forward slope of the linearly interpolated
 volume, with integration boundaries at every history point. After the history
