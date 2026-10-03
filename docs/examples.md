@@ -245,9 +245,10 @@ must be no greater than 10 s, independent of the time-axis origin.
 
 History-driven RCM points require separate `initial_temperature` and
 `initial_pressure` quantities, using the existing temperature/pressure units.
-This additive shape preserves the meaning of `temperature` and `pressure` in
-every existing file: for RCM they still describe the measured compressed state,
-not the state at the beginning of compression. The ideal-gas reactor instead
+Their `temperature` and `pressure` fields are optional stated labels for the
+measured compressed state; when supplied, they retain that meaning rather than
+describing the state at the beginning of compression. Both fields remain
+required for every point without `volume_history`. The ideal-gas reactor instead
 starts at the explicitly supplied initial state and the first history volume.
 A unit-area wall drives the exact forward slope of the linearly interpolated
 volume, with integration boundaries at every history point. After the history
