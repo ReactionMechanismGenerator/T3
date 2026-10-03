@@ -86,6 +86,26 @@ def test_rcm_volume_history_schema_accepts_units_and_initial_states():
     assert parsed.temperature.value == 1400.0
 
 
+def test_rcm_volume_history_schema_allows_absent_compressed_state_labels():
+    point = _rcm_history_point()
+    del point['temperature']
+    del point['pressure']
+
+    parsed = _parsed_rcm_point(point)
+
+    assert parsed.temperature is None
+    assert parsed.pressure is None
+
+
+@pytest.mark.parametrize('field', ['temperature', 'pressure'])
+def test_history_free_point_requires_compressed_state_labels(field):
+    point = _point()
+    del point[field]
+
+    with pytest.raises(ValidationError, match='temperature and pressure are required without a volume_history'):
+        ExperimentalIDTFile.model_validate({'version': 1, 'points': [point]})
+
+
 @pytest.mark.parametrize('mutation, message', [
     ({'time': {'values': [0.0], 'units': 's'}, 'volume': {'values': [1.0], 'units': 'm3'}}, 'at least two'),
     ({'time': {'values': [0.0, 1.0], 'units': 's'}}, 'equal length'),
@@ -260,8 +280,24 @@ def test_rcm_volume_history_reactive_ignition_is_relative_to_compression():
     result = adapter._compare_versioned_experiment({'version': 1, 'points': [_rcm_history_point()]})
     assert result['n_matched'] == 1
     assert result['points'][0]['idt_sim'] == pytest.approx(expected, rel=1e-9)
+    assert result['points'][0]['temperature'] == {'value': 1400.0, 'units': 'K'}
+    assert result['points'][0]['pressure'] == {'value': 5.0, 'units': 'bar'}
     assert expected > 0
     assert np.max(history.T) > 2000
+
+
+def test_rcm_volume_history_simulates_without_compressed_state_labels():
+    adapter = _adapter()
+    point = _rcm_history_point()
+    del point['temperature']
+    del point['pressure']
+
+    result = adapter._compare_versioned_experiment({'version': 1, 'points': [point]})
+
+    assert result['n_matched'] == 1
+    assert result['points'][0]['idt_sim'] > 0
+    assert result['points'][0]['temperature'] is None
+    assert result['points'][0]['pressure'] is None
 
 
 def test_rcm_volume_history_ignition_does_not_depend_on_time_origin():

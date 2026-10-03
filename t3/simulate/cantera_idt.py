@@ -918,8 +918,8 @@ class CanteraIDT(SimulateAdapter):
             criterion = raw_point['ignition_definition']
             experimental_idt = convert_time_to_seconds(point.idt.value, point.idt.units)
             comparison = {
-                'temperature': raw_point['temperature'],
-                'pressure': raw_point['pressure'],
+                'temperature': raw_point.get('temperature'),
+                'pressure': raw_point.get('pressure'),
                 'composition': raw_point['composition'],
                 'apparatus': raw_point['apparatus'],
                 'idt_exp': experimental_idt,

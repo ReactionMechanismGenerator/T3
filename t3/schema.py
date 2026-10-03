@@ -347,8 +347,8 @@ class ExperimentalIDTPoint(BaseModel):
     History-driven integration ends no later than 10 s after end of compression,
     so its total elapsed duration is bounded by 20 s. History-free points are unchanged.
     """
-    temperature: ExperimentalTemperature
-    pressure: ExperimentalPressure
+    temperature: ExperimentalTemperature | None = None
+    pressure: ExperimentalPressure | None = None
     composition: list[ExperimentalCompositionEntry]
     apparatus: ExperimentalApparatusEnum
     ignition_definition: ExperimentalIgnitionDefinition
@@ -374,6 +374,8 @@ class ExperimentalIDTPoint(BaseModel):
     def validate_volume_history_state(self):
         """Keep existing post-compression state fields unchanged for all RCM points."""
         if self.volume_history is None:
+            if self.temperature is None or self.pressure is None:
+                raise ValueError('temperature and pressure are required without a volume_history')
             if self.initial_temperature is not None or self.initial_pressure is not None:
                 raise ValueError('initial_temperature and initial_pressure require a volume_history')
             return self
