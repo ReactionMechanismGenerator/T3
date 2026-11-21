@@ -4,10 +4,14 @@
 t3 tests test_main module
 """
 
+import concurrent.futures as cf
 import datetime
+import multiprocessing
 import os
 import shutil
 import re
+import signal
+import time
 from unittest import mock
 
 import numpy as np
@@ -29,6 +33,9 @@ from tests.test_pdep._wiring_helpers import (NETWORK_NAME,
                                              network_path,
                                              )
 from t3.main import (T3,
+                     RMGRunStatus,
+                     RMGWalltimeStop,
+                     T3WalltimeExceeded,
                      auto_complete_rmg_libraries,
                      legalize_species_label,
                      get_reaction_by_index,
@@ -1774,3 +1781,325 @@ def test_auto_complete_rmg_libraries(copy_test_data):
     assert database_3['kinetics_libraries'] == ['primaryNitrogenLibrary', 'HydrazinePDep', 'Ethylamine']
     assert database_2['seed_mechanisms'] == ['primaryH2O2']
     assert 'chemistry_sets' not in database_3
+
+
+RMG_LOG_HEAD = """RMG execution initiated at Sat Nov  7 08:02:19 2026
+
+Loading thermodynamics library from primaryThermoLibrary.py...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:00:00:23
+For reaction CO2(11) + C4H6CHO1-13(529) <=> CC=CC(C=O)O[C]=O(28856), Ea raised from 154.1 to 158.2 kJ/mol.
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:01:05:10
+"""
+
+RMG_LOG_WALLTIME_BLOCK = """MODEL GENERATION TERMINATED
+
+There is not enough time to complete the next iteration before the wall time is reached.
+The output model may be incomplete.
+
+The current model core has 616 species and 27494 reactions
+The current model edge has 58151 species and 152674 reactions
+"""
+
+RMG_LOG_MAX_ITERATIONS_BLOCK = """MODEL GENERATION TERMINATED
+
+The maximum number of iterations of 5 has been reached
+The output model may be incomplete.
+
+The current model core has 616 species and 27494 reactions
+The current model edge has 58151 species and 152674 reactions
+"""
+
+RMG_LOG_COMPLETED_BLOCK = """
+MODEL GENERATION COMPLETED
+
+The final model core has 616 species and 27494 reactions
+The final model edge has 58151 species and 152674 reactions
+"""
+
+RMG_LOG_TERMINATED_LINE = """
+RMG execution terminated at Sat Nov  7 09:10:42 2026
+"""
+
+
+def _t3_with_rmg_log(project_directory: str, iteration: int, content: str | None) -> T3:
+    """
+    Build a minimal T3 project whose ``iteration_<iteration>/RMG/RMG.log`` holds ``content``.
+
+    Args:
+        project_directory (str): The per-test project directory.
+        iteration (int): The iteration whose RMG log is written.
+        content (Optional[str]): The RMG log text; ``None`` writes no log.
+
+    Returns:
+        T3: The T3 object, with paths set for ``iteration``.
+    """
+    t3 = run_minimal(project_directory=project_directory, iteration=iteration, set_paths=True)
+    if content is not None:
+        os.makedirs(os.path.dirname(t3.paths['RMG log']), exist_ok=True)
+        with open(t3.paths['RMG log'], 'w') as f:
+            f.write(content)
+    return t3
+
+
+def test_rmg_walltime_stop_is_terminal_and_not_restarted(minimal_project_directory):
+    """A run RMG stopped at its wall time, with no COMPLETED banner, is terminal: restart does not rerun RMG."""
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, RMG_LOG_HEAD + RMG_LOG_WALLTIME_BLOCK)
+    status = t3.check_rmg_status()
+    assert status.began is True
+    assert status.terminated is True
+    assert status.walltime_stop == RMGWalltimeStop(datetime.datetime(2026, 11, 7, 9, 7, 29), 'execution-time')
+    i_max, run_rmg, restart_rmg = t3.restart()
+    assert (i_max, run_rmg, restart_rmg) == (1, False, False)
+    assert t3.rmg_walltime_stops == {1: status.walltime_stop}
+
+
+def test_rmg_log_without_walltime_stop_is_still_restarted(minimal_project_directory):
+    """The same log without the wall-time block (a crash or a foreign kill) is restarted, as before."""
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, RMG_LOG_HEAD)
+    assert t3.check_rmg_status() == RMGRunStatus(True, False, None)
+    assert t3.restart() == (1, False, True)
+    assert t3.rmg_walltime_stops == {}
+
+
+def test_rmg_max_iterations_stop_is_still_restarted(minimal_project_directory):
+    """A max-iterations TERMINATED block is not a wall-time stop and keeps today's restart behaviour."""
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, RMG_LOG_HEAD + RMG_LOG_MAX_ITERATIONS_BLOCK)
+    assert t3.check_rmg_status() == RMGRunStatus(True, False, None)
+    assert t3.restart() == (1, False, True)
+
+
+def test_rmg_walltime_stop_in_an_earlier_run_of_an_appended_log_does_not_count(minimal_project_directory):
+    """Only the latest run in an appended RMG.log is judged; an earlier run's wall-time stop is ignored."""
+    content = (RMG_LOG_HEAD + RMG_LOG_WALLTIME_BLOCK + RMG_LOG_TERMINATED_LINE
+               + RMG_LOG_HEAD.replace('08:02:19', '10:00:00'))
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, content)
+    assert t3.check_rmg_status() == RMGRunStatus(True, False, None)
+    assert t3.restart() == (1, False, True)
+
+
+def test_rmg_walltime_stop_time_sources(minimal_project_directory):
+    """The stop time comes from RMG's terminated line, else the start plus the last save time, else the log mtime."""
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1,
+                          RMG_LOG_HEAD + RMG_LOG_WALLTIME_BLOCK + RMG_LOG_TERMINATED_LINE)
+    assert t3.check_rmg_status().walltime_stop == RMGWalltimeStop(datetime.datetime(2026, 11, 7, 9, 10, 42),
+                                                                  'terminated-line')
+
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, RMG_LOG_HEAD + RMG_LOG_WALLTIME_BLOCK)
+    assert t3.check_rmg_status().walltime_stop == RMGWalltimeStop(datetime.datetime(2026, 11, 7, 9, 7, 29),
+                                                                  'execution-time')
+
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, 'Loading thermodynamics library...\n' + RMG_LOG_WALLTIME_BLOCK)
+    mtime = datetime.datetime(2026, 11, 15, 0, 5, 6)
+    os.utime(t3.paths['RMG log'], (mtime.timestamp(), mtime.timestamp()))
+    assert t3.check_rmg_status().walltime_stop == RMGWalltimeStop(mtime, 'log-mtime')
+
+
+def test_rmg_completed_run_is_distinguishable_from_a_walltime_stop(minimal_project_directory, tmp_path):
+    """A normally completed run carries no stop time; a wall-time stop carries its stop time."""
+    completed = _t3_with_rmg_log(str(tmp_path / 'completed'), 1,
+                                 RMG_LOG_HEAD + RMG_LOG_COMPLETED_BLOCK + RMG_LOG_TERMINATED_LINE)
+    stopped = _t3_with_rmg_log(str(tmp_path / 'stopped'), 1,
+                               RMG_LOG_HEAD + RMG_LOG_WALLTIME_BLOCK + RMG_LOG_TERMINATED_LINE)
+    assert completed.check_rmg_status() == RMGRunStatus(True, True, None)
+    assert stopped.check_rmg_status() == RMGRunStatus(
+        True, True, RMGWalltimeStop(datetime.datetime(2026, 11, 7, 9, 10, 42), 'terminated-line'))
+    completed.restart()
+    stopped.restart()
+    assert completed.rmg_walltime_stops == {}
+    assert stopped.rmg_walltime_stops[1].stopped_at == datetime.datetime(2026, 11, 7, 9, 10, 42)
+
+
+def test_run_rmg_records_a_walltime_stop_and_keeps_exception_counting(minimal_project_directory):
+    """After a live RMG run that stopped at its wall time, the stop time is recorded; exception counting is unchanged."""
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, None)
+
+    def fake_runner(**kwargs):
+        os.makedirs(os.path.dirname(t3.paths['RMG log']), exist_ok=True)
+        with open(t3.paths['RMG log'], 'w') as f:
+            f.write(RMG_LOG_HEAD + RMG_LOG_WALLTIME_BLOCK)
+        return True
+
+    with mock.patch('t3.main.rmg_runner', side_effect=fake_runner):
+        t3.run_rmg()
+    assert t3.rmg_exceptions_counter == 1
+    assert t3.rmg_walltime_stops == {1: RMGWalltimeStop(datetime.datetime(2026, 11, 7, 9, 7, 29), 'execution-time')}
+
+
+def test_run_rmg_normal_completion_records_no_walltime_stop(minimal_project_directory):
+    """A live RMG run that completed normally leaves no stop time."""
+    t3 = _t3_with_rmg_log(minimal_project_directory, 1, None)
+
+    def fake_runner(**kwargs):
+        os.makedirs(os.path.dirname(t3.paths['RMG log']), exist_ok=True)
+        with open(t3.paths['RMG log'], 'w') as f:
+            f.write(RMG_LOG_HEAD + RMG_LOG_COMPLETED_BLOCK)
+        return False
+
+    with mock.patch('t3.main.rmg_runner', side_effect=fake_runner):
+        t3.run_rmg()
+    assert t3.rmg_exceptions_counter == 0
+    assert t3.rmg_walltime_stops == {}
+
+
+class _NeverReturningAdapter:
+    """A simulate adapter stub whose ``simulate()`` never returns."""
+
+    def simulate(self):
+        """Loop forever."""
+        while True:
+            time.sleep(0.05)
+
+
+def test_max_t3_walltime_bounds_a_step_that_never_returns(minimal_project_directory):
+    """An SA step that never returns is cut by max_T3_walltime while it runs, and no further RMG run follows."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = '00:00:00:01'
+    t3.t3['options']['max_T3_iterations'] = 2
+    t3.qm['species'], t3.qm['reactions'] = [], []
+    t3.sa_observables = ['H2']
+    t3.restart = lambda: (0, True, False)
+    rmg_iterations = []
+    t3.run_rmg = lambda *a, **k: rmg_iterations.append(t3.iteration)
+    t3.determine_species_and_reactions_to_calculate = mock.Mock(return_value=True)
+    t3._generate_flux_diagrams = lambda: None
+    t3.t0 = datetime.datetime.now()
+    tic = time.monotonic()
+    with mock.patch('t3.main.simulate_factory', return_value=_NeverReturningAdapter()), \
+            mock.patch.object(t3.logger, 'log_max_time_reached') as log_max_time_reached:
+        t3.execute()
+    assert time.monotonic() - tic < 10
+    log_max_time_reached.assert_called_once()
+    assert rmg_iterations == [1]
+    t3.determine_species_and_reactions_to_calculate.assert_not_called()
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+def _sleep_task(seconds: float) -> float:
+    """Sleep in a pool worker and return the time slept."""
+    time.sleep(seconds)
+    return seconds
+
+
+def test_max_t3_walltime_bound_stops_a_process_pool(minimal_project_directory):
+    """The bound cuts a step blocked on a process pool and leaves no pool worker alive."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = '00:00:00:01'
+    t3.t0 = datetime.datetime.now()
+    tic = time.monotonic()
+    with pytest.raises(T3WalltimeExceeded):
+        with t3._bounded_by_max_t3_walltime():
+            with cf.ProcessPoolExecutor(max_workers=2, mp_context=multiprocessing.get_context('fork')) as pool:
+                list(pool.map(_sleep_task, [60, 60, 60, 60]))
+    assert time.monotonic() - tic < 10
+    assert multiprocessing.active_children() == []
+
+
+def test_max_t3_walltime_bound_arms_nothing_without_a_budget_and_always_restores(minimal_project_directory):
+    """Without a budget nothing is armed; with one, the timer and the previous handler are restored on every exit."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    t3.t3['options']['max_T3_walltime'] = None
+    with t3._bounded_by_max_t3_walltime():
+        assert signal.getsignal(signal.SIGALRM) is previous_handler
+        assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+    t3.t3['options']['max_T3_walltime'] = '01:00:00:00'
+    t3.t0 = datetime.datetime.now()
+    with t3._bounded_by_max_t3_walltime():
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 0
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+    assert signal.getsignal(signal.SIGALRM) is previous_handler
+
+    with pytest.raises(RuntimeError):
+        with t3._bounded_by_max_t3_walltime():
+            raise RuntimeError('step failed')
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+    assert signal.getsignal(signal.SIGALRM) is previous_handler
+
+
+def test_max_t3_walltime_already_spent_fires_at_once(minimal_project_directory):
+    """A budget already spent at step entry fires immediately, and check_overtime agrees with the bound."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = '00:00:00:01'
+    t3.t0 = datetime.datetime.now() - datetime.timedelta(hours=1)
+    assert t3.check_overtime() is True
+    with pytest.raises(T3WalltimeExceeded):
+        with t3._bounded_by_max_t3_walltime():
+            time.sleep(5)
+
+
+def test_resumed_arc_run_is_bounded_by_max_t3_walltime(minimal_project_directory):
+    """An ARC run resumed from a restart file is bounded, not only the ARC runs inside the loop."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = '00:00:00:01'
+    t3.t0 = datetime.datetime.now()
+    t3.set_paths(iteration=1)
+    t3.run_arc = lambda *a, **k: time.sleep(60)
+    t3.process_arc_run = lambda *a, **k: None
+    tic = time.monotonic()
+    with pytest.raises(T3WalltimeExceeded):
+        t3.handle_arc_restart(i_max=1)
+    assert time.monotonic() - tic < 10
+
+
+def test_max_t3_walltime_bound_leaves_the_callers_children_alone(minimal_project_directory):
+    """The bound terminates the children the step started, never ones that were alive on entry."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = '00:00:00:01'
+    t3.t0 = datetime.datetime.now()
+    context = multiprocessing.get_context('fork')
+    callers_child = context.Process(target=_sleep_task, args=(60,), daemon=True)
+    callers_child.start()
+    try:
+        with pytest.raises(T3WalltimeExceeded):
+            with t3._bounded_by_max_t3_walltime():
+                with cf.ProcessPoolExecutor(max_workers=2, mp_context=context) as pool:
+                    list(pool.map(_sleep_task, [60, 60]))
+        assert callers_child.is_alive()
+        assert multiprocessing.active_children() == [callers_child]
+    finally:
+        callers_child.terminate()
+        callers_child.join(timeout=10)
+
+
+def test_max_t3_walltime_bound_restores_the_callers_itimer(minimal_project_directory):
+    """A caller's own ITIMER_REAL survives a bounded step, reduced by the time the step took."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = '01:00:00:00'
+    t3.t0 = datetime.datetime.now()
+    callers_handler = signal.getsignal(signal.SIGALRM)
+    signal.setitimer(signal.ITIMER_REAL, 30.0)
+    try:
+        with t3._bounded_by_max_t3_walltime():
+            assert 0 < signal.getitimer(signal.ITIMER_REAL)[0] <= 24 * 60 * 60
+            time.sleep(0.2)
+        restored = signal.getitimer(signal.ITIMER_REAL)[0]
+        assert 29.0 < restored < 30.0
+        assert signal.getsignal(signal.SIGALRM) is callers_handler
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+
+
+def test_a_cut_arc_run_logs_its_project_directory(minimal_project_directory):
+    """A cut ARC run names its project directory and says the submitted jobs may still be running."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.set_paths(iteration=1)
+    os.makedirs(os.path.dirname(t3.paths['ARC input']), exist_ok=True)
+    with open(t3.paths['ARC input'], 'w') as f:
+        f.write('project: test\n')
+    t3.dump_species_and_reactions = lambda *a, **k: None
+    arc = mock.Mock()
+    arc.execute.side_effect = T3WalltimeExceeded()
+    with mock.patch('t3.main.ARC', return_value=arc), \
+            mock.patch.object(t3.logger, 'error') as log_error:
+        with pytest.raises(T3WalltimeExceeded):
+            t3.run_arc(arc_kwargs={'project': 'test'})
+    log_error.assert_called_once()
+    message = log_error.call_args[0][0]
+    assert t3.paths['ARC'] in message
+    assert 'may still be running' in message
+    assert 'did not cancel' in message
+
