@@ -37,6 +37,8 @@ from t3.pdep.budget import (
 )
 from t3.pdep.cache import (
     SA_CACHE_CONTRACT_VERSION,
+    RmgPyVersionMismatchError,
+    read_arkane_log_rmg_py_version,
     sa_cache_metadata_path,
     validate_sa_cache,
     write_sa_cache_metadata,

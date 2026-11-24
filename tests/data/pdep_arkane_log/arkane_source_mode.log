@@ -1,0 +1,23 @@
+Arkane execution initiated at Thu Jan  1 00:00:00 2026
+
+################################################################
+#                                                              #
+# Automated Reaction Kinetics and Network Exploration (Arkane) #
+#                                                              #
+#   Version: 3.3.0                                             #
+#   Authors: RMG Developers (rmg_dev@mit.edu)                  #
+#   P.I.s:   William H. Green (whgreen@mit.edu)                #
+#            Richard H. West (r.west@neu.edu)                  #
+#   Website: https://reactionmechanismgenerator.github.io/      #
+#                                                              #
+################################################################
+
+The current git HEAD for RMG-Py is:
+	1111111111111111111111111111111111111111
+	Thu Jan 1 00:00:00 2026 +0000
+
+The current git HEAD for RMG-database is:
+	2222222222222222222222222222222222222222
+	Thu Jan 1 00:00:00 2026 +0000
+
+Databases not found. Making databases

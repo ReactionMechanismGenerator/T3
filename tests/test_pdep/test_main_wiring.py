@@ -33,7 +33,13 @@ from t3.pdep.budget import (BUDGET_OUTCOME_ADMITTED,
                             PDepBudgetDecision,
                             PDepBudgetSkip,
                             )
-from t3.pdep.cache import hash_file, sa_cache_metadata_path, write_sa_cache_metadata
+from t3.common import TEST_DATA_BASE_PATH
+from t3.pdep.cache import (RmgPyVersionMismatchError,
+                          hash_file,
+                          sa_cache_metadata_path,
+                          write_sa_cache_metadata,
+                          )
+from t3.pdep.reason_codes import REASON_INTERNAL_ERROR
 from t3.pdep.capture import CAPTURE_MANIFEST_FILE_NAME, verify_capture
 from t3.pdep.discovery import ARTIFACT_STATUS_USABLE
 from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
@@ -353,6 +359,104 @@ class TestDetermineSpeciesFromPdepNetworkWiring(object):
         metadata = read_yaml_file(sa_cache_metadata_path(sa_path))
         assert metadata['rmg_py_commit'] == rmg_py_commit, \
             'The sidecar must record the RMG-Py commit that actually ran Arkane, not null.'
+
+    @staticmethod
+    def _fake_arkane_writing_log(sa_dict, log_text):
+        """A run_arkane_job stand-in that writes the SA YAML and the given arkane.log."""
+        def _fake_run_arkane_job(input_file, output_directory, plot=True, logger=None, **kwargs):
+            sensitivity_dir = os.path.join(output_directory, 'sensitivity')
+            os.makedirs(sensitivity_dir, exist_ok=True)
+            save_yaml_file(os.path.join(sensitivity_dir, 'sa_coefficients.yml'), sa_dict)
+            with open(os.path.join(output_directory, 'arkane.log'), 'w') as f:
+                f.write(log_text)
+            return True
+        return _fake_run_arkane_job
+
+    @staticmethod
+    def _package_mode_log_text():
+        with open(os.path.join(TEST_DATA_BASE_PATH, 'pdep_arkane_log', 'arkane_package_mode.log')) as f:
+            return f.read()
+
+    def test_a_package_mode_run_records_the_rmg_py_version_cross_checked_against_rmg_env(self, tmp_path,
+                                                                                          monkeypatch):
+        """Package mode prints no RMG-Py commit, so the banner version is what names the RMG-Py
+        that produced the entry; rmg_env agreeing with it is recorded too."""
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            self._fake_arkane_writing_log(_build_sa_dict(t3), self._package_mode_log_text()))
+        monkeypatch.setattr(t3_main, 'query_rmg_env_rmg_py_version', lambda: ('4.0.0', None))
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        metadata = read_yaml_file(sa_cache_metadata_path(_candidate_sa_path(t3, method='CSE')))
+        assert metadata['rmg_py_version'] == '4.0.0'
+        assert metadata['rmg_env_rmg_py_version'] == '4.0.0'
+        assert metadata['rmg_py_commit'] is None
+
+    def test_a_version_mismatch_between_the_log_and_rmg_env_stops_the_run(self, tmp_path, monkeypatch):
+        """A log whose banner disagrees with rmg_env is refused, not recorded: the run stops, the
+        assessment names both versions, and no sidecar vouches for the SA output."""
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            self._fake_arkane_writing_log(_build_sa_dict(t3), self._package_mode_log_text()))
+        monkeypatch.setattr(t3_main, 'query_rmg_env_rmg_py_version', lambda: ('3.3.0', None))
+
+        with pytest.raises(RmgPyVersionMismatchError, match='RMG-Py 4.0.0.*RMG-Py 3.3.0'):
+            t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        assessment = t3.pdep_network_assessments[-1]
+        assert assessment.reason_code == REASON_INTERNAL_ERROR
+        assert any('4.0.0' in w and '3.3.0' in w for w in assessment.warnings)
+        assert not os.path.isfile(sa_cache_metadata_path(_candidate_sa_path(t3, method='CSE')))
+
+    def test_an_unaskable_rmg_env_records_the_banner_and_warns_once(self, tmp_path, monkeypatch):
+        """Could not ask is unknown, not mismatch: the banner is recorded, nothing is refused, the
+        reason is logged once, and rmg_env is not asked again in the same run."""
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            self._fake_arkane_writing_log(_build_sa_dict(t3), self._package_mode_log_text()))
+        calls = list()
+
+        def _unaskable():
+            calls.append(1)
+            return None, 'the rmg_env launcher could not be run (RuntimeError: stub)'
+
+        monkeypatch.setattr(t3_main, 'query_rmg_env_rmg_py_version', _unaskable)
+        warnings_logged = list()
+        original_warning = t3.logger.warning
+        monkeypatch.setattr(t3.logger, 'warning',
+                            lambda message, *a, **k: (warnings_logged.append(message),
+                                                      original_warning(message, *a, **k)))
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+        assert t3._rmg_env_rmg_py_version() is None
+
+        metadata = read_yaml_file(sa_cache_metadata_path(_candidate_sa_path(t3, method='CSE')))
+        assert metadata['rmg_py_version'] == '4.0.0'
+        assert 'rmg_env_rmg_py_version' not in metadata
+        assert len(calls) == 1
+        skipped = [m for m in warnings_logged if 'Could not ask rmg_env' in m]
+        assert len(skipped) == 1
+
+    def test_a_log_without_a_banner_never_asks_rmg_env(self, tmp_path, monkeypatch):
+        """With nothing to compare against, rmg_env is not queried at all."""
+        t3 = _build_t3(tmp_path)
+        pdep_rxns_to_explore = _build_pdep_rxns_to_explore(t3)
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            self._fake_arkane_writing_log(_build_sa_dict(t3), 'Arkane execution initiated\n'))
+
+        def _must_not_be_called():
+            raise AssertionError('rmg_env was queried although the log has no banner')
+
+        monkeypatch.setattr(t3_main, 'query_rmg_env_rmg_py_version', _must_not_be_called)
+
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=pdep_rxns_to_explore)
+
+        metadata = read_yaml_file(sa_cache_metadata_path(_candidate_sa_path(t3, method='CSE')))
+        assert 'rmg_py_version' not in metadata
 
     def test_qualified_and_network_id_agree_with_direct_selector_call(self, tmp_path, monkeypatch):
         """The wiring's decision must agree with select_from_sa_dict() called directly."""
