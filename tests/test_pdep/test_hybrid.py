@@ -51,6 +51,7 @@ TS_DUP_PATH_TEXT_ARTIFACT = os.path.join(ARC_TS_DIR, 'TS_dup_path_text.py')
 # for gfn2/torchani model chemistries), so this fixture must carry values, not omit them.
 DEFAULT_ENERGY_SETTINGS = QMEnergySettings(
     model_chemistry='wb97xd/def2tzvp',
+    frequency_scale_factor=0.988,
     atom_energies={
         'Br': -2574.174533595486,
         'C': -37.84706210301937,
@@ -285,7 +286,8 @@ def test_accepts_and_renders_bare_level_of_theory_model_chemistry(tmp_path, mode
     is accepted (it legitimately contains quote characters that _validate_no_injection_chars alone
     would reject) and rendered bare (unquoted), not as a quoted string containing that syntax."""
     dest_path = str(tmp_path / 'input.py')
-    energy_settings = QMEnergySettings(model_chemistry=model_chemistry_expr, atom_energies={'C': -37.79, 'H': -0.5})
+    energy_settings = QMEnergySettings(model_chemistry=model_chemistry_expr, frequency_scale_factor=0.988,
+                                       atom_energies={'C': -37.79, 'H': -0.5})
     write_hybrid_network_input_file(
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
@@ -412,11 +414,28 @@ def test_qm_reaction_drops_kinetics_and_adds_tunneling(tmp_path):
     assert 'tunneling' not in reaction2_block
 
 
+def test_a_missing_frequency_scale_factor_is_refused_not_omitted(tmp_path):
+    """A level with no frequency scale factor raises, naming the level, and writes nothing."""
+    dest_path = str(tmp_path / 'input.py')
+    energy_settings = QMEnergySettings(model_chemistry='wb97xd/def2tzvp', frequency_scale_factor=None,
+                                       atom_energies={'C': -37.79, 'H': -0.5})
+    with pytest.raises(ValueError, match='frequency_scale_factor is None for the model chemistry wb97xd/def2tzvp'):
+        write_hybrid_network_input_file(
+            source_path=NETWORK_FIXTURE,
+            dest_path=dest_path,
+            method='CSE',
+            qm_transition_states={'TS1': ts_conformer()},
+            energy_settings=energy_settings,
+        )
+    assert not os.path.exists(dest_path)
+
+
 def test_qm_reaction_omits_tunneling_when_not_configured(tmp_path):
     """tunneling=None on QMEnergySettings means no tunneling = ... is written."""
     dest_path = str(tmp_path / 'input.py')
     energy_settings = QMEnergySettings(
-        model_chemistry='wb97xd/def2tzvp', tunneling=None, atom_energies={'C': -37.79, 'H': -0.5})
+        model_chemistry='wb97xd/def2tzvp', tunneling=None, frequency_scale_factor=0.988,
+        atom_energies={'C': -37.79, 'H': -0.5})
     write_hybrid_network_input_file(
         source_path=NETWORK_FIXTURE,
         dest_path=dest_path,
@@ -1464,6 +1483,7 @@ CHO2_SOURCE = os.path.join(CHO2_DIR, 'source_network0_reduced.py')
 CHO2_CONFORMERS = os.path.join(CHO2_DIR, 'conformers.json')
 CHO2_ENERGY_SETTINGS = QMEnergySettings(
     model_chemistry="LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')",
+    frequency_scale_factor=0.988,
     atom_energies={
         'Br': -2574.174533595486, 'C': -37.84706210301937, 'Cl': -460.1467876783656,
         'F': -99.73955550924293, 'H': -0.5006557872395249, 'N': -54.584995947182875,

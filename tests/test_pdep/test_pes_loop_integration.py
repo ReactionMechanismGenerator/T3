@@ -248,7 +248,31 @@ def test_real_run_pes_loop_wires_the_real_arc_qm_runner_across_rounds(tmp_path, 
 # file so "the right barrier sits on the right channel" is checked on the bytes, not inferred.
 # ---------------------------------------------------------------------------------------------
 
-_MODEL_CHEMISTRY = "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')"
+_ARC_KINETICS_INPUT_PATH = os.path.join(
+    os.path.dirname(__file__), '..', 'data', 'pdep_energy_settings', 'xl1001_project', 'calcs',
+    'statmech', 'kinetics', 'input.py')
+# The level the frozen ARC output above was computed at, spelled with its year.
+_CAPTURED_LEVEL = 'wb97xd2023/def2tzvp'
+
+
+def _frozen_model_chemistry(path: str) -> str:
+    """
+    Read the ``modelChemistry`` expression text a real ARC statmech input file carries.
+
+    Args:
+        path (str): The ARC ``calcs/statmech/<kind>/input.py`` file.
+
+    Returns:
+        str: The text right of ``modelChemistry = ``.
+    """
+    with open(path) as f:
+        for line in f:
+            if line.startswith('modelChemistry = '):
+                return line[len('modelChemistry = '):].strip()
+    raise ValueError(f'{path} carries no modelChemistry line.')
+
+
+_MODEL_CHEMISTRY = _frozen_model_chemistry(_ARC_KINETICS_INPUT_PATH)
 
 # The fixture's three channels, by species labels (direction-insensitively sorted, as
 # _hybrid_channels below renders them).
@@ -611,6 +635,7 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
              'bath_gas': {'Ar': 1.0}, 'method': 'MSC'},
         termination={'max_rounds': 2},
         reuse={'from_t3_projects': [prior_project_dir]},
+        qm={'sp_level': _CAPTURED_LEVEL},
     )
     result = run_pes_loop(config, project_directory=project_directory, qm_runner=arc_qm_runner)
 
@@ -633,10 +658,10 @@ def test_real_loop_round_0_full_adoption_completes_with_real_vendoring(tmp_path,
         == _marker_e0(_channel_marker(('O=C1OO1(9)',), ('[O]C([O])=O(2)',)))
     assert _hybrid_ts_e0(round0_hybrid_path, 'TS3') \
         == _marker_e0(_channel_marker(('O=C1OO1(9)',), ('[O]O[C]=O(3)',)))
-    # The hybrid's energy settings came from the adopted artifacts' own prior manifest -- the
-    # _adopted_energy_settings path a capture-less round is forced through.
+    # The hybrid is written under the run's own level, which names the capture's year, so it
+    # carries the capture's frozen model chemistry.
     with open(round0_hybrid_path) as f:
-        assert 'wb97xd2023' in f.read()
+        assert f'modelChemistry = {_MODEL_CHEMISTRY}' in f.read()
 
 
 def test_pes_cli_main_drives_the_real_loop_end_to_end(tmp_path, monkeypatch):
@@ -778,7 +803,8 @@ def test_pes_cli_resolves_a_relative_reuse_path_against_the_input_file(tmp_path,
                            'bath_gas': {'Ar': 1.0},
                            'method': 'MSC'},
                    'termination': {'max_rounds': 2},
-                   'reuse': {'from_t3_projects': ['../prior_project']}}, f)
+                   'reuse': {'from_t3_projects': ['../prior_project']},
+                   'qm': {'sp_level': _CAPTURED_LEVEL}}, f)
 
     _fixture_explorer(monkeypatch, project_directory, 'network0_full')
     _ArtifactWritingFakeARC.converge_plan = ()

@@ -34,6 +34,7 @@ _CHO2_CONFORMERS_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'data', 'pdep_hybrid', 'cho2_round0', 'conformers.json')
 _CHO2_ENERGY_SETTINGS = QMEnergySettings(
     model_chemistry="LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')",
+    frequency_scale_factor=0.988,
     atom_energies={
         'Br': -2574.174533595486, 'C': -37.84706210301937, 'Cl': -460.1467876783656,
         'F': -99.73955550924293, 'H': -0.5006557872395249, 'N': -54.584995947182875,

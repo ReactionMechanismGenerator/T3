@@ -321,8 +321,10 @@ class QMEnergySettings:
                                Required and must not be blank: this is what lets Arkane apply
                                atom energy corrections so a QM'd TS's E0 lands on the same
                                enthalpy-of-formation scale as the RMG wells around it.
-        frequency_scale_factor (float, optional): Arkane's ``frequencyScaleFactor``. Omitted from
-                                                  the header entirely when ``None``.
+        frequency_scale_factor (float, optional): Arkane's ``frequencyScaleFactor``.
+                                                  ``write_hybrid_network_input_file`` raises
+                                                  ``ValueError`` when it is ``None`` rather than
+                                                  let Arkane fall back to unscaled frequencies.
         use_hindered_rotors (bool, optional): Arkane's ``useHinderedRotors``. Default: ``True``.
         use_bond_corrections (bool, optional): Arkane's ``useBondCorrections``. Default: ``False``.
                                                Must not be ``True``: Arkane's input DSL has no
@@ -638,7 +640,8 @@ def write_hybrid_network_input_file(source_path: str,
         ValueError: If ``energy_settings.model_chemistry`` is missing/blank or fails validation; if
                    ``energy_settings.use_atom_corrections`` is ``False``; if
                    ``energy_settings.use_atom_corrections`` is ``True`` and ``atom_energies`` is
-                   ``None``; if ``energy_settings.use_bond_corrections`` is ``True``; if
+                   ``None``; if ``energy_settings.frequency_scale_factor`` is ``None``; if
+                   ``energy_settings.use_bond_corrections`` is ``True``; if
                    ``qm_transition_states`` is empty; if a key of ``qm_transition_states`` is not a
                    transition state label, or a key of ``qm_wells`` is not an isomer (species)
                    label, in the source network; if any conformer-data dict is malformed; or if the
@@ -1239,13 +1242,20 @@ def _build_energy_header(energy_settings: QMEnergySettings) -> str:
 
     Returns:
         str: The header text, terminated with a blank line.
+
+    Raises:
+        ValueError: If ``energy_settings.frequency_scale_factor`` is ``None``.
     """
+    if energy_settings.frequency_scale_factor is None:
+        raise ValueError(f"QMEnergySettings.frequency_scale_factor is None for the model chemistry "
+                         f"{energy_settings.model_chemistry}: no frequency scale factor is known for this level, "
+                         f"and omitting frequencyScaleFactor would make Arkane use unscaled frequencies. Provide "
+                         f"the scale factor this level's frequencies were computed for.")
     if _model_chemistry_ast_call(energy_settings.model_chemistry) is not None:
         lines = [f'modelChemistry = {energy_settings.model_chemistry}']
     else:
         lines = [f'modelChemistry = "{energy_settings.model_chemistry}"']
-    if energy_settings.frequency_scale_factor is not None:
-        lines.append(f'frequencyScaleFactor = {energy_settings.frequency_scale_factor}')
+    lines.append(f'frequencyScaleFactor = {energy_settings.frequency_scale_factor}')
     lines.append(f'useHinderedRotors = {energy_settings.use_hindered_rotors}')
     lines.append(f'useBondCorrections = {energy_settings.use_bond_corrections}')
     if energy_settings.use_bond_corrections:

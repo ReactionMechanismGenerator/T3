@@ -118,6 +118,7 @@ def _write_energy_settings_fixture(arc_dir: str, statmech_subdir: str = 'kinetic
         with open(input_py_path, 'w') as f:
             f.write(
                 "modelChemistry = 'CBS-QB3'\n\n"
+                "frequencyScaleFactor = 0.99\n\n"
                 "useHinderedRotors = True\n\n"
                 "useAtomCorrections = True\n\n"
                 "atomEnergies = {'C': -37.844411, 'H': -0.499818, 'N': -54.581501, 'O': -75.062219}\n\n"

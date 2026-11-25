@@ -31,10 +31,13 @@ This module never imports ``rmgpy`` or ``arkane``. It imports ``arc`` directly, 
 ``t3.main`` does -- ARC is an allowed dependency; only RMG-Py and Arkane are not.
 """
 
+import copy
 import logging
 import os
+import re
 
 from arc.common import save_yaml_file
+from arc.exceptions import InputError
 from arc.level import Level, assign_frequency_scale_factor
 from arc.main import ARC
 from arc.statmech.arkane import get_arkane_model_chemistry
@@ -54,6 +57,13 @@ from t3.pdep.pes_rounds import (RoundPaths, adoption_channel_keys_by_ts_label,
 from t3.schema import PESLoopConfig
 
 _logger = logging.getLogger(__name__)
+
+# A four-digit year suffix on a corrections-database method name, as ARC splits it.
+_METHOD_YEAR_SUFFIX = re.compile(r'^(.*?)(\d{4})$')
+# Every year suffix carried by a method inside ARC's LevelOfTheory(...) text.
+_MODEL_CHEMISTRY_METHOD_YEAR = re.compile(r"method='[^']*?(\d{4})'")
+# Sentinel: resolve the single-point level with whatever year its own spelling carries.
+_AS_WRITTEN = object()
 
 # The name ARC's own input YAML is written under, inside the round's ARC project directory --
 # mirrors t3.main.T3.run_arc's 'ARC input' path, kept local here since this loop's ARC project
@@ -580,7 +590,8 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
             f"artifact it references, so combining these would render the adopted barriers "
             f"against an energy reference they were never computed under.")
     energy_settings_frozen = captured_settings if captured_settings is not None else adopted_settings
-    energy_settings = QMEnergySettings.from_frozen(energy_settings_frozen)
+    energy_settings = QMEnergySettings.from_frozen(
+        _emitted_energy_settings(energy_settings_frozen, config.qm.sp_level, config.qm.freq_level))
     if capture_result is not None:
         # I1: the hybrid network is built from the CAPTURE's own vendored network copy and
         # recorded method (CaptureResult.networks is the authoritative source -- see
@@ -622,6 +633,43 @@ def arc_qm_runner(candidates: tuple, paths: RoundPaths, config: PESLoopConfig,
     for warning in result.warnings:
         _logger.warning(warning)
     return converged_labels, queued_ts_labels
+
+
+def _emitted_energy_settings(frozen: dict | None, sp_level: str, freq_level: str | None) -> dict | None:
+    """
+    The frozen energy settings a hybrid network is written under, labelled with this run's level.
+
+    A hybrid network carries one ``modelChemistry``, and it is this run's own resolved level, never
+    the spelling a capture froze: one raw level under two corrections-database spellings (e.g.
+    ``wb97xd`` and ``wb97xd2023``) makes Arkane apply two different sets of fitted corrections.
+    Every number the capture froze is kept. A capture that froze no frequency scale factor gets the
+    one ARC assigns to this run's frequency level; if ARC has none, the factor stays ``None`` and
+    ``write_hybrid_network_input_file`` refuses the network.
+
+    Args:
+        frozen (dict, optional): The frozen ``energy_settings`` block the network is built on.
+        sp_level (str): This run's single-point level, e.g. ``config.qm.sp_level``.
+        freq_level (str, optional): This run's frequency level, e.g. ``config.qm.freq_level``.
+
+    Returns:
+        dict, optional: A copy of ``frozen`` with the run's ``model_chemistry``, or ``None`` if
+        ``frozen`` is ``None``.
+
+    Raises:
+        ValueError: If ARC cannot resolve this run's level into a model chemistry.
+    """
+    if frozen is None:
+        return None
+    model_chemistry = _normalized_model_chemistry(sp_level, freq_level)
+    if model_chemistry is None:
+        raise ValueError(f'Refusing to write a hybrid network: ARC cannot resolve this run\'s level '
+                         f'of theory {sp_level!r} (frequencies at {freq_level or sp_level!r}) into '
+                         f'a model chemistry, so the network has no level to be written under.')
+    emitted = dict(frozen, model_chemistry=model_chemistry)
+    if emitted.get('frequency_scale_factor') is None:
+        emitted['frequency_scale_factor'] = assign_frequency_scale_factor(
+            Level(repr=freq_level or sp_level))
+    return emitted
 
 
 def _normalized_model_chemistry(sp_level: str, freq_level: str | None = None) -> str | None:
@@ -676,7 +724,58 @@ def _normalized_model_chemistry(sp_level: str, freq_level: str | None = None) ->
     return normalized[0] if normalized else None
 
 
-def _normalized_model_chemistries(sp_level: str, freq_level: str | None = None) -> tuple[str, ...]:
+def _level_with_year(level: Level, year: int | None) -> Level:
+    """
+    A copy of ``level`` whose method carries no year suffix and whose ``year`` is ``year``.
+
+    Args:
+        level (Level): The level to copy.
+        year (int, optional): The year ARC should match, or ``None`` for the no-year entry.
+
+    Returns:
+        Level: The copy.
+    """
+    variant = copy.deepcopy(level)
+    match = _METHOD_YEAR_SUFFIX.match(variant.method)
+    if match is not None:
+        variant.method = match.group(1)
+    variant.year = year
+    return variant
+
+
+def _admissible_model_chemistries(sp_level: str, freq_level: str | None,
+                                  model_chemistry: str | None) -> tuple[str, ...]:
+    """
+    Every ``model_chemistry`` spelling under which a capture's raw output may be reused for this
+    ``sp_level``/``freq_level`` request.
+
+    ARC can resolve one request to corrections-database keys that differ only by a four-digit year
+    suffix on the method (``wb97xd`` and ``wb97xd2023``): the same functional and basis, with
+    different fitted corrections. A capture holds raw QM output, so its spelling's year does not
+    make it a different level. Beside the request as written, this accepts what ARC resolves for
+    the same request with the single-point year removed, and pinned to each year the capture's
+    ``model_chemistry`` carries. Only the name comparison widens; whether the frozen numbers agree
+    stays the energy-reference check in ``arc_qm_runner``.
+
+    Args:
+        sp_level (str): The requested single-point level.
+        freq_level (str, optional): The requested frequency level, defaulting to ``sp_level``.
+        model_chemistry (str, optional): The capture's frozen ``model_chemistry`` text.
+
+    Returns:
+        tuple[str, ...]: The admissible spellings, the request's own first.
+    """
+    spellings = list(_normalized_model_chemistries(sp_level, freq_level))
+    years = sorted({int(year) for year in _MODEL_CHEMISTRY_METHOD_YEAR.findall(model_chemistry or '')})
+    for year in [None] + years:
+        for spelling in _normalized_model_chemistries(sp_level, freq_level, sp_year=year):
+            if spelling not in spellings:
+                spellings.append(spelling)
+    return tuple(spellings)
+
+
+def _normalized_model_chemistries(sp_level: str, freq_level: str | None = None,
+                                  sp_year=_AS_WRITTEN) -> tuple[str, ...]:
     """
     Every ``model_chemistry`` spelling a capture made at this ``sp_level``/``freq_level`` pair may
     legitimately carry.
@@ -700,12 +799,17 @@ def _normalized_model_chemistries(sp_level: str, freq_level: str | None = None) 
     Args:
         sp_level (str): The single-point level-of-theory string.
         freq_level (str, optional): The frequency level, defaulting to ``sp_level``.
+        sp_year (int, optional): A year to pin the single-point method to (``None`` for the no-year
+                                 entry), replacing any year its spelling carries. Left unset, the
+                                 level resolves as written.
 
     Returns:
         tuple[str, ...]: The accepted spellings, most-likely first; empty if ARC could not resolve
         any.
     """
     level = Level(repr=sp_level)
+    if sp_year is not _AS_WRITTEN:
+        level = _level_with_year(level, sp_year)
     frequency_level = Level(repr=freq_level) if freq_level else level
     # Mirrors ARC.check_freq_scaling_factor: the factor comes from the FREQUENCY level, and is
     # never left as None once a frequency level exists.
@@ -717,14 +821,14 @@ def _normalized_model_chemistries(sp_level: str, freq_level: str | None = None) 
         try:
             resolved = get_arkane_model_chemistry(level, freq_level=frequency_level,
                                                   freq_scale_factor=freq_scale_factor)
-        except ValueError as e:
+        except (ValueError, InputError) as e:
             _logger.debug(f'PES loop: ARC could not normalize the level of theory {sp_level!r} '
                           f'(frequencies at {freq_level or sp_level!r}) with '
                           f'freq_scale_factor={freq_scale_factor!r}: {e}')
             continue
         if resolved is not None and resolved not in spellings:
             spellings.append(resolved)
-    if not spellings:
+    if not spellings and sp_year is _AS_WRITTEN:
         _logger.warning(f'PES loop: ARC could not normalize the level of theory {sp_level!r} '
                         f'(frequencies at {freq_level or sp_level!r}) into a model_chemistry; '
                         f'treating it as unresolvable.')
@@ -748,11 +852,12 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
     (the same re-hashing, tamper/torn-capture detection a live consumer gets -- see
     ``t3.main``'s own use of it). An entry is adopted only when ALL of the following hold:
 
-    - the capture's recorded ``energy_settings['model_chemistry']``, once normalized through
-      ``_normalized_model_chemistry``, matches the requested ``level_of_theory``: mixing levels
+    - the capture's recorded ``energy_settings['model_chemistry']`` is one of the spellings
+      ``_admissible_model_chemistries`` gives for the requested ``level_of_theory``: mixing levels
       of theory inside one barrier's rate makes it inconsistent, so a prior result computed at a
       different level is refused even though it exists and converged (never adopted "close
-      enough"). A refusal is logged with the manifest path, its raw ``model_chemistry``, and the
+      enough"). Spellings that differ only by a method's year suffix name one raw level and are
+      admitted. A refusal is logged with the manifest path, its raw ``model_chemistry``, and the
       requested level, so a silent "nothing was reused" is always explainable.
     - ``record.network_id`` is NEVER a gate -- it is logged only. Arkane names TS artifacts
       positionally (``'TS{i+1}'``, see ``arkane/pdep.py``), so a pruned or reordered exploration
@@ -855,12 +960,13 @@ def adopt_prior_qm(from_t3_projects: list, network_id: str, level_of_theory: str
                 continue
             energy_settings = verified.energy_settings or {}
             manifest_model_chemistry = energy_settings.get('model_chemistry')
-            if manifest_model_chemistry not in normalized_requested:
+            admissible = _admissible_model_chemistries(level_of_theory, freq_level,
+                                                       manifest_model_chemistry)
+            if manifest_model_chemistry not in admissible:
                 _logger.info(
                     f"PES loop: refusing prior QM at {manifest_path!r} -- its model_chemistry "
                     f"{manifest_model_chemistry!r} does not match the requested level of theory "
-                    f"{level_of_theory!r} (accepted spellings: "
-                    f"{list(normalized_requested)}).")
+                    f"{level_of_theory!r} (accepted spellings: {list(admissible)}).")
                 continue
             # The capture's own VENDORED network copy is the authoritative structural record of
             # what each of its transition states connects (verified.networks -- see
