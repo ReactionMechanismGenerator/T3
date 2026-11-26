@@ -209,14 +209,17 @@ def convert_volume_to_cubic_meters(value: float, units) -> float:
 def convert_termination_time_to_seconds(termination_time: tuple[float, str]):
     """
     Converts the termination_time tuple from the RMG reactor to seconds.
-    This is necessary for the RMS adapters since the Julia solver expects
-    the integration bounds to be in units of seconds.
+    Simulators integrate in seconds, so every adapter that consumes a
+    termination time (Cantera, RMS, flux diagrams) converts it here.
 
     Args:
         termination_time (Tuple[float, str]):  Termination time for simulating in the RMG reactor. Example: [5, 'hours']
 
     Returns:
         t_final (float): The termination time in seconds.
+
+    Raises:
+        ValueError: If the unit is not a supported termination time unit.
     """
     unit_conversion = {'micro-s': 1e-6,
                        'ms': 1e-3,
@@ -226,6 +229,9 @@ def convert_termination_time_to_seconds(termination_time: tuple[float, str]):
                        'days': 3600*24,
                        }
     t_final, units = termination_time
+    if units not in unit_conversion:
+        raise ValueError(f'Unsupported termination_time unit {units!r}. '
+                         f'Supported units: {", ".join(repr(unit) for unit in unit_conversion)}.')
     t_final = t_final * unit_conversion[units]
     return t_final
 

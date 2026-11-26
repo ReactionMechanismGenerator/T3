@@ -10,8 +10,10 @@ import os
 import shutil
 
 import numpy as np
+import pytest
 
 from t3.common import SIMULATE_TEST_DATA_BASE_PATH, TEST_DATA_BASE_PATH
+from t3.schema import RMGReactor
 from tests.common import run_minimal
 from t3.simulate.adapter import SimulateAdapter
 from t3.simulate.cantera_base import CanteraBase
@@ -39,6 +41,80 @@ def _make_adapter(adapter_class, observable_list=None):
                             sa_rtol=t3.t3['sensitivity']['rtol'],
                             )
     return adapter
+
+
+def _make_adapter_with_reactor(adapter_class, **reactor_overrides):
+    """Construct a Cantera adapter after overriding keys of the first RMG reactor."""
+    t3 = run_minimal(project_directory=TEST_DIR)
+    t3.set_paths()
+    t3.rmg['reactors'][0].update(reactor_overrides)
+    return adapter_class(t3=t3.t3,
+                         rmg=t3.rmg,
+                         paths=t3.paths,
+                         logger=t3.logger,
+                         atol=t3.rmg['model']['atol'],
+                         rtol=t3.rmg['model']['rtol'],
+                         observable_list=list(),
+                         sa_atol=t3.t3['sensitivity']['atol'],
+                         sa_rtol=t3.t3['sensitivity']['rtol'],
+                         )
+
+
+def _initialize_first_condition(adapter):
+    """Load the first condition into Cantera the way ``simulate`` does."""
+    condition = adapter.conditions[0]
+    T0, P0, V0 = adapter._get_initial_state(condition)
+    adapter.reinitialize_simulation(T0=T0, P0=P0, X0=condition.mol_frac, V0=V0)
+    return condition
+
+
+# ---------------------------------------------------------------------------
+# Units reaching Cantera
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('adapter_class', [CanteraConstantTP, CanteraConstantHP, CanteraConstantUV])
+def test_set_up_pressure_reaches_cantera_in_pa(adapter_class):
+    """A reactor declared at P: 1 bar is held by Cantera at 1e5 Pa after set_up."""
+    adapter = _make_adapter_with_reactor(adapter_class, P=1)
+    _initialize_first_condition(adapter)
+    assert adapter.model.P == pytest.approx(1e5)
+    assert adapter.cantera_reactor.thermo.P == pytest.approx(1e5)
+
+
+@pytest.mark.parametrize('termination_time, expected_seconds',
+                         [((1.0, 'ms'), 1e-3), ((1.0, 'hours'), 3600.0), ((1.0, 'days'), 86400.0)])
+def test_set_up_termination_time_converted_to_seconds(termination_time, expected_seconds):
+    """The integration bound is the declared termination time expressed in seconds."""
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, termination_time=termination_time)
+    assert adapter.conditions[0].reaction_time.value_si == pytest.approx(expected_seconds)
+
+
+def test_set_up_micro_s_bound_end_to_end():
+    """A schema-validated 1 micro-s termination time bounds the Cantera integration at 1e-6 s."""
+    validated = RMGReactor(type='gas batch constant T P', T=1000, P=1,
+                           termination_time=[1.0, 'micro-s']).termination_time
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, termination_time=validated)
+    assert adapter.conditions[0].reaction_time.value_si == pytest.approx(1e-6)
+    adapter.simulate()
+    assert 1e-6 <= adapter.cantera_simulation.time < 1e-3
+
+
+def test_set_up_unknown_time_unit_raises():
+    """An unknown termination_time unit refuses to build the adapter, naming the unit and the permitted set."""
+    with pytest.raises(ValueError) as error:
+        _make_adapter_with_reactor(CanteraConstantTP, termination_time=(1.0, 'fortnights'))
+    message = str(error.value)
+    assert 'fortnights' in message
+    for unit in ('micro-s', 'ms', 's', 'hrs', 'hours', 'days'):
+        assert f"'{unit}'" in message
+
+
+def test_set_up_seconds_and_kelvin_unchanged():
+    """Inputs already in s and K reach Cantera unchanged."""
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=800, termination_time=(1.0, 's'))
+    condition = _initialize_first_condition(adapter)
+    assert condition.reaction_time.value_si == 1.0
+    assert adapter.model.T == pytest.approx(800.0)
 
 
 # ---------------------------------------------------------------------------

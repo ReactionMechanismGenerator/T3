@@ -727,7 +727,7 @@ def test_rmg_reactors_schema():
                              termination_rate_ratio=0.01,
                              conditions_per_iteration=12
                              )
-    assert rmg_reactor.termination_time == (5000, 'ms')
+    assert rmg_reactor.termination_time == (0.005, 'ms')
 
     # test 'hrs' units in termination_time
     rmg_reactor = RMGReactor(type='gas batch constant T P',
