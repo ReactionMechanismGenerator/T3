@@ -18,6 +18,7 @@ ever written to.
 """
 
 import builtins
+import datetime
 import hashlib
 import os
 import shutil
@@ -49,6 +50,7 @@ from t3.pdep.join import (JOIN_STATUS_ALREADY_PRESENT,
                           )
 from t3.pdep.api import load_pdep_budget_record
 from t3.pdep.parser import parse_pdep_network_file, parse_pdep_network_text
+from t3.runners.rmg_runner import ArkaneJobResult
 from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               CACHE_STATUS_GENERATED,
                               PDepNetworkSelection,
@@ -2499,3 +2501,78 @@ class TestWritePdepHybridNetworkInputsPruning(object):
             'a refused manifest must not prune the still-valid hybrid output from the prior pass'
         assert not t3.check_arc_finalization_complete(), \
             'the finalization marker must not be (re-)written when process_arc_run raises'
+
+
+class TestPdepSaArkaneBoundedByMaxT3Walltime(object):
+    """
+    Test that the P-dep SA Arkane job is bounded by what is left of ``max_T3_walltime``.
+    """
+
+    @staticmethod
+    def _recording_fake(sa_dict, calls, result=True):
+        """
+        Build a fake ``run_arkane_job`` that records its keyword arguments and writes the SA output.
+
+        Args:
+            sa_dict (dict): The SA dictionary to write on success.
+            calls (list): Receives the keyword arguments of each call.
+            result: The value the fake returns.
+
+        Returns:
+            Callable: The fake.
+        """
+        def _fake(input_file, output_directory, logger=None, **kwargs):
+            calls.append(kwargs)
+            if result:
+                sensitivity_dir = os.path.join(output_directory, 'sensitivity')
+                os.makedirs(sensitivity_dir, exist_ok=True)
+                save_yaml_file(os.path.join(sensitivity_dir, 'sa_coefficients.yml'), sa_dict)
+            return result
+        return _fake
+
+    def test_a_set_limit_reaches_the_call_as_a_finite_timeout(self, tmp_path, monkeypatch):
+        """With max_T3_walltime set, the Arkane job receives the remaining budget as its timeout."""
+        t3 = _build_t3(tmp_path)
+        t3.t3['options']['max_T3_walltime'] = '00:01:00:00'
+        t3.t0 = datetime.datetime.now()
+        calls = []
+        monkeypatch.setattr(t3_main, 'run_arkane_job', self._recording_fake(_build_sa_dict(t3), calls))
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=_build_pdep_rxns_to_explore(t3))
+        assert len(calls) == 1
+        timeout = calls[0].get('timeout')
+        assert isinstance(timeout, float)
+        assert 3500 < timeout <= 3600
+
+    def test_no_limit_keeps_the_call_unbounded(self, tmp_path, monkeypatch):
+        """Without max_T3_walltime, the Arkane job receives timeout=None, as before."""
+        t3 = _build_t3(tmp_path)
+        t3.t3['options']['max_T3_walltime'] = None
+        calls = []
+        monkeypatch.setattr(t3_main, 'run_arkane_job', self._recording_fake(_build_sa_dict(t3), calls))
+        t3.determine_species_from_pdep_network(pdep_rxns_to_explore=_build_pdep_rxns_to_explore(t3))
+        assert len(calls) == 1
+        assert calls[0].get('timeout') is None
+
+    def test_a_timed_out_job_raises_t3_walltime_exceeded(self, tmp_path, monkeypatch):
+        """An Arkane job killed at the deadline ends T3 with T3WalltimeExceeded, not a skipped method."""
+        t3 = _build_t3(tmp_path)
+        t3.t3['options']['max_T3_walltime'] = '00:01:00:00'
+        t3.t0 = datetime.datetime.now()
+        calls = []
+        timed_out = ArkaneJobResult(succeeded=False, timed_out=True, reason='timed out')
+        monkeypatch.setattr(t3_main, 'run_arkane_job',
+                            self._recording_fake(_build_sa_dict(t3), calls, result=timed_out))
+        with pytest.raises(t3_main.T3WalltimeExceeded):
+            t3.determine_species_from_pdep_network(pdep_rxns_to_explore=_build_pdep_rxns_to_explore(t3))
+        assert len(calls) == 1
+
+    def test_a_spent_budget_starts_no_job(self, tmp_path, monkeypatch):
+        """With no time left, the Arkane job is not started and T3WalltimeExceeded is raised."""
+        t3 = _build_t3(tmp_path)
+        t3.t3['options']['max_T3_walltime'] = '00:00:00:01'
+        t3.t0 = datetime.datetime.now() - datetime.timedelta(seconds=10)
+        calls = []
+        monkeypatch.setattr(t3_main, 'run_arkane_job', self._recording_fake(_build_sa_dict(t3), calls))
+        with pytest.raises(t3_main.T3WalltimeExceeded):
+            t3.determine_species_from_pdep_network(pdep_rxns_to_explore=_build_pdep_rxns_to_explore(t3))
+        assert calls == []

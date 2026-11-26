@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from arc.job.local import (_determine_job_id,
                            change_mode,
@@ -32,6 +32,12 @@ if TYPE_CHECKING:
 MEM = settings['rmg_initial_memory'] * 1000  # MB
 SLEEP_TIME = 6  # hours
 MAX_RMG_RUNS_PER_ITERATION = 5
+
+RMG_LOG_INITIATED_PREFIX = 'RMG execution initiated at '
+RMG_LOG_TERMINATED_PREFIX = 'RMG execution terminated at '
+RMG_LOG_EXECUTION_TIME_PREFIX = 'Execution time (DD:HH:MM:SS): '
+RMG_LOG_WALLTIME_STOP_LINE = 'There is not enough time to complete the next iteration before the wall time is reached.'
+RMG_LOG_ASCTIME_FORMAT = '%a %b %d %H:%M:%S %Y'
 
 RMG_EXECUTION_TYPE = settings['execution_type']['rmg']
 
@@ -198,6 +204,97 @@ def rmg_job_converged(project_directory: str) -> tuple[bool, str | None]:
                 error = line.strip()
                 break
     return rmg_converged, error
+
+
+class RMGWalltimeStop(NamedTuple):
+    """
+    The stop time of an RMG run that stopped at its own wall time.
+
+    RMG writes a ``MODEL GENERATION TERMINATED`` block naming the wall time when it decides there is
+    not enough time left for another enlargement. Such a run is terminal: repeating it would spend
+    the same wall time again. It is not a normally completed run, so it is reported separately.
+
+    Attributes:
+        stopped_at (datetime.datetime): The stop time.
+        source (str): Where the stop time was read from: ``'terminated-line'`` (RMG's own
+                      ``RMG execution terminated at`` line), ``'execution-time'`` (the run start plus
+                      RMG's execution time at its last save), or ``'log-mtime'`` (the modification
+                      time of ``RMG.log``).
+    """
+    stopped_at: datetime.datetime
+    source: str
+
+
+def find_rmg_walltime_stop(path: str) -> RMGWalltimeStop | None:
+    """
+    Find RMG's own wall-time stop in the latest run recorded in an ``RMG.log``.
+
+    The log is streamed once. Each ``RMG execution initiated at`` line starts a new run, so a stop
+    recorded by an earlier run in an appended log does not count. The stop time is RMG's
+    ``RMG execution terminated at`` line after the stop if present; otherwise the run start plus the
+    last ``Execution time`` RMG logged at a save; otherwise the log's modification time.
+
+    Args:
+        path (str): The path to ``RMG.log`` (assumed to exist).
+
+    Returns:
+        Optional[RMGWalltimeStop]: The wall-time stop, or ``None`` if the latest run did not stop at its wall time.
+    """
+    initiated_at = terminated_at = last_execution_time = None
+    stopped = False
+    with open(path, errors='replace') as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if line.startswith(RMG_LOG_INITIATED_PREFIX):
+                initiated_at = _parse_rmg_asctime(line[len(RMG_LOG_INITIATED_PREFIX):])
+                terminated_at = last_execution_time = None
+                stopped = False
+            elif line == RMG_LOG_WALLTIME_STOP_LINE:
+                stopped = True
+            elif line.startswith(RMG_LOG_EXECUTION_TIME_PREFIX) and not stopped:
+                last_execution_time = _parse_dd_hh_mm_ss(line[len(RMG_LOG_EXECUTION_TIME_PREFIX):])
+            elif line.startswith(RMG_LOG_TERMINATED_PREFIX) and stopped:
+                terminated_at = _parse_rmg_asctime(line[len(RMG_LOG_TERMINATED_PREFIX):])
+    if not stopped:
+        return None
+    if terminated_at is not None:
+        return RMGWalltimeStop(terminated_at, 'terminated-line')
+    if initiated_at is not None and last_execution_time is not None:
+        return RMGWalltimeStop(initiated_at + last_execution_time, 'execution-time')
+    return RMGWalltimeStop(datetime.datetime.fromtimestamp(os.path.getmtime(path)), 'log-mtime')
+
+
+def _parse_rmg_asctime(text: str) -> datetime.datetime | None:
+    """
+    Parse a ``time.asctime()`` timestamp as RMG writes it, e.g. ``'Sat Nov  7 08:02:19 2026'``.
+
+    Args:
+        text (str): The timestamp text.
+
+    Returns:
+        Optional[datetime.datetime]: The parsed time, or ``None`` if the text does not parse.
+    """
+    try:
+        return datetime.datetime.strptime(text.strip(), RMG_LOG_ASCTIME_FORMAT)
+    except ValueError:
+        return None
+
+
+def _parse_dd_hh_mm_ss(text: str) -> datetime.timedelta | None:
+    """
+    Parse a 'DD:HH:MM:SS' duration, e.g. RMG's ``Execution time`` value.
+
+    Args:
+        text (str): The duration text.
+
+    Returns:
+        Optional[datetime.timedelta]: The duration, or ``None`` if the text does not parse.
+    """
+    try:
+        days, hours, minutes, seconds = (int(part) for part in text.strip().split(':'))
+    except ValueError:
+        return None
+    return datetime.timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
 _DEFAULT_RMG_TIMEOUT_S = 6 * 3600  # 6 hours
@@ -408,6 +505,10 @@ def rmg_runner(rmg_input_file_path: str,
     """
     Run an RMG job as a subprocess under the rmg_env.
 
+    In ``local`` mode a run that did not converge is re-submitted, up to
+    ``MAX_RMG_RUNS_PER_ITERATION`` times, unless RMG stopped it at its own wall time
+    (see ``find_rmg_walltime_stop``) or it crashed with the same error as the previous run.
+
     Args:
         rmg_input_file_path (str): The path to the RMG input file.
         job_log_path (str): The path to the ``job.log`` file created on an HTCondor scheduler.
@@ -458,6 +559,10 @@ def rmg_runner(rmg_input_file_path: str,
             while job_id in check_running_jobs_ids(cluster_soft=LOCAL_CLUSTER_SOFTWARE):
                 time.sleep(120)
             converged, error = rmg_job_converged(project_directory=project_directory)
+            rmg_log_path = os.path.join(project_directory, 'RMG.log')
+            stopped_at_walltime = os.path.isfile(rmg_log_path) and find_rmg_walltime_stop(rmg_log_path) is not None
+            if stopped_at_walltime:
+                logger.info('RMG stopped at its own wall time; not re-submitting it.')
             err_path = os.path.join(project_directory, 'err.txt')
             if os.path.isfile(err_path):
                 os.rename(err_path, os.path.join(project_directory,
@@ -470,6 +575,7 @@ def rmg_runner(rmg_input_file_path: str,
                                                            logger=logger,
                                                            )
             run_rmg = not converged \
+                      and not stopped_at_walltime \
                       and new_memory is not None \
                       and runner_counter < MAX_RMG_RUNS_PER_ITERATION \
                       and not(len(rmg_errors) >= 2 and error is not None and error == rmg_errors[-2])

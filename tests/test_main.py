@@ -2083,6 +2083,41 @@ def test_max_t3_walltime_bound_restores_the_callers_itimer(minimal_project_direc
         signal.setitimer(signal.ITIMER_REAL, 0)
 
 
+def test_max_t3_walltime_run_out_in_the_pdep_sa_ends_like_the_other_bounded_steps(minimal_project_directory):
+    """T3WalltimeExceeded from the P-dep SA step logs the time limit, skips the final RMG run and logs the summaries."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = '00:01:00:00'
+    t3.t3['options']['max_T3_iterations'] = 2
+    t3.t3['sensitivity'] = None
+    t3.qm['species'], t3.qm['reactions'] = [], []
+    t3.restart = lambda: (0, True, False)
+    rmg_iterations = []
+    t3.run_rmg = lambda *a, **k: rmg_iterations.append(t3.iteration)
+    t3.determine_species_and_reactions_to_calculate = mock.Mock(side_effect=T3WalltimeExceeded())
+    t3._generate_flux_diagrams = lambda: None
+    t3.t0 = datetime.datetime.now()
+    with mock.patch.object(t3.logger, 'log_max_time_reached') as log_max_time_reached, \
+            mock.patch.object(t3.logger, 'log_species_summary') as log_species_summary, \
+            mock.patch.object(t3.logger, 'log_reactions_summary') as log_reactions_summary:
+        t3.execute()
+    log_max_time_reached.assert_called_once()
+    assert rmg_iterations == [1]
+    log_species_summary.assert_called_once()
+    log_reactions_summary.assert_called_once()
+
+
+def test_remaining_max_t3_walltime(minimal_project_directory):
+    """The remaining budget is None without a limit, and the limit minus the elapsed time with one."""
+    t3 = run_minimal(project_directory=minimal_project_directory)
+    t3.t3['options']['max_T3_walltime'] = None
+    assert t3._remaining_max_t3_walltime_s() is None
+    t3.t3['options']['max_T3_walltime'] = '00:01:00:00'
+    t3.t0 = datetime.datetime.now() - datetime.timedelta(minutes=10)
+    assert 2990 < t3._remaining_max_t3_walltime_s() <= 3000
+    t3.t0 = datetime.datetime.now() - datetime.timedelta(hours=2)
+    assert t3._remaining_max_t3_walltime_s() < 0
+
+
 def test_a_cut_arc_run_logs_its_project_directory(minimal_project_directory):
     """A cut ARC run names its project directory and says the submitted jobs may still be running."""
     t3 = run_minimal(project_directory=minimal_project_directory)

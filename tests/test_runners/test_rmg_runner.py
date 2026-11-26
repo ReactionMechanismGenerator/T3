@@ -5,6 +5,7 @@
 t3 tests test_rmg_runner module
 """
 
+import logging
 import os
 import shutil
 import signal
@@ -573,3 +574,100 @@ class TestKillProcessGroup(object):
         grandchild_pid = _wait_for_pid_file(pid_file)
         assert _wait_for_death(spawned[0].pid), 'the direct child survived the timeout'
         assert _wait_for_death(grandchild_pid), 'the grandchild was orphaned instead of killed'
+
+
+_RMG_LOG_HEAD = """RMG execution initiated at Sat Nov  7 08:02:19 2026
+
+Loading thermodynamics library from primaryThermoLibrary.py...
+Loading kinetics library from primaryH2O2.py...
+Adding reaction library primaryH2O2 to model edge...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:00:00:23
+Enlarging reaction model...
+Updating RMG execution statistics...
+    Execution time (DD:HH:MM:SS): 00:01:05:10
+Saving current model core to Chemkin file...
+"""
+
+_RMG_LOG_WALLTIME_BLOCK = """MODEL GENERATION TERMINATED
+
+There is not enough time to complete the next iteration before the wall time is reached.
+The output model may be incomplete.
+
+The current model core has 616 species and 27494 reactions
+The current model edge has 58151 species and 152674 reactions
+"""
+
+
+class TestRMGRunnerLocalResubmission(object):
+    """
+    Test the local-queue re-submit loop of ``rmg_runner()`` against synthetic ``RMG.log``/``err.txt`` fixtures.
+    """
+
+    @staticmethod
+    def _run(tmp_path, monkeypatch, outcomes):
+        """
+        Run ``rmg_runner()`` in local mode with each submission writing the next outcome.
+
+        Args:
+            tmp_path: The pytest temporary directory holding the RMG project.
+            monkeypatch: The pytest monkeypatch fixture.
+            outcomes (list): One ``(rmg_log_text, err_text_or_None)`` per submission; the last repeats.
+
+        Returns:
+            tuple: The number of submissions and the value ``rmg_runner()`` returned.
+        """
+        project_directory = tmp_path / 'RMG'
+        project_directory.mkdir()
+        input_path = project_directory / 'input.py'
+        input_path.write_text('# synthetic RMG input\n')
+        submissions = []
+
+        def fake_submit(project_directory, **kwargs):
+            log_text, err_text = outcomes[min(len(submissions), len(outcomes) - 1)]
+            submissions.append(kwargs)
+            with open(os.path.join(project_directory, 'RMG.log'), 'w') as f:
+                f.write(log_text)
+            if err_text is not None:
+                with open(os.path.join(project_directory, 'err.txt'), 'w') as f:
+                    f.write(err_text)
+            return f'job{len(submissions)}'
+
+        monkeypatch.setattr(rmg_runner, 'run_rmg_in_local_queue', fake_submit)
+        monkeypatch.setattr(rmg_runner, 'check_running_jobs_ids', lambda cluster_soft: [])
+        exception_raised = rmg_runner.rmg_runner(rmg_input_file_path=str(input_path),
+                                                 job_log_path=str(tmp_path / 'job.log'),
+                                                 logger=logging.getLogger('test_rmg_runner'),
+                                                 rmg_execution_type='local',
+                                                 fix_cantera_model=False,
+                                                 )
+        return len(submissions), exception_raised
+
+    def test_walltime_stop_is_submitted_once(self, tmp_path, monkeypatch):
+        """A run RMG stopped at its own wall time is not re-submitted."""
+        count, exception_raised = self._run(tmp_path, monkeypatch,
+                                            [(_RMG_LOG_HEAD + _RMG_LOG_WALLTIME_BLOCK, None)])
+        assert count == 1
+        assert exception_raised is True
+
+    def test_crash_with_changing_errors_is_resubmitted_up_to_the_cap(self, tmp_path, monkeypatch):
+        """A crash with a new error each time is re-submitted up to MAX_RMG_RUNS_PER_ITERATION."""
+        outcomes = [(_RMG_LOG_HEAD, f'ValueError: Error number {i}\n') for i in range(10)]
+        count, exception_raised = self._run(tmp_path, monkeypatch, outcomes)
+        assert count == rmg_runner.MAX_RMG_RUNS_PER_ITERATION == 5
+        assert exception_raised is True
+
+    def test_crash_with_a_repeated_error_stops_after_the_repeat(self, tmp_path, monkeypatch):
+        """A crash that repeats the previous run's error stops the loop after the second submission."""
+        count, exception_raised = self._run(tmp_path, monkeypatch,
+                                            [(_RMG_LOG_HEAD, 'KeyError: Error in the same place\n')])
+        assert count == 2
+        assert exception_raised is True
+
+    def test_crash_then_walltime_stop_is_resubmitted_once(self, tmp_path, monkeypatch):
+        """A crash still re-submits; a wall-time stop in the re-submitted run then ends the loop."""
+        outcomes = [(_RMG_LOG_HEAD, 'ValueError: Error number 1\n'),
+                    (_RMG_LOG_HEAD + _RMG_LOG_WALLTIME_BLOCK, None),
+                    (_RMG_LOG_HEAD, 'ValueError: Error number 3\n')]
+        count, _ = self._run(tmp_path, monkeypatch, outcomes)
+        assert count == 2

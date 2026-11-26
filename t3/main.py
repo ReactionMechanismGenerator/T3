@@ -109,7 +109,12 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               select_from_sa_dict_with_diagnostics,
                               select_sensitive_wells,
                               )
-from t3.runners.rmg_runner import rmg_runner, run_arkane_job
+from t3.runners.rmg_runner import (ArkaneJobResult,
+                                  RMGWalltimeStop,
+                                  find_rmg_walltime_stop,
+                                  rmg_runner,
+                                  run_arkane_job,
+                                  )
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
 from t3.utils.fix_cantera import fix_cantera
@@ -150,31 +155,6 @@ ARC_FINALIZATION_MARKER_TEXT = f'ARC finalization completed (v{ARC_FINALIZATION_
 # setitimer() treats 0 as "disarm", so a deadline that has already passed is armed at this floor
 # instead, which fires on the next tick.
 MIN_ITIMER_SECONDS = 0.001
-
-RMG_LOG_INITIATED_PREFIX = 'RMG execution initiated at '
-RMG_LOG_TERMINATED_PREFIX = 'RMG execution terminated at '
-RMG_LOG_EXECUTION_TIME_PREFIX = 'Execution time (DD:HH:MM:SS): '
-RMG_LOG_WALLTIME_STOP_LINE = 'There is not enough time to complete the next iteration before the wall time is reached.'
-RMG_LOG_ASCTIME_FORMAT = '%a %b %d %H:%M:%S %Y'
-
-
-class RMGWalltimeStop(NamedTuple):
-    """
-    The stop time of an RMG run that stopped at its own wall time.
-
-    RMG writes a ``MODEL GENERATION TERMINATED`` block naming the wall time when it decides there is
-    not enough time left for another enlargement. Such a run is terminal: repeating it would spend
-    the same wall time again. It is not a normally completed run, so it is reported separately.
-
-    Attributes:
-        stopped_at (datetime.datetime): The stop time.
-        source (str): Where the stop time was read from: ``'terminated-line'`` (RMG's own
-                      ``RMG execution terminated at`` line), ``'execution-time'`` (the run start plus
-                      RMG's execution time at its last save), or ``'log-mtime'`` (the modification
-                      time of ``RMG.log``).
-    """
-    stopped_at: datetime.datetime
-    source: str
 
 
 class RMGRunStatus(NamedTuple):
@@ -917,7 +897,7 @@ class T3:
             for line in _tail_lines(self.paths['RMG log']):
                 if 'MODEL GENERATION COMPLETED' in line:
                     return RMGRunStatus(True, True)
-            walltime_stop = _find_rmg_walltime_stop(self.paths['RMG log'])
+            walltime_stop = find_rmg_walltime_stop(self.paths['RMG log'])
             if walltime_stop is not None:
                 return RMGRunStatus(True, True, walltime_stop)
             return RMGRunStatus(True, False)
@@ -2523,6 +2503,8 @@ class T3:
         Raises:
             Exception: Re-raised unchanged, after being recorded, for any failure that is not one of
                 the outcomes named in :mod:`t3.pdep.reason_codes`.
+            T3WalltimeExceeded: If ``max_T3_walltime`` is spent before a master-equation job starts,
+                or runs out while it runs. The job gets the remaining budget as its ``timeout``.
 
         Returns:
             PDepNetworkAssessmentOutcome: The assessment, plus what the well analysis needs.
@@ -2633,10 +2615,21 @@ class T3:
                     isomer_labels = write_result.isomer_labels
                     self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method\n'
                                      f'to examine reaction {reaction} (iteration {self.iteration})...')
-                    if not run_arkane_job(input_file=arkane_input,
-                                          output_directory=arkane_output_dir,
-                                          logger=self.logger,
-                                          ):
+                    remaining_s = self._remaining_max_t3_walltime_s()
+                    if remaining_s is not None and remaining_s <= 0:
+                        self.logger.error(f'max_T3_walltime ran out before the {method} master-equation job '
+                                          f'for network {network_name} could start; not starting it.')
+                        raise T3WalltimeExceeded()
+                    job_result = run_arkane_job(input_file=arkane_input,
+                                                output_directory=arkane_output_dir,
+                                                logger=self.logger,
+                                                timeout=remaining_s,
+                                                )
+                    if isinstance(job_result, ArkaneJobResult) and job_result.timed_out:
+                        self.logger.error(f'max_T3_walltime ran out while the {method} master-equation job '
+                                          f'for network {network_name} was running; the job was killed.')
+                        raise T3WalltimeExceeded()
+                    if not job_result:
                         # Recorded, not merely logged: without this the record would say nothing at
                         # all about a method that ran and failed, and the remaining codes would make
                         # it look as though that method had never been configured.
@@ -3796,6 +3789,19 @@ class T3:
                                   seconds=int(splits[3]),
                                   )
 
+    def _remaining_max_t3_walltime_s(self) -> float | None:
+        """
+        The time left of ``max_T3_walltime``, counted from ``self.t0``.
+
+        Returns:
+            Optional[float]: The remaining budget in seconds (zero or negative once it is spent),
+                             or ``None`` if no budget is set.
+        """
+        max_delta = self._max_t3_walltime_delta()
+        if max_delta is None:
+            return None
+        return (max_delta - time_lapse(self.t0)).total_seconds()
+
     def check_overtime(self) -> bool:
         """
         Check that the timer hasn't run out.
@@ -3828,11 +3834,10 @@ class T3:
         Raises:
             T3WalltimeExceeded: If the budget runs out while the step is running.
         """
-        max_delta = self._max_t3_walltime_delta()
-        if max_delta is None:
+        remaining_s = self._remaining_max_t3_walltime_s()
+        if remaining_s is None:
             yield
             return
-        remaining_s = (max_delta - time_lapse(self.t0)).total_seconds()
         children_on_entry = set(multiprocessing.active_children())
 
         def _on_alarm(signum, frame):
@@ -3875,78 +3880,6 @@ class T3:
             for folder in dirs:
                 if folder != 'log_archive':
                     shutil.rmtree(os.path.join(root, folder), ignore_errors=True)
-
-
-def _find_rmg_walltime_stop(path: str) -> RMGWalltimeStop | None:
-    """
-    Find RMG's own wall-time stop in the latest run recorded in an ``RMG.log``.
-
-    The log is streamed once. Each ``RMG execution initiated at`` line starts a new run, so a stop
-    recorded by an earlier run in an appended log does not count. The stop time is RMG's
-    ``RMG execution terminated at`` line after the stop if present; otherwise the run start plus the
-    last ``Execution time`` RMG logged at a save; otherwise the log's modification time.
-
-    Args:
-        path (str): The path to ``RMG.log`` (assumed to exist).
-
-    Returns:
-        Optional[RMGWalltimeStop]: The wall-time stop, or ``None`` if the latest run did not stop at its wall time.
-    """
-    initiated_at = terminated_at = last_execution_time = None
-    stopped = False
-    with open(path, errors='replace') as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if line.startswith(RMG_LOG_INITIATED_PREFIX):
-                initiated_at = _parse_rmg_asctime(line[len(RMG_LOG_INITIATED_PREFIX):])
-                terminated_at = last_execution_time = None
-                stopped = False
-            elif line == RMG_LOG_WALLTIME_STOP_LINE:
-                stopped = True
-            elif line.startswith(RMG_LOG_EXECUTION_TIME_PREFIX) and not stopped:
-                last_execution_time = _parse_dd_hh_mm_ss(line[len(RMG_LOG_EXECUTION_TIME_PREFIX):])
-            elif line.startswith(RMG_LOG_TERMINATED_PREFIX) and stopped:
-                terminated_at = _parse_rmg_asctime(line[len(RMG_LOG_TERMINATED_PREFIX):])
-    if not stopped:
-        return None
-    if terminated_at is not None:
-        return RMGWalltimeStop(terminated_at, 'terminated-line')
-    if initiated_at is not None and last_execution_time is not None:
-        return RMGWalltimeStop(initiated_at + last_execution_time, 'execution-time')
-    return RMGWalltimeStop(datetime.datetime.fromtimestamp(os.path.getmtime(path)), 'log-mtime')
-
-
-def _parse_rmg_asctime(text: str) -> datetime.datetime | None:
-    """
-    Parse a ``time.asctime()`` timestamp as RMG writes it, e.g. ``'Sat Nov  7 08:02:19 2026'``.
-
-    Args:
-        text (str): The timestamp text.
-
-    Returns:
-        Optional[datetime.datetime]: The parsed time, or ``None`` if the text does not parse.
-    """
-    try:
-        return datetime.datetime.strptime(text.strip(), RMG_LOG_ASCTIME_FORMAT)
-    except ValueError:
-        return None
-
-
-def _parse_dd_hh_mm_ss(text: str) -> datetime.timedelta | None:
-    """
-    Parse a 'DD:HH:MM:SS' duration, e.g. RMG's ``Execution time`` value.
-
-    Args:
-        text (str): The duration text.
-
-    Returns:
-        Optional[datetime.timedelta]: The duration, or ``None`` if the text does not parse.
-    """
-    try:
-        days, hours, minutes, seconds = (int(part) for part in text.strip().split(':'))
-    except ValueError:
-        return None
-    return datetime.timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
 def _tail_lines(path: str, n: int = 500) -> list[str]:

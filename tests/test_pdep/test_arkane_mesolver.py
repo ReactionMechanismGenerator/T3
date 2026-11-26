@@ -41,7 +41,7 @@ def _fake_run_arkane_job_writing(fixture_output_path):
     ``output_directory`` as ``output.py``, WITHOUT writing any ``stderr.log`` -- reproducing the
     empirically-observed soft-failure case: exit 0, empty stderr, broken payload.
     """
-    def _fake(input_file, output_directory, plot=False, logger=None, required_artifact='output.py'):
+    def _fake(input_file, output_directory, plot=False, logger=None, required_artifact='output.py', timeout=None):
         os.makedirs(output_directory, exist_ok=True)
         shutil.copyfile(fixture_output_path, os.path.join(output_directory, 'output.py'))
         return True
@@ -267,3 +267,38 @@ class TestArkaneMESolverAdapterGetKTP(object):
         assert adapter.solve() is True
         reactions = adapter.get_k_tp()
         assert len(reactions) > 0
+
+
+class TestArkaneMESolverAdapterTimeout(object):
+
+    @staticmethod
+    def _recording_fake(calls):
+        """Build a fake ``run_arkane_job`` that records its keyword arguments and writes the SUCCESS fixture."""
+        def _fake(input_file, output_directory, logger=None, **kwargs):
+            calls.append(kwargs)
+            shutil.copyfile(SUCCESS_OUTPUT, os.path.join(output_directory, 'output.py'))
+            return True
+        return _fake
+
+    def test_solve_forwards_the_timeout(self, tmp_path, monkeypatch):
+        """The adapter's timeout reaches run_arkane_job."""
+        calls = []
+        adapter = ArkaneMESolverAdapter(network_path=NETWORK_FIXTURE,
+                                        output_directory=str(tmp_path / 'out'),
+                                        method='CSE',
+                                        timeout=120.0,
+                                        )
+        monkeypatch.setattr('t3.pdep.mesolver.arkane.run_arkane_job', self._recording_fake(calls))
+        assert adapter.solve() is True
+        assert calls[0]['timeout'] == 120.0
+
+    def test_solve_default_timeout_is_none(self, tmp_path, monkeypatch):
+        """Without a timeout, run_arkane_job receives timeout=None."""
+        calls = []
+        adapter = ArkaneMESolverAdapter(network_path=NETWORK_FIXTURE,
+                                        output_directory=str(tmp_path / 'out'),
+                                        method='CSE',
+                                        )
+        monkeypatch.setattr('t3.pdep.mesolver.arkane.run_arkane_job', self._recording_fake(calls))
+        assert adapter.solve() is True
+        assert calls[0].get('timeout') is None
