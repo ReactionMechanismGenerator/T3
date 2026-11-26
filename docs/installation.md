@@ -126,6 +126,16 @@ make
 conda deactivate
 ```
 
+!!! Warning "`rmg_env` needs `numdifftools>=0.9.41` from conda-forge"
+    Arkane imports `numdifftools`. Version 0.9.39, the one on the `rmg`
+    channel, calls `np.finfo().machar`, which the numpy that RMG uses no
+    longer has, so with it `import arkane` fails. If you see an Arkane import
+    error that mentions `machar`, install the newer version into `rmg_env`:
+
+    ```bash
+    mamba install -n rmg_env "conda-forge::numdifftools>=0.9.41"
+    ```
+
 #### Set environment variables
 
 Add the following to your `~/.bashrc` (or `~/.zshrc` on macOS):

@@ -26,7 +26,7 @@ PDEP_ME_DIR = os.path.join(TEST_DATA_BASE_PATH, 'pdep_me')
 # and writes a valid, count-consistent output.py: scipy and RMG numerical-conditioning warnings,
 # each followed by the warnings module's echo of the offending source line.
 _EXPLORER_WARNING_STDERR = (
-    "/home/x/envs/rmg_env/lib/python3.9/site-packages/scipy/optimize/_optimize.py:2322: "
+    "/home/x/envs/rmg_env/lib/python3.11/site-packages/scipy/optimize/_optimize.py:2322: "
     "LinAlgWarning: Ill-conditioned matrix (rcond=9.78829e-18): result may not be accurate.\n"
     "  fu = func(x, *args)\n"
     "/home/x/Code/RMG-Py/rmgpy/thermo/thermoengine.py:100: LinAlgWarning: Ill-conditioned matrix "

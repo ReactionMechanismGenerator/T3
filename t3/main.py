@@ -37,7 +37,6 @@ from arc.exceptions import ConverterError, InputError
 from arc.main import ARC
 from arc.species.species import check_label
 from arc.species.converter import check_xyz_dict
-from arc.settings.settings import RMG_DB_PATH
 
 from t3.chem import T3Species, T3Reaction, T3Status, ThermoMethod
 from t3.common import (DATA_BASE_PATH,
@@ -348,8 +347,6 @@ class T3:
         rmg_exceptions_counter (int): Number of times RMG crashed.
         iteration (int): The current iteration number. Iteration 0 is reserved for pre-running ARC,
                          normal iteration numbers begin at 1.
-        thermo_lib_base_path (str): The path to the thermo libraries folder in RMG-database.
-        kinetics_lib_base_path (str): The path to the kinetics libraries folder in RMG-database.
         species (Dict[int, T3Species]): The T3 species dictionary. Keys are T3 species indices.
         reactions (Dict[int, T3Reaction]): The T3 reactions dictionary. Keys are T3 reaction indices.
         paths (dict): Various directory and file paths.
@@ -421,8 +418,6 @@ class T3:
 
         self.rmg_exceptions_counter = 0
         self.iteration = 0
-        self.thermo_lib_base_path = os.path.join(RMG_DB_PATH, 'thermo', 'libraries')
-        self.kinetics_lib_base_path = os.path.join(RMG_DB_PATH, 'kinetics', 'libraries')
         self.species, self.reactions, self.paths = dict(), dict(), dict()
         self.rmg_species, self.rmg_reactions, self.executed_networks = list(), list(), list()
         self.pdep_network_selections = list()
