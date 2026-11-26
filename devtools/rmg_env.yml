@@ -1,0 +1,21 @@
+# The one statement of T3's rmg_env, the environment T3 runs RMG and Arkane in as subprocesses.
+#
+# Read by devtools/install_all.sh (make install), by .github/workflows/ci.yml, and by
+# devtools/check_rmg_env.py, which asserts that a built rmg_env matches the pins below.
+# Change the environment here and nowhere else.
+#
+# Package mode: rmgpy and arkane come from this environment's own site-packages, and the RMG
+# database is the rmgdatabase package's copy (rmgpy's rmgrc points at <env>/share/rmgdatabase).
+# No RMG-Py source tree is compiled, and ARC's RMG_PATH must stay unset (docs/installation.md).
+#
+# numdifftools: the rmg channel ships 0.9.39, which calls np.finfo().machar. The numpy that
+# rmg 4.0.0 needs no longer has it, so `import arkane` fails without the conda-forge floor.
+name: rmg_env
+channels:
+  - rmg
+  - conda-forge
+dependencies:
+  - python=3.11
+  - rmg=4.0.0
+  - rmgdatabase=4.0.0
+  - conda-forge::numdifftools>=0.9.41

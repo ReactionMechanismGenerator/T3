@@ -30,54 +30,17 @@ else
     source "$BASE/etc/profile.d/conda.sh"
 fi
 
+# Create or update rmg_env from T3's own spec (package mode: rmgpy, arkane and the RMG database all
+# come from the pinned conda packages, so no RMG-Py or RMG-database clone is needed or compiled).
+# devtools/check_rmg_env.py, run at the end, asserts the result matches the spec.
+if { $COMMAND_PKG env list | grep 'rmg_env'; } >/dev/null 2>&1; then
+    $COMMAND_PKG env update -n rmg_env -f devtools/rmg_env.yml
+else
+    $COMMAND_PKG env create -f devtools/rmg_env.yml
+fi;
+
 # Temporarily change directory to parent to install sibling repos
 pushd .
-cd ..
-
-# Clone or update RMG-database
-if [ -d "./RMG-database" ]; then
-    cd RMG-database || exit
-    git pull https://github.com/ReactionMechanismGenerator/RMG-database
-    cd ..
-else
-    git clone https://github.com/ReactionMechanismGenerator/RMG-database
-fi;
-
-# Clone or update RMG-Py
-if [ -d "./RMG-Py" ]; then
-    cd RMG-Py || exit
-    git pull https://github.com/ReactionMechanismGenerator/RMG-Py
-else
-    git clone https://github.com/ReactionMechanismGenerator/RMG-Py
-    cd RMG-Py || exit
-fi;
-
-echo "export PYTHONPATH=$PYTHONPATH:$(pwd)" >> ~/.bashrc
-echo "export PATH=$PATH:$(pwd)" >> ~/.bashrc
-PYTHONPATH=$PYTHONPATH:$(pwd)
-export PYTHONPATH
-PATH=$PATH:$(pwd)
-export PATH
-# shellcheck source=~/.bashrc
-source ~/.bashrc
-
-# Create or update rmg_env
-if { $COMMAND_PKG env list | grep 'rmg_env'; } >/dev/null 2>&1; then
-    $COMMAND_PKG env update -n rmg_env -f environment.yml
-else
-    $COMMAND_PKG env create -f environment.yml
-fi;
-
-# Activate rmg_env and compile RMG-Py
-if [ "$COMMAND_PKG" == "micromamba" ]; then
-    micromamba activate rmg_env
-else
-    conda activate rmg_env
-fi
-
-make
-
-conda deactivate
 
 # Create or update t3_env
 cd ..
@@ -128,3 +91,11 @@ popd || exit
 
 # Install PyRDL into t3_env (delegates to ARC's install_pyrdl.sh)
 bash devtools/install_pyrdl.sh
+
+# Assert that rmg_env is the pinned environment, reached the way T3 reaches it (package mode).
+if [ "$COMMAND_PKG" == "micromamba" ]; then
+    micromamba activate t3_env
+else
+    conda activate t3_env
+fi
+python devtools/check_rmg_env.py || exit 1
