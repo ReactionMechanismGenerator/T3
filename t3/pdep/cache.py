@@ -337,7 +337,8 @@ def write_sa_cache_metadata(sa_path: str,
     Raises:
         ValueError: If ``t_grid_clamp`` is supplied but is not a ``TGridClampRecord.as_dict()``
             rendering, or if either version argument is supplied but is not a version string.
-        RmgPyVersionMismatchError: If both versions are supplied and differ. No sidecar is written.
+        RmgPyVersionMismatchError: If both versions are supplied and differ. No sidecar is written,
+            and an existing sidecar for ``sa_path`` is deleted.
 
     Returns:
         str: The path of the sidecar that was written.
@@ -366,9 +367,14 @@ def write_sa_cache_metadata(sa_path: str,
     # by tens of percent between pins), so a log whose banner disagrees with the environment this
     # run uses is refused, not recorded: a sidecar would otherwise vouch for output produced by an
     # install other than the one the cache is about to be trusted under. Raised before anything is
-    # written, so the SA YAML is left without a sidecar and validate_sa_cache rejects it next time.
+    # written, and any sidecar already in place is deleted first, so the SA YAML is left without a
+    # sidecar and validate_sa_cache rejects it next time even if Arkane regenerates the same bytes.
     if rmg_py_version is not None and rmg_env_rmg_py_version is not None \
             and rmg_py_version != rmg_env_rmg_py_version:
+        try:
+            os.remove(sa_cache_metadata_path(sa_path))
+        except FileNotFoundError:
+            pass
         raise RmgPyVersionMismatchError(
             f'Refusing to write the SA cache sidecar for {sa_path!r}: the Arkane log says RMG-Py '
             f'{rmg_py_version}, but rmg_env reports RMG-Py {rmg_env_rmg_py_version}. Arkane output '

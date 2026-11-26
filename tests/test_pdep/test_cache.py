@@ -13,7 +13,6 @@ import pytest
 from arc.common import read_yaml_file, save_yaml_file
 
 from t3.common import TEST_DATA_BASE_PATH
-import t3.pdep.cache as cache_module
 from t3.pdep.cache import (SA_CACHE_METADATA_FILE_NAME,
                           RmgPyVersionMismatchError,
                           hash_file,
@@ -912,6 +911,22 @@ def test_write_sa_cache_metadata_refuses_a_version_mismatch_naming_both(tmp_path
     assert status == CACHE_STATUS_CACHED_REJECTED
 
 
+def test_write_sa_cache_metadata_deletes_an_existing_sidecar_when_it_refuses_a_version_mismatch(tmp_path):
+    """A refused mismatch removes the sidecar already in place, so SA bytes identical to the ones
+    it vouched for can no longer validate against it."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC',
+                            rmg_py_version='4.0.0', rmg_env_rmg_py_version='4.0.0')
+    assert validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC') \
+        == (CACHE_STATUS_CACHED_VALID, [])
+    with pytest.raises(RmgPyVersionMismatchError):
+        write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                                method='MSC', rmg_py_version='4.0.0', rmg_env_rmg_py_version='3.3.0')
+    assert not os.path.isfile(sa_cache_metadata_path(sa_path=sa_path))
+    status, _ = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
+    assert status == CACHE_STATUS_CACHED_REJECTED
+
+
 def test_write_sa_cache_metadata_records_the_banner_when_the_environment_is_unknown(tmp_path):
     """Could not ask is unknown, not mismatch: banner recorded, no environment key, no refusal."""
     sa_path, network_path = _sa_and_network(tmp_path)
@@ -967,8 +982,8 @@ class _FakeCompletedProcess(object):
 
 def test_query_rmg_env_rmg_py_version_reads_the_framed_answer(monkeypatch):
     """Activation noise around the framed answer is ignored."""
-    monkeypatch.setattr(cache_module, 'rmg_env_command', lambda py_args: 'true')
-    monkeypatch.setattr(cache_module.subprocess, 'run', lambda *a, **k: _FakeCompletedProcess(
+    monkeypatch.setattr('t3.pdep.cache.rmg_env_command', lambda py_args: 'true')
+    monkeypatch.setattr('t3.pdep.cache.subprocess.run', lambda *a, **k: _FakeCompletedProcess(
         0, 'activation noise\nT3_RMG_PY_VERSION_BEGIN4.0.0T3_RMG_PY_VERSION_END\n'))
     assert query_rmg_env_rmg_py_version() == ('4.0.0', None)
 
@@ -991,9 +1006,9 @@ def _raise(exception):
 def test_query_rmg_env_rmg_py_version_reports_unknown_without_raising(monkeypatch, launcher, runner,
                                                                       reason_fragment):
     """Every way of failing to ask is (None, reason), never an exception and never a version."""
-    monkeypatch.setattr(cache_module, 'rmg_env_command', launcher)
+    monkeypatch.setattr('t3.pdep.cache.rmg_env_command', launcher)
     if runner is not None:
-        monkeypatch.setattr(cache_module.subprocess, 'run', runner)
+        monkeypatch.setattr('t3.pdep.cache.subprocess.run', runner)
     version, reason = query_rmg_env_rmg_py_version()
     assert version is None
     assert reason_fragment in reason
