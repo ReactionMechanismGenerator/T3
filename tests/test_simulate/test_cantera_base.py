@@ -317,6 +317,105 @@ def test_nh3_thermo_sa_keys_not_none():
             assert len(values) == len(sa_dict['time'][0])
 
 
+# ---------------------------------------------------------------------------
+# Reactor T / P given as lists
+# ---------------------------------------------------------------------------
+
+RANGE_800_900_K = [800.0, 810.0, 820.2532, 830.7692, 841.5584, 852.6316, 864.0, 875.6757, 887.6712, 900.0]
+
+
+def _make_adapter_with_reactor(adapter_class, T, P, termination_time=None):
+    """
+    Construct a Cantera adapter on the minimal example model with the first reactor's
+    ``T`` and ``P`` overridden (and optionally its ``termination_time``).
+    """
+    t3 = run_minimal(project_directory=TEST_DIR)
+    t3.set_paths()
+    t3.rmg['reactors'][0]['T'] = T
+    t3.rmg['reactors'][0]['P'] = P
+    if termination_time is not None:
+        t3.rmg['reactors'][0]['termination_time'] = termination_time
+    return adapter_class(t3=t3.t3,
+                         rmg=t3.rmg,
+                         paths=t3.paths,
+                         logger=t3.logger,
+                         atol=t3.rmg['model']['atol'],
+                         rtol=t3.rmg['model']['rtol'],
+                         observable_list=list(),
+                         sa_atol=t3.t3['sensitivity']['atol'],
+                         sa_rtol=t3.t3['sensitivity']['rtol'],
+                         )
+
+
+def _condition_tps(adapter):
+    """Return the (T0, P0) ``value_si`` pair of every condition, in order."""
+    return [(c.T0.value_si, c.P0.value_si) for c in adapter.conditions]
+
+
+def test_conditions_scalar_t_and_p():
+    """A scalar T and P give exactly one condition at those values."""
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=1000, P=1)
+    assert _condition_tps(adapter) == [(1000.0, 1.0)]
+
+
+def test_conditions_length_one_lists():
+    """A length-1 T or P list is one condition at that value."""
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=[1000.0], P=[2.0])
+    assert _condition_tps(adapter) == [(1000.0, 2.0)]
+
+
+def test_conditions_length_two_t_is_a_range():
+    """A length-2 T list is a (min, max) range, interpolated linearly in 1/T."""
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=[800, 900], P=1)
+    tps = _condition_tps(adapter)
+    assert [p for _, p in tps] == [1.0] * len(RANGE_800_900_K)
+    np.testing.assert_allclose([t for t, _ in tps], RANGE_800_900_K, rtol=1e-6)
+
+
+def test_conditions_length_two_p_is_a_range():
+    """A length-2 P list is a (min, max) range, log-spaced over three points."""
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=1000, P=[1, 100])
+    tps = _condition_tps(adapter)
+    assert [t for t, _ in tps] == [1000.0] * 3
+    np.testing.assert_allclose([p for _, p in tps], [1.0, 10.0, 100.0], rtol=1e-9)
+
+
+def test_conditions_long_lists_are_explicit_values():
+    """A T or P list longer than two is honoured value by value, in the given order."""
+    temperatures = [1200, 800, 1000, 900, 1100]
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=temperatures, P=1)
+    assert _condition_tps(adapter) == [(float(t), 1.0) for t in temperatures]
+    pressures = [5, 1, 20, 2, 10]
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=1000, P=pressures)
+    np.testing.assert_allclose([p for _, p in _condition_tps(adapter)], pressures, rtol=1e-9)
+    assert [t for t, _ in _condition_tps(adapter)] == [1000.0] * 5
+
+
+def test_conditions_cross_product_of_t_range_and_p_values():
+    """A T range and a list of three P values give every (T, P) pair."""
+    adapter = _make_adapter_with_reactor(CanteraConstantTP, T=[800, 900], P=[1, 5, 10])
+    tps = _condition_tps(adapter)
+    assert len(tps) == len(RANGE_800_900_K) * 3
+    expected = [(t, p) for t in RANGE_800_900_K for p in (1.0, 5.0, 10.0)]
+    np.testing.assert_allclose(tps, expected, rtol=1e-6)
+
+
+def test_simulate_with_list_t_returns_data_per_condition():
+    """A list T simulates every condition and each run holds its own T and P."""
+    for adapter_class in (CanteraConstantTP, CanteraConstantHP, CanteraConstantUV):
+        adapter = _make_adapter_with_reactor(adapter_class, T=[900, 1000, 1100], P=[1, 2, 3],
+                                             termination_time=[1e-4, 's'])
+        adapter.simulate()
+        assert len(adapter.all_data) == len(adapter.conditions) == 9
+        for (t0, p0), (time, condition_data, _, _) in zip(_condition_tps(adapter), adapter.all_data):
+            assert len(time.data) > 0
+            temperature, pressure = condition_data[0], condition_data[1]
+            assert temperature.label == 'Temperature' and pressure.label == 'Pressure'
+            np.testing.assert_allclose(temperature.data[0], t0, rtol=1e-3)
+            np.testing.assert_allclose(pressure.data[0], p0, rtol=1e-3)
+        assert sorted({round(t) for t, _ in _condition_tps(adapter)}) == [900, 1000, 1100]
+
+
 NH3_SA_BASE_TEST_DIR = os.path.join(SIMULATE_TEST_DATA_BASE_PATH, 'nh3_base_test')
 
 

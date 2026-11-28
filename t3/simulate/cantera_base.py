@@ -9,6 +9,7 @@ different reactor configuration.
 """
 
 import logging
+import math
 import cantera as ct
 import numpy as np
 from abc import abstractmethod
@@ -18,6 +19,64 @@ from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.utils.fix_cantera import fix_cantera
 from t3.utils.rmg_shim import generate_cantera_conditions, GenericData
+
+
+def expand_temperatures(T: float | list[float],
+                        num_t_points: int = 25,
+                        as_range: bool = True,
+                        ) -> list[float]:
+    """
+    Expand a reactor ``T`` field into an explicit list of temperatures.
+
+    A scalar becomes a 1-element list. When ``as_range`` is set, a 2-element list is a
+    (min, max) range interpolated linearly in 1/T, with one point per 10 K, at least 2
+    and at most ``num_t_points`` points. Any other list is taken verbatim, in order.
+
+    Args:
+        T (float | list[float]): The reactor temperature(s).
+        num_t_points (int, optional): The maximal number of points in an expanded range.
+        as_range (bool, optional): Whether a 2-element list is a range rather than two values.
+
+    Returns:
+        list[float]: The temperatures, in the units given.
+    """
+    if isinstance(T, (int, float)):
+        T_list = [float(T)]
+    elif len(T) == 2 and as_range:
+        n = min(int(abs(T[1] - T[0]) / 10), num_t_points)
+        n = max(n, 2)
+        inverse_ts = np.linspace(1 / T[1], 1 / T[0], num=n)
+        T_list = [1 / inverse_t for inverse_t in inverse_ts[::-1]]
+    else:
+        T_list = [float(t) for t in T]
+    return [float(t) for t in T_list]
+
+
+def expand_pressures(P: float | list[float],
+                     as_range: bool = True,
+                     ) -> list[float]:
+    """
+    Expand a reactor ``P`` field into an explicit list of pressures.
+
+    A scalar becomes a 1-element list. When ``as_range`` is set, a 2-element list is a
+    (min, max) range expanded to three log-spaced points. Any other list is taken
+    verbatim, in order.
+
+    Args:
+        P (float | list[float]): The reactor pressure(s).
+        as_range (bool, optional): Whether a 2-element list is a range rather than two values.
+
+    Returns:
+        list[float]: The pressures, in the units given.
+    """
+    if isinstance(P, (int, float)):
+        P_list = [float(P)]
+    elif len(P) == 2 and as_range:
+        log_p = np.linspace(math.log10(P[0]), math.log10(P[1]), num=3)
+        P_list = [10 ** p for p in log_p]
+    else:
+        P_list = [float(p) for p in P]
+    return [float(p) for p in P_list]
 
 
 class CanteraBase(SimulateAdapter):
@@ -172,8 +231,9 @@ class CanteraBase(SimulateAdapter):
 
         reactor_type_list = [self.cantera_reactor_type]
         mol_frac_list = [self.initialconds]
-        Tlist = ([self.rmg['reactors'][0]['T']], 'K')
-        Plist = ([self.rmg['reactors'][0]['P']], 'bar')
+        P = self.rmg['reactors'][0]['P']
+        Tlist = (expand_temperatures(self.rmg['reactors'][0]['T']), 'K')
+        Plist = ([P] if P is None else expand_pressures(P), 'bar')
         rxn_time, units = self.rmg['reactors'][0]['termination_time']
         reaction_time_list = ([rxn_time], units)  # tuple giving the ([list of reaction times], units)
 

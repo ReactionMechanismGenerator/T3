@@ -27,6 +27,7 @@ from t3.common import (convert_pressure_to_bar, convert_temperature_to_kelvin, c
                        determine_concentrations_by_equivalence_ratios, remove_numeric_parentheses)
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
+from t3.simulate.cantera_base import expand_pressures, expand_temperatures
 from t3.simulate.factory import register_simulate_adapter
 
 py_logger = logging.getLogger(__name__)
@@ -1468,24 +1469,9 @@ def get_t_and_p_lists(reactor: dict,
     while a longer list is taken verbatim. In ``idt_mode='row'`` every list is taken
     verbatim (no range expansion) so that T / P / equivalence_ratios stay index-aligned.
     """
-    row_mode = reactor.get('idt_mode', 'matrix') == 'row'
-    if isinstance(reactor['T'], (int, float)):
-        T_list = [float(reactor['T'])]
-    elif len(reactor['T']) == 2 and not row_mode:
-        n = min(int(abs(reactor['T'][1] - reactor['T'][0]) / 10), num_t_points)
-        n = max(n, 2)
-        inverse_ts = np.linspace(1 / reactor['T'][1], 1 / reactor['T'][0], num=n)
-        T_list = [1 / inverse_t for inverse_t in inverse_ts[::-1]]
-    else:
-        T_list = [float(t) for t in reactor['T']]
-    if isinstance(reactor['P'], (int, float)):
-        P_list = [float(reactor['P'])]
-    elif len(reactor['P']) == 2 and not row_mode:
-        log_p = np.linspace(math.log10(reactor['P'][0]), math.log10(reactor['P'][1]), num=3)
-        P_list = [10 ** p for p in log_p]
-    else:
-        P_list = [float(p) for p in reactor['P']]
-    return [float(t) for t in T_list], [float(p) for p in P_list]
+    as_range = reactor.get('idt_mode', 'matrix') != 'row'
+    return (expand_temperatures(reactor['T'], num_t_points=num_t_points, as_range=as_range),
+            expand_pressures(reactor['P'], as_range=as_range))
 
 
 def plot_idt_vs_temperature(idt_dict: dict,

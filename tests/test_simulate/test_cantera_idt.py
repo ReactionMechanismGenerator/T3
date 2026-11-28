@@ -574,6 +574,15 @@ def test_get_t_and_p_lists_row():
     assert P_list == [10.0, 20.0]
 
 
+
+def test_get_t_and_p_lists_explicit_values():
+    """In idt_mode='matrix', T and P lists longer than two are taken verbatim, in order."""
+    reactor = {'T': [1200, 800, 1000], 'P': [5, 1, 20, 2], 'idt_mode': 'matrix'}
+    T_list, P_list = get_t_and_p_lists(reactor)
+    assert T_list == [1200.0, 800.0, 1000.0]
+    assert P_list == [5.0, 1.0, 20.0, 2.0]
+    assert all(isinstance(v, float) for v in T_list + P_list)
+
 def test_idt_mode_row():
     """Test that idt_mode='row' produces index-aligned (T, P, phi) tuples, not a full matrix."""
     t3 = run_minimal(project_directory=TEST_DIR_IDT)
