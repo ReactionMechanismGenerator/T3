@@ -51,24 +51,6 @@ jobs:
           ref: main
           path: ARC
 
-      # 3. Checkout RMG Database
-      - name: Checkout RMG Database
-        uses: actions/checkout@v7
-        with:
-          repository: ReactionMechanismGenerator/RMG-database
-          path: RMG-database
-          ref: main
-          fetch-depth: 1
-
-      # 4. Checkout RMG-Py (needed at runtime for the rmg_env subprocess)
-      - name: Checkout RMG-Py
-        uses: actions/checkout@v7
-        with:
-          repository: ReactionMechanismGenerator/RMG-Py
-          path: RMG-Py
-          ref: main
-          fetch-depth: 1
-
       # 5. Clean Disk (Important for heavy conda envs)
       - name: Clean Ubuntu Image
         uses: jlumbroso/free-disk-space@main
@@ -89,57 +71,18 @@ jobs:
           cache-environment: true
           generate-run-shell: true
 
-      # 7. Setup RMG Environment (rmg_env) — required by all T3 tests that
+      # 7. Setup RMG Environment (rmg_env), which T3 runs RMG and Arkane in as subprocesses. Built
+      # from devtools/rmg_env.yml, the same file `make install` reads, in package mode: rmgpy,
+      # arkane and the RMG database come from the pinned conda packages, so no RMG-Py or
+      # RMG-database checkout is compiled or put on PYTHONPATH. Add no package here; change the
+      # spec file instead.
       - name: Set up micromamba (rmg_env)
         uses: mamba-org/setup-micromamba@v3
         with:
           environment-name: rmg_env
-          environment-file: RMG-Py/environment.yml
+          environment-file: T3/devtools/rmg_env.yml
           cache-environment: true
           generate-run-shell: false
-          create-args: >-
-            python=3.11
-            --channel-priority strict
-
-      # 8a. Cache key for the compiled RMG-Py Cython extensions.
-      # The build is only valid for the exact RMG-Py source it was built from AND the exact
-      # rmg_env it was built against (the extensions link against that env's Python, numpy and
-      # Cython ABIs), so the key is the RMG-Py commit SHA plus a hash of the resolved package
-      # list of rmg_env (name + version + build string of every package), not just
-      # environment.yml -- environment.yml is not a lock file and can re-solve to a different
-      # numpy while hashing the same.
-      - name: Compute RMG-Py build cache key
-        id: rmg-build-key
-        shell: bash -el {0}
-        run: |
-          rmg_sha="$(git -C RMG-Py rev-parse HEAD)"
-          env_hash="$(micromamba list -n rmg_env | sort | sha256sum | cut -c1-16)"
-          echo "key=rmgpy-build-${{ runner.os }}-${{ runner.arch }}-${rmg_sha}-${env_hash}" >> "$GITHUB_OUTPUT"
-
-      # 8b. Restore the compiled extensions if this exact (source, environment) pair was built
-      # before. There are deliberately no restore-keys: a partial match would serve a build made
-      # from different sources or against a different ABI, which is the stale-cache failure mode
-      # nobody can reproduce locally. A miss just means the build runs, as it does today.
-      - name: Cache RMG-Py Cython build
-        id: rmg-build-cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            RMG-Py/**/*.so
-            RMG-Py/build
-          key: ${{ steps.rmg-build-key.outputs.key }}
-
-      # 8. Compile RMG-Py (Cython extensions, in rmg_env)
-      - name: Compile RMG-Py
-        shell: bash -el {0}
-        working-directory: RMG-Py
-        run: |
-          if [ "${{ steps.rmg-build-cache.outputs.cache-hit }}" == "true" ]; then
-            echo "Reusing the cached RMG-Py Cython build (${{ steps.rmg-build-key.outputs.key }})."
-          else
-            micromamba run -n rmg_env make
-          fi
-          echo "PYTHONPATH=${{ github.workspace }}/RMG-Py" >> $GITHUB_ENV
 
       # 9. Install & Compile ARC (Dependency, into t3_env)
       - name: Install and Compile ARC
@@ -167,14 +110,23 @@ jobs:
         run: |
           pip install -e .
 
+      # 10b. Assert that rmg_env is the pin, reached the way T3 reaches it: through ARC's
+      # rmg_env_command, with ARC's RMG_PATH unset and a decoy rmgpy on the parent's PYTHONPATH.
+      # Fails unless Python, rmg, rmgdatabase and numdifftools match devtools/rmg_env.yml, rmgpy
+      # and arkane load from rmg_env's site-packages, ARC and rmgpy read the same database, the
+      # imports of T3's rmg_env scripts succeed, and `python -m arkane --help` exits 0.
+      - name: Verify rmg_env matches devtools/rmg_env.yml
+        shell: micromamba-shell {0}
+        working-directory: T3
+        run: python devtools/check_rmg_env.py
+
       # 11. Run T3 Tests
       - name: Run Tests
         shell: micromamba-shell {0}
         working-directory: T3
         run: |
           echo "Running T3 Tests..."
-          export PYTHONPATH="$PYTHONPATH:$(pwd):${{ github.workspace }}/ARC:${{ github.workspace }}/RMG-Py"
-          export RMG_DB_PATH="${{ github.workspace }}/RMG-database"
+          export PYTHONPATH="$PYTHONPATH:$(pwd):${{ github.workspace }}/ARC"
 
           # Run pytest on the T3 tests directory
           pytest tests/ --cov=t3 --cov-report=xml -ra -vv

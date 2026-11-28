@@ -17,7 +17,7 @@ defect, and consumer-side is exactly where these bugs live. So this test drives 
 Level, and the trade-off chosen
 -------------------------------
 This is a single slow (~30 s) end-to-end test. It shells out to Arkane in the ``rmg_env``
-environment (Python 3.9) via the same ``run_arkane_job`` path production uses. It sits at the
+environment (Python 3.11) via the same ``run_arkane_job`` path production uses. It sits at the
 *loop* level on purpose: the whole point of the ticket is catching what fast, in-process fixture
 tests structurally cannot -- a producer/consumer contact defect. A file-only assertion would be
 fast but blind to precisely the failure class being protected against.

@@ -49,7 +49,8 @@ make install
 conda activate t3_env
 ```
 
-This clones and installs ARC, RMG-Py, RMG-database, and all external dependencies.
+This clones and installs ARC and all external dependencies, and creates `rmg_env` (RMG-Py and
+RMG-database as pinned conda packages) from `devtools/rmg_env.yml`.
 See the [full installation guide](https://reactionmechanismgenerator.github.io/T3/installation/)
 for manual installation and troubleshooting.
 

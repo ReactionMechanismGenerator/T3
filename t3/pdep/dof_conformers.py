@@ -5,7 +5,7 @@ Orchestrate DOF-normalized conformer extraction for the hybrid P-dep network wri
 AND adopted wells -- inline and vibration-only (``HarmonicOscillator`` [+ ``HinderedRotor``], plus
 the imaginary frequency for a TS), never as Arkane's by-reference full conformer. Turning a raw
 ARC/Arkane statmech artifact (``Log(...)`` references to Gaussian ``opt``/``freq`` logs) into that
-inline data means loading it through Arkane -- which imports only under the ``rmg_env`` (Python 3.9),
+inline data means loading it through Arkane -- which imports only under the ``rmg_env`` (Python 3.11),
 not T3's ``t3_env``. This module runs ``t3.runners.statmech_conformer_extract`` in that sibling env
 via the same ``rmg_env_command`` launcher ARC uses everywhere else, and parses the conformer data
 back for the writer.

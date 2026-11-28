@@ -2,7 +2,7 @@
 """
 Render the estimated ``species()`` blocks for a source-only PES exploration seed.
 
-Runs under ``rmg_env`` (Python 3.9, the RMG database importable), NOT under T3's ``t3_env``: every
+Runs under ``rmg_env`` (Python 3.11, the RMG database importable), NOT under T3's ``t3_env``: every
 field a source seed carries -- ``E0``, the ``HarmonicOscillator`` frequencies, spin multiplicity,
 optical isomers, molecular weight, ``TransportData``, ``SingleExponentialDown`` and the NASA
 ``thermo`` -- comes out of RMG's own databases (group-additivity thermo, statmech group

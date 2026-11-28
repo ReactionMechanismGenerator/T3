@@ -50,7 +50,13 @@ T3 requires four co-installed components:
 | **T3** itself | `t3_env` | the orchestrator |
 | **ARC** | `t3_env` | QM job submission and post-processing |
 | **RMG-Py** | `rmg_env` | mechanism generation and Arkane PDep SA — T3 spawns these as subprocesses |
-| **RMG-database** | (filesystem only) | thermo / kinetics / transport data used by both RMG and ARC |
+| **RMG-database** | `rmg_env` | thermo / kinetics / transport data used by both RMG and ARC |
+
+`rmg_env` is pinned in one file, `devtools/rmg_env.yml`: the `rmg` release, its
+Python, the `rmgdatabase` package of the same release, and a floor on
+`numdifftools`. Both installation options below and T3's CI build `rmg_env`
+from that file. RMG-Py and RMG-database are installed as conda packages, so
+neither repository is cloned or compiled.
 
 !!! Note "Why two conda environments?"
     T3 itself never imports `rmg-py`; it only shells out to RMG and Arkane.
@@ -71,24 +77,25 @@ cd T3
 make install
 ```
 
-This clones ARC, RMG-Py, and RMG-database into the parent folder if they
-are not already there, creates both `t3_env` and `rmg_env`, compiles
-RMG-Py and ARC, and installs a custom updated version of PyRDL.
-It may take a while (RMG-Py's Cython compile is the slow step).
+This creates `rmg_env` from `devtools/rmg_env.yml`, creates `t3_env`, clones
+ARC into the parent folder if it is not already there and compiles it, and
+installs a custom updated version of PyRDL. Last, it runs
+`devtools/check_rmg_env.py`, which stops the install with a list of failures
+if `rmg_env` does not match `devtools/rmg_env.yml` (see
+[Keep `RMG_PATH` unset](#keep-rmg_path-unset)).
 
 
 ### Option 2: Manual installation
 
 #### Clone repositories
 
-Clone all four repositories (e.g., under `~/Code/`):
+Clone T3 and ARC (e.g., under `~/Code/`). RMG-Py and RMG-database come as
+conda packages in `rmg_env`, so do not clone them:
 
 ```bash
 cd ~/Code
 git clone https://github.com/ReactionMechanismGenerator/T3.git
 git clone https://github.com/ReactionMechanismGenerator/ARC.git
-git clone https://github.com/ReactionMechanismGenerator/RMG-Py.git
-git clone https://github.com/ReactionMechanismGenerator/RMG-database.git
 ```
 
 #### Create the T3 conda environment
@@ -113,26 +120,35 @@ cd ~/Code/ARC
 make compile
 ```
 
-#### Create the RMG conda environment and compile RMG-Py
+#### Create the RMG conda environment
 
 T3 spawns RMG and Arkane as subprocesses inside `rmg_env`, so this step is
-**required** even though T3 itself never imports `rmg-py`.
+**required** even though T3 itself never imports `rmg-py`. Create it from T3's
+spec file, and add no other package to it:
 
 ```bash
-cd ~/Code/RMG-Py
-mamba env create -f environment.yml
-conda activate rmg_env
-make
-conda deactivate
+cd ~/Code/T3
+mamba env create -f devtools/rmg_env.yml
 ```
+
+!!! Warning "`rmg_env` needs `numdifftools>=0.9.41` from conda-forge"
+    Arkane imports `numdifftools`. Version 0.9.39, the one on the `rmg`
+    channel, calls `np.finfo().machar`, which the numpy that RMG uses no
+    longer has, so with it `import arkane` fails. `devtools/rmg_env.yml`
+    already asks for the conda-forge version. If you built `rmg_env` another
+    way and see an Arkane import error that mentions `machar`, install the
+    newer version into `rmg_env`:
+
+    ```bash
+    mamba install -n rmg_env "conda-forge::numdifftools>=0.9.41"
+    ```
 
 #### Set environment variables
 
 Add the following to your `~/.bashrc` (or `~/.zshrc` on macOS):
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:~/Code/T3:~/Code/ARC:~/Code/RMG-Py
-export RMG_DB_PATH=~/Code/RMG-database
+export PYTHONPATH=$PYTHONPATH:~/Code/T3:~/Code/ARC
 ```
 
 Then reload your shell:
@@ -140,6 +156,40 @@ Then reload your shell:
 ```bash
 source ~/.bashrc
 ```
+
+Do not set `RMG_DB_PATH`: ARC finds the database that the `rmgdatabase`
+package installed in `rmg_env`, which is the one RMG itself reads.
+
+#### Keep `RMG_PATH` unset
+
+ARC runs RMG and Arkane in `rmg_env`. If ARC's `RMG_PATH` setting names an
+RMG-Py source tree, ARC puts that tree on the child's `PYTHONPATH`, and it
+replaces the pinned `rmgpy` package. ARC sets `RMG_PATH` by itself when it
+finds any of these:
+
+- an exported `RMG_PATH` variable;
+- a `PYTHONPATH` entry that contains `RMG-Py`;
+- a folder `~/Code/RMG-Py` (or `$GITHUB_WORKSPACE/RMG-Py`).
+
+So do not export `RMG_PATH`, and remove RMG-Py from `PYTHONPATH`. If you keep
+an RMG-Py clone at `~/Code/RMG-Py` for other work, add this line to
+`~/.arc/settings.py` (create the file if it does not exist):
+
+```python
+RMG_PATH = None
+```
+
+To confirm that `rmg_env` is the pinned environment and that ARC reaches it in
+package mode, run the same check that `make install` and CI run:
+
+```bash
+conda activate t3_env
+cd ~/Code/T3
+python devtools/check_rmg_env.py
+```
+
+It ends with `rmg_env matches .../devtools/rmg_env.yml (package mode).`, or
+lists each failure and exits 1.
 
 
 ## Verify the installation
@@ -153,7 +203,7 @@ pytest tests/ -x -q
 ```
 
 All tests should pass. If you encounter import errors, verify that
-`PYTHONPATH` and `RMG_DB_PATH` are set correctly.
+`PYTHONPATH` is set correctly and run `python devtools/check_rmg_env.py`.
 
 
 ## Optional: convenient aliases
@@ -183,22 +233,17 @@ cd ~/Code/T3
 git pull origin main
 ```
 
-You may also want to update ARC, RMG-Py, and RMG-database:
+You may also want to update ARC, and recompile it:
 
 ```bash
 cd ~/Code/ARC && git pull origin main
-cd ~/Code/RMG-Py && git pull origin main
-cd ~/Code/RMG-database && git pull origin main
+make compile
 ```
 
-Recompile ARC and RMG-Py with the latest changes:
+When `devtools/rmg_env.yml` changes, rebuild `rmg_env` from it:
 
 ```bash
-cd ~/Code/ARC
-make compile
-
-cd ~/Code/RMG-Py
-conda activate rmg_env
-make
-conda deactivate
+cd ~/Code/T3
+conda env remove -n rmg_env
+mamba env create -f devtools/rmg_env.yml
 ```

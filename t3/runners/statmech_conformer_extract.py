@@ -2,7 +2,7 @@
 """
 Extract DOF-normalized (vibration-only) conformer data from ARC/Arkane statmech artifacts.
 
-Runs under the ``rmg_env`` (Python 3.9, Arkane importable), NOT under T3's ``t3_env``: Arkane is
+Runs under the ``rmg_env`` (Python 3.11, Arkane importable), NOT under T3's ``t3_env``: Arkane is
 the only thing that turns a raw ``opt``/``freq`` Gaussian log into a scaled-frequency, atom-energy-
 corrected ``Conformer`` on a single self-consistent energy reference. This script loads each QM
 statmech artifact through Arkane's own ``StatMechJob`` (so the E0 and frequencies are exactly what
