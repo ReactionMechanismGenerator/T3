@@ -4,21 +4,26 @@ import ast
 import glob
 import logging
 import os
+import re
 import shutil
 
+import arc.statmech.arkane as arc_arkane
 import pytest
 
+from arc.level import Level, assign_frequency_scale_factor
 from arc.reaction.reaction import ARCReaction
 from arc.species.species import ARCSpecies
+from arc.statmech.arkane import get_arkane_model_chemistry
 
 from t3.pdep.capture import (CAPTURE_MANIFEST_FILE_NAME, CaptureResult, VerifyResult,
                              capture_ts_artifacts, captured_qm_artifact_path)
 from t3.pdep.discovery import ARTIFACT_STATUS_UNVERIFIED, ARTIFACT_STATUS_USABLE, TSArtifactRecord
 from t3.pdep.hashing import hash_file
 from t3.pdep.hybrid import HybridNetworkResult
+from t3.pdep.hybrid import write_hybrid_network_input_file as real_write_hybrid_network_input_file
 from t3.pdep.join import JOIN_STATUS_QUEUED, TSJoinRecord, arc_ts_label, expected_ts_artifact_path
 from t3.pdep.parser import PDepPathReaction, parse_pdep_network_file
-from t3.pdep.pes_qm import (ARC_INPUT_FILE_NAME, _adopted_energy_settings,
+from t3.pdep.pes_qm import (ARC_INPUT_FILE_NAME, _admissible_model_chemistries, _adopted_energy_settings,
                             _normalized_model_chemistries, _normalized_model_chemistry,
                             adopt_prior_qm, arc_qm_runner, build_arc_input)
 from t3.pdep.pes_rounds import (QMCandidate, adoption_channel_keys_by_ts_label,
@@ -744,31 +749,31 @@ class TestArcQmRunner(object):
         assert recorder.write_hybrid_calls == []
 
 
-# The exact modelChemistry source text a real ARC project writes, keyed by T3 sp_level. The
-# 'wb97xd/def2tzvp' entry is copied verbatim (not recomputed) from a real ARC-written
-# calcs/statmech/kinetics/input.py -- see
-# tests/data/pdep_energy_settings/xl1001_project/calcs/statmech/kinetics/input.py:9. The
-# 'b3lyp/def2tzvp' entry was captured once, out-of-band, the same way (by inspecting real ARC
-# output), NOT by calling _normalized_model_chemistry's own Level/get_arkane_model_chemistry chain
-# at test-collection time -- doing that would make this fixture pass or fail in lockstep with
-# whatever that chain currently does, so a real bug in it could never be caught by a test built
-# from it. A stored manifest written by an older ARC version is exactly the case a fixture that
-# re-derives its own expectation at test time cannot represent.
-# The composite entry is likewise copied verbatim from real ARC output vendored in this
-# repository -- tests/data/pdep_energy_settings/composite_level_project/calcs/statmech/thermo/
-# input.py:9-12, whose exact text tests/test_pdep/test_energy_settings.py already pins as what
-# t3.pdep.energy_settings freezes into a manifest. It is keyed by the (sp_level, freq_level) pair
-# it was written for.
+# The exact modelChemistry source text a real ARC project wrote, keyed by the T3 level that names
+# its year. Each literal is copied verbatim from real ARC output, never recomputed through the
+# chain under test: the wb97xd2023 entry from
+# tests/data/pdep_energy_settings/xl1001_project/calcs/statmech/kinetics/input.py:9, the b3lyp2023
+# entry from real ARC output inspected once out-of-band, and the composite entry from
+# tests/data/pdep_energy_settings/composite_level_project/calcs/statmech/thermo/input.py:9-12
+# (keyed by its sp/freq pair; the plain dlpno entry is that capture's energy level). A key that
+# names the literal's year resolves to that exact entry under ARC's tie-break, whatever no-year
+# keys the corrections database gains later.
 _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL = {
-    'wb97xd/def2tzvp': "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')",
-    'b3lyp/def2tzvp': "LevelOfTheory(method='b3lyp2023',basis='def2tzvp',software='gaussian')",
-    ('dlpno-ccsd(t)-f12/cc-pvtz-f12', 'wb97xd/def2tzvp'): (
+    'wb97xd2023/def2tzvp': "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')",
+    'b3lyp2023/def2tzvp': "LevelOfTheory(method='b3lyp2023',basis='def2tzvp',software='gaussian')",
+    'dlpno-ccsd(t)-f122023/cc-pvtz-f12':
+        "LevelOfTheory(method='dlpnoccsd(t)f122023',basis='ccpvtzf12',software='orca')",
+    ('dlpno-ccsd(t)-f122023/cc-pvtz-f12', 'wb97xd/def2tzvp'): (
         "CompositeLevelOfTheory(\n"
         "    freq=LevelOfTheory(method='wb97xd',basis='def2tzvp',software='gaussian'),\n"
         "    energy=LevelOfTheory(method='dlpnoccsd(t)f122023',basis='ccpvtzf12',software='orca')\n"
         ")"
     ),
 }
+# The levels the frozen captures above were computed at, spelled with their year.
+_CAPTURED_LEVEL = 'wb97xd2023/def2tzvp'
+_CAPTURED_COMPOSITE_SP_LEVEL = 'dlpno-ccsd(t)-f122023/cc-pvtz-f12'
+_CAPTURED_B3LYP_LEVEL = 'b3lyp2023/def2tzvp'
 
 
 def _arc_model_chemistry_text(sp_level: str, freq_level: str | None = None) -> str:
@@ -780,7 +785,7 @@ def _arc_model_chemistry_text(sp_level: str, freq_level: str | None = None) -> s
     return _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL[sp_level]
 
 
-def _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp', freq_level=None,
+def _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL, freq_level=None,
                             network_id='network1_1', network_source_text=None) -> None:
     """Build a real capture manifest under ``tmp_path`` by calling ``capture_ts_artifacts`` itself
     (mirrors ``tests/test_pdep/test_capture.py``'s own fixture-building style), so
@@ -855,24 +860,24 @@ _FIXTURE_CHANNEL_KEYS = adoption_channel_keys_by_ts_label(
 class TestAdoptPriorQM(object):
 
     def test_no_projects_adopts_nothing(self):
-        assert adopt_prior_qm([], 'network1_1', 'wb97xd/def2tzvp', _FIXTURE_CHANNEL_KEYS) == {}
+        assert adopt_prior_qm([], 'network1_1', _CAPTURED_LEVEL, _FIXTURE_CHANNEL_KEYS) == {}
 
     def test_a_missing_project_is_skipped_not_fatal(self, tmp_path):
         """A stale path in a config must not kill a run that would otherwise work."""
-        assert adopt_prior_qm([str(tmp_path / 'gone')], 'network1_1', 'wb97xd/def2tzvp',
+        assert adopt_prior_qm([str(tmp_path / 'gone')], 'network1_1', _CAPTURED_LEVEL,
                               _FIXTURE_CHANNEL_KEYS) == {}
 
     def test_matching_level_of_theory_is_adopted(self, tmp_path):
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
-        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL)
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_LEVEL,
                                  _FIXTURE_CHANNEL_KEYS)
         assert 'TS1' in adopted
 
     def test_adopted_artifact_path_points_at_the_real_captured_file(self, tmp_path):
         """Regression for mutation (f): a prior round asserted only key membership, so a mutant
         that returns the wrong path (or a constant) still passed. Assert the value itself."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
-        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL)
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_LEVEL,
                                  _FIXTURE_CHANNEL_KEYS)
         assert os.path.isfile(adopted['TS1'])
         with open(adopted['TS1']) as f:
@@ -884,8 +889,8 @@ class TestAdoptPriorQM(object):
         """Mixing levels inside one barrier makes the rate inconsistent, so a non-matching prior
         result is not adopted even though it exists and converged. b3lyp/def2tzvp normalizes to a
         genuinely different LevelOfTheory(...) string, not merely a different raw string."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='b3lyp/def2tzvp')
-        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_B3LYP_LEVEL)
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_LEVEL,
                               _FIXTURE_CHANNEL_KEYS) == {}
 
     def test_a_different_network_id_is_still_adopted_on_structural_match(self, tmp_path):
@@ -894,9 +899,9 @@ class TestAdoptPriorQM(object):
         so gating on it would refuse the exact case adoption exists to serve. A manifest recorded
         under a completely different network_id is still adopted when its path_reaction_labels
         structurally match THIS run's own candidates."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL,
                                 network_id='network9_9')
-        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_LEVEL,
                                  _FIXTURE_CHANNEL_KEYS)
         assert 'TS1' in adopted
 
@@ -904,9 +909,9 @@ class TestAdoptPriorQM(object):
         """C3/I1: network_id alone is not enough -- a record whose structural channel key matches
         none of THIS run's own transition states is refused, even with a matching network_id and
         level of theory."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL)
         other_channels_only = {ts: key for ts, key in _FIXTURE_CHANNEL_KEYS.items() if ts != 'TS1'}
-        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_LEVEL,
                               other_channels_only) == {}
 
     def test_status_gate_refuses_non_usable_artifacts(self, tmp_path, monkeypatch):
@@ -927,10 +932,10 @@ class TestAdoptPriorQM(object):
             manifest_path=str(manifest_dir / CAPTURE_MANIFEST_FILE_NAME),
             record_count=1, captured_artifact_count=1,
             networks={'network1_1': {'captured_path': os.path.join('networks', 'network1_1.py')}},
-            energy_settings={'model_chemistry': _arc_model_chemistry_text('wb97xd/def2tzvp')},
+            energy_settings={'model_chemistry': _arc_model_chemistry_text(_CAPTURED_LEVEL)},
             ts_records=(record,))
         monkeypatch.setattr('t3.pdep.pes_qm.verify_capture', lambda root: verify_result)
-        adopted = adopt_prior_qm([str(tmp_path / 'proj')], 'network1_1', 'wb97xd/def2tzvp',
+        adopted = adopt_prior_qm([str(tmp_path / 'proj')], 'network1_1', _CAPTURED_LEVEL,
                                  _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
 
@@ -943,7 +948,7 @@ class TestAdoptPriorQM(object):
         record_b = TSArtifactRecord(network_id='network1_1', network_ts_label='TS1', arc_ts_label='B',
                                     status=ARTIFACT_STATUS_USABLE, artifact_path='/b/TS1.py',
                                     path_reaction_labels=('reaction1',))
-        energy_settings = {'model_chemistry': _arc_model_chemistry_text('wb97xd/def2tzvp')}
+        energy_settings = {'model_chemistry': _arc_model_chemistry_text(_CAPTURED_LEVEL)}
         results_by_root = {}
 
         def _fake_verify_capture(root):
@@ -969,7 +974,7 @@ class TestAdoptPriorQM(object):
 
         monkeypatch.setattr('t3.pdep.pes_qm.verify_capture', _fake_verify_capture)
         adopted = adopt_prior_qm([str(tmp_path / 'proj_a'), str(tmp_path / 'proj_b')],
-                                 'network1_1', 'wb97xd/def2tzvp', _FIXTURE_CHANNEL_KEYS)
+                                 'network1_1', _CAPTURED_LEVEL, _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
 
 
@@ -979,8 +984,11 @@ class TestNormalizedModelChemistry(object):
     every prior capture is refused on a mismatch that does not exist."""
 
     def test_resolvable_level_returns_arcs_own_literal(self):
-        assert _normalized_model_chemistry('wb97xd/def2tzvp') \
-            == _arc_model_chemistry_text('wb97xd/def2tzvp')
+        """T3 returns the plain spelling ARC's own resolver gives once a frequency scale factor is settled."""
+        level = Level(repr='wb97xd/def2tzvp')
+        arcs_own = get_arkane_model_chemistry(level, freq_level=level, freq_scale_factor=1)
+        assert arcs_own is not None
+        assert _normalized_model_chemistry('wb97xd/def2tzvp') == arcs_own
 
     def test_a_composite_sp_freq_pair_resolves_instead_of_going_dead(self):
         """The schema permits sp_level != freq_level. ARC settles its frequency scale factor from
@@ -989,26 +997,30 @@ class TestNormalizedModelChemistry(object):
         SP level instead yields None for an SP level with no tabulated factor of its own,
         get_arkane_model_chemistry then raises, this function reported 'unresolvable', and reuse
         was silently dead for the entire composite configuration."""
-        normalized = _normalized_model_chemistry('dlpno-ccsd(t)-f12/cc-pvtz-f12',
-                                                 'wb97xd/def2tzvp')
+        normalized = _normalized_model_chemistry(_CAPTURED_COMPOSITE_SP_LEVEL, 'wb97xd/def2tzvp')
         assert normalized is not None, 'reuse is dead for every composite sp/freq configuration'
-        assert normalized.startswith('LevelOfTheory('), \
-            "ARC writes the SP level's plain repr once its own freq scale factor is settled"
-        # The energy half is the SP level, spelled the way the vendored real ARC output spells it.
-        assert "method='dlpnoccsd(t)f122023',basis='ccpvtzf12',software='orca'" in normalized
+        # ARC writes the SP level's plain repr once its own freq scale factor is settled.
+        assert normalized == _arc_model_chemistry_text(_CAPTURED_COMPOSITE_SP_LEVEL)
         # The OTHER spelling -- what an ARC that had not settled a scale factor wrote, vendored
         # verbatim in this repository -- must be accepted too: it is the same pair of levels, and
         # refusing it would refuse reuse from every capture written on that side of the change.
-        assert _arc_model_chemistry_text('dlpno-ccsd(t)-f12/cc-pvtz-f12', 'wb97xd/def2tzvp') \
-            in _normalized_model_chemistries('dlpno-ccsd(t)-f12/cc-pvtz-f12', 'wb97xd/def2tzvp')
+        assert _arc_model_chemistry_text(_CAPTURED_COMPOSITE_SP_LEVEL, 'wb97xd/def2tzvp') \
+            in _normalized_model_chemistries(_CAPTURED_COMPOSITE_SP_LEVEL, 'wb97xd/def2tzvp')
 
-    def test_arcs_own_year_suffixed_spelling_resolves_to_the_same_level(self):
-        """'wb97xd2023/def2tzvp' is ARC's OWN normalized form -- exactly what a user copying a
-        level out of a prior capture manifest writes back into their config. It has no tabulated
-        frequency scale factor under that spelling, which used to make it unresolvable; it must
-        normalize to the very level it was copied from."""
-        assert _normalized_model_chemistry('wb97xd2023/def2tzvp') \
-            == _normalized_model_chemistry('wb97xd/def2tzvp')
+    def test_an_explicit_year_selects_that_year_and_both_spellings_are_one_level_for_reuse(
+            self, tmp_path, monkeypatch):
+        """The year spelling resolves to its own entry and no-year prefers a no-year entry, yet a capture under either is admitted for the other."""
+        _use_synthetic_corrections_database(tmp_path / 'db_a', monkeypatch, with_no_year_key=False)
+        assert _normalized_model_chemistry('wb97xd/def2tzvp') == _YEAR_KEY
+        assert _normalized_model_chemistry(_CAPTURED_LEVEL) == _YEAR_KEY
+
+        _use_synthetic_corrections_database(tmp_path / 'db_b', monkeypatch, with_no_year_key=True)
+        assert _normalized_model_chemistry('wb97xd/def2tzvp') == _NO_YEAR_KEY
+        assert _normalized_model_chemistry(_CAPTURED_LEVEL) == _YEAR_KEY
+        assert _YEAR_KEY in _admissible_model_chemistries('wb97xd/def2tzvp', 'wb97xd/def2tzvp',
+                                                          _YEAR_KEY)
+        assert _NO_YEAR_KEY in _admissible_model_chemistries(_CAPTURED_LEVEL, 'wb97xd/def2tzvp',
+                                                             _NO_YEAR_KEY)
 
     def test_a_level_arc_cannot_resolve_at_all_returns_none_not_raise(self, caplog):
         """The documented degradation: a level with no AEC entry anywhere yields None with a
@@ -1020,7 +1032,7 @@ class TestNormalizedModelChemistry(object):
     def test_adopt_prior_qm_survives_an_unresolvable_level(self, tmp_path, caplog):
         """End to end through adopt_prior_qm: an unresolvable requested level must degrade to
         'nothing adopted' with a warning, never to a crash before round 0."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL)
         with caplog.at_level(logging.WARNING, logger='t3.pdep.pes_qm'):
             adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'notamethod/notabasis',
                                      _FIXTURE_CHANNEL_KEYS)
@@ -1030,9 +1042,9 @@ class TestNormalizedModelChemistry(object):
     def test_adopt_prior_qm_reuses_a_composite_level_capture(self, tmp_path):
         """The end-to-end shape of the dead-reuse defect: a prior capture made under a composite
         sp/freq pair must actually be adopted when this run asks for the same pair."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='dlpno-ccsd(t)-f12/cc-pvtz-f12',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_COMPOSITE_SP_LEVEL,
                                 freq_level='wb97xd/def2tzvp')
-        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'dlpno-ccsd(t)-f12/cc-pvtz-f12',
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_COMPOSITE_SP_LEVEL,
                                  _FIXTURE_CHANNEL_KEYS, freq_level='wb97xd/def2tzvp')
         assert 'TS1' in adopted
 
@@ -1040,9 +1052,9 @@ class TestNormalizedModelChemistry(object):
         """The negative half, and the reason freq_level had to be threaded through the API at all:
         a caller that does not supply it cannot reconstruct the spelling ARC wrote, so the same
         capture is refused. This is what the fix moves -- not a match that was loosened."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='dlpno-ccsd(t)-f12/cc-pvtz-f12',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_COMPOSITE_SP_LEVEL,
                                 freq_level='wb97xd/def2tzvp')
-        assert adopt_prior_qm([str(tmp_path)], 'network1_1', 'dlpno-ccsd(t)-f12/cc-pvtz-f12',
+        assert adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_COMPOSITE_SP_LEVEL,
                               _FIXTURE_CHANNEL_KEYS) == {}
 
 
@@ -1054,11 +1066,11 @@ class TestAdoptPriorQMRefusesRecordsWithoutStructuralEvidence(object):
         capture's own vendored network copy (here: a stub network with no reactions at all) cannot
         be structurally matched -- it must be refused with a log line saying exactly that, never
         matched by any label."""
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL,
                                 network_source_text="# stub RMG network file\n"
                                                     "network(label='network1_1')\n")
         with caplog.at_level(logging.INFO, logger='t3.pdep.pes_qm'):
-            adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+            adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_LEVEL,
                                      _FIXTURE_CHANNEL_KEYS)
         assert adopted == {}
         assert 'no unambiguous structural channel identity' in caplog.text
@@ -1073,17 +1085,17 @@ class TestAdoptedEnergySettings(object):
         assert _adopted_energy_settings(dict()) is None
 
     def test_settings_come_from_the_adopted_artifacts_own_prior_manifest(self, tmp_path):
-        _write_capture_manifest(tmp_path, ts_label='TS1', level='wb97xd/def2tzvp')
-        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', 'wb97xd/def2tzvp',
+        _write_capture_manifest(tmp_path, ts_label='TS1', level=_CAPTURED_LEVEL)
+        adopted = adopt_prior_qm([str(tmp_path)], 'network1_1', _CAPTURED_LEVEL,
                                  _FIXTURE_CHANNEL_KEYS)
         settings = _adopted_energy_settings(adopted)
-        assert settings['model_chemistry'] == _arc_model_chemistry_text('wb97xd/def2tzvp')
+        assert settings['model_chemistry'] == _arc_model_chemistry_text(_CAPTURED_LEVEL)
         assert settings['use_hindered_rotors'] is True
 
     def test_conflicting_prior_manifests_raise_rather_than_guess(self, tmp_path):
-        _write_capture_manifest(tmp_path / 'proj_a', ts_label='TS1', level='wb97xd/def2tzvp')
-        _write_capture_manifest(tmp_path / 'proj_b', ts_label='TS2', level='b3lyp/def2tzvp')
-        adopted_a = adopt_prior_qm([str(tmp_path / 'proj_a')], 'network1_1', 'wb97xd/def2tzvp',
+        _write_capture_manifest(tmp_path / 'proj_a', ts_label='TS1', level=_CAPTURED_LEVEL)
+        _write_capture_manifest(tmp_path / 'proj_b', ts_label='TS2', level=_CAPTURED_B3LYP_LEVEL)
+        adopted_a = adopt_prior_qm([str(tmp_path / 'proj_a')], 'network1_1', _CAPTURED_LEVEL,
                                    _FIXTURE_CHANNEL_KEYS)
         # proj_b's TS2 is deliberately NOT reached through adopt_prior_qm: reaction2 of the
         # fixture network names no RMG family, so its channel is identified by its endpoints
@@ -1134,9 +1146,9 @@ class TestArcQmRunnerWithNothingQueued(object):
         # adopt_prior_qm, so the vendoring below and _adopted_energy_settings both run against the
         # exact artifact and manifest formats production writes -- no hand-rolled shapes.
         _write_capture_manifest(tmp_path / 'prior_project', ts_label='TS1',
-                                level='wb97xd/def2tzvp')
+                                level=_CAPTURED_LEVEL)
         adopted = adopt_prior_qm([str(tmp_path / 'prior_project')], _NETWORK_ID,
-                                 'wb97xd/def2tzvp', _FIXTURE_CHANNEL_KEYS)
+                                 _CAPTURED_LEVEL, _FIXTURE_CHANNEL_KEYS)
         assert adopted, 'fixture must adopt TS1 for this test to mean anything'
 
         paths, _candidates, recorder, network_path = _arc_qm_runner_fixture(
@@ -1156,8 +1168,8 @@ class TestArcQmRunnerWithNothingQueued(object):
         assert recorder.capture_ts_artifacts_calls == []
         # The hybrid still fires: the adopted artifact is vendored under THIS round's own capture
         # directory, the source is the round's explored network (no captured copy exists), the
-        # method is the configured one, and the energy settings come from the adopted artifact's
-        # own prior manifest.
+        # method is the configured one, the frozen numbers come from the adopted artifact's own
+        # prior manifest, and the level is this run's own resolved one.
         assert len(recorder.write_hybrid_calls) == 1
         call = recorder.write_hybrid_calls[0]
         vendored_path = recorder.extract_dof_calls[0]['transition_states']['TS1']
@@ -1166,7 +1178,9 @@ class TestArcQmRunnerWithNothingQueued(object):
         assert call['source_path'] == network_path
         assert call['method'] == 'MSC'
         assert call['dest_path'] == hybrid_network_path(paths, _NETWORK_ID)
-        assert call['energy_settings'].model_chemistry == _arc_model_chemistry_text('wb97xd/def2tzvp')
+        assert call['energy_settings'].model_chemistry == _normalized_model_chemistry(
+            _config().qm.sp_level, _config().qm.freq_level)
+        assert call['energy_settings'].atom_energies == _adopted_energy_settings(adopted)['atom_energies']
 
     def test_nothing_queued_and_nothing_adopted_returns_empty_without_touching_arc(self, tmp_path,
                                                                                    monkeypatch):
@@ -1206,7 +1220,7 @@ _OUTPUT_YML_ATOM_ENERGY_CORRECTIONS = {
 
 
 def _fabricate_completed_arc_project(arc_project, network_id, network_ts_label,
-                                     level='wb97xd/def2tzvp'):
+                                     level=_CAPTURED_LEVEL):
     """Populate ``arc_project`` as a completed ARC run that converged ``network_ts_label``.
 
     Shaped from what ARC actually writes for the pilot's level: ``useAtomCorrections = True`` with
@@ -1382,7 +1396,7 @@ class TestArcQmRunnerRealCaptureHybrid(object):
         paths, candidate, _arc_label, project_directory = _real_drive_setup(tmp_path, monkeypatch)
         arc_qm_runner((candidate,), paths, _config(), _NETWORK_ID)
         network = parse_pdep_network_file(_FIXTURE_NETWORK_PATH)
-        adopted = adopt_prior_qm([project_directory], _NETWORK_ID, 'wb97xd/def2tzvp',
+        adopted = adopt_prior_qm([project_directory], _NETWORK_ID, _CAPTURED_LEVEL,
                                  adoption_channel_keys_by_ts_label(network),
                                  freq_level='wb97xd/def2tzvp')
         assert set(adopted) == {'TS1'}
@@ -1414,3 +1428,187 @@ class TestArcQmRunnerRealCaptureHybrid(object):
         assert "frequency = (" in ts1_block and "'cm^-1')" in ts1_block
         # Self-contained inline conformer: no external qm/ statmech file is written beside it.
         assert not os.path.isdir(os.path.join(os.path.dirname(hybrid_path), 'qm'))
+
+
+# The literals ARC's corrections-database parser looks for, by the name ARC gives each one.
+_ARC_CORRECTIONS_SECTION_MARKERS = {
+    'AEC_SECTION_START': 'atom_energies = {',
+    'AEC_SECTION_END': 'pbac = {',
+    'PBAC_SECTION_START': 'pbac = {',
+    'PBAC_SECTION_END': 'mbac = {',
+    'MBAC_SECTION_START': 'mbac = {',
+    'MBAC_SECTION_END': 'freq_dict =',
+    'FREQ_SECTION_START': 'freq_dict = {',
+}
+_NO_YEAR_KEY = "LevelOfTheory(method='wb97xd',basis='def2tzvp',software='gaussian')"
+_YEAR_KEY = "LevelOfTheory(method='wb97xd2023',basis='def2tzvp',software='gaussian')"
+
+
+def _use_synthetic_corrections_database(root, monkeypatch, with_no_year_key: bool) -> None:
+    """
+    Point ARC at a minimal corrections database holding a ``wb97xd2023`` atom-energy key, and a
+    no-year ``wb97xd`` key beside it when ``with_no_year_key`` is set.
+
+    The file is written to match the section markers ARC parses. If ARC no longer uses one of
+    those markers, the test skips and names it, since no valid synthetic input can be built.
+
+    Args:
+        root: The directory to hold ``input/quantum_corrections/data.py``.
+        monkeypatch: The pytest ``monkeypatch`` fixture.
+        with_no_year_key (bool): Whether to add the no-year key.
+    """
+    for name, literal in _ARC_CORRECTIONS_SECTION_MARKERS.items():
+        if getattr(arc_arkane, name, None) != literal:
+            pytest.skip(f'ARC no longer parses the corrections section marker {name} = {literal!r} '
+                        f'(found {getattr(arc_arkane, name, None)!r}); cannot build a synthetic '
+                        f'corrections database ARC would read.')
+    keys = ([_NO_YEAR_KEY] if with_no_year_key else []) + [_YEAR_KEY]
+    aec = ''.join(f'    "{key}": {{"H": -0.5, "C": -37.8, "O": -75.0}},\n' for key in keys)
+    data_dir = os.path.join(str(root), 'input', 'quantum_corrections')
+    os.makedirs(data_dir)
+    with open(os.path.join(data_dir, 'data.py'), 'w') as f:
+        f.write(f'atom_energies = {{\n{aec}}}\n\npbac = {{\n}}\n\nmbac = {{\n}}\n\n'
+                f'freq_dict = {{\n    "{_NO_YEAR_KEY}": 0.988,\n}}\n')
+    monkeypatch.setattr(arc_arkane, 'RMG_DB_PATH', str(root))
+
+
+class TestOneRawLevelUnderTwoSpellings(object):
+    """wb97xd and wb97xd2023 are one raw computation with two fitted corrections: one level for
+    reuse admission, and the run's own resolved level for what a hybrid network emits."""
+
+    def test_a_capture_frozen_under_the_year_spelling_is_admitted_for_the_no_year_request(
+            self, tmp_path, monkeypatch):
+        """A capture frozen as wb97xd2023 is adopted for a wb97xd/def2tzvp request."""
+        _use_synthetic_corrections_database(tmp_path / 'db', monkeypatch, with_no_year_key=True)
+        assert _normalized_model_chemistry('wb97xd/def2tzvp') == _NO_YEAR_KEY
+        _write_capture_manifest(tmp_path / 'proj', ts_label='TS1', level=_CAPTURED_LEVEL)
+        adopted = adopt_prior_qm([str(tmp_path / 'proj')], 'network1_1', _CAPTURED_LEVEL,
+                                 _FIXTURE_CHANNEL_KEYS, freq_level='wb97xd/def2tzvp')
+        assert set(adopted) == {'TS1'}
+
+    def test_an_old_spelling_capture_plus_a_new_well_emits_one_resolved_level_and_a_scale_factor(
+            self, tmp_path, monkeypatch):
+        """The hybrid carries one modelChemistry, the run's resolved level, and a frequencyScaleFactor."""
+        _write_capture_manifest(tmp_path / 'prior_project', ts_label='TS1',
+                                level=_CAPTURED_LEVEL)
+        adopted = adopt_prior_qm([str(tmp_path / 'prior_project')], _NETWORK_ID,
+                                 _CAPTURED_LEVEL, _FIXTURE_CHANNEL_KEYS,
+                                 freq_level='wb97xd/def2tzvp')
+        assert set(adopted) == {'TS1'}
+        paths, _candidates, recorder, _network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, capture_result=None)
+        monkeypatch.setattr('t3.pdep.pes_qm.write_hybrid_network_input_file',
+                            real_write_hybrid_network_input_file)
+        well_label = parse_pdep_network_file(_FIXTURE_NETWORK_PATH).isomers[0]
+        species_dir = os.path.join(paths.arc_project, 'calcs', 'statmech', 'kinetics', 'species')
+        os.makedirs(species_dir)
+        with open(os.path.join(species_dir, well_label.replace('(', '[').replace(')', ']') + '.py'),
+                  'w') as f:
+            f.write("energy = Log('output.out')\n")
+        config = _config()
+
+        arc_qm_runner((), paths, config, _NETWORK_ID, adopted=adopted)
+
+        assert set(recorder.extract_dof_calls[0]['wells']) == {well_label}
+        with open(hybrid_network_path(paths, _NETWORK_ID)) as f:
+            header = [line for line in f.read().splitlines()
+                      if line.startswith(('modelChemistry', 'frequencyScaleFactor'))]
+        expected_level = _normalized_model_chemistry(config.qm.sp_level, config.qm.freq_level)
+        expected_factor = assign_frequency_scale_factor(Level(repr=config.qm.freq_level))
+        assert header == [f'modelChemistry = {expected_level}',
+                          f'frequencyScaleFactor = {expected_factor}']
+
+    def test_guard_c4_still_refuses_a_capture_and_an_adopted_artifact_on_different_numbers(
+            self, tmp_path, monkeypatch):
+        """Admitting both spellings leaves the energy-reference comparison of C4 raising on a real mix."""
+        capture_dir = os.path.join(str(tmp_path), 'capture')
+        os.makedirs(os.path.join(capture_dir, 'networks'))
+        shutil.copyfile(_FIXTURE_NETWORK_PATH,
+                        os.path.join(capture_dir, 'networks', f'{_NETWORK_ID}.py'))
+        captured = _usable_capture_result(None, capture_dir, network_path='')
+        captured_settings = dict(_FROZEN_ENERGY_SETTINGS, model_chemistry=_NO_YEAR_KEY,
+                                 frequency_scale_factor=0.988,
+                                 atom_energies={'C': -37.84706, 'H': -0.50066, 'O': -75.07252})
+        captured = CaptureResult(capture_dir=captured.capture_dir,
+                                 manifest_path=captured.manifest_path, records=captured.records,
+                                 energy_settings=captured_settings, networks=captured.networks)
+        paths, candidates, recorder, _network_path = _arc_qm_runner_fixture(
+            tmp_path, monkeypatch, captured)
+        prior_artifact_path = _write_prior_adopted_artifact(tmp_path, 'TS2')
+        adopted_settings = dict(captured_settings, model_chemistry=_YEAR_KEY,
+                                atom_energies={'C': -37.84000, 'H': -0.50066, 'O': -75.07252})
+        monkeypatch.setattr('t3.pdep.pes_qm.verify_capture',
+                            lambda root: _prior_verify_result(root, adopted_settings))
+        with pytest.raises(ValueError, match='energy reference') as raised:
+            arc_qm_runner(candidates, paths, _config(), _NETWORK_ID,
+                          adopted={'TS2': prior_artifact_path})
+        print(f'C4 raised: {raised.value}')
+        assert recorder.write_hybrid_calls == []
+
+
+# Assignments whose string constants may spell a year: the frozen ARC output, the yeared requests
+# naming it, and the synthetic corrections-database keys.
+_YEAR_SPELLING_ALLOWED_ASSIGNMENTS = frozenset({
+    '_ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL', '_CAPTURED_LEVEL', '_CAPTURED_COMPOSITE_SP_LEVEL',
+    '_CAPTURED_B3LYP_LEVEL', '_NO_YEAR_KEY', '_YEAR_KEY',
+})
+_LEVEL_EXPECTATION_TEST_MODULES = (
+    __file__, os.path.join(os.path.dirname(__file__), 'test_pes_loop_integration.py'))
+# ARC model-chemistry text whose method carries a year, and a T3 level spelled with a year.
+_YEARED_METHOD_TEXT = re.compile(r"method='[^']*\d{4}'")
+_YEARED_LEVEL_SPELLING = re.compile(r"\b[a-z][a-z0-9()\-]*(?:19|20)\d{2}/")
+
+
+def _years_named_by_level_key(key) -> set:
+    """The four-digit years the single-point and frequency methods of a table key carry."""
+    levels = key if isinstance(key, tuple) else (key,)
+    return {match.group(1) for level in levels
+            for match in [re.search(r'(\d{4})$', level.split('/')[0].replace('-', ''))] if match}
+
+
+def _stray_year_spellings(path: str) -> tuple[list, set]:
+    """
+    Find string constants in a test module that spell a level with a year outside the allowed
+    assignments.
+
+    Args:
+        path (str): The test module to scan.
+
+    Returns:
+        tuple[list, set]: ``(line, text)`` for every stray constant, and the allowed assignment
+        names found in the module.
+    """
+    with open(path) as f:
+        tree = ast.parse(f.read())
+    allowed_ids, found = set(), set()
+    for node in tree.body:
+        targets = node.targets if isinstance(node, ast.Assign) else []
+        names = {target.id for target in targets if isinstance(target, ast.Name)}
+        if names & _YEAR_SPELLING_ALLOWED_ASSIGNMENTS:
+            found |= names & _YEAR_SPELLING_ALLOWED_ASSIGNMENTS
+            allowed_ids |= {id(child) for child in ast.walk(node)}
+    stray = [(node.lineno, node.value) for node in ast.walk(tree)
+             if isinstance(node, ast.Constant) and isinstance(node.value, str)
+             and id(node) not in allowed_ids
+             and (_YEARED_METHOD_TEXT.search(node.value) or _YEARED_LEVEL_SPELLING.search(node.value))]
+    return stray, found
+
+
+class TestLevelExpectationsNameTheirYear(object):
+    """A frozen yeared ARC literal is only ever requested by a level that names its year."""
+
+    def test_every_frozen_literal_is_keyed_by_a_level_naming_its_year(self):
+        """Each table key names every year its frozen literal's methods carry."""
+        for key, literal in _ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL.items():
+            literal_years = set(re.findall(r"method='[^']*?(\d{4})'", literal))
+            assert literal_years <= _years_named_by_level_key(key), \
+                f'{key!r} requests {literal!r} without naming its year(s) {sorted(literal_years)}'
+
+    def test_no_yeared_level_expectation_is_hard_coded_outside_the_frozen_table(self):
+        """No string constant in these test modules spells a yeared level outside the allowed assignments."""
+        found_anywhere = set()
+        for path in _LEVEL_EXPECTATION_TEST_MODULES:
+            stray, found = _stray_year_spellings(path)
+            found_anywhere |= found
+            assert stray == [], f'{path} hard-codes a yeared level expectation: {stray}'
+        assert '_ARC_MODEL_CHEMISTRY_TEXT_BY_LEVEL' in found_anywhere
