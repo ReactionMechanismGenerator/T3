@@ -15,7 +15,7 @@ from arc.common import read_yaml_file
 from t3.chem import T3Species
 import t3.common as common
 from t3.common import TEST_DATA_BASE_PATH
-from t3.schema import RMGSpecies
+from t3.schema import RMGReactor, RMGSpecies, TerminationTimeEnum
 from t3.utils.writer import get_species_obj_from_a_species_dict
 
 
@@ -109,6 +109,40 @@ def test_convert_termination_time_to_seconds():
 
     t_final = (1, 'days')
     assert common.convert_termination_time_to_seconds(t_final) == 3600*24
+
+
+def test_convert_termination_time_to_seconds_unknown_unit_raises():
+    """An unknown time unit raises ValueError naming the unit and the permitted set."""
+    with pytest.raises(ValueError) as error:
+        common.convert_termination_time_to_seconds((1.0, 'fortnights'))
+    message = str(error.value)
+    assert 'fortnights' in message
+    for unit in TerminationTimeEnum:
+        assert f"'{unit.value}'" in message
+
+
+def test_every_schema_time_unit_is_convertible():
+    """Every termination_time unit the schema permits converts, both raw and after validation."""
+    units = [unit.value for unit in TerminationTimeEnum]
+    assert units == ['micro-s', 'ms', 's', 'hrs', 'hours', 'days']
+    for unit in units:
+        assert isinstance(common.convert_termination_time_to_seconds((1.0, unit)), float)
+        validated = RMGReactor(type='gas batch constant T P', T=1000, P=1,
+                               termination_time=[1.0, unit]).termination_time
+        assert isinstance(common.convert_termination_time_to_seconds(validated), float)
+
+
+@pytest.mark.parametrize('unit, expected', [('micro-s', (0.001, 'ms')), ('hrs', (1.0, 'hours')),
+                                            ('ms', (1.0, 'ms')), ('s', (1.0, 's')),
+                                            ('hours', (1.0, 'hours')), ('days', (1.0, 'days'))])
+def test_schema_termination_time_normalization(unit, expected):
+    """Schema normalization of termination_time preserves the declared duration."""
+    validated = RMGReactor(type='gas batch constant T P', T=1000, P=1,
+                           termination_time=[1.0, unit]).termination_time
+    assert validated[1] == expected[1]
+    assert validated[0] == pytest.approx(expected[0])
+    assert common.convert_termination_time_to_seconds(validated) == \
+        pytest.approx(common.convert_termination_time_to_seconds((1.0, unit)))
 
 
 def test_get_values_within_range():

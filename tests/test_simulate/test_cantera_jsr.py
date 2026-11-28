@@ -280,12 +280,13 @@ def test_mass_flow_rate_matches_residence_time():
 
 
 def test_pressure_controller_primary_is_mfc():
-    """The PressureController's primary should be the MassFlowController."""
+    """The PressureController's outflow is the MassFlowController's flow plus the pressure correction."""
     adapter = _make_jsr()
     adapter.simulate()
-    # Primary device of the PC is the MFC; can check via mass_flow_rate equivalence
-    assert adapter._jsr_pc.mass_flow_rate == pytest.approx(adapter._jsr_mfc.mass_flow_rate,
-                                                            rel=1e-3, abs=1e-12)
+    delta_p = adapter.cantera_reactor.thermo.P - adapter._jsr_exhaust.thermo.P
+    expected = adapter._jsr_mfc.mass_flow_rate + jsr_module.PRESSURE_COEFF * delta_p
+    assert adapter._jsr_mfc.mass_flow_rate > 1e-7
+    assert adapter._jsr_pc.mass_flow_rate == pytest.approx(expected, rel=1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -533,18 +534,19 @@ def test_jsr_long_residence_time_approaches_batch_final_state():
     batch_final = {batch.all_data[0][1][2 + s].label: batch.all_data[0][1][2 + s].data[-1]
                    for s in range(batch.num_ct_species)}
 
-    # JSR at the same conditions, with the residence time = batch reaction time
+    # JSR at the same conditions, with the residence time = batch reaction time.
+    # simulate() integrates only to t = tau, so advance the network to steady state.
     jsr = _make_jsr()
     jsr.simulate()
-    jsr_final = {jsr.all_data[0][1][2 + s].label: jsr.all_data[0][1][2 + s].data[-1]
-                 for s in range(jsr.num_ct_species)}
+    tau = jsr.conditions[0].reaction_time.value_si
+    jsr.cantera_simulation.advance(20 * tau)
+    jsr_final = dict(zip(jsr.model.species_names, jsr.cantera_reactor.thermo.X))
 
-    # For non-trace species, JSR steady state should be close to batch final
-    # (qualitative sanity — both reach the same near-equilibrium state)
-    for spc in batch_final:
-        if batch_final[spc] > 1e-3:
-            np.testing.assert_allclose(jsr_final[spc], batch_final[spc], rtol=0.20,
-                                       err_msg=f'JSR ≠ batch for {spc}')
+    compared = [spc for spc in batch_final if batch_final[spc] > 1e-3]
+    assert any(spc.startswith('H2O') for spc in compared)
+    for spc in compared:
+        np.testing.assert_allclose(jsr_final[spc], batch_final[spc], rtol=0.20,
+                                   err_msg=f'JSR ≠ batch for {spc}')
 
 
 # ---------------------------------------------------------------------------

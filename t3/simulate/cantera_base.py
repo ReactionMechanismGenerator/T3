@@ -13,7 +13,10 @@ import cantera as ct
 import numpy as np
 from abc import abstractmethod
 
-from t3.common import get_observable_label_from_header, get_parameter_from_header
+from t3.common import (convert_termination_time_to_seconds,
+                       get_observable_label_from_header,
+                       get_parameter_from_header,
+                       )
 from t3.logger import Logger
 from t3.simulate.adapter import SimulateAdapter
 from t3.utils.fix_cantera import fix_cantera
@@ -128,6 +131,8 @@ class CanteraBase(SimulateAdapter):
     def set_up(self):
         """
         Read in the Cantera input file and set up the empty attributes initialized in the init method.
+        The reactor conditions are converted to SI here (P from bar to Pa, termination time to s),
+        since the condition objects carry SI values only.
         """
         fix_cantera(self.paths['cantera annotated'])
         self.model = ct.Solution(infile=self.paths['cantera annotated'])
@@ -173,9 +178,9 @@ class CanteraBase(SimulateAdapter):
         reactor_type_list = [self.cantera_reactor_type]
         mol_frac_list = [self.initialconds]
         Tlist = ([self.rmg['reactors'][0]['T']], 'K')
-        Plist = ([self.rmg['reactors'][0]['P']], 'bar')
-        rxn_time, units = self.rmg['reactors'][0]['termination_time']
-        reaction_time_list = ([rxn_time], units)  # tuple giving the ([list of reaction times], units)
+        Plist = ([self.rmg['reactors'][0]['P'] * 1e5], 'Pa')
+        rxn_time = convert_termination_time_to_seconds(self.rmg['reactors'][0]['termination_time'])
+        reaction_time_list = ([rxn_time], 's')  # tuple giving the ([list of reaction times], units)
 
         self.generate_conditions(reactor_type_list, reaction_time_list, mol_frac_list, Tlist, Plist)
 

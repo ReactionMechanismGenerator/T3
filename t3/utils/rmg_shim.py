@@ -14,11 +14,24 @@ from typing import Any
 
 class Quantity:
     """
-    Minimal shim for RMG Quantity.
-    Assumes the value passed is already in SI or the code will handle it.
-    Use this if the code expects an object with .value_si
+    Minimal shim for RMG Quantity that holds a value already in SI.
+
+    Unlike RMG's Quantity it performs no unit conversion, so it accepts only the SI
+    units its callers use and refuses any other unit rather than mislabel the value.
+
+    Args:
+        value: The value, already expressed in ``units``.
+        units (str): One of ``'K'``, ``'Pa'`` or ``'s'``.
+
+    Raises:
+        ValueError: If ``units`` is not one of the accepted SI units.
     """
+    si_units = ('K', 'Pa', 's')
+
     def __init__(self, value, units=None):
+        if units not in self.si_units:
+            raise ValueError(f'Quantity holds SI values only; got units {units!r}. '
+                             f'Convert the value to one of {", ".join(repr(u) for u in self.si_units)} first.')
         self.value_si = value
         self.units = units
 
