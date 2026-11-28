@@ -52,6 +52,8 @@ class ArkaneMESolverAdapter(MESolverAdapter):
                                                  topology is deferred future work (the number
                                                  of net reactions in a P-dep network is not
                                                  trivially the number of path reactions).
+        timeout (float, optional): The wall-clock deadline, in seconds, forwarded to
+                                   ``run_arkane_job``. ``None`` (the default) means no deadline.
 
     Raises:
         ValueError: If ``method`` is not a key of ``t3.utils.writer.METHOD_MAP``.
@@ -73,6 +75,7 @@ class ArkaneMESolverAdapter(MESolverAdapter):
                  logger: Logger | None = None,
                  allow_ilt_complement: bool = False,
                  expected_reactions: int | set | None = None,
+                 timeout: float | None = None,
                  ):
         self.network_path = network_path
         self.output_directory = output_directory
@@ -80,6 +83,7 @@ class ArkaneMESolverAdapter(MESolverAdapter):
         self.logger = logger
         self.allow_ilt_complement = allow_ilt_complement
         self.expected_reactions = expected_reactions
+        self.timeout = timeout
 
         self.isomer_labels = tuple()
         self.me_success_result = None
@@ -142,7 +146,9 @@ class ArkaneMESolverAdapter(MESolverAdapter):
         job_ran = run_arkane_job(input_file=input_file_path,
                                  output_directory=self.output_directory,
                                  logger=self.logger,
-                                 required_artifact='output.py')
+                                 required_artifact='output.py',
+                                 timeout=self.timeout,
+                                 )
 
         stderr_text = None
         if os.path.isfile(stderr_path):

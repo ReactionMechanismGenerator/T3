@@ -14,15 +14,20 @@ Todo:
       A + OH <=> C + D, we shouldn't store thermo for OH, it's already well-known and our numbers will be inferior.
 """
 
+import contextlib
 import datetime
 import inspect
+import multiprocessing
 import os
 import re
 import shutil
+import signal
 import tempfile
+import time
 import traceback
 from collections import deque
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import cantera as ct
 import yaml
@@ -104,7 +109,12 @@ from t3.pdep.selector import (CACHE_STATUS_CACHED_VALID,
                               select_from_sa_dict_with_diagnostics,
                               select_sensitive_wells,
                               )
-from t3.runners.rmg_runner import rmg_runner, run_arkane_job
+from t3.runners.rmg_runner import (ArkaneJobResult,
+                                  RMGWalltimeStop,
+                                  find_rmg_walltime_stop,
+                                  rmg_runner,
+                                  run_arkane_job,
+                                  )
 from t3.schema import InputBase
 from t3.simulate.factory import simulate_factory
 from t3.utils.fix_cantera import fix_cantera
@@ -141,6 +151,35 @@ ARC_FINALIZATION_MARKER_VERSION = 2
 # version -- older or newer -- fails the check and finalization is redone rather than skipped. The
 # closing parenthesis keeps the match exact: 'v2)' can never prefix-match a hypothetical 'v20)'.
 ARC_FINALIZATION_MARKER_TEXT = f'ARC finalization completed (v{ARC_FINALIZATION_MARKER_VERSION})'
+
+# setitimer() treats 0 as "disarm", so a deadline that has already passed is armed at this floor
+# instead, which fires on the next tick.
+MIN_ITIMER_SECONDS = 0.001
+
+
+class RMGRunStatus(NamedTuple):
+    """
+    The state of the RMG run of one T3 iteration, as read from its ``RMG.log``.
+
+    Attributes:
+        began (bool): Whether RMG began running.
+        terminated (bool): Whether the run is terminal and must not be restarted. True for a run that
+                           reached ``MODEL GENERATION COMPLETED`` and for a run that stopped at its wall time.
+        walltime_stop (Optional[RMGWalltimeStop]): The stop time if the run stopped at its wall time,
+                                                   ``None`` otherwise (including a normally completed run).
+    """
+    began: bool
+    terminated: bool
+    walltime_stop: RMGWalltimeStop | None = None
+
+
+class T3WalltimeExceeded(BaseException):
+    """
+    Raised inside a step bounded by ``max_T3_walltime`` when the budget runs out while it is running.
+
+    Derived from ``BaseException`` so that ``except Exception`` handlers inside the bounded step
+    do not catch it.
+    """
 
 
 @dataclass(frozen=True)
@@ -359,6 +398,9 @@ class T3:
         pdep_network_assessments (list): Entries are ``PDepNetworkAssessment`` records of what happened to each
                                          examined PDep network, including the ones no decision could be reached
                                          about. Both lists cover one iteration only.
+        rmg_walltime_stops (Dict[int, RMGWalltimeStop]): The stop time of every RMG run that stopped at its
+                                                         wall time, keyed by T3 iteration. A normally
+                                                         completed run has no entry.
         rmg_species (List[T3Species]): Entries are RMG species objects in the model core for a certain T3 iteration.
         rmg_reactions (List[T3Reaction]): Entries are RMG reaction objects in the model core for a certain T3 iteration.
         sa_observables (list): Entries are RMG species labels for the SA observables.
@@ -420,6 +462,7 @@ class T3:
         self.logger.log_args(schema=self.schema_exclude_unset)
 
         self.rmg_exceptions_counter = 0
+        self.rmg_walltime_stops = dict()
         self.iteration = 0
         self.thermo_lib_base_path = os.path.join(RMG_DB_PATH, 'thermo', 'libraries')
         self.kinetics_lib_base_path = os.path.join(RMG_DB_PATH, 'kinetics', 'libraries')
@@ -490,6 +533,30 @@ class T3:
     def execute(self):
         """
         Execute T3.
+
+        If ``max_T3_walltime`` runs out while a bounded step (SA or ARC) is still running, the step
+        is cut, the time limit is logged, and no further RMG run follows. The species and reaction
+        summaries are logged either way.
+        """
+        try:
+            self._execute_iterations()
+        except T3WalltimeExceeded:
+            self.logger.log_max_time_reached(max_time=self.t3['options']['max_T3_walltime'])
+
+        self.logger.log_species_summary(species_dict=self.species)
+        self.logger.log_reactions_summary(reactions_dict=self.reactions)
+        self.logger.log_footer()
+        delete_root_rmg_log(project_directory=self.project_directory)
+
+    def _execute_iterations(self):
+        """
+        Run the T3 iterations: an optional ARC pre-run, the RMG / SA / ARC loop, and a final RMG run
+        if the last calculations are not yet in the model.
+
+        The SA and ARC steps run bounded by ``max_T3_walltime`` (see ``_bounded_by_max_t3_walltime``).
+
+        Raises:
+            T3WalltimeExceeded: If ``max_T3_walltime`` runs out during a bounded step.
         """
         iteration_start, run_rmg_at_start, restart_rmg = self.restart()
 
@@ -498,8 +565,9 @@ class T3:
                 and self.qm['adapter'] == 'ARC' \
                 and (len(self.qm['species']) or len(self.qm['reactions'])):
             self.set_paths(iteration=iteration_start)
-            self.run_arc(arc_kwargs=self.qm)
-            self.process_arc_run()
+            with self._bounded_by_max_t3_walltime():
+                self.run_arc(arc_kwargs=self.qm)
+                self.process_arc_run()
             # don't request these species and reactions again
             iteration_start += 1
         # ARC species and reactions will be loaded again if restarting and if they were already sent to ARC
@@ -524,56 +592,57 @@ class T3:
                 self.run_rmg(restart_rmg=restart_rmg)
 
             # SA
-            if self.t3['sensitivity'] is not None:
-                # Determine observables to run SA for.
-                if not self.sa_observables:
-                    for species in self.rmg['species']:
-                        if species['observable'] or species['SA_observable']:
-                            self.sa_observables.append(species['label'])
+            with self._bounded_by_max_t3_walltime():
+                if self.t3['sensitivity'] is not None:
+                    # Determine observables to run SA for.
+                    if not self.sa_observables:
+                        for species in self.rmg['species']:
+                            if species['observable'] or species['SA_observable']:
+                                self.sa_observables.append(species['label'])
 
-                if self.t3['sensitivity']['adapter'] is not None and self.sa_observables:
-                    simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
-                                                        t3=self.t3,
-                                                        rmg=self.rmg,
-                                                        paths=self.paths,
-                                                        logger=self.logger,
-                                                        atol=self.rmg['model']['atol'],
-                                                        rtol=self.rmg['model']['rtol'],
-                                                        observable_list=self.sa_observables,
-                                                        sa_atol=self.t3['sensitivity']['atol'],
-                                                        sa_rtol=self.t3['sensitivity']['rtol'],
-                                                        global_observables=None,
-                                                        )
-                    simulate_adapter.simulate()
-                    self.sa_dict = simulate_adapter.get_sa_coefficients()
-                    if self.sa_dict is not None:
-                        self.dump_sa_coefficients()
-                if self.t3['sensitivity']['global_observables'] is not None \
-                        and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
-                    idt_simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                    if self.t3['sensitivity']['adapter'] is not None and self.sa_observables:
+                        simulate_adapter = simulate_factory(simulate_method=self.t3['sensitivity']['adapter'],
                                                             t3=self.t3,
                                                             rmg=self.rmg,
                                                             paths=self.paths,
                                                             logger=self.logger,
                                                             atol=self.rmg['model']['atol'],
                                                             rtol=self.rmg['model']['rtol'],
-                                                            observable_list=None,
+                                                            observable_list=self.sa_observables,
                                                             sa_atol=self.t3['sensitivity']['atol'],
                                                             sa_rtol=self.t3['sensitivity']['rtol'],
-                                                            global_observables=['IDT'],
+                                                            global_observables=None,
                                                             )
-                    idt_simulate_adapter.simulate()
-                    self.sa_dict_idt = idt_simulate_adapter.get_sa_coefficients()
-                    exp_path = self.t3['sensitivity'].get('experimental_idt_path')
-                    if exp_path is not None:
-                        comparison = idt_simulate_adapter.compare_with_experiment(exp_path)
-                        self.logger.info(f"IDT experimental comparison: "
-                                         f"{comparison['n_matched']}/{comparison['n_points']} matched, "
-                                         f"RMSE(log10) = {comparison['rmse_log']}")
-                        save_yaml_file(
-                            path=os.path.join(self.paths['SA'], 'idt_comparison.yaml'),
-                            content=comparison,
-                        )
+                        simulate_adapter.simulate()
+                        self.sa_dict = simulate_adapter.get_sa_coefficients()
+                        if self.sa_dict is not None:
+                            self.dump_sa_coefficients()
+                    if self.t3['sensitivity']['global_observables'] is not None \
+                            and any(go.lower() == 'idt' for go in self.t3['sensitivity']['global_observables']):
+                        idt_simulate_adapter = simulate_factory(simulate_method='CanteraIDT',
+                                                                t3=self.t3,
+                                                                rmg=self.rmg,
+                                                                paths=self.paths,
+                                                                logger=self.logger,
+                                                                atol=self.rmg['model']['atol'],
+                                                                rtol=self.rmg['model']['rtol'],
+                                                                observable_list=None,
+                                                                sa_atol=self.t3['sensitivity']['atol'],
+                                                                sa_rtol=self.t3['sensitivity']['rtol'],
+                                                                global_observables=['IDT'],
+                                                                )
+                        idt_simulate_adapter.simulate()
+                        self.sa_dict_idt = idt_simulate_adapter.get_sa_coefficients()
+                        exp_path = self.t3['sensitivity'].get('experimental_idt_path')
+                        if exp_path is not None:
+                            comparison = idt_simulate_adapter.compare_with_experiment(exp_path)
+                            self.logger.info(f"IDT experimental comparison: "
+                                             f"{comparison['n_matched']}/{comparison['n_points']} matched, "
+                                             f"RMSE(log10) = {comparison['rmse_log']}")
+                            save_yaml_file(
+                                path=os.path.join(self.paths['SA'], 'idt_comparison.yaml'),
+                                content=comparison,
+                            )
 
             self._generate_flux_diagrams()
 
@@ -585,8 +654,9 @@ class T3:
                     self.logger.error('Could not refine the model without any QM arguments.')
                     additional_calcs_required = None
                 else:
-                    self.run_arc(arc_kwargs=self.qm)
-                    self.process_arc_run()
+                    with self._bounded_by_max_t3_walltime():
+                        self.run_arc(arc_kwargs=self.qm)
+                        self.process_arc_run()
             if not additional_calcs_required and self.iteration >= len(self.rmg['model']['core_tolerance']):
                 # T3 iterated through all of the user requested tolerances, and there are no more calculations required
                 break
@@ -606,11 +676,6 @@ class T3:
             self.set_paths()
             self.run_rmg(restart_rmg=False)
             self._generate_flux_diagrams()
-
-        self.logger.log_species_summary(species_dict=self.species)
-        self.logger.log_reactions_summary(reactions_dict=self.reactions)
-        self.logger.log_footer()
-        delete_root_rmg_log(project_directory=self.project_directory)
 
     def set_paths(self,
                   iteration: int | None = None,
@@ -743,7 +808,10 @@ class T3:
 
         self.load_species_and_reactions()
 
-        rmg_began, rmg_terminated = self.check_rmg_status()
+        rmg_status = self.check_rmg_status()
+        rmg_began, rmg_terminated = rmg_status.began, rmg_status.terminated
+        if rmg_status.walltime_stop is not None:
+            self.record_rmg_walltime_stop(iteration=i_max, walltime_stop=rmg_status.walltime_stop)
         arc_began, arc_terminated = self.check_arc_status()
 
         run_rmg = not rmg_began
@@ -813,22 +881,40 @@ class T3:
         self.set_paths(iteration=i_max)
         return i_max
 
-    def check_rmg_status(self) -> tuple[bool, bool]:
+    def check_rmg_status(self) -> RMGRunStatus:
         """
-        Check whether RMG has begun running and whether it terminated successfully
-        for the current iteration.
+        Check whether RMG has begun running and whether its run is terminal for the current iteration.
+
+        A run is terminal if it reached ``MODEL GENERATION COMPLETED``, or if RMG stopped it at its
+        own wall time (see ``RMGWalltimeStop``). The two are told apart by ``walltime_stop``, which
+        carries the stop time only for the latter. Any other ending (a crash, a foreign kill, a
+        max-iterations stop) is not terminal, and RMG is restarted.
 
         Returns:
-            Tuple[bool, bool]:
-                - Whether RMG already began running.
-                - Whether RMG terminated successfully.
+            RMGRunStatus: Whether RMG began, whether its run is terminal, and the wall-time stop if any.
         """
         if os.path.isfile(self.paths['RMG log']):
             for line in _tail_lines(self.paths['RMG log']):
                 if 'MODEL GENERATION COMPLETED' in line:
-                    return True, True
-            return True, False
-        return False, False
+                    return RMGRunStatus(True, True)
+            walltime_stop = find_rmg_walltime_stop(self.paths['RMG log'])
+            if walltime_stop is not None:
+                return RMGRunStatus(True, True, walltime_stop)
+            return RMGRunStatus(True, False)
+        return RMGRunStatus(False, False)
+
+    def record_rmg_walltime_stop(self, iteration: int, walltime_stop: RMGWalltimeStop):
+        """
+        Record and log the stop time of an RMG run that stopped at its wall time.
+
+        Args:
+            iteration (int): The T3 iteration of the RMG run.
+            walltime_stop (RMGWalltimeStop): The wall-time stop read from that run's ``RMG.log``.
+        """
+        self.rmg_walltime_stops[iteration] = walltime_stop
+        self.logger.info(f'RMG stopped at its wall time for iteration {iteration}, '
+                         f'stop time {walltime_stop.stopped_at.isoformat(sep=" ")} '
+                         f'(from {walltime_stop.source}); not restarting RMG.')
 
     def check_arc_status(self) -> tuple[bool, bool]:
         """
@@ -927,14 +1013,22 @@ class T3:
         Resume an interrupted ARC run from its restart file and advance to the next
         iteration.
 
+        The resumed run is bounded by ``max_T3_walltime`` like every other ARC step: it is reached
+        from ``restart()`` before the iteration loop begins, so without its own bound it would be
+        the one ARC entry point able to outlive the budget.
+
         Args:
             i_max (int): The current iteration number.
 
         Returns:
             int: The updated iteration number (``i_max + 1``).
+
+        Raises:
+            T3WalltimeExceeded: If ``max_T3_walltime`` runs out while the resumed run is running.
         """
-        self.run_arc(input_file_path=self.paths['ARC restart'])
-        self.process_arc_run()
+        with self._bounded_by_max_t3_walltime():
+            self.run_arc(input_file_path=self.paths['ARC restart'])
+            self.process_arc_run()
         i_max += 1
         self.set_paths(iteration=i_max)
         return i_max
@@ -971,6 +1065,9 @@ class T3:
         Raises:
             ValueError: If neither or both ``input_file`` and ``kwargs`` were specified,
                         or an ARC input file was specified but could not be found.
+            T3WalltimeExceeded: If ``max_T3_walltime`` runs out while ARC is running. The ARC
+                                project directory is logged first: jobs already submitted to a
+                                server are not cancelled and may still be running there.
             Various ARC exceptions: If ARC crashes.
         """
         if input_file_path is None and arc_kwargs is None:
@@ -1020,6 +1117,16 @@ class T3:
 
         try:
             arc.execute()
+        except T3WalltimeExceeded:
+            # T3WalltimeExceeded derives from BaseException, so the 'except Exception' below cannot
+            # report it. Name the project directory here, where it is known, because nothing
+            # downstream cancels the server-side jobs this run may have left behind.
+            self.logger.error(
+                f'max_T3_walltime ran out while ARC was running, so this ARC run was cut. T3 did '
+                f'not cancel anything: jobs already submitted to a server may still be running '
+                f'there, and T3 will not collect their results. ARC project directory: '
+                f"{arc_kwargs['project_directory']}")
+            raise
         except Exception as e:
             self.logger.error(f'ARC crashed with {e.__class__}. Got the following error message:\n{e}')
             raise
@@ -1789,6 +1896,10 @@ class T3:
                                     f'exception raised by RMG.\n'
                                     f'The maximum number of exceptions allowed is {max_rmg_exceptions_allowed}.')
 
+        rmg_status = self.check_rmg_status()
+        if rmg_status.walltime_stop is not None:
+            self.record_rmg_walltime_stop(iteration=self.iteration, walltime_stop=rmg_status.walltime_stop)
+
         elapsed_time = time_lapse(tic)
         self.logger.info(f'RMG terminated, execution time: {elapsed_time}')
 
@@ -2392,6 +2503,8 @@ class T3:
         Raises:
             Exception: Re-raised unchanged, after being recorded, for any failure that is not one of
                 the outcomes named in :mod:`t3.pdep.reason_codes`.
+            T3WalltimeExceeded: If ``max_T3_walltime`` is spent before a master-equation job starts,
+                or runs out while it runs. The job gets the remaining budget as its ``timeout``.
 
         Returns:
             PDepNetworkAssessmentOutcome: The assessment, plus what the well analysis needs.
@@ -2502,10 +2615,21 @@ class T3:
                     isomer_labels = write_result.isomer_labels
                     self.logger.info(f'\nRunning PDep SA for network {network_name} using the {method} method\n'
                                      f'to examine reaction {reaction} (iteration {self.iteration})...')
-                    if not run_arkane_job(input_file=arkane_input,
-                                          output_directory=arkane_output_dir,
-                                          logger=self.logger,
-                                          ):
+                    remaining_s = self._remaining_max_t3_walltime_s()
+                    if remaining_s is not None and remaining_s <= 0:
+                        self.logger.error(f'max_T3_walltime ran out before the {method} master-equation job '
+                                          f'for network {network_name} could start; not starting it.')
+                        raise T3WalltimeExceeded()
+                    job_result = run_arkane_job(input_file=arkane_input,
+                                                output_directory=arkane_output_dir,
+                                                logger=self.logger,
+                                                timeout=remaining_s,
+                                                )
+                    if isinstance(job_result, ArkaneJobResult) and job_result.timed_out:
+                        self.logger.error(f'max_T3_walltime ran out while the {method} master-equation job '
+                                          f'for network {network_name} was running; the job was killed.')
+                        raise T3WalltimeExceeded()
+                    if not job_result:
                         # Recorded, not merely logged: without this the record would say nothing at
                         # all about a method that ran and failed, and the remaining codes would make
                         # it look as though that method had never been configured.
@@ -3648,6 +3772,36 @@ class T3:
         elif library_name in self.rmg['database'][library_type] and not exists_function(library_name):
             self.rmg['database'][library_type].pop(self.rmg['database'][library_type].index(library_name))
 
+    def _max_t3_walltime_delta(self) -> datetime.timedelta | None:
+        """
+        Parse ``max_T3_walltime`` ('DD:HH:MM:SS') into a timedelta.
+
+        Returns:
+            Optional[datetime.timedelta]: The T3 wall-time budget, or ``None`` if no budget is set.
+        """
+        max_walltime = self.t3['options'].get('max_T3_walltime')
+        if max_walltime is None:
+            return None
+        splits = max_walltime.split(':')  # 01:00:00:00
+        return datetime.timedelta(days=int(splits[0]),
+                                  hours=int(splits[1]),
+                                  minutes=int(splits[2]),
+                                  seconds=int(splits[3]),
+                                  )
+
+    def _remaining_max_t3_walltime_s(self) -> float | None:
+        """
+        The time left of ``max_T3_walltime``, counted from ``self.t0``.
+
+        Returns:
+            Optional[float]: The remaining budget in seconds (zero or negative once it is spent),
+                             or ``None`` if no budget is set.
+        """
+        max_delta = self._max_t3_walltime_delta()
+        if max_delta is None:
+            return None
+        return (max_delta - time_lapse(self.t0)).total_seconds()
+
     def check_overtime(self) -> bool:
         """
         Check that the timer hasn't run out.
@@ -3655,17 +3809,65 @@ class T3:
         Returns:
             bool: Whether T3 is running over time.
         """
-        if self.t3['options']['max_T3_walltime'] is not None:
-            delta = time_lapse(self.t0)
-            splits = self.t3['options']['max_T3_walltime'].split(':')  # 01:00:00:00
-            max_delta = datetime.timedelta(days=int(splits[0]),
-                                           hours=int(splits[1]),
-                                           minutes=int(splits[2]),
-                                           seconds=int(splits[3]),
-                                           )
-            if delta > max_delta:
-                return True
-        return False
+        max_delta = self._max_t3_walltime_delta()
+        return max_delta is not None and time_lapse(self.t0) > max_delta
+
+    @contextlib.contextmanager
+    def _bounded_by_max_t3_walltime(self):
+        """
+        Bound the enclosed step by what is left of ``max_T3_walltime``.
+
+        A one-shot ``SIGALRM`` timer is armed for the remaining budget (counted from ``self.t0``).
+        If it fires while the step is still running, the ``multiprocessing`` children the step itself
+        started are terminated (a ``ProcessPoolExecutor`` otherwise waits for its running tasks on
+        the way out), and ``T3WalltimeExceeded`` is raised out of the step. Children that were
+        already alive on entry belong to the caller and are left alone.
+
+        On leaving the block the previous ``SIGALRM`` handler is restored, and so is any
+        ``ITIMER_REAL`` the caller had armed, reduced by the time spent inside the block. A caller
+        timer whose deadline passed while the step ran is rearmed to fire at once rather than
+        dropped.
+
+        Without a budget nothing is armed. Signal handlers can only be installed from the main
+        thread; elsewhere the step runs unbounded and a warning is logged.
+
+        Raises:
+            T3WalltimeExceeded: If the budget runs out while the step is running.
+        """
+        remaining_s = self._remaining_max_t3_walltime_s()
+        if remaining_s is None:
+            yield
+            return
+        children_on_entry = set(multiprocessing.active_children())
+
+        def _on_alarm(signum, frame):
+            for child in multiprocessing.active_children():
+                if child not in children_on_entry:
+                    child.terminate()
+            raise T3WalltimeExceeded()
+
+        try:
+            previous_handler = signal.signal(signal.SIGALRM, _on_alarm)
+        except ValueError:
+            self.logger.warning('max_T3_walltime cannot bound a step outside the main thread; '
+                                'it is checked between steps only.')
+            yield
+            return
+        previous_delay, previous_interval = signal.getitimer(signal.ITIMER_REAL)
+        entered_at = time.monotonic()
+        signal.setitimer(signal.ITIMER_REAL, max(remaining_s, MIN_ITIMER_SECONDS))
+        try:
+            yield
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            try:
+                signal.signal(signal.SIGALRM, previous_handler)
+            finally:
+                if previous_delay:
+                    left = previous_delay - (time.monotonic() - entered_at)
+                    signal.setitimer(signal.ITIMER_REAL,
+                                     max(left, MIN_ITIMER_SECONDS),
+                                     previous_interval)
 
     def cleanup(self):
         """

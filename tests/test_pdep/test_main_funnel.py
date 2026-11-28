@@ -78,7 +78,7 @@ def _arkane_writing(t3, payloads):
     """
     calls = list()
 
-    def _fake_run_arkane_job(input_file, output_directory, logger):
+    def _fake_run_arkane_job(input_file, output_directory, logger, timeout=None):
         method = os.path.basename(output_directory)
         calls.append(method)
         if method not in payloads:
