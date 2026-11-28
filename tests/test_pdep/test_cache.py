@@ -6,6 +6,7 @@ t3 tests test_pdep test_cache
 """
 
 import os
+import subprocess
 
 import pytest
 
@@ -13,9 +14,12 @@ from arc.common import read_yaml_file, save_yaml_file
 
 from t3.common import TEST_DATA_BASE_PATH
 from t3.pdep.cache import (SA_CACHE_METADATA_FILE_NAME,
+                          RmgPyVersionMismatchError,
                           hash_file,
                           max_abs_ts_coefficient,
+                          query_rmg_env_rmg_py_version,
                           read_arkane_log_rmg_py_commit,
+                          read_arkane_log_rmg_py_version,
                           read_t_grid_clamp_record,
                           sa_cache_metadata_path,
                           validate_sa_cache,
@@ -781,3 +785,230 @@ def test_write_sa_cache_metadata_still_falls_back_to_the_checkout_when_no_commit
 
     metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
     assert metadata['rmg_py_commit'] is None
+
+
+# --- RMG-Py version provenance (the banner, in both install modes) ------------------------------
+#
+# In package (conda) mode Arkane never prints the RMG-Py commit stanza (its get_conda_package fails
+# silently), so the commit reader returns None for every documented install. The banner line
+# ``#   Version: x.y.z`` is printed in both modes. The two fixtures are header-only copies of real
+# logs, one per mode, with hashes and dates replaced by synthetic values.
+
+SOURCE_MODE_LOG_PATH = os.path.join(TEST_DATA_BASE_PATH, 'pdep_arkane_log', 'arkane_source_mode.log')
+PACKAGE_MODE_LOG_PATH = os.path.join(TEST_DATA_BASE_PATH, 'pdep_arkane_log', 'arkane_package_mode.log')
+SOURCE_MODE_RMG_PY_COMMIT = '1111111111111111111111111111111111111111'
+
+
+def _banner(version_field):
+    """One Arkane banner block whose Version line carries ``version_field`` verbatim."""
+    return ('################################################################\n'
+            f'#   Version: {version_field:49s} #\n'
+            '#   Authors: RMG Developers (rmg_dev@mit.edu)                  #\n'
+            '################################################################\n')
+
+
+def _sa_and_network(tmp_path):
+    """A network file and a realistic SA YAML in ``tmp_path``; returns (sa_path, network_path)."""
+    network_path = str(tmp_path / 'network4_2.py')
+    _write(network_path, 'reaction(label="reaction1")\n')
+    sa_path = str(tmp_path / 'sa_coefficients.yml')
+    _write_realistic_sa_yaml(sa_path)
+    return sa_path, network_path
+
+
+def test_package_mode_log_has_a_banner_version_but_no_commit():
+    """The defect: a package-mode log yields no commit, but its banner still names the version."""
+    assert read_arkane_log_rmg_py_commit(PACKAGE_MODE_LOG_PATH) is None
+    assert read_arkane_log_rmg_py_version(PACKAGE_MODE_LOG_PATH) == '4.0.0'
+
+
+def test_source_mode_log_has_both_a_banner_version_and_a_commit():
+    """A source-mode log carries both statements."""
+    assert read_arkane_log_rmg_py_commit(SOURCE_MODE_LOG_PATH) == SOURCE_MODE_RMG_PY_COMMIT
+    assert read_arkane_log_rmg_py_version(SOURCE_MODE_LOG_PATH) == '3.3.0'
+
+
+def test_read_arkane_log_rmg_py_version_takes_the_last_banner(tmp_path):
+    """Arkane appends to arkane.log, so a re-run directory holds one banner per run, oldest first.
+    The files on disk come from the LAST run, so the last banner wins."""
+    log_path = str(tmp_path / 'arkane.log')
+    _write(log_path, 'Arkane execution initiated\n' + _banner('3.3.0') + 'first run body\n'
+                     'Arkane execution initiated\n' + _banner('4.0.0') + 'second run body\n')
+    assert read_arkane_log_rmg_py_version(log_path) == '4.0.0'
+
+
+@pytest.mark.parametrize('version_field', ['4.0.0garbage', '', 'n/a', '4', '4.0.0 extra'])
+def test_read_arkane_log_rmg_py_version_returns_none_for_a_mangled_banner(tmp_path, version_field):
+    """A banner value that is not a version is None, never a fragment such as '4.0.0'."""
+    log_path = str(tmp_path / 'arkane.log')
+    _write(log_path, _banner(version_field))
+    assert read_arkane_log_rmg_py_version(log_path) is None
+
+
+@pytest.mark.parametrize('version_field', ['4.0.0garbage', '4.0.0 extra', ''])
+def test_read_arkane_log_rmg_py_version_returns_none_when_the_last_banner_is_mangled(tmp_path, version_field):
+    """An earlier good banner must not stand in for a mangled latest one: that would name the
+    version of a run that did not produce the files on disk."""
+    log_path = str(tmp_path / 'arkane.log')
+    _write(log_path, _banner('3.3.0') + _banner(version_field))
+    assert read_arkane_log_rmg_py_version(log_path) is None
+
+
+def test_read_arkane_log_rmg_py_version_returns_none_without_a_log_or_banner(tmp_path):
+    """No log, or a log with no banner, is None."""
+    assert read_arkane_log_rmg_py_version(str(tmp_path / 'missing' / 'arkane.log')) is None
+    assert read_arkane_log_rmg_py_version(None) is None
+    log_path = str(tmp_path / 'arkane.log')
+    _write(log_path, 'Arkane execution initiated\nno banner here\n')
+    assert read_arkane_log_rmg_py_version(log_path) is None
+
+
+def test_write_sa_cache_metadata_records_the_banner_version_in_package_mode(tmp_path):
+    """Package mode: the sidecar names the RMG-Py version even though no commit is available."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC',
+                            rmg_py_commit=read_arkane_log_rmg_py_commit(PACKAGE_MODE_LOG_PATH),
+                            rmg_py_version=read_arkane_log_rmg_py_version(PACKAGE_MODE_LOG_PATH))
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert metadata['rmg_py_version'] == '4.0.0'
+    assert metadata['rmg_py_commit'] is None
+
+
+def test_write_sa_cache_metadata_records_version_and_commit_in_source_mode(tmp_path):
+    """Source mode: both the version and the unchanged commit are recorded. Feeding the readers'
+    output straight into the writer also catches a drift between the reader's and the writer's
+    idea of what a version is."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC',
+                            rmg_py_commit=read_arkane_log_rmg_py_commit(SOURCE_MODE_LOG_PATH),
+                            rmg_py_version=read_arkane_log_rmg_py_version(SOURCE_MODE_LOG_PATH))
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert metadata['rmg_py_version'] == '3.3.0'
+    assert metadata['rmg_py_commit'] == SOURCE_MODE_RMG_PY_COMMIT
+
+
+def test_write_sa_cache_metadata_records_both_versions_when_they_agree(tmp_path):
+    """Agreement between the log and the environment writes both values."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC',
+                            rmg_py_version='4.0.0', rmg_env_rmg_py_version='4.0.0')
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert metadata['rmg_py_version'] == '4.0.0'
+    assert metadata['rmg_env_rmg_py_version'] == '4.0.0'
+
+
+def test_write_sa_cache_metadata_refuses_a_version_mismatch_naming_both(tmp_path):
+    """A log from one RMG-Py reused under another is refused, both values named, and no sidecar
+    is written -- so validate_sa_cache rejects the unlabelled SA YAML next time."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    with pytest.raises(RmgPyVersionMismatchError) as excinfo:
+        write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                                method='MSC', rmg_py_version='4.0.0', rmg_env_rmg_py_version='3.3.0')
+    message = str(excinfo.value)
+    assert 'RMG-Py 4.0.0' in message and 'RMG-Py 3.3.0' in message
+    assert not os.path.isfile(sa_cache_metadata_path(sa_path=sa_path))
+    status, _ = validate_sa_cache(sa_path=sa_path, network_path=network_path)
+    assert status == CACHE_STATUS_CACHED_REJECTED
+
+
+def test_write_sa_cache_metadata_deletes_an_existing_sidecar_when_it_refuses_a_version_mismatch(tmp_path):
+    """A refused mismatch removes the sidecar already in place, so SA bytes identical to the ones
+    it vouched for can no longer validate against it."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC',
+                            rmg_py_version='4.0.0', rmg_env_rmg_py_version='4.0.0')
+    assert validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC') \
+        == (CACHE_STATUS_CACHED_VALID, [])
+    with pytest.raises(RmgPyVersionMismatchError):
+        write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                                method='MSC', rmg_py_version='4.0.0', rmg_env_rmg_py_version='3.3.0')
+    assert not os.path.isfile(sa_cache_metadata_path(sa_path=sa_path))
+    status, _ = validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC')
+    assert status == CACHE_STATUS_CACHED_REJECTED
+
+
+def test_write_sa_cache_metadata_records_the_banner_when_the_environment_is_unknown(tmp_path):
+    """Could not ask is unknown, not mismatch: banner recorded, no environment key, no refusal."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC',
+                            rmg_py_version='4.0.0', rmg_env_rmg_py_version=None)
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert metadata['rmg_py_version'] == '4.0.0'
+    assert 'rmg_env_rmg_py_version' not in metadata
+
+
+@pytest.mark.parametrize('kwargs', [{'rmg_py_version': '4.0.0garbage'},
+                                    {'rmg_py_version': 4.0},
+                                    {'rmg_env_rmg_py_version': 'n/a'},
+                                    ])
+def test_write_sa_cache_metadata_refuses_a_value_that_is_not_a_version(tmp_path, kwargs):
+    """Strict write: something that is not a version must not land in a sidecar as provenance."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    with pytest.raises(ValueError, match='not an RMG-Py version'):
+        write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                                method='MSC', **kwargs)
+    assert not os.path.isfile(sa_cache_metadata_path(sa_path=sa_path))
+
+
+def test_write_sa_cache_metadata_omits_the_version_keys_when_not_given(tmp_path):
+    """A caller that passes neither version writes neither key -- absent means unknown."""
+    sa_path, network_path = _sa_and_network(tmp_path)
+    write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2', method='MSC')
+    metadata = read_yaml_file(sa_cache_metadata_path(sa_path=sa_path))
+    assert 'rmg_py_version' not in metadata
+    assert 'rmg_env_rmg_py_version' not in metadata
+
+
+def test_validate_sa_cache_ignores_the_version_keys(tmp_path):
+    """Provenance discloses, it does not invalidate: a sidecar with the version keys and one
+    without them validate identically."""
+    with_dir, without_dir = tmp_path / 'with', tmp_path / 'without'
+    with_dir.mkdir()
+    without_dir.mkdir()
+    results = list()
+    for directory, kwargs in ((with_dir, {'rmg_py_version': '4.0.0', 'rmg_env_rmg_py_version': '4.0.0'}),
+                              (without_dir, dict())):
+        sa_path, network_path = _sa_and_network(directory)
+        write_sa_cache_metadata(sa_path=sa_path, network_path=network_path, network_id='network4_2',
+                                method='MSC', **kwargs)
+        results.append(validate_sa_cache(sa_path=sa_path, network_path=network_path, method='MSC'))
+    assert results[0] == results[1] == (CACHE_STATUS_CACHED_VALID, [])
+
+
+class _FakeCompletedProcess(object):
+    def __init__(self, returncode, stdout):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, ''
+
+
+def test_query_rmg_env_rmg_py_version_reads_the_framed_answer(monkeypatch):
+    """Activation noise around the framed answer is ignored."""
+    monkeypatch.setattr('t3.pdep.cache.rmg_env_command', lambda py_args: 'true')
+    monkeypatch.setattr('t3.pdep.cache.subprocess.run', lambda *a, **k: _FakeCompletedProcess(
+        0, 'activation noise\nT3_RMG_PY_VERSION_BEGIN4.0.0T3_RMG_PY_VERSION_END\n'))
+    assert query_rmg_env_rmg_py_version() == ('4.0.0', None)
+
+
+def _raise(exception):
+    def _raiser(*args, **kwargs):
+        raise exception
+    return _raiser
+
+
+@pytest.mark.parametrize('launcher, runner, reason_fragment', [
+    (_raise(RuntimeError('no launcher found')), None, 'could not be run'),
+    (lambda py_args: 'true', _raise(OSError('bash missing')), 'could not be run'),
+    (lambda py_args: 'true', _raise(subprocess.TimeoutExpired(cmd='bash', timeout=1)), 'timed out'),
+    (lambda py_args: 'true', lambda *a, **k: _FakeCompletedProcess(1, ''), 'exited with status 1'),
+    (lambda py_args: 'true', lambda *a, **k: _FakeCompletedProcess(0, '4.0.0\n'), 'no framed'),
+    (lambda py_args: 'true', lambda *a, **k: _FakeCompletedProcess(
+        0, 'T3_RMG_PY_VERSION_BEGINunknownT3_RMG_PY_VERSION_END'), 'not a version'),
+])
+def test_query_rmg_env_rmg_py_version_reports_unknown_without_raising(monkeypatch, launcher, runner,
+                                                                      reason_fragment):
+    """Every way of failing to ask is (None, reason), never an exception and never a version."""
+    monkeypatch.setattr('t3.pdep.cache.rmg_env_command', launcher)
+    if runner is not None:
+        monkeypatch.setattr('t3.pdep.cache.subprocess.run', runner)
+    version, reason = query_rmg_env_rmg_py_version()
+    assert version is None
+    assert reason_fragment in reason

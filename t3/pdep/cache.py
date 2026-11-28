@@ -27,6 +27,7 @@ import subprocess
 
 
 from arc.common import save_yaml_file
+from arc.job.env_run import rmg_env_command
 
 # Re-exported, not defined here: ``t3.pdep.cache.hash_file`` is named as the mandated hashing
 # primitive throughout join.py, capture.py, and main.py, so the import path is kept while the
@@ -48,6 +49,26 @@ SA_CACHE_METADATA_FILE_NAME = 't3_sa_cache.yml'
 
 # The label Arkane prints immediately before the RMG-Py commit hash in its own log.
 ARKANE_LOG_RMG_PY_COMMIT_LABEL = 'current git HEAD for RMG-Py'
+
+# The banner line Arkane prints at the top of every run: ``'#   Version: {0:49s} #'.format(
+# rmgpy.__version__)``. Unlike the RMG-Py commit stanza it is written in BOTH install modes: in
+# package (conda) mode Arkane's ``get_conda_package`` fails silently and the commit stanza is never
+# printed, so the banner is the only statement about RMG-Py a package-mode log makes.
+# Any line that starts like the banner's Version line counts as a banner, whatever follows, so a
+# mangled latest banner is recognised as the latest (and yields None) instead of letting an older,
+# well-formed banner from a previous run stand in for it.
+ARKANE_LOG_VERSION_LINE_PATTERN = re.compile(r'^#\s+Version:(.*?)#?\s*$')
+
+# What counts as an RMG-Py version, wherever one is read or written in this module: a dotted
+# release plus the optional PEP 440 pre/dev/post/local suffixes. A string that does not FULLY match
+# is not a version, and is recorded as nothing rather than as a fragment.
+RMG_PY_VERSION_PATTERN = re.compile(
+    r'\d+(?:\.\d+)+(?:[.-]?(?:a|b|rc|dev|post)\d*)*(?:\+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?')
+
+# Frames the version the rmg_env query prints, so stray output from the environment's activation
+# hooks or from importing rmgpy cannot be mistaken for the answer.
+_RMG_ENV_VERSION_BEGIN = 'T3_RMG_PY_VERSION_BEGIN'
+_RMG_ENV_VERSION_END = 'T3_RMG_PY_VERSION_END'
 
 # Whether a T3-generated sensitivity YAML on disk may still be trusted -- this is the ONLY job this
 # constant has. It is deliberately separate from ``t3.pdep.selector.SELECTION_SCHEMA_VERSION`` (the
@@ -180,6 +201,102 @@ def read_arkane_log_rmg_py_commit(arkane_log_path: str | None) -> str | None:
     return None
 
 
+def is_rmg_py_version(value) -> bool:
+    """
+    Whether a value is an RMG-Py version string, per ``RMG_PY_VERSION_PATTERN``.
+
+    Args:
+        value: Any value.
+
+    Returns:
+        bool: ``True`` only for a ``str`` that fully matches the pattern.
+    """
+    return isinstance(value, str) and RMG_PY_VERSION_PATTERN.fullmatch(value) is not None
+
+
+def read_arkane_log_rmg_py_version(arkane_log_path: str | None) -> str | None:
+    """
+    Best-effort lookup of the RMG-Py version that produced an Arkane run, from Arkane's banner.
+
+    The banner is first-hand evidence of what actually ran, and it is present whether RMG-Py was
+    installed from source or from a conda package -- the commit stanza read by
+    ``read_arkane_log_rmg_py_commit`` is missing in package mode.
+
+    The LAST banner wins. Arkane opens its log in append mode and nothing removes it between runs,
+    so an output directory that was re-run (e.g. a rejected cache being regenerated) holds one
+    banner per run, oldest first; the run that produced the files now on disk is the last one.
+    (``read_arkane_log_rmg_py_commit`` takes the FIRST commit stanza instead; that inconsistency is
+    known and deliberately left alone here.)
+
+    As careful as the commit reader: a banner value that is not a version is ``None``, never a
+    fragment, since a wrong value would read as real provenance to whoever audits the sidecar.
+
+    Args:
+        arkane_log_path (str, optional): The path to an Arkane ``arkane.log``.
+
+    Returns:
+        Optional[str]: The RMG-Py version, or ``None`` if it could not be determined (no log,
+            unreadable log, no banner, or a last banner whose value is not a version).
+    """
+    if not arkane_log_path or not os.path.isfile(arkane_log_path):
+        return None
+    try:
+        with open(arkane_log_path, 'r', errors='replace') as f:
+            lines = f.readlines()
+    except OSError:
+        return None
+    last_value = None
+    for line in lines:
+        match = ARKANE_LOG_VERSION_LINE_PATTERN.match(line.strip())
+        if match is not None:
+            last_value = match.group(1).strip()
+    return last_value if is_rmg_py_version(last_value) else None
+
+
+def query_rmg_env_rmg_py_version(timeout: float = 120) -> tuple:
+    """
+    Ask ``rmg_env`` -- through the same ``rmg_env_command`` launcher ARC runs Arkane with -- which
+    ``rmgpy.__version__`` it has.
+
+    Never raises. Failing to ask is UNKNOWN, not a mismatch: the caller records the log's banner
+    without a cross-check, and must not refuse on it.
+
+    Args:
+        timeout (float, optional): Seconds to wait for the query.
+
+    Returns:
+        tuple: ``(version, None)`` on success, or ``(None, reason)`` when the environment could
+            not be asked or did not answer with a version.
+    """
+    code = (f"import rmgpy; print('{_RMG_ENV_VERSION_BEGIN}' + rmgpy.__version__ + "
+            f"'{_RMG_ENV_VERSION_END}')")
+    try:
+        inner = rmg_env_command(py_args=['-c', code])
+        proc = subprocess.run(['bash', '-c', inner], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, f'the rmg_env query timed out after {timeout:g} s'
+    except Exception as e:
+        return None, f'the rmg_env launcher could not be run ({type(e).__name__}: {e})'
+    if proc.returncode != 0:
+        return None, f'the rmg_env query exited with status {proc.returncode}'
+    match = re.search(f'{_RMG_ENV_VERSION_BEGIN}(.*?){_RMG_ENV_VERSION_END}', proc.stdout or '')
+    if match is None:
+        return None, 'the rmg_env query printed no framed rmgpy.__version__'
+    version = match.group(1).strip()
+    if not is_rmg_py_version(version):
+        return None, f'rmg_env reported {version!r}, which is not a version'
+    return version, None
+
+
+class RmgPyVersionMismatchError(ValueError):
+    """
+    The RMG-Py version in an Arkane log disagrees with the one ``rmg_env`` reports.
+
+    Raised by ``write_sa_cache_metadata`` instead of writing a sidecar: Arkane results from two
+    RMG-Py pins are not interchangeable, so a log from a different install is refused, not recorded.
+    """
+
+
 def write_sa_cache_metadata(sa_path: str,
                             network_path: str,
                             network_id: str,
@@ -188,6 +305,8 @@ def write_sa_cache_metadata(sa_path: str,
                             rmg_py_path: str | None = None,
                             rmg_py_commit: str | None = None,
                             t_grid_clamp: dict | None = None,
+                            rmg_py_version: str | None = None,
+                            rmg_env_rmg_py_version: str | None = None,
                             ) -> str:
     """
     Write the T3 sidecar next to a freshly generated sensitivity YAML.
@@ -209,10 +328,17 @@ def write_sa_cache_metadata(sa_path: str,
             (an old sidecar, or SA data produced outside this code path) omits the key entirely
             rather than recording a value that would misrepresent "unknown" as "not clamped". See
             ``TGridClampRecord``'s docstring for why those two states must never be conflated.
+        rmg_py_version (str, optional): The RMG-Py version that actually ran, from the Arkane log
+            banner (``read_arkane_log_rmg_py_version``). Written ONLY when supplied.
+        rmg_env_rmg_py_version (str, optional): The ``rmgpy.__version__`` that ``rmg_env``
+            reports (``query_rmg_env_rmg_py_version``). Written ONLY when supplied; ``None`` means
+            the environment could not be asked, which is unknown, not agreement.
 
     Raises:
         ValueError: If ``t_grid_clamp`` is supplied but is not a ``TGridClampRecord.as_dict()``
-            rendering.
+            rendering, or if either version argument is supplied but is not a version string.
+        RmgPyVersionMismatchError: If both versions are supplied and differ. No sidecar is written,
+            and an existing sidecar for ``sa_path`` is deleted.
 
     Returns:
         str: The path of the sidecar that was written.
@@ -230,6 +356,30 @@ def write_sa_cache_metadata(sa_path: str,
             raise ValueError(f'Refusing to record T-grid clamp provenance in the SA cache sidecar for '
                              f'{sa_path!r}: {reason}. A sidecar this module would then refuse to read '
                              f'back is provenance lost, not provenance recorded.')
+    # Strict for the same reason as t_grid_clamp above: a value this module would not recognise as
+    # a version must not be written into a sidecar where it would read as provenance.
+    for name, value in (('rmg_py_version', rmg_py_version),
+                        ('rmg_env_rmg_py_version', rmg_env_rmg_py_version)):
+        if value is not None and not is_rmg_py_version(value):
+            raise ValueError(f'Refusing to record {name}={value!r} in the SA cache sidecar for {sa_path!r}: '
+                             f'it is not an RMG-Py version string.')
+    # The cross-check. Entries from two RMG-Py pins are not interchangeable (the same rate can move
+    # by tens of percent between pins), so a log whose banner disagrees with the environment this
+    # run uses is refused, not recorded: a sidecar would otherwise vouch for output produced by an
+    # install other than the one the cache is about to be trusted under. Raised before anything is
+    # written, and any sidecar already in place is deleted first, so the SA YAML is left without a
+    # sidecar and validate_sa_cache rejects it next time even if Arkane regenerates the same bytes.
+    if rmg_py_version is not None and rmg_env_rmg_py_version is not None \
+            and rmg_py_version != rmg_env_rmg_py_version:
+        try:
+            os.remove(sa_cache_metadata_path(sa_path))
+        except FileNotFoundError:
+            pass
+        raise RmgPyVersionMismatchError(
+            f'Refusing to write the SA cache sidecar for {sa_path!r}: the Arkane log says RMG-Py '
+            f'{rmg_py_version}, but rmg_env reports RMG-Py {rmg_env_rmg_py_version}. Arkane output '
+            f'from two RMG-Py versions is not interchangeable; make rmg_env and the Arkane that '
+            f'runs under it agree, then rerun.')
     try:
         sa_dict = read_sa_yaml_file(sa_path)
     except Exception:
@@ -263,6 +413,13 @@ def write_sa_cache_metadata(sa_path: str,
         # version, since a sidecar written before this key existed is merely missing an optional
         # field, not misread by anything that consults sa_cache_contract_version.
         metadata['t_grid_clamp'] = t_grid_clamp
+    # Same reasoning as t_grid_clamp: disclosure only, never gated on by validate_sa_cache, so no
+    # contract-version bump; a sidecar without these keys is merely missing optional provenance.
+    # Absent means unknown -- never written as null, which would read as a claim.
+    if rmg_py_version is not None:
+        metadata['rmg_py_version'] = rmg_py_version
+    if rmg_env_rmg_py_version is not None:
+        metadata['rmg_env_rmg_py_version'] = rmg_env_rmg_py_version
     metadata_path = sa_cache_metadata_path(sa_path)
     save_yaml_file(path=metadata_path, content=metadata)
     return metadata_path

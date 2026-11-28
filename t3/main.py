@@ -57,7 +57,9 @@ from t3.pdep.api import save_pdep_budget_record, save_pdep_network_assessments
 from t3.pdep.assessment import PDepNetworkAssessment, assessments_record_path
 from t3.pdep.barrierless import classify_barrierless
 from t3.pdep.budget import apply_pdep_qm_budget, budget_record_path, build_pdep_budget_record
-from t3.pdep.cache import (read_arkane_log_rmg_py_commit,
+from t3.pdep.cache import (query_rmg_env_rmg_py_version,
+                           read_arkane_log_rmg_py_commit,
+                           read_arkane_log_rmg_py_version,
                            read_t_grid_clamp_record,
                            validate_sa_cache,
                            write_sa_cache_metadata,
@@ -134,6 +136,10 @@ from t3.utils.uncertainty import is_this_reaction_uncertain
 # v2: finalization now also writes the hybrid P-dep network inputs; a v1 (unversioned) marker
 # predates them.
 ARC_FINALIZATION_MARKER_VERSION = 2
+
+# Marks "rmg_env has not been asked for its RMG-Py version yet in this run" (None means it was
+# asked and could not answer).
+_NOT_ASKED = object()
 # Leading text of the durable ARC finalization marker. Its presence is what tells a restart that an
 # already-terminated ARC run was fully finalized; the content is checked so that an empty or
 # truncated file reads as "not finalized" rather than as done. The version token is part of the
@@ -436,6 +442,10 @@ class T3:
         # the records, so the post-ARC capture step can vendor the exact network file this
         # iteration's selection examined. Reset per iteration together with the records.
         self.pdep_ts_join_networks = dict()
+        # The rmgpy.__version__ rmg_env reports, asked at most once per run (see
+        # _rmg_env_rmg_py_version). A sentinel rather than None, since None is a real answer there:
+        # "rmg_env could not be asked", which must also be remembered so it is logged only once.
+        self._rmg_env_rmg_py_version_memo = _NOT_ASKED
 
         if self.qm:
             self.check_arc_args()
@@ -2306,6 +2316,27 @@ class T3:
                 os.remove(stale_sidecar_path)
         return species_keys
 
+    def _rmg_env_rmg_py_version(self) -> str | None:
+        """
+        The ``rmgpy.__version__`` that ``rmg_env`` reports, asked once per T3 run and memoized.
+
+        Asked lazily, at the first SA cache sidecar write (after that network's Arkane run), not at
+        start-up. When ``rmg_env`` cannot be asked, that is UNKNOWN, not a mismatch: the reason is
+        logged once, ``None`` is returned for the rest of the run, and the caller records the log's
+        banner version without a cross-check.
+
+        Returns:
+            Optional[str]: The version, or ``None`` if ``rmg_env`` could not be asked.
+        """
+        if getattr(self, '_rmg_env_rmg_py_version_memo', _NOT_ASKED) is _NOT_ASKED:
+            version, reason = query_rmg_env_rmg_py_version()
+            if version is None:
+                self.logger.warning(f'Could not ask rmg_env for its RMG-Py version ({reason}); recording '
+                                    f'the Arkane log banner version in SA cache sidecars without '
+                                    f'cross-checking it against the environment.')
+            self._rmg_env_rmg_py_version_memo = version
+        return self._rmg_env_rmg_py_version_memo
+
     def _record_pdep_network_assessment(self, assessment: PDepNetworkAssessment) -> None:
         """
         Keep one network's assessment and persist the record as it now stands.
@@ -2519,13 +2550,21 @@ class T3:
                     self.executed_networks.append(isomer_labels)
                     cache_status = CACHE_STATUS_GENERATED
                     if os.path.isfile(candidate_sa_path):
+                        arkane_log_path = os.path.join(arkane_output_dir, 'arkane.log')
+                        rmg_py_version = read_arkane_log_rmg_py_version(arkane_log_path)
+                        # rmg_env is asked only when the log gives something to compare against.
+                        # A disagreement raises RmgPyVersionMismatchError out of the writer: it is
+                        # recorded as internal_error below and ends the run, since every later
+                        # network would be produced by the same inconsistent install.
                         write_sa_cache_metadata(sa_path=candidate_sa_path,
                                                 network_path=network_path,
                                                 network_id=network_name,
                                                 method=method,
-                                                rmg_py_commit=read_arkane_log_rmg_py_commit(
-                                                    os.path.join(arkane_output_dir, 'arkane.log')),
+                                                rmg_py_commit=read_arkane_log_rmg_py_commit(arkane_log_path),
                                                 t_grid_clamp=write_result.t_grid_clamp.as_dict(),
+                                                rmg_py_version=rmg_py_version,
+                                                rmg_env_rmg_py_version=self._rmg_env_rmg_py_version()
+                                                if rmg_py_version is not None else None,
                                                 )
                 # A method that ran is only worth anything if what it wrote can be read, so the
                 # artifact is opened HERE rather than after the loop: whether an artifact is missing
